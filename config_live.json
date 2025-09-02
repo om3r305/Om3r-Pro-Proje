@@ -1,0 +1,88 @@
+{
+  "cash": 500.0,
+  "console_verbose": true,
+  "display_decimals": null,
+
+  "portfolio": { "dip": 0.40, "pred": 0.30, "news": 0.20, "ob": 0.10 },
+  "entry_frac": { "dip": 0.40, "pred": 0.40, "news": 0.60, "ob": 0.50 },
+  "sizing": { "min_mult": 0.5, "max_mult": 2.0 },
+
+  "max_total_open_positions": 3,
+  "max_open_per_symbol": 2,
+
+  "dip": { "require_new_dip_after_start": false, "reset_dip_after_sell": true, "window_sec": 300 },
+
+  "rules": {
+    "level_mode": "per_symbol",
+    "abs": { "offset": 1.0, "tp": 6.0, "sl": -6.0 },
+    "pct": { "offset": 0.10, "tp": 0.30, "sl": -0.50 },
+    "per_symbol_modes": {
+      "ETHUSDT": "abs",
+      "BTCUSDT": "abs",
+      "SOLUSDT": "pct",
+      "AVAXUSDT": "pct",
+      "BNBUSDT": "pct",
+      "XRPUSDT": "pct",
+      "ADAUSDT": "pct",
+      "DOGEUSDT": "pct"
+    },
+    "dynamic_tpsl": { "enabled": true, "target_vol_pct": 0.25, "min_scale": 0.6, "max_scale": 1.8 },
+    "max_hold_sec": 900,
+    "breakeven_after_sec": 240,
+    "min_exit_profit_pct": 0.05,
+    "decay_tp_pct_per_min": 0.02
+  },
+
+  "fees": { "taker_pct": 0.10, "slippage_pct": 0.02 },
+
+  "dca": { "enabled": true, "max_layers": 3, "step_mode": "pct", "step": 0.20, "alloc_scheme": [0.40, 0.35, 0.25] },
+
+  "predictor": {
+    "enabled": true,
+    "interval": "1m",
+    "limit": 120,
+    "refresh_sec": 20,
+    "weights": { "squeeze": 0.25, "vol": 0.35, "accel": 0.20, "break": 0.20 },
+    "enter_prob": 0.70
+  },
+
+  "news_mode": {
+    "enabled": true,
+    "cooldown_sec": 300,
+    "min_quote_volume_usdt": 10000000,
+    "one_min_change_pct": 1.5,
+    "cmc_api_key": null,
+    "trailing_pct": 5.0,
+    "emergency_sl_pct": -10.0
+  },
+
+  "orderbook": { "max_dist_pct": 0.2, "imbalance_mult": 2.0 },
+
+  "scanner": {
+    "watchlist": ["ETHUSDT", "SOLUSDT", "AVAXUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT"],
+    "adaptive": {
+      "enabled": true,
+      "refresh_min": 10,
+      "top_n": 7,
+      "min_quote_volume_usdt": 10000000,
+      "min_price": 0.02,
+      "exclude": ["BUSDUSDT"],
+      "score": { "w_qv": 0.5, "w_range": 0.3, "w_change": 0.2 }
+    }
+  },
+
+  "regime": {
+    "refresh_sec": 20,
+    "multipliers": {
+      "TREND":   { "tp": 1.4, "sl": 0.9, "off": 1.1 },
+      "MEAN":    { "tp": 0.9, "sl": 0.7, "off": 0.8 },
+      "CHOP":    { "tp": 0.6, "sl": 0.6, "off": 1.2 },
+      "UNKNOWN": { "tp": 1.0, "sl": 1.0, "off": 1.0 }
+    }
+  },
+
+  "risk": { "daily_max_loss_usd": 10.0, "cooldown_min": 30 },
+  "freq_ctrl": { "min_sec_between_trades": 20, "max_trades_per_hour": 60 },
+
+  "telegram": { "enabled": true }
+}
