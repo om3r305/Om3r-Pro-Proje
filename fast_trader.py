@@ -109,16 +109,18 @@ def load_state(default_cash: float):
 # ---------- EV FILTER (opsiyonel) ----------
 def ev_ok(entry: float, tp_abs: float, sl_abs: float, conf: float,
           fee_pct: float, slip_pct: float, ev_min: float = 0.0005) -> Tuple[bool, float]:
-    """
-    Basit EV tahmini (USD):
-      EV ≈ conf * (tp_net) - (1-conf) * |sl_net|
-    conf: 0..1 arası güven (slot'a göre hesaplanıyor)
-    tp_abs/sl_abs: mutlak fark (USD), sl_abs negatif olmalı
-    """
-    tp_net = max(0.0, (tp_abs) * (1.0 - fee_pct) )  # sadeleştirilmiş
+    tp_net = max(0.0, (tp_abs) * (1.0 - fee_pct) )
     sl_net = abs(sl_abs) * (1.0 + fee_pct)
     ev = conf * tp_net - (1.0 - conf) * sl_net
     return (ev >= ev_min), ev
+
+# conf sözlük de gelse güvenle floata çevir
+def _as_float_conf(x, key: str = "score") -> float:
+    if isinstance(x, dict):
+        try: return float(x.get(key, 0.0))
+        except Exception: return 0.0
+    try: return float(x)
+    except Exception: return 0.0
 
 # ---------------- Symbol Engine ----------------
 class SymbolEngine:
@@ -138,6 +140,7 @@ class SymbolEngine:
         self._last_reg = {"regime":"UNKNOWN","ema9":None}
 
         self.pos: Dict[str, Optional[dict]] = {"dip": None, "pred": None, "news": None, "ob": None}
+        # HATALI SATIR SİLİNDİ: self._last_trade_ts[slot] = time.time()
         self._last_trade_ts = {"dip":0.0, "pred":0.0, "news":0.0, "ob":0.0}
         self.last_px = 0.0
 
@@ -147,10 +150,6 @@ class SymbolEngine:
     def levels(self, price: float):
         r = self.rules
         mode = r.get("per_symbol_modes",{}).get(self.s, r.get("level_mode","pct"))
-        # dip_rules override (sadece DIP için mutlak offset/tp/sl)
-        dip_rules = self.cfg.get("dip_rules", {})
-        abs_dip = (dip_rules.get("abs") or {}) if dip_rules else {}
-
         a,p = r["abs"], r["pct"]
         a_off,a_tp,a_sl = float(a["offset"]), float(a["tp"]), float(a["sl"])
         p_off,p_tp,p_sl = price*(float(p["offset"])/100.0), price*(float(p["tp"])/100.0), price*(float(p["sl"])/100.0)
@@ -182,7 +181,6 @@ class SymbolEngine:
         dip_val = self.dip.update(price)
         if dip_val is None or not self.dip.can_buy():
             return (False,"",None)
-        # dip_rules varsa offset/tp/sl için mutlak offset kullanacağız (giriş kontrolünde)
         off,_,_ = self.levels(price)
         fired = price >= (dip_val + off)
         ema9 = self._last_reg.get("ema9")
@@ -359,8 +357,7 @@ class Bot:
         return sum(1 for v in st.pos.values() if v is not None)
 
     def can_trade_now(self, s: str, slot: str) -> bool:
-        # global cooldown
-        if time.time() < self._cool_until:
+        if time.time() < self._cool_until:  # global cooldown
             return False
 
         # trading hours (opsiyonel)
@@ -377,10 +374,9 @@ class Bot:
                             ok = True; break
                     except Exception:
                         continue
-                if not ok:
-                    return False
+                if not ok: return False
             except Exception:
-                pass  # saat filtresi hata verirse engelleme
+                pass
 
         st = self.syms[s]
         if time.time() - st._last_trade_ts.get(slot, 0.0) < self.min_gap:
@@ -467,7 +463,6 @@ class Bot:
                 d=slots[sl]
                 slot_lines.append(f"• {slot_name[sl]:<18} | {d['n']} işlem | ✅ {d['w']}/{d['n']} | {d['p']:+.2f}")
 
-        # slot dağılımı (open sayıları)
         open_counts = {}
         for e in ev:
             if e["kind"]=="open":
@@ -498,7 +493,6 @@ class Bot:
                 if time.time() < self._cool_until:
                     time.sleep(1); self._maybe_report(); continue
 
-                # watchlist
                 self.wlm.update()
                 self._sync_symbols(self.wlm.active())
 
@@ -514,12 +508,11 @@ class Bot:
                     if px <= 0: continue
                     st.last_px = px
 
-                    # candle bias (BİR KEZ hesapla ve tüm girişlerde kullan)
-                    cbias, cconf, ctag = candle_bias(s, self.cfg.get("candles", {}))
+                    cbias, cconf_raw, ctag = candle_bias(s, self.cfg.get("candles", {}))
+                    cconf = _as_float_conf(cconf_raw)   # <-- önemli
                     strict_mode = self.cfg.get("candles", {}).get("strict", True)
                     bonus_conf = (min(1.0, 0.1 + 0.8*cconf) if cbias=="bullish" else 0.0)
 
-                    # heartbeat
                     if self.console:
                         off,tp,sl = st.levels(px)
                         dip = st.dip.current_dip
@@ -528,20 +521,15 @@ class Bot:
                               f"need={('-' if need is None else st.fmtp(need))} tp={st.fmtp(tp)} sl={st.fmtp(sl)} "
                               f"open={self.open_count()}/{self.max_open_total} cbias={cbias}({cconf:.2f})")
 
-                    if self.open_count() >= self.max_open_total:
-                        continue
-                    if self.symbol_open_count(s) >= self.max_per_symbol:
-                        continue
+                    if self.open_count() >= self.max_open_total:  continue
+                    if self.symbol_open_count(s) >= self.max_per_symbol:  continue
 
-                    # regime bonus
                     if reg == "TREND":   bonus = 1.2
                     elif reg == "MEAN":  bonus = 1.0
                     elif reg == "CHOP":  bonus = 0.6
                     else:                bonus = 0.9
 
-                    allow_long = True
-                    if strict_mode and cbias!="bullish":
-                        allow_long = False
+                    allow_long = not (strict_mode and cbias!="bullish")
 
                     fees = self.cfg.get("fees", {})
                     fee_pct = float(fees.get("taker_pct", 0.10))/100.0
@@ -552,34 +540,20 @@ class Bot:
                         fired, why, _ = st.signal_dip(px)
                         if fired and self.can_trade_now(s,"dip"):
                             _, free = self.slot_cash("dip")
-                            # conf tabanı
-                            conf = 0.55 + (0.15 if reg=="TREND" else 0.0) + bonus_conf
-                            conf = max(0.0, min(1.0, conf))
-                            # EV filter (opsiyonel)
+                            conf = max(0.0, min(1.0, 0.55 + (0.15 if reg=="TREND" else 0.0) + bonus_conf))
                             if self.use_ev_filter:
-                                # st.levels(px) → tp/sl fiyat farklarını döndürüyor (mutlaklaştır)
                                 _, tp_abs, sl_abs = st.levels(px)
-                                ok, ev = ev_ok(entry=px, tp_abs=tp_abs, sl_abs=sl_abs,
-                                               conf=conf, fee_pct=fee_pct, slip_pct=slip_pct,
-                                               ev_min=self.ev_min)
-                                if not ok:
-                                    if self.console:
-                                        print(f"[EV] skip DIP {s} ev={ev:.4f} conf={conf:.2f}")
-                                    pass
-                                else:
+                                ok, ev = ev_ok(px, tp_abs, sl_abs, conf, fee_pct, slip_pct, self.ev_min)
+                                if ok:
                                     spend = self._size_with_conf("dip", free, conf) * bonus
-                                    if spend>0:
-                                        used = st.maybe_open("dip", px, spend, f"{why} | candles={cbias}({ctag})", "DIP", conf)
-                                        if used>0:
-                                            self._trade_hist.append((time.time(), s))
-                                            self._add_event("open","dip",s,0.0)
+                                    if spend>0 and st.maybe_open("dip", px, spend, f"{why} | candles={cbias}({ctag})", "DIP", conf):
+                                        self._trade_hist.append((time.time(), s)); self._add_event("open","dip",s,0.0)
+                                elif self.console:
+                                    print(f"[EV] skip DIP {s} ev={ev:.4f} conf={conf:.2f}")
                             else:
                                 spend = self._size_with_conf("dip", free, conf) * bonus
-                                if spend>0:
-                                    used = st.maybe_open("dip", px, spend, f"{why} | candles={cbias}({ctag})", "DIP", conf)
-                                    if used>0:
-                                        self._trade_hist.append((time.time(), s))
-                                        self._add_event("open","dip",s,0.0)
+                                if spend>0 and st.maybe_open("dip", px, spend, f"{why} | candles={cbias}({ctag})", "DIP", conf):
+                                    self._trade_hist.append((time.time(), s)); self._add_event("open","dip",s,0.0)
 
                     # PRED
                     if allow_long:
@@ -590,25 +564,18 @@ class Bot:
                             if self.use_ev_filter:
                                 _, tp_abs, sl_abs = st.levels(px)
                                 ok, ev = ev_ok(px, tp_abs, sl_abs, conf, fee_pct, slip_pct, self.ev_min)
-                                if not ok:
-                                    if self.console:
-                                        print(f"[EV] skip PRED {s} ev={ev:.4f} conf={conf:.2f}")
-                                else:
+                                if ok:
                                     spend = self._size_with_conf("pred", free, conf) * bonus
-                                    if spend>0:
-                                        used = st.maybe_open("pred", px, spend, f"{why} | candles={cbias}({ctag})", "PRED", conf)
-                                        if used>0:
-                                            self._trade_hist.append((time.time(), s))
-                                            self._add_event("open","pred",s,0.0)
+                                    if spend>0 and st.maybe_open("pred", px, spend, f"{why} | candles={cbias}({ctag})", "PRED", conf):
+                                        self._trade_hist.append((time.time(), s)); self._add_event("open","pred",s,0.0)
+                                elif self.console:
+                                    print(f"[EV] skip PRED {s} ev={ev:.4f} conf={conf:.2f}")
                             else:
                                 spend = self._size_with_conf("pred", free, conf) * bonus
-                                if spend>0:
-                                    used = st.maybe_open("pred", px, spend, f"{why} | candles={cbias}({ctag})", "PRED", conf)
-                                    if used>0:
-                                        self._trade_hist.append((time.time(), s))
-                                        self._add_event("open","pred",s,0.0)
+                                if spend>0 and st.maybe_open("pred", px, spend, f"{why} | candles={cbias}({ctag})", "PRED", conf):
+                                    self._trade_hist.append((time.time(), s)); self._add_event("open","pred",s,0.0)
 
-                    # NEWS (strict kapalıysa bypass; strict ise yine bullish izni arıyoruz)
+                    # NEWS
                     nfired, nwhy = st.signal_news()
                     if nfired and self.can_trade_now(s,"news") and (not strict_mode or cbias=="bullish"):
                         _, free = self.slot_cash("news")
@@ -616,50 +583,35 @@ class Bot:
                         if self.use_ev_filter:
                             _, tp_abs, sl_abs = st.levels(px)
                             ok, ev = ev_ok(px, tp_abs, sl_abs, conf, fee_pct, slip_pct, self.ev_min)
-                            if not ok:
-                                if self.console:
-                                    print(f"[EV] skip NEWS {s} ev={ev:.4f} conf={conf:.2f}")
-                            else:
+                            if ok:
                                 spend = self._size_with_conf("news", free, conf)
-                                if spend>0:
-                                    used = st.maybe_open("news", px, spend, f"{nwhy} | candles={cbias}({ctag})", "NEWS", conf)
-                                    if used>0:
-                                        self._trade_hist.append((time.time(), s))
-                                        self._add_event("open","news",s,0.0)
+                                if spend>0 and st.maybe_open("news", px, spend, f"{nwhy} | candles={cbias}({ctag})", "NEWS", conf):
+                                    self._trade_hist.append((time.time(), s)); self._add_event("open","news",s,0.0)
+                            elif self.console:
+                                print(f"[EV] skip NEWS {s} ev={ev:.4f} conf={conf:.2f}")
                         else:
                             spend = self._size_with_conf("news", free, conf)
-                            if spend>0:
-                                used = st.maybe_open("news", px, spend, f"{nwhy} | candles={cbias}({ctag})", "NEWS", conf)
-                                if used>0:
-                                    self._trade_hist.append((time.time(), s))
-                                    self._add_event("open","news",s,0.0)
+                            if spend>0 and st.maybe_open("news", px, spend, f"{nwhy} | candles={cbias}({ctag})", "NEWS", conf):
+                                self._trade_hist.append((time.time(), s)); self._add_event("open","news",s,0.0)
 
                     # ORDERBOOK
                     ofired, owhy = st.signal_ob(self.cfg.get("orderbook", {}))
                     if ofired and self.can_trade_now(s,"ob") and allow_long:
                         _, free = self.slot_cash("ob")
-                        conf = 0.65 + (0.15 if reg=="TREND" else 0.0) + bonus_conf
-                        conf = max(0.0, min(1.0, conf))
+                        conf = max(0.0, min(1.0, 0.65 + (0.15 if reg=="TREND" else 0.0) + bonus_conf))
                         if self.use_ev_filter:
                             _, tp_abs, sl_abs = st.levels(px)
                             ok, ev = ev_ok(px, tp_abs, sl_abs, conf, fee_pct, slip_pct, self.ev_min)
-                            if not ok:
-                                if self.console:
-                                    print(f"[EV] skip OB {s} ev={ev:.4f} conf={conf:.2f}")
-                            else:
+                            if ok:
                                 spend = self._size_with_conf("ob", free, conf) * bonus
-                                if spend>0:
-                                    used = st.maybe_open("ob", px, spend, f"{owhy} | candles={cbias}({ctag})", "ORDERBOOK", conf)
-                                    if used>0:
-                                        self._trade_hist.append((time.time(), s))
-                                        self._add_event("open","ob",s,0.0)
+                                if spend>0 and st.maybe_open("ob", px, spend, f"{owhy} | candles={cbias}({ctag})", "ORDERBOOK", conf):
+                                    self._trade_hist.append((time.time(), s)); self._add_event("open","ob",s,0.0)
+                            elif self.console:
+                                print(f"[EV] skip OB {s} ev={ev:.4f} conf={conf:.2f}")
                         else:
                             spend = self._size_with_conf("ob", free, conf) * bonus
-                            if spend>0:
-                                used = st.maybe_open("ob", px, spend, f"{owhy} | candles={cbias}({ctag})", "ORDERBOOK", conf)
-                                if used>0:
-                                    self._trade_hist.append((time.time(), s))
-                                    self._add_event("open","ob",s,0.0)
+                            if spend>0 and st.maybe_open("ob", px, spend, f"{owhy} | candles={cbias}({ctag})", "ORDERBOOK", conf):
+                                self._trade_hist.append((time.time(), s)); self._add_event("open","ob",s,0.0)
 
                 # yönetim: DCA + early-exit + exit + risk + state + rapor
                 for s, st in self.syms.items():
@@ -667,7 +619,8 @@ class Bot:
                     if px <= 0: continue
                     # bearish early exit
                     if self.cfg.get("candles", {}).get("exit_on_bearish", True):
-                        cbias, cconf, ctag = candle_bias(s, self.cfg.get("candles", {}))
+                        cbias, cconf_raw, ctag = candle_bias(s, self.cfg.get("candles", {}))
+                        cconf = _as_float_conf(cconf_raw)
                         need_conf = float(self.cfg.get("candles", {}).get("exit_conf", 0.75))
                         ema9 = st._last_reg.get("ema9")
                         if cbias=="bearish" and (cconf>=need_conf) and (ema9 is not None) and (px<ema9):
@@ -692,11 +645,9 @@ class Bot:
                         if closed:
                             self.cash = round(self.cash + pnl, 2)
                             self._add_event("close",slot,s,pnl)
-                            # daily risk
                             day_now = time.strftime("%Y-%m-%d")
                             if day_now != self._day0:
-                                self._day0 = day_now
-                                self._realized_today = 0.0
+                                self._day0 = day_now; self._realized_today = 0.0
                             self._realized_today += pnl
                             if self._realized_today <= -abs(self.risk_daily_cap):
                                 self._cool_until = time.time() + self.cooldown_min * 60
