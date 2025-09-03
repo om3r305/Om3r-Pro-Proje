@@ -5,3 +5,5 @@ python-dotenv>=1.0.1
 websockets>=11.0
 pytz>=2024.1
 certifi>=2024.7.4
+numpy>=1.26.0
+pandas>=2.2.0
