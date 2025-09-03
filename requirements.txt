@@ -1,2 +1,7 @@
-requests
-python-dotenv
+# --- runtime deps ---
+ccxt==4.3.81
+requests>=2.31.0
+python-dotenv>=1.0.1
+websockets>=11.0
+pytz>=2024.1
+certifi>=2024.7.4
