@@ -256,6 +256,10 @@ def normalize(batch: RawKlineBatch, *, now: float | None = None) -> Normalizatio
             if open_ts > now or close_ts > now:
                 future += 1
                 continue
+            expected_close = open_ts + _timeframe_seconds(batch.timeframe) - 0.001
+            if abs(close_ts - expected_close) > 0.002:
+                incomplete += 1
+                continue
             if close_ts >= now or close_ts >= batch.requested_end:
                 incomplete += 1
                 continue

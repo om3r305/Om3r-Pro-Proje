@@ -134,7 +134,9 @@ class LogisticRegressionBaseline(SupervisedBaseline):
 class GradientBoostingBaseline(SupervisedBaseline):
     model_type = "gradient_boosting"
     def _estimator(self):
-        return GradientBoostingClassifier(random_state=self.random_state)
+        allowed = {"n_estimators", "learning_rate", "max_depth", "subsample"}
+        configured = {key: value for key, value in self.metadata.hyperparameters if key in allowed}
+        return GradientBoostingClassifier(random_state=self.random_state, **configured)
 
 
 class PlattCalibrator:
