@@ -377,7 +377,74 @@ def main(argv: Sequence[str] | None = None) -> int:
     validate = sub.add_parser("validate"); validate.add_argument("path")
     build = sub.add_parser("build-dataset"); build.add_argument("path"); build.add_argument("--output", default="research_data")
     build.add_argument("--allow-quality-warning", action="store_true")
+    archive_fetch = sub.add_parser("archive-fetch")
+    archive_fetch.add_argument("--symbol", choices=DEFAULT_SYMBOLS, required=True)
+    archive_fetch.add_argument("--year", type=int, required=True); archive_fetch.add_argument("--month", type=int, required=True)
+    archive_fetch.add_argument("--output", default="research_data"); archive_fetch.add_argument("--force", action="store_true")
+    archive_plan = sub.add_parser("archive-plan"); archive_plan.add_argument("--symbol", choices=DEFAULT_SYMBOLS, required=True); archive_plan.add_argument("--start", required=True); archive_plan.add_argument("--end", required=True); archive_plan.add_argument("--root", default="research_data")
+    archive_verify = sub.add_parser("archive-verify"); archive_verify.add_argument("manifest")
+    archive_import = sub.add_parser("archive-import"); archive_import.add_argument("manifest")
+    parquet = sub.add_parser("build-parquet"); parquet.add_argument("manifest"); parquet.add_argument("--output", default="research_data/parquet"); parquet.add_argument("--catalog-root", default="research_data")
+    derive = sub.add_parser("derive-timeframes"); derive.add_argument("parquet"); derive.add_argument("--output", default="research_data/parquet"); derive.add_argument("--catalog-root", default="research_data")
+    catalog_cmd = sub.add_parser("catalog"); catalog_cmd.add_argument("--root", default="research_data"); catalog_cmd.add_argument("--symbol"); catalog_cmd.add_argument("--timeframe")
     args = parser.parse_args(argv)
+    if args.command.startswith("archive-") or args.command in ("build-parquet", "derive-timeframes", "catalog"):
+        from .archive import (ArchiveSpec, BinanceArchiveAdapter, derive_timeframe, discover_first_available, plan_months,
+                              load_manifest, parse_archive, spec_from_manifest)
+        from .parquet_store import ParquetResearchStore
+        if args.command == "archive-plan":
+            from datetime import datetime, timezone
+            adapter = BinanceArchiveAdapter()
+            start = datetime.fromtimestamp(utc_timestamp(args.start), timezone.utc); end = datetime.fromtimestamp(utc_timestamp(args.end), timezone.utc)
+            first = discover_first_available(args.symbol, start, end, adapter.exists)
+            verified = set()
+            manifest_root = Path(args.root) / "archive_manifests"
+            if manifest_root.exists():
+                for path in manifest_root.glob("*.json"):
+                    item = json.loads(path.read_text(encoding="utf-8"))
+                    if item.get("symbol") == args.symbol and item.get("checksum_verified"):
+                        verified.add(Path(item["source_url"]).name)
+            failed = set()
+            failure_root = Path(args.root) / "archive_failures"
+            if failure_root.exists():
+                for path in failure_root.glob("*.json"):
+                    item = json.loads(path.read_text(encoding="utf-8"))
+                    failed.add(item["filename"])
+            plan = plan_months(args.symbol, start, end, verified, adapter.exists, first, failed)
+            print(json.dumps({"first_available": first, "items": [{"filename": p.spec.filename, "status": p.status} for p in plan]}, sort_keys=True)); return 0
+        if args.command == "archive-fetch":
+            manifest = BinanceArchiveAdapter().fetch(ArchiveSpec(args.symbol, "1m", args.year, args.month), args.output, force=args.force)
+            print(json.dumps({"manifest_id": manifest.manifest_id, "content_hash": manifest.content_hash,
+                              "verified": manifest.checksum_verified, "archive_path": manifest.archive_path}, sort_keys=True)); return 0
+        if args.command == "catalog":
+            from .research_catalog import ResearchCatalog
+            print(json.dumps([asdict(r) for r in ResearchCatalog(args.root).search(symbol=args.symbol, timeframe=args.timeframe)], sort_keys=True)); return 0
+        if args.command == "derive-timeframes":
+            store = ParquetResearchStore(args.output); records, provenance, parent = store.read(args.parquet)
+            output = {}
+            for timeframe in ("5m", "15m", "1h"):
+                derived = derive_timeframe(records, timeframe)
+                if derived:
+                    descriptor = store.write(derived, {**provenance, "derived_from": parent, "aggregation": timeframe})
+                    from .research_catalog import ResearchCatalog
+                    catalog_record = ResearchCatalog(args.catalog_root).add(
+                        descriptor, exchange="binance", market_type="spot",
+                        symbol=derived[0].instrument.symbol, raw_source_hashes=(parent,), quality_state="READY")
+                    output[timeframe] = {"partition": asdict(descriptor), "catalog_record": asdict(catalog_record)}
+            print(json.dumps(output, sort_keys=True)); return 0
+        manifest = load_manifest(args.manifest); spec = spec_from_manifest(manifest)
+        result = parse_archive(spec, manifest.archive_path, manifest)
+        if args.command == "archive-verify":
+            print(json.dumps({"manifest_id": manifest.manifest_id, "verified": True,
+                              "rows": result.report.observations, "quality": asdict(result.report)}, sort_keys=True)); return 0
+        if args.command == "archive-import":
+            print(json.dumps({"rows": len(result.records), "quality": asdict(result.report)}, sort_keys=True)); return 0
+        descriptor = ParquetResearchStore(args.output).write(result.records,
+                     {"archive_provenance_id": manifest.provenance_id, "content_hash": manifest.content_hash})
+        from .research_catalog import ResearchCatalog
+        catalog_record = ResearchCatalog(args.catalog_root).add(descriptor, exchange="binance", market_type="spot",
+                         symbol=manifest.symbol, raw_source_hashes=(manifest.content_hash,), quality_state=result.report.status)
+        print(json.dumps({"partition": asdict(descriptor), "catalog_record": asdict(catalog_record)}, sort_keys=True)); return 0
     if args.command == "inspect":
         batch = read_raw(args.path)
         print(json.dumps({"raw_hash": batch.raw_hash, "records": len(batch.records),

@@ -74,3 +74,20 @@ Example bounded fetch:
 `python -m brian2026.data fetch --symbol BTCUSDT --timeframe 1m --start 2024-01-01T00:00:00Z --end 2024-02-01T00:00:00Z --output research_data`
 
 Offline candles become available at their exchange close timestamp. Download time is raw-import provenance, not a claim that the candle was known earlier. Spot OHLCV does not contain historical bid/ask, depth, or funding; those remain unavailable. Any replay spread is explicitly tagged `simulation_assumption`.
+## Phase 2.3 official archives and Parquet
+
+Official Binance monthly Spot kline archives are downloaded only from `data.binance.vision`. The adjacent `.CHECKSUM` SHA-256 document is required and verified before a ZIP can be stored or parsed. Verified immutable archives resume without another download unless `--force` is explicit.
+
+The canonical research policy stores source 1m candles and derives 5m, 15m, and 1h bars on exact UTC boundaries. A missing constituent suppresses the derived bar. Derived availability is the derived close timestamp.
+
+Research-only commands:
+
+- `archive-plan --symbol BTCUSDT --start ... --end ...`
+- `archive-fetch --symbol BTCUSDT --year 2024 --month 1`
+- `archive-verify MANIFEST`
+- `archive-import MANIFEST`
+- `build-parquet MANIFEST`
+- `derive-timeframes PARQUET`
+- `catalog --symbol BTCUSDT --timeframe 1m`
+
+Parquet partitions are immutable and ZSTD-compressed. Brian dataset identity is calculated from canonical logical rows, schema, and source provenance—not physical Parquet bytes. None of these commands starts or imports the trading loop.
