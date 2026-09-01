@@ -57,3 +57,20 @@ quarantined historical code and are not imported by `brian2026`.
 ## Phase 2.1 supervised baseline
 
 Point-in-time samples, completed-candle multi-timeframe joins, train-only preprocessing, validation-only calibration/thresholds, locked walk-forward tests, deterministic replay evaluation, and research-only champion candidates. Logistic regression and gradient boosting are reproducible baselines; no model can execute or promote itself to live trading.
+
+## Phase 2.2 public research data
+
+`python -m brian2026.data` is a public, unauthenticated research-data CLI. It never starts the trading loop and contains no exchange execution methods.
+
+Stages:
+
+- `fetch`: download a bounded Binance public spot kline range and persist immutable raw content.
+- `inspect`: display raw identity, instrument, timeframe, and requested range.
+- `validate`: normalize in memory and emit deterministic quality diagnostics.
+- `build-dataset`: create an immutable Brian MarketDataset only after quality checks.
+
+Example bounded fetch:
+
+`python -m brian2026.data fetch --symbol BTCUSDT --timeframe 1m --start 2024-01-01T00:00:00Z --end 2024-02-01T00:00:00Z --output research_data`
+
+Offline candles become available at their exchange close timestamp. Download time is raw-import provenance, not a claim that the candle was known earlier. Spot OHLCV does not contain historical bid/ask, depth, or funding; those remain unavailable. Any replay spread is explicitly tagged `simulation_assumption`.

@@ -20,3 +20,12 @@ runtime/brian2026/
 *.tmp
 .env.*
 !.env.example
+
+# Brian research artifacts (large/generated)
+research_data/
+data/raw/
+data/normalized/
+data/datasets/
+data/features/
+experiments/
+model_artifacts/

@@ -27,6 +27,9 @@ class DatasetCatalogEntry:
     observations: int
     source_provenance: tuple[tuple[str, str], ...]
     missing_feature_counts: tuple[tuple[str, int], ...]
+    exchange: str = "unknown"
+    market_types: tuple[str, ...] = ()
+    quality_status: str = "UNKNOWN"
     schema_version: str = CATALOG_SCHEMA_VERSION
 
     @property
@@ -46,6 +49,7 @@ def catalog_dataset(dataset: MarketDataset, snapshots: Iterable[FeatureSnapshot]
     names = sorted({name for s in snaps for name in s.unavailable_features() + list(s.available_features())})
     missing = tuple((name, sum(getattr(s, name, None) is None for s in snaps)) for name in names)
     sources = sorted({pair for event in dataset.events for pair in event.sources})
+    metadata = dict(dataset.metadata)
     return DatasetCatalogEntry(
         dataset.dataset_id,
         tuple(sorted({e.symbol for e in dataset.events})),
@@ -53,4 +57,7 @@ def catalog_dataset(dataset: MarketDataset, snapshots: Iterable[FeatureSnapshot]
         min(e.event_timestamp for e in dataset.events),
         max(e.event_timestamp for e in dataset.events),
         next(iter(versions), "unknown"), len(snaps), tuple(sources), missing,
+        metadata.get("exchange", "unknown"),
+        (metadata["market_type"],) if metadata.get("market_type") else (),
+        metadata.get("quality_status", "UNKNOWN"),
     )
