@@ -94,6 +94,8 @@ def get_orderbook_features(symbol: str, cfg: dict) -> Dict[str, float]:
         elif ask_qty >= max(min_qty, mult * bid_qty) and ask_qty > 0:
             wall_score = -min(1.0, ask_qty / max(bid_qty, 1e-12) / max(mult, 1e-12))
         return {
+            "bid": bid,
+            "ask": ask,
             "spread_bps": (ask - bid) / max(mid, 1e-12) * 10_000.0,
             "book_imbalance": imbalance,
             "wall_score": wall_score,

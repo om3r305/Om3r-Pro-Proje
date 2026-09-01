@@ -48,7 +48,8 @@ class LegacyShadowBridge:
         self._pending_reviews[(snapshot.symbol, slot)] = out
         return out
 
-    def mark_open(self, symbol: str, slot: str, entry_price: float, ts: float | None = None) -> str | None:
+    def mark_open(self, symbol: str, slot: str, entry_price: float, ts: float | None = None,
+                  quantity: float = 0.0) -> str | None:
         key = (symbol, slot)
         review = self._pending_reviews.pop(key, None)
         if not review:
@@ -60,6 +61,10 @@ class LegacyShadowBridge:
             "shadow_action": review.get("action", "WAIT"),
             "shadow_confidence": float(review.get("confidence", 0.0)),
         }
+        self.engine.account.open_position(
+            f"{symbol}:{slot}", symbol, "LONG", float(entry_price),
+            max(0.0, float(quantity)), float(ts or time.time()),
+        )
         self.engine.memory.append("legacy_open_link", {"symbol": symbol, "slot": slot, **self._open[key]})
         return str(review["decision_id"])
 
@@ -72,7 +77,7 @@ class LegacyShadowBridge:
         now = float(ts or time.time())
         entry = float(opened.get("entry_price", 0.0))
         pnl_pct = ((float(exit_price) / entry - 1.0) * 100.0) if entry > 0 else 0.0
-        self.engine.learn(TradeOutcome(
+        outcome = TradeOutcome(
             decision_id=str(opened["decision_id"]),
             symbol=symbol,
             pnl_usd=float(pnl_usd),
@@ -86,5 +91,8 @@ class LegacyShadowBridge:
                 "shadow_confidence": opened.get("shadow_confidence"),
                 "executed_action": "BUY",
             },
-        ))
+        )
+        self.engine.account.close_position(f"{symbol}:{slot}", float(pnl_usd),
+                                           outcome.fees_usd, now)
+        self.engine.learn(outcome)
         return True

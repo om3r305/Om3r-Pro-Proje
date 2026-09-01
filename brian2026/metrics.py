@@ -16,12 +16,19 @@ class PerformanceMetrics:
     profit_factor: float
     max_drawdown: float
     sharpe_like: float
+    return_pct: float = 0.0
+    average_win: float = 0.0
+    average_loss: float = 0.0
+    exposure: float = 0.0
+    abstention_rate: float = 0.0
 
     def to_dict(self):
         return asdict(self)
 
 
-def calculate(pnls: list[float]) -> PerformanceMetrics:
+def calculate(pnls: list[float], *, starting_equity: float = 0.0,
+              exposure: float = 0.0, decisions: int | None = None,
+              waits: int = 0) -> PerformanceMetrics:
     vals = [float(x) for x in pnls]
     n = len(vals)
     wins = [x for x in vals if x > 0]
@@ -52,4 +59,9 @@ def calculate(pnls: list[float]) -> PerformanceMetrics:
         profit_factor=pf,
         max_drawdown=max_dd,
         sharpe_like=sharpe,
+        return_pct=(net / starting_equity * 100.0 if starting_equity > 0 else 0.0),
+        average_win=(statistics.fmean(wins) if wins else 0.0),
+        average_loss=(statistics.fmean(losses) if losses else 0.0),
+        exposure=float(exposure),
+        abstention_rate=(waits / decisions if decisions and decisions > 0 else 0.0),
     )

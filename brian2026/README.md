@@ -43,3 +43,13 @@ synthesis, and random TP/SL tuning) are not started or ticked. Brian consumes
 only typed snapshots built from completed candles, point-in-time order-book
 data, and the observed legacy signal. Legacy random/mock research modules remain
 quarantined historical code and are not imported by `brian2026`.
+
+## Phase 2 foundation
+
+- `dataset.py` defines immutable, hashed point-in-time market datasets.
+- `features.py` records schema/Brian versions, source times, availability and dataset identity.
+- `equity.py` mirrors legacy positions for shadow equity, exposure and drawdown accounting.
+- `replay.py` provides deterministic LONG/SHORT/WAIT simulation with explicit costs and fill interfaces.
+- `counterfactual.py` compares bounded alternatives on one identical future path.
+- `splits.py` creates purged and embargoed walk-forward train/validation/test boundaries.
+- `experiments.py` writes immutable, content-addressed experiment manifests.

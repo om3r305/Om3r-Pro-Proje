@@ -11,6 +11,7 @@ from .specialists import run_specialists
 from .types import Decision, MarketSnapshot, TradeOutcome
 from .researcher import Researcher
 from .promotion_gate import PromotionGate, PromotionPolicy
+from .equity import ShadowEquityTracker
 
 
 class BrianEngine:
@@ -26,6 +27,7 @@ class BrianEngine:
         # Phase 1 is observation/research only. Configuration cannot grant
         # Brian execution authority or produce a non-shadow decision state.
         self.shadow_only = True
+        self.account = ShadowEquityTracker(float(cfg.get("starting_equity", 1000.0)))
         self.memory = EpisodicMemory(runtime_root)
         self.meta = MetaTrader(
             self.memory,
@@ -43,9 +45,13 @@ class BrianEngine:
         return cls(data)
 
     def decide(self, snapshot: MarketSnapshot, account: Dict[str, Any] | None = None) -> Decision:
+        self.account.mark_price(snapshot.symbol, snapshot.price, snapshot.ts)
+        observed_account = self.account.account_state()
+        if account:
+            observed_account.update(account)
         votes = run_specialists(snapshot)
         decision = self.meta.decide(snapshot, votes)
-        allowed, size_scale, risk_reason = self.risk.review(decision, snapshot, account)
+        allowed, size_scale, risk_reason = self.risk.review(decision, snapshot, observed_account)
         decision.allowed_by_risk = bool(allowed)
         decision.size_scale = float(size_scale) if allowed else 0.0
         decision.shadow_only = self.shadow_only

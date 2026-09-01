@@ -8,6 +8,9 @@ import time
 
 from .types import MarketSnapshot
 
+FEATURE_SCHEMA_VERSION = "brian.features.v2"
+BRIAN_VERSION = "0.2.0"
+
 
 @dataclass(slots=True)
 class FeatureSnapshot:
@@ -43,11 +46,23 @@ class FeatureSnapshot:
     legacy_signal_fired: bool | None = None
     legacy_slot: str | None = None
     sources: dict[str, str] = field(default_factory=dict)
+    feature_schema_version: str = FEATURE_SCHEMA_VERSION
+    source_timestamps: dict[str, float] = field(default_factory=dict)
+    dataset_id: str | None = None
+    brian_version: str = BRIAN_VERSION
+
+    def __post_init__(self) -> None:
+        if self.candle_timestamp is not None and self.candle_timestamp > self.timestamp:
+            raise ValueError("future candle cannot enter a feature snapshot")
+        future = [name for name, ts in self.source_timestamps.items() if float(ts) > self.timestamp]
+        if future:
+            raise ValueError(f"future sources cannot enter feature snapshot: {future}")
 
     def available_features(self) -> dict[str, float]:
         excluded = {
             "symbol", "timestamp", "price", "regime", "timeframe",
             "candle_timestamp", "legacy_signal_fired", "legacy_slot", "sources",
+            "feature_schema_version", "source_timestamps", "dataset_id", "brian_version",
         }
         return {
             key: float(value)
@@ -77,6 +92,14 @@ class FeatureSnapshot:
                 "legacy_signal_fired": self.legacy_signal_fired,
                 "legacy_slot": self.legacy_slot,
                 "sources": dict(self.sources),
+                "source_timestamps": dict(self.source_timestamps),
+                "dataset_id": self.dataset_id,
+                "feature_schema_version": self.feature_schema_version,
+                "feature_availability": {
+                    name: name not in self.unavailable_features()
+                    for name in self.unavailable_features() + list(self.available_features())
+                },
+                "brian_version": self.brian_version,
                 "unavailable_features": self.unavailable_features(),
             },
         )
@@ -109,6 +132,8 @@ def from_closed_candles(
     legacy_signal_fired: bool | None = None,
     legacy_slot: str | None = None,
     timestamp: float | None = None,
+    dataset_id: str | None = None,
+    source_timestamps: Mapping[str, float] | None = None,
 ) -> FeatureSnapshot:
     """Build features from oldest-to-newest *completed* OHLCV candles."""
     rows = [tuple(row[:6]) for row in candles if len(row) >= 6]
@@ -118,6 +143,7 @@ def from_closed_candles(
         legacy_predictor_confidence=legacy_predictor_confidence,
         legacy_signal_fired=legacy_signal_fired, legacy_slot=legacy_slot,
         sources={"candles": "binance_closed", "price": "binance_ticker"},
+        dataset_id=dataset_id, source_timestamps=dict(source_timestamps or {}),
     )
     if order_book:
         for name in ("spread_bps", "book_imbalance", "wall_score"):
@@ -132,7 +158,11 @@ def from_closed_candles(
     highs = [float(row[2]) for row in rows]
     lows = [float(row[3]) for row in rows]
     volumes = [float(row[5]) for row in rows]
-    snapshot.candle_timestamp = float(rows[-1][0]) / 1000.0
+    snapshot.candle_timestamp = float(
+        snapshot.source_timestamps.get("closed_candle", float(rows[-1][0]) / 1000.0)
+    )
+    if snapshot.candle_timestamp > snapshot.timestamp:
+        raise ValueError("future candle cannot enter a feature snapshot")
     snapshot.sources["technical_features"] = "completed_candles_only"
 
     if len(closes) >= 21:

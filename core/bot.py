@@ -53,11 +53,13 @@ try:
     from Proje1.brian2026.bridge import LegacyShadowBridge as _Brian2026Bridge
     from Proje1.brian2026.features import from_closed_candles as _brian2026_features
     from Proje1.brian2026.safety import shadow_workflow_guard as _brian2026_safe_guard
+    from Proje1.brian2026.dataset import from_legacy_closed_candles as _brian2026_dataset
 except Exception:
     _Brian2026Engine = None  # type: ignore
     _Brian2026Bridge = None  # type: ignore
     _brian2026_features = None  # type: ignore
     _brian2026_safe_guard = None  # type: ignore
+    _brian2026_dataset = None  # type: ignore
 
 # dış veri opsiyonel — yoksa stub
 try:
@@ -322,6 +324,7 @@ class Bot:
             if self._brian2026_enabled and _Brian2026Engine is not None and _Brian2026Bridge is not None:
                 engine_cfg = dict(b26.get("engine", {}) or {})
                 engine_cfg["shadow_only"] = True
+                engine_cfg["starting_equity"] = max(float(self.cash), 1.0)
                 self.brian2026 = _Brian2026Bridge(_Brian2026Engine(engine_cfg))
                 log_event("brian2026_init", shadow_only=True)
         except Exception as _b26e:
@@ -522,33 +525,39 @@ class Bot:
 
     # ------ Brian 2026: shadow review / outcome linking ------
     def _brian2026_review(self, s: str, slot: str, st: SymbolEngine, px: float, conf: float, reg: str) -> None:
-        if not self.brian2026 or _brian2026_features is None:
+        if not self.brian2026 or _brian2026_features is None or _brian2026_dataset is None:
             return
         try:
             tf = str((self.cfg.get("predictor", {}) or {}).get("interval", "1m"))
             candles = get_candles(s, tf=tf, lookback=80, include_partial=False)
             order_book = get_orderbook_features(s, self.cfg.get("orderbook", {}))
+            observed_ts = time.time()
+            dataset = _brian2026_dataset(
+                symbol=s, timeframe=tf, candles=candles,
+                ingestion_timestamp=observed_ts, regime=reg,
+                bid=order_book.get("bid"), ask=order_book.get("ask"),
+            )
+            source_timestamps = {"order_book": observed_ts, "ticker": observed_ts}
+            if dataset.events:
+                source_timestamps["closed_candle"] = dataset.events[-1].event_timestamp
             feature_snapshot = _brian2026_features(
                 symbol=s, price=px, regime=reg, candles=candles, timeframe=tf,
                 order_book=order_book, legacy_predictor_confidence=float(conf),
                 legacy_signal_fired=True, legacy_slot=slot,
+                timestamp=observed_ts, dataset_id=dataset.dataset_id,
+                source_timestamps=source_timestamps,
             )
-            account = {
-                "daily_pnl_pct": (float(self.risk.realized) / max(float(self.cash), 1e-9)) * 100.0,
-                "drawdown_pct": 0.0,
-                "open_positions": self.open_count(),
-            }
-            d = self.brian2026.review_snapshot(feature_snapshot, account=account)
+            d = self.brian2026.review_snapshot(feature_snapshot)
             log_brain("brian2026_shadow", {"symbol": s, "slot": slot, "decision": d})
         except Exception as _e:
             try: log_event("brian2026_review_error", symbol=s, slot=slot, error=str(_e))
             except Exception: pass
 
-    def _brian2026_mark_open(self, s: str, slot: str, px: float) -> None:
+    def _brian2026_mark_open(self, s: str, slot: str, px: float, qty: float = 0.0) -> None:
         if not self.brian2026:
             return
         try:
-            self.brian2026.mark_open(s, slot, px)
+            self.brian2026.mark_open(s, slot, px, quantity=qty)
         except Exception:
             pass
 
@@ -901,7 +910,7 @@ class Bot:
                                     qty = max(0.0, float(prop["qty"]))
                                     used = st.maybe_open("dip", px, qty * px, f"{why} | {cbias}({ctag})", reason_tag("DIP"), conf)
                                     if used > 0:
-                                        self._brian2026_mark_open(s, "dip", px)
+                                        self._brian2026_mark_open(s, "dip", px, qty)
                                         try:
                                             write_trades_full_row(
                                                 event="open", sym=s, slot="dip", side="BUY",
@@ -938,7 +947,7 @@ class Bot:
                                     qty = max(0.0, float(prop["qty"]))
                                     used = st.maybe_open("pred", px, qty * px, f"{why} | {cbias}({ctag})", reason_tag("PRED"), conf)
                                     if used > 0:
-                                        self._brian2026_mark_open(s, "pred", px)
+                                        self._brian2026_mark_open(s, "pred", px, qty)
                                         try:
                                             write_trades_full_row(
                                                 event="open", sym=s, slot="pred", side="BUY",
@@ -979,7 +988,7 @@ class Bot:
                                 qty = max(0.0, float(prop["qty"]))
                                 used = st.maybe_open("news", px, qty * px, f"{nwhy} | {cbias}({ctag})", reason_tag("NEWS"), conf)
                                 if used > 0:
-                                    self._brian2026_mark_open(s, "news", px)
+                                    self._brian2026_mark_open(s, "news", px, qty)
                                     try:
                                         write_trades_full_row(
                                             event="open", sym=s, slot="news", side="BUY",
@@ -1014,7 +1023,7 @@ class Bot:
                                 qty = max(0.0, float(prop["qty"]))
                                 used = st.maybe_open("ob", px, qty * px, f"{owhy} | {cbias}({ctag})", reason_tag("ORDERBOOK"), conf)
                                 if used > 0:
-                                    self._brian2026_mark_open(s, "ob", px)
+                                    self._brian2026_mark_open(s, "ob", px, qty)
                                     try:
                                         write_trades_full_row(
                                             event="open", sym=s, slot="ob", side="BUY",
@@ -1061,7 +1070,7 @@ class Bot:
                                 conf,
                             )
                             if used > 0:
-                                self._brian2026_mark_open(s, slot, px)
+                                self._brian2026_mark_open(s, slot, px, qty)
                                 try:
                                     write_trades_full_row(
                                         event="open", sym=s, slot=slot, side="BUY",

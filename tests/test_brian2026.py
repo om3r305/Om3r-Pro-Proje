@@ -52,13 +52,13 @@ class BrianCoreTests(unittest.TestCase):
             symbol="X", price=106.0, regime="TREND", candles=rows,
             order_book={"spread_bps": 2.0, "book_imbalance": 0.25, "wall_score": 0.5},
             legacy_predictor_confidence=0.77, legacy_signal_fired=True,
-            legacy_slot="pred", timestamp=999.0,
+            legacy_slot="pred", timestamp=9999.0,
         )
         b = from_closed_candles(
             symbol="X", price=106.0, regime="TREND", candles=rows,
             order_book={"spread_bps": 2.0, "book_imbalance": 0.25, "wall_score": 0.5},
             legacy_predictor_confidence=0.77, legacy_signal_fired=True,
-            legacy_slot="pred", timestamp=999.0,
+            legacy_slot="pred", timestamp=9999.0,
         )
         self.assertEqual(a, b)
         self.assertIsNotNone(a.ema_fast)
