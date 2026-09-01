@@ -303,14 +303,8 @@ def preload_missing_modules(allow: Iterable[str] | None = None) -> None:
     except Exception:
         pass
 
-# import-time bootstrap (güvenli)
-try:
-    _ensure_pkg()
-    _alias_package_root()
-    preload_missing_modules()
-except Exception as e:
-    try: tg_send(f"🟡 <b>AutoPkg</b> preload failed: <code>{e}</code>", parse_mode="HTML")
-    except Exception: pass
+# Importing this module must be side-effect free. Legacy callers may explicitly
+# call ``preload_missing_modules`` outside the Brian shadow workflow.
 
 # Dışarıya: tek modül garantisi
 def ensure_bare(name: str) -> types.ModuleType:

@@ -11,8 +11,6 @@ except Exception:
     def log_event(kind, **kw): pass
 
 BLOCKS_DIR = Path("Proje1/core/blocks_autogen")
-BLOCKS_DIR.mkdir(parents=True, exist_ok=True)
-(BLOCKS_DIR / "__init__.py").touch(exist_ok=True)
 
 REGISTRY_PATH = Path("model/blocks_registry.json")
 
@@ -93,6 +91,8 @@ def run_block(st, name: str, params: Dict[str,Any]) -> Dict[str,Any]:
 # BLOK ÜRETİM API
 # ---------------------
 def _emit_block_module(name: str, code_body: str) -> Path:
+    BLOCKS_DIR.mkdir(parents=True, exist_ok=True)
+    (BLOCKS_DIR / "__init__.py").touch(exist_ok=True)
     header = f"""# AUTOGEN BLOCK (L60+) — {name}
 # created_ts: {time.time()}
 # NOTE: return dict keys may include: mid, up, dn, hi, lo, r, k, o, atr, value

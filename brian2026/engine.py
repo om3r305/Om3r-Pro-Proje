@@ -23,7 +23,9 @@ class BrianEngine:
     def __init__(self, config: Dict[str, Any] | None = None,
                  runtime_root: str | Path = "runtime/brian2026") -> None:
         cfg = config or {}
-        self.shadow_only = bool(cfg.get("shadow_only", True))
+        # Phase 1 is observation/research only. Configuration cannot grant
+        # Brian execution authority or produce a non-shadow decision state.
+        self.shadow_only = True
         self.memory = EpisodicMemory(runtime_root)
         self.meta = MetaTrader(
             self.memory,

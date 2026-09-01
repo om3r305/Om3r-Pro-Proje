@@ -34,3 +34,12 @@ with the linked outcome.  After enough observations, run the replay lab and the
 promotion gate.
 
 Runtime state is written under `runtime/brian2026/` and should not be committed.
+
+## Phase 1.1 safety boundary
+
+When the legacy loop enables `brian2026.shadow_enabled`, code-writing background
+services (autocoder, auto-repair/file watchers, evolutionary promotion, intent
+synthesis, and random TP/SL tuning) are not started or ticked. Brian consumes
+only typed snapshots built from completed candles, point-in-time order-book
+data, and the observed legacy signal. Legacy random/mock research modules remain
+quarantined historical code and are not imported by `brian2026`.

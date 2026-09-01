@@ -13,6 +13,9 @@ _proj_root = _pkg_dir.parent                    # proje kökü
 if str(_proj_root) not in sys.path:
     sys.path.insert(0, str(_proj_root))
 
+from project_compat import install_proje1_alias
+install_proje1_alias()
+
 # --- (ops.) .env yükle: API anahtarları vs. ----------------------------------
 # dotenv yoksa sessizce geçer; varsa CMC_API_KEY gibi değişkenler erken yüklenir.
 try:
@@ -30,12 +33,12 @@ if load_dotenv:
 # --- AutoPkg: alias+finder kur, eksik modülleri skeleton ile oluştur ----------
 # Not: Modülün kendisini import edip onun üzerinden çağırıyoruz.
 from Proje1.core import auto_pkg_bootstrap as _autopkg
-_autopkg.preload_missing_modules()  # created/aliased sayılarını TG'ye de yollar
 
 # --- Paket içi mutlak importlar ----------------------------------------------
 from Proje1.core.bot import Bot
 from Proje1.core.utils_io import tg_send
 from Proje1.core.brain_selfheal import ensure_selfheal_watcher, report_exception
+from Proje1.brian2026.safety import shadow_workflow_guard
 
 
 def _resolve_config_path(arg_path: str | Path) -> Path:
@@ -71,8 +74,13 @@ def main() -> None:
 
     cfg = load_config(args.config)
 
+    # Importing main must be side-effect free. In the Brian shadow workflow,
+    # missing-module autogeneration is also explicitly prohibited.
+    if not shadow_workflow_guard(cfg):
+        _autopkg.preload_missing_modules()
+
     # 🧠 Self-heal’i başta devreye al
-    selfheal_ok = ensure_selfheal_watcher()
+    selfheal_ok = None if shadow_workflow_guard(cfg) else ensure_selfheal_watcher(cfg)
     print(f"[main] selfHeal check -> {selfheal_ok}")
 
     # Bilgilendir: kritik env anahtarları var mı?

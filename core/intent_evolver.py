@@ -41,8 +41,6 @@ except Exception:
         return name, spec, code
 
 AUTOGEN_DIR = Path("Proje1/core/strategies_autogen")
-AUTOGEN_DIR.mkdir(parents=True, exist_ok=True)
-(AUTOGEN_DIR / "__init__.py").touch(exist_ok=True)
 
 JOURNAL_PATH = Path("logs/l60_intent_journal.jsonl")
 DESIGNS_PATH = Path("logs/l60_designs.jsonl")
@@ -340,6 +338,8 @@ def _build_exit_code(g: Dict[str,Any]) -> str:
     return "\n".join(lines)
 
 def _emit_strategy_file(graph: Dict[str,Any], rationale: str, shadow: bool, intent_id: str) -> Path:
+    AUTOGEN_DIR.mkdir(parents=True, exist_ok=True)
+    (AUTOGEN_DIR / "__init__.py").touch(exist_ok=True)
     cls = f"AutoL60_{int(time.time())}_{random.randint(100,999)}"
     header = HEADER.format(
         intent_id=intent_id, ts=time.time(), meta=json.dumps(graph["meta"]),

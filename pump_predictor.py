@@ -3,6 +3,13 @@
 import math, time, requests
 from typing import List, Dict, Tuple
 
+try:
+    from brian2026.timing import completed_klines as _completed_klines
+    from brian2026.timing import prior_high as _prior_high
+except ModuleNotFoundError:
+    from Proje1.brian2026.timing import completed_klines as _completed_klines
+    from Proje1.brian2026.timing import prior_high as _prior_high
+
 def _sma(x: List[float], n: int) -> float:
     if not x: return 0.0
     n = min(n, len(x))
@@ -33,10 +40,10 @@ class PumpPredictor:
 
     def _pull(self):
         r = requests.get("https://api.binance.com/api/v3/klines",
-                         params={"symbol": self.symbol, "interval": self.interval, "limit": self.limit},
+                         params={"symbol": self.symbol, "interval": self.interval, "limit": min(1000, self.limit + 1)},
                          timeout=5)
         r.raise_for_status()
-        self._klines = r.json()
+        self._klines = _completed_klines(r.json())[-self.limit:]
         self._last_pull = time.time()
 
     def _ensure(self):
@@ -71,7 +78,9 @@ class PumpPredictor:
         roc3 = 0.0 if closes[-4]==0 else (closes[-1]/closes[-4]-1.0)
         accel = max(0.0, min(1.0, (roc1 + 0.5*roc3) / 0.01))  # ~%1 → 1.0
 
-        hh = max(highs[-15:])
+        hh = _prior_high(highs, 15)
+        if hh is None:
+            return 0.0, {"why": "prior-high-unavailable", "hh": 0.0}
         brk = 1.0 if closes[-1] >= hh*1.001 else 0.0
 
         prob = (self.w.get("squeeze",0.25)*squeeze_comp +

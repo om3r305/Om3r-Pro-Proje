@@ -4,6 +4,7 @@ from typing import Any, Dict
 import time
 
 from .engine import BrianEngine
+from .features import FeatureSnapshot
 from .types import MarketSnapshot, TradeOutcome
 
 
@@ -36,6 +37,15 @@ class LegacyShadowBridge:
         d = self.engine.decide(snapshot, account=account)
         out = d.to_dict()
         self._pending_reviews[(symbol, legacy_slot)] = out
+        return out
+
+    def review_snapshot(self, snapshot: FeatureSnapshot,
+                        account: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        """Review a typed point-in-time snapshot without affecting execution."""
+        decision = self.engine.decide(snapshot.to_market(), account=account)
+        out = decision.to_dict()
+        slot = snapshot.legacy_slot or "unknown"
+        self._pending_reviews[(snapshot.symbol, slot)] = out
         return out
 
     def mark_open(self, symbol: str, slot: str, entry_price: float, ts: float | None = None) -> str | None:

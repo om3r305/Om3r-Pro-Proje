@@ -49,11 +49,11 @@ def _ex_decimals(symbol: str) -> Tuple[int, int]:
         return 2, 6
 
 
-def _book_wall_signal(symbol: str, cfg: dict) -> Tuple[bool, str]:
-    """Orderbook duvar sinyali (yakın güçlü bid/ask)."""
+def get_orderbook_features(symbol: str, cfg: dict) -> Dict[str, float]:
+    """Fetch point-in-time spread, near-book imbalance, and signed wall score."""
     cfg = cfg or {}
     if not cfg.get("enabled", True):
-        return False, ""
+        return {}
     max_dist = float(cfg.get("max_dist_pct", 0.2)) / 100.0
     min_bps = float(cfg.get("min_distance_bps", 6)) / 10_000.0
     mult = float(cfg.get("imbalance_mult", 2.0))
@@ -86,13 +86,31 @@ def _book_wall_signal(symbol: str, cfg: dict) -> Tuple[bool, str]:
         bid_qty = sum(q for _, q in nb)
         ask_qty = sum(q for _, q in na)
 
+        total = bid_qty + ask_qty
+        imbalance = (bid_qty - ask_qty) / total if total > 0 else 0.0
+        wall_score = 0.0
         if bid_qty >= max(min_qty, mult * ask_qty) and bid_qty > 0:
-            return True, f"Buy wall near (bid {bid_qty:.0f} vs ask {ask_qty:.0f})"
-        if ask_qty >= max(min_qty, mult * bid_qty) and ask_qty > 0:
-            return True, f"Sell wall near (ask {ask_qty:.0f} vs bid {bid_qty:.0f})"
+            wall_score = min(1.0, bid_qty / max(ask_qty, 1e-12) / max(mult, 1e-12))
+        elif ask_qty >= max(min_qty, mult * bid_qty) and ask_qty > 0:
+            wall_score = -min(1.0, ask_qty / max(bid_qty, 1e-12) / max(mult, 1e-12))
+        return {
+            "spread_bps": (ask - bid) / max(mid, 1e-12) * 10_000.0,
+            "book_imbalance": imbalance,
+            "wall_score": wall_score,
+        }
     except Exception:
-        pass
-    return False, ""
+        return {}
+    return {}
+
+
+def _book_wall_signal(symbol: str, cfg: dict) -> Tuple[bool, str]:
+    """Orderbook wall signal derived from the same snapshot exposed to Brian."""
+    features = get_orderbook_features(symbol, cfg)
+    wall = features.get("wall_score")
+    if wall is None or wall == 0:
+        return False, ""
+    side = "Buy" if wall > 0 else "Sell"
+    return True, f"{side} wall near (score={wall:.2f})"
 
 
 # ----------------- stublar (opsiyonel modül yoksa) -----------------

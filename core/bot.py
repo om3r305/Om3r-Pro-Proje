@@ -32,12 +32,12 @@ def _tick_kpi():
 
 
 # --- ABSOLUTE IMPORTS (package: Proje1.core) ---
-from Proje1.core.market import get_price
+from Proje1.core.market import get_candles, get_price
 from Proje1.core.state import save_state, load_state
 from Proje1.core.utils_io import (
     tg_send, ensure_tg, ev_ok, reason_tag, write_event_cash, tg_ready
 )
-from Proje1.core.symbol_engine import SymbolEngine
+from Proje1.core.symbol_engine import SymbolEngine, get_orderbook_features
 from Proje1.core.alloc import slot_cash, size_with_conf, can_trade_now
 from Proje1.core.reporting import Reporter
 from Proje1.core.candles_guard import allow_long, should_bearish_exit
@@ -51,9 +51,13 @@ from Proje1.core.brain_hook import decide_trade, brain_overrides
 try:
     from Proje1.brian2026.engine import BrianEngine as _Brian2026Engine
     from Proje1.brian2026.bridge import LegacyShadowBridge as _Brian2026Bridge
+    from Proje1.brian2026.features import from_closed_candles as _brian2026_features
+    from Proje1.brian2026.safety import shadow_workflow_guard as _brian2026_safe_guard
 except Exception:
     _Brian2026Engine = None  # type: ignore
     _Brian2026Bridge = None  # type: ignore
+    _brian2026_features = None  # type: ignore
+    _brian2026_safe_guard = None  # type: ignore
 
 # dış veri opsiyonel — yoksa stub
 try:
@@ -326,6 +330,10 @@ class Bot:
             try: log_event("brian2026_init_error", error=str(_b26e))
             except Exception: pass
 
+        self._brian2026_safe_mode = bool(
+            _brian2026_safe_guard and _brian2026_safe_guard(self.cfg)
+        )
+
         # Modules
         self.news = NewsHunter(self.cfg.get("news_mode", {}))
         self.wlm = WatchListManager(self.cfg)
@@ -355,23 +363,26 @@ class Bot:
             pass
 
         # L9: Self-heal & File-watcher
-        ensure_selfheal_watcher(self.cfg)
-        self.sh = SelfHeal.get()
-        ensure_file_watcher(self.cfg)
+        self.sh = None
+        if not self._brian2026_safe_mode:
+            ensure_selfheal_watcher(self.cfg)
+            self.sh = SelfHeal.get()
+            ensure_file_watcher(self.cfg)
 
         # L13: Auto-repair
-        ensure_autorepair(self.cfg)
+        if not self._brian2026_safe_mode:
+            ensure_autorepair(self.cfg)
 
         # L14: Governor init (opsiyonel)
         try:
-            if _l14_ensure is not None:
+            if not self._brian2026_safe_mode and _l14_ensure is not None:
                 _l14_ensure(self.cfg)
         except Exception:
             pass
 
         # L60: Intent Evolver init (opsiyonel)
         try:
-            if _l60_ensure is not None:
+            if not self._brian2026_safe_mode and _l60_ensure is not None:
                 _l60_ensure(self.cfg)
         except Exception:
             pass
@@ -390,7 +401,7 @@ class Bot:
 
         # L11: EVO scheduler
         ecfg = (self.cfg.get("evo") or {}) if isinstance(self.cfg, dict) else {}
-        self._evo_enabled = bool(ecfg.get("enabled", True))
+        self._evo_enabled = bool(ecfg.get("enabled", True)) and not self._brian2026_safe_mode
         self._evo_tick_sec = int(ecfg.get("tick_sec", 300))
         self._evo_last = 0.0
 
@@ -402,13 +413,13 @@ class Bot:
 
         # L14: Governor scheduler
         l14cfg = (self.cfg.get("l14") or {}) if isinstance(self.cfg, dict) else {}
-        self._l14_enabled = bool(l14cfg.get("enabled", True))
+        self._l14_enabled = bool(l14cfg.get("enabled", True)) and not self._brian2026_safe_mode
         self._l14_tick_sec = int(l14cfg.get("tick_sec", 180))
         self._l14_last = 0.0
 
         # L60: Intent Evolver scheduler
         l60cfg = (self.cfg.get("l60") or {}) if isinstance(self.cfg, dict) else {}
-        self._l60_enabled = bool(l60cfg.get("enabled", True))
+        self._l60_enabled = bool(l60cfg.get("enabled", True)) and not self._brian2026_safe_mode
         self._l60_tick_sec = int(l60cfg.get("tick_sec", 240))
         self._l60_last = 0.0
 
@@ -511,37 +522,23 @@ class Bot:
 
     # ------ Brian 2026: shadow review / outcome linking ------
     def _brian2026_review(self, s: str, slot: str, st: SymbolEngine, px: float, conf: float, reg: str) -> None:
-        if not self.brian2026:
+        if not self.brian2026 or _brian2026_features is None:
             return
         try:
-            alphas = getattr(st, "alphas", {}) or {}
-            features = {
-                "spread_bps": float(getattr(st, "spread_bps", 0.0) or 0.0),
-                "book_imbalance": float(getattr(st, "book_imbalance", 0.0) or 0.0),
-                "wall_score": float(getattr(st, "wall_score", 0.0) or 0.0),
-                "breakout_score": float(getattr(st, "breakout_score", 0.0) or 0.0),
-                "volume_z": float(getattr(st, "volume_z", 0.0) or 0.0),
-                "acceleration": float(getattr(st, "acceleration", 0.0) or 0.0),
-                "rsi": float(getattr(st, "rsi", 50.0) or 50.0),
-                "return_5": float(getattr(st, "return_5", 0.0) or 0.0),
-                "zscore": float(getattr(st, "zscore", 0.0) or 0.0),
-                "bb_position": float(getattr(st, "bb_position", 0.5) or 0.5),
-                "ema_fast": float(getattr(st, "ema_fast", px) or px),
-                "ema_slow": float(getattr(st, "ema_slow", px) or px),
-                "ema_slope_pct": float(getattr(st, "ema_slope_pct", 0.0) or 0.0),
-                "atr_pct": float(getattr(st, "atr_pct", 0.0) or 0.0),
-                "legacy_alpha_pred": float(alphas.get("pred", 0.0) or 0.0) if isinstance(alphas, dict) else 0.0,
-                "legacy_alpha_dip": float(alphas.get("dip", 0.0) or 0.0) if isinstance(alphas, dict) else 0.0,
-            }
+            tf = str((self.cfg.get("predictor", {}) or {}).get("interval", "1m"))
+            candles = get_candles(s, tf=tf, lookback=80, include_partial=False)
+            order_book = get_orderbook_features(s, self.cfg.get("orderbook", {}))
+            feature_snapshot = _brian2026_features(
+                symbol=s, price=px, regime=reg, candles=candles, timeframe=tf,
+                order_book=order_book, legacy_predictor_confidence=float(conf),
+                legacy_signal_fired=True, legacy_slot=slot,
+            )
             account = {
                 "daily_pnl_pct": (float(self.risk.realized) / max(float(self.cash), 1e-9)) * 100.0,
                 "drawdown_pct": 0.0,
                 "open_positions": self.open_count(),
             }
-            d = self.brian2026.review(
-                symbol=s, price=px, regime=reg, legacy_slot=slot,
-                legacy_confidence=conf, features=features, account=account
-            )
+            d = self.brian2026.review_snapshot(feature_snapshot, account=account)
             log_brain("brian2026_shadow", {"symbol": s, "slot": slot, "decision": d})
         except Exception as _e:
             try: log_event("brian2026_review_error", symbol=s, slot=slot, error=str(_e))
@@ -729,24 +726,27 @@ class Bot:
                     last_aux_tick = now
 
                 # L9 heartbeat
-                try: selfheal_heartbeat()
+                try:
+                    if not self._brian2026_safe_mode: selfheal_heartbeat()
                 except Exception: pass
                 # L13 heartbeat
-                try: l13_heartbeat()
+                try:
+                    if not self._brian2026_safe_mode: l13_heartbeat()
                 except Exception: pass
                 # L14 heartbeat (opsiyonel)
                 try:
-                    if _l14_heartbeat is not None:
+                    if not self._brian2026_safe_mode and _l14_heartbeat is not None:
                         _l14_heartbeat()
                 except Exception: pass
                 # L60 heartbeat (opsiyonel)
                 try:
-                    if _l60_heartbeat is not None:
+                    if not self._brian2026_safe_mode and _l60_heartbeat is not None:
                         _l60_heartbeat()
                 except Exception: pass
 
                 # L10: brain tick
-                if _brain_tick is not None and (now - self._last_brain_tick) >= max(5, self._brain_tick_sec):
+                if (not self._brian2026_safe_mode and _brain_tick is not None and
+                    (now - self._last_brain_tick) >= max(5, self._brain_tick_sec)):
                     try:
                         ctx = {
                             "ts": now,
@@ -837,14 +837,16 @@ class Bot:
                 if now - last_learn_ping > 60:
                     try: intra_day_bandit(self.cfg)
                     except Exception: pass
-                    try: sandbox_try(self.cfg)
+                    try:
+                        if not self._brian2026_safe_mode: sandbox_try(self.cfg)
                     except Exception: pass
                     last_learn_ping = now
 
                 # day-end ops
                 gm = time.gmtime()
                 if gm.tm_hour == 23 and gm.tm_min >= 55:
-                    try: day_end_grid(self.cfg)
+                    try:
+                        if not self._brian2026_safe_mode: day_end_grid(self.cfg)
                     except Exception: pass
                 day_key = time.strftime("%Y-%m-%d", gm)
                 if last_daily_retrain != day_key:
@@ -1201,20 +1203,19 @@ class Bot:
                 try: tg_send(f"[ERR] bot.loop: {e}")
                 except Exception: pass
                 # L13: exception hook
-                try: l13_on_exception("loop", e, self.cfg)
+                try:
+                    if not self._brian2026_safe_mode: l13_on_exception("loop", e, self.cfg)
                 except Exception: pass
                 # L14: exception hook
                 try:
-                    if _l14_on_exception is not None:
+                    if not self._brian2026_safe_mode and _l14_on_exception is not None:
                         _l14_on_exception("loop", e, self.cfg)  # type: ignore
                 except Exception:
                     pass
                 # L60: exception hook
                 try:
-                    if _l60_on_exception is not None:
+                    if not self._brian2026_safe_mode and _l60_on_exception is not None:
                         _l60_on_exception("loop", e, self.cfg)  # type: ignore
                 except Exception:
                     pass
                 time.sleep(2)
-
-

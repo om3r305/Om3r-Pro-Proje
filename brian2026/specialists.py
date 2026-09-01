@@ -27,8 +27,17 @@ def _vote(name: str, signed_edge: float, rationale: str, used: dict[str, float])
                           rationale=rationale, features_used=used)
 
 
+def _unavailable(name: str, *features: str) -> SpecialistVote:
+    return SpecialistVote(
+        name=name, action="WAIT", confidence=0.0, edge=0.0,
+        rationale=f"unavailable:{','.join(features)}", features_used={},
+    )
+
+
 def trend_specialist(s: MarketSnapshot) -> SpecialistVote:
     f = s.features
+    if "ema_fast" not in f or "ema_slow" not in f:
+        return _unavailable("trend", "ema_fast", "ema_slow")
     price = float(s.price)
     fast = float(f.get("ema_fast", price))
     slow = float(f.get("ema_slow", fast))
@@ -41,6 +50,8 @@ def trend_specialist(s: MarketSnapshot) -> SpecialistVote:
 
 def momentum_specialist(s: MarketSnapshot) -> SpecialistVote:
     f = s.features
+    if "return_5" not in f:
+        return _unavailable("momentum", "return_5")
     rsi = float(f.get("rsi", 50.0))
     ret = float(f.get("return_5", f.get("momentum_pct", 0.0)))
     # Momentum is directional but extreme RSI is penalised to avoid chasing.
@@ -53,6 +64,8 @@ def momentum_specialist(s: MarketSnapshot) -> SpecialistVote:
 
 def orderbook_specialist(s: MarketSnapshot) -> SpecialistVote:
     f = s.features
+    if "book_imbalance" not in f:
+        return _unavailable("orderbook", "book_imbalance")
     imb = float(f.get("book_imbalance", 0.0))  # expected -1..+1
     spread_bps = max(0.0, float(f.get("spread_bps", 0.0)))
     wall = float(f.get("wall_score", 0.0))
@@ -64,6 +77,8 @@ def orderbook_specialist(s: MarketSnapshot) -> SpecialistVote:
 
 def breakout_specialist(s: MarketSnapshot) -> SpecialistVote:
     f = s.features
+    if not any(name in f for name in ("breakout_score", "volume_z", "acceleration")):
+        return _unavailable("breakout", "breakout_score", "volume_z", "acceleration")
     breakout = float(f.get("breakout_score", 0.0))
     vol_z = float(f.get("volume_z", 0.0))
     accel = float(f.get("acceleration", 0.0))
@@ -74,6 +89,8 @@ def breakout_specialist(s: MarketSnapshot) -> SpecialistVote:
 
 def mean_reversion_specialist(s: MarketSnapshot) -> SpecialistVote:
     f = s.features
+    if "zscore" not in f and "bb_position" not in f:
+        return _unavailable("mean_reversion", "zscore", "bb_position")
     z = float(f.get("zscore", 0.0))
     bb = float(f.get("bb_position", 0.5))  # 0 lower, 1 upper
     regime = str(s.regime).upper()

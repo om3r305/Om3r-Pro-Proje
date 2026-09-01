@@ -1,12 +1,13 @@
 # regime.py — piyasa rejimi tespitçisi
-import requests, statistics
+import requests, statistics, time
 
 def _kl(symbol, interval="1m", limit=60):
     r = requests.get("https://api.binance.com/api/v3/klines",
-                     params={"symbol": symbol, "interval": interval, "limit": limit},
+                     params={"symbol": symbol, "interval": interval, "limit": min(1000, limit + 1)},
                      timeout=4)
     k = r.json()
-    return [float(x[4]) for x in k]  # close fiyatları
+    now_ms = int(time.time() * 1000)
+    return [float(x[4]) for x in k if len(x) >= 7 and int(x[6]) <= now_ms][-limit:]
 
 def _slope(xs):
     n = len(xs)
