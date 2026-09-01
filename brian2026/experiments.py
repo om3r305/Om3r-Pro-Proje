@@ -28,6 +28,9 @@ class ExperimentManifest:
     simulator_settings: Mapping[str, Any]
     metrics: Mapping[str, float | int]
     random_seed: int | None = None
+    fold_boundaries: tuple[Mapping[str, Any], ...] = ()
+    model_ids: tuple[str, ...] = ()
+    feature_ablation_metrics: Mapping[str, Mapping[str, float | int]] = field(default_factory=dict)
     creation_timestamp: float = field(default_factory=time.time)
     schema_version: str = EXPERIMENT_SCHEMA_VERSION
     experiment_id: str = field(init=False)

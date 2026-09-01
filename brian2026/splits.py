@@ -12,6 +12,12 @@ class WalkForwardFold:
     purge: int
     embargo: int
 
+    def to_dict(self) -> dict[str, object]:
+        return {"fold": self.fold,
+                "train": (self.train.start, self.train.stop),
+                "validation": (self.validation.start, self.validation.stop),
+                "test": (self.test.start, self.test.stop),
+                "purge": self.purge, "embargo": self.embargo}
     def validate(self) -> None:
         sets = [set(self.train), set(self.validation), set(self.test)]
         if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2]:

@@ -12,6 +12,10 @@ from .types import MarketSnapshot, Decision, TradeOutcome, SpecialistVote
 __all__ = [
     "BrianEngine", "FeatureSnapshot", "from_closed_candles", "MarketSnapshot",
     "Decision", "TradeOutcome", "SpecialistVote", "ClosedCandle",
-    "MarketDataset", "MarketEvent",
+    "MarketDataset", "MarketEvent", "LogisticRegressionBaseline",
+    "GradientBoostingBaseline", "ProbabilityPrediction", "PolicyThresholds",
 ]
-__version__ = "0.2.0"
+__version__ = "0.2.1"
+
+from .learning import LogisticRegressionBaseline, GradientBoostingBaseline, ProbabilityPrediction
+from .policy import PolicyThresholds

@@ -53,3 +53,7 @@ quarantined historical code and are not imported by `brian2026`.
 - `counterfactual.py` compares bounded alternatives on one identical future path.
 - `splits.py` creates purged and embargoed walk-forward train/validation/test boundaries.
 - `experiments.py` writes immutable, content-addressed experiment manifests.
+
+## Phase 2.1 supervised baseline
+
+Point-in-time samples, completed-candle multi-timeframe joins, train-only preprocessing, validation-only calibration/thresholds, locked walk-forward tests, deterministic replay evaluation, and research-only champion candidates. Logistic regression and gradient boosting are reproducible baselines; no model can execute or promote itself to live trading.
