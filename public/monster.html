@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Monster Coins Pro — Dashboard</title>
+<link rel="icon" href="/static/logo.png">
+<style>
+  :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--ok:#22c55e;--warn:#eab308;--bad:#ef4444;--brand:#22d3ee;--chip:#1f2937;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b1220;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;color:#e5e7eb}
+  .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+  .header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .header img{width:28px;height:28px}
+  .h-title{font-weight:700}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .card{background:linear-gradient(165deg,#101827 0%,#0d1423 100%);border:1px solid #1f2937;border-radius:14px;padding:16px;box-shadow:0 1px 0 #0b1020 inset}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi{background:#0d1423;border:1px solid #1f2937;border-radius:12px;padding:14px}
+  .kpi .label{color:#9aa6b2;font-size:13px;margin-bottom:8px}
+  .kpi .val{font-size:26px;font-weight:800}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:#0e1626;border:1px solid #213146;color:#b9c3d0;font-size:12px;padding:6px 10px;border-radius:999px}
+  .row{display:flex;gap:16px}
+  .col{flex:1}
+  .btns{display:flex;gap:10px;justify-content:flex-end}
+  .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn-start{background:#2563eb;color:white}
+  .btn-stop{background:#db2777;color:white}
+  .btn-logout{background:#374151;color:#cbd5e1}
+  .log{font-family:ui-monospace,Consolas,monaco,monospace;background:#0a111f;border-radius:12px;border:1px solid #1f2937;padding:10px;height:190px;overflow:auto}
+  .row h3{margin:0 0 10px 0;font-size:15px;color:#a6b0bc}
+  .toast{position:fixed;right:18px;bottom:18px;background:#0e1626;border:1px solid #1f2937;padding:10px 14px;border-radius:10px;opacity:0;transform:translateY(8px);transition:.2s}
+  .toast.show{opacity:1;transform:none}
+  /* ---- Login overlay ---- */
+  .overlay{position:fixed;inset:0;background:radial-gradient(1200px 600px at 80% 10%,rgba(34,211,238,.08),transparent 60%),linear-gradient(180deg,#0a0f1a 0%,#0b1120 100%);display:none;align-items:center;justify-content:center;padding:24px}
+  .overlay.show{display:flex}
+  .login{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;max-width:980px;width:100%}
+  .panel{background:#0b1220;border:1px solid #1f2937;border-radius:14px;padding:20px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .brand img{width:32px;height:32px}
+  .brand .t1{font-weight:800}
+  .brand .t2{font-size:12px;color:#93a3b8}
+  .pw{display:flex;gap:10px;margin-top:8px}
+  .pw input{flex:1;background:#0d1627;border:1px solid #243041;border-radius:10px;color:#e5e7eb;padding:12px 12px}
+  .pw button{background:#2563eb;border:0;color:white;border-radius:10px;font-weight:700;padding:12px 16px;cursor:pointer}
+  .hints{display:flex;gap:10px;margin-top:10px}
+  .hint{background:#0f192b;border:1px dashed #28344a;color:#98a7b9;font-size:12px;border-radius:9px;padding:8px 10px}
+  .poster{background:#0b1220;border:1px solid #1f2937;border-radius:14px;display:flex;align-items:center;justify-content:center}
+  .poster img{max-width:100%;border-radius:12px}
+  a.link{color:#7dd3fc;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <img src="/static/logo.png" alt="logo">
+    <div class="h-title">MONSTER COINS PRO</div>
+    <span style="color:#94a3b8">— Live Trading Intelligence Dashboard</span>
+    <div style="flex:1"></div>
+    <div class="btns">
+      <button class="btn btn-start" id="btnStart">Başlat</button>
+      <button class="btn btn-stop"  id="btnStop">Durdur</button>
+      <button class="btn btn-logout" id="btnLogout">Çıkış</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Kasa</div>
+        <div class="val" id="vCash">$8,00</div>
+        <div class="chips"><span class="chip"><a class="link" href="/logs/events.csv" target="_blank">logs/events.csv</a></span></div>
+      </div>
+      <div class="kpi">
+        <div class="label">Günlük PnL</div>
+        <div class="val" id="vDay">$0,00</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Açık Pozisyon</div>
+        <div class="val" id="vOpen">0</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Winrate</div>
+        <div class="val" id="vWr">0%</div>
+      </div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="row" style="margin-top:16px">
+    <div class="col card">
+      <h3>Varlık Eğrisi</h3>
+      <canvas id="eq" height="140"></canvas>
+    </div>
+    <div class="col card">
+      <h3>Brain Log (son 100)</h3>
+      <div class="log" id="blog"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Login overlay -->
+<div class="overlay" id="gate">
+  <div class="login">
+    <div class="panel">
+      <div class="brand">
+        <img src="/static/logo.png" alt="">
+        <div>
+          <div class="t1">Monster Coins Pro</div>
+          <div class="t2">Tek Beyin — The Singularity Engine</div>
+        </div>
+      </div>
+      <div style="color:#9fb0c3;font-size:13px">Giriş için parolayı gir (oturum tarayıcıda saklanır).</div>
+      <div class="pw">
+        <input id="pw" type="password" placeholder="Parola">
+        <button id="pwBtn">Giriş</button>
+      </div>
+      <div class="hints">
+        <div class="hint"><input type="checkbox" id="ckWatch" checked> <label for="ckWatch">Brian izleme</label></div>
+        <div class="hint"><input type="checkbox" id="ckMetrics" checked> <label for="ckMetrics">Canlı metrikler</label></div>
+      </div>
+      <div class="hint" style="margin-top:8px">Parolayı değiştirmek için dosyada <code>PASS</code> sabitini güncelle.</div>
+    </div>
+    <div class="poster">
+      <img src="/static/anime.png" alt="anime">
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ====== Ayarlar ====== */
+const PASS = "monster";               // <— şifren
+const GATE_KEY = "mcp_auth_v1";
+const ctxEq = document.getElementById('eq').getContext('2d');
+let eqChart;
+
+/* ====== UI helpers ====== */
+const $ = id => document.getElementById(id);
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
+function formatUsd(x){ return "$" + (Math.round(x*100)/100).toFixed(2) }
+function setKpis(data){
+  $('vCash').textContent = formatUsd(data.cash ?? 0);
+  $('vDay').textContent  = formatUsd(data.today_pnl ?? 0);
+  $('vOpen').textContent = data.open ?? 0;
+  $('vWr').textContent   = ((data.winrate ?? 0)*100).toFixed(1) + "%";
+  const chips = [];
+  if (data.best_today) chips.push(`🟢 En çok kazandıran (bugün): <b>${data.best_today.sym}</b> ${formatUsd(data.best_today.pnl)}`);
+  if (data.worst_today) chips.push(`🔴 En çok kaybettiren (bugün): <b>${data.worst_today.sym}</b> ${formatUsd(data.worst_today.pnl)}`);
+  chips.push(`Status: <b>${data.running ? "RUNNING" : "STOPPED"}</b>`);
+  $('chips').innerHTML = chips.map(x=>`<span class="chip">${x}</span>`).join("");
+}
+function drawEq(seq){
+  if(!eqChart){
+    eqChart = new Chart(ctxEq,{type:"line",data:{labels:seq.map((_,i)=>i+1),datasets:[{label:"Equity",data:seq,tension:.25}]},options:{plugins:{legend:{labels:{color:"#cbd5e1"}}},scales:{x:{display:false},y:{display:true,grid:{color:"#1f2a3b"},ticks:{color:"#94a3b8"}}}}});
+  }else{
+    eqChart.data.labels = seq.map((_,i)=>i+1);
+    eqChart.data.datasets[0].data = seq;
+    eqChart.update('none');
+  }
+}
+
+/* ====== API ====== */
+async function api(path, opt){ const r=await fetch(path,opt); if(!r.ok) throw new Error(path+" "+r.status); return r.json(); }
+async function refresh(){
+  try{
+    const st = await api("/api/status?v=3");
+    setKpis(st.metrics || {cash:st.cash, open:st.open, today_pnl:st.today_pnl, winrate:st.winrate, running:st.running});
+    const ts = await api("/api/timeseries?limit=180");
+    drawEq((ts.series||[]).map(x=>x.eq||x.equity||0));
+    const bl = await api("/api/brainlog?limit=100");
+    $('blog').innerHTML = (bl.items||[]).map(it => {
+      const t = new Date((it.ts||0)*1000).toLocaleTimeString();
+      return `<div>[${t}] <b>${it.kind||it.k}</b> — ${it.msg||it.m||""}</div>`;
+    }).join("");
+  }catch(e){ /* sessiz */ }
+}
+
+/* ====== Start/Stop/Logout ====== */
+$('btnStart').onclick = async ()=>{
+  try{ await api("/api/start",{method:"POST"}); toast("Brain başlatıldı"); }catch(e){ toast("Başlatılamadı"); }
+  refresh();
+};
+$('btnStop').onclick = async ()=>{
+  try{ await api("/api/stop",{method:"POST"}); toast("Brain durduruldu"); }catch(e){ toast("Durdurulamadı"); }
+  refresh();
+};
+$('btnLogout').onclick = ()=>{
+  sessionStorage.removeItem(GATE_KEY);
+  toast("Oturum kapatıldı");
+  setTimeout(()=>{ location.reload(); },350);
+};
+
+/* ====== Login Gate ====== */
+function gateShow(){ $('gate').classList.add('show'); }
+function gateHide(){ $('gate').classList.remove('show'); }
+$('pwBtn').onclick = ()=>{
+  const ok = ($('pw').value||"").trim() === PASS;
+  if(!ok){ alert("Parola hatalı!"); return; }
+  sessionStorage.setItem(GATE_KEY,"1");
+  gateHide();
+  refresh();
+};
+$('pw').addEventListener('keydown',e=>{ if(e.key==="Enter") $('pwBtn').click(); });
+
+/* ====== Init ====== */
+(async function init(){
+  // Chart.js yükle (CDN)
+  const s=document.createElement('script'); s.src="https://cdn.jsdelivr.net/npm/chart.js"; await new Promise(r=>{s.onload=r;document.head.appendChild(s);});
+  if(sessionStorage.getItem(GATE_KEY)==="1"){ gateHide(); } else { gateShow(); }
+  refresh(); setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

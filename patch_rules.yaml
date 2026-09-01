@@ -1,0 +1,239 @@
+# Monster Coins Pro — Full-power auto patch set (AUTOPILOT uyumlu)
+# Bu dosya autopilot.py'nin desteklediği aksiyonları kullanır:
+#  - json_merge
+#  - append_if_missing
+#  - edit_text
+
+rules:
+# =====================================================================
+# 1) CONFIG — Auto pilot varsayılanları, sağlık ve raporlar
+# =====================================================================
+- file: config_live.json
+  action: json_merge
+  patch:
+    cash: 500.0
+    console_verbose: true
+    portfolio: { dip: 0.42, pred: 0.30, news: 0.20, ob: 0.08 }
+    entry_frac:
+      dip: 0.40
+      pred: 0.40
+      news: 0.60
+      ob: 0.50
+    sizing: { min_mult: 0.5, max_mult: 2.0 }
+    max_total_open_positions: 3
+    max_open_per_symbol: 2
+    dip:
+      require_new_dip_after_start: false
+      reset_dip_after_sell: true
+      window_sec: 300
+    rules:
+      level_mode: "per_symbol"
+      abs: { offset: 1.0, tp: 6.0, sl: -6.0 }
+      pct: { offset: 0.10, tp: 0.30, sl: -0.50 }
+      per_symbol_modes:
+        ETHUSDT: abs
+        BTCUSDT: abs
+        SOLUSDT: pct
+        AVAXUSDT: pct
+        BNBUSDT: pct
+        XRPUSDT: pct
+        ADAUSDT: pct
+        DOGEUSDT: pct
+      dynamic_tpsl:
+        enabled: true
+        target_vol_pct: 0.25
+        min_scale: 0.6
+        max_scale: 1.8
+      max_hold_sec: 900
+      breakeven_after_sec: 240
+      min_exit_profit_pct: 0.05
+      decay_tp_pct_per_min: 0.02
+    fees: { taker_pct: 0.10, slippage_pct: 0.02 }
+    dca:
+      enabled: true
+      max_layers: 3
+      step_mode: "pct"
+      step: 0.20
+      alloc_scheme: [0.40, 0.35, 0.25]
+    predictor:
+      enabled: true
+      interval: "1m"
+      limit: 120
+      refresh_sec: 20
+      weights: { squeeze: 0.25, vol: 0.35, accel: 0.20, break: 0.20 }
+      enter_prob: 0.70
+    news_mode:
+      enabled: true
+      cooldown_sec: 300
+      min_quote_volume_usdt: 10000000
+      one_min_change_pct: 1.5
+      cmc_api_key: null
+      trailing_pct: 5.0
+      emergency_sl_pct: -10.0
+    orderbook:
+      max_dist_pct: 0.2
+      imbalance_mult: 2.0
+    scanner:
+      watchlist: ["ETHUSDT","SOLUSDT","AVAXUSDT","BNBUSDT","XRPUSDT","ADAUSDT","DOGEUSDT"]
+      adaptive:
+        enabled: true
+        refresh_min: 10
+        top_n: 7
+        min_quote_volume_usdt: 10000000
+        min_price: 0.02
+        exclude: ["BUSDUSDT"]
+        score: { w_qv: 0.5, w_range: 0.3, w_change: 0.2 }
+    regime:
+      refresh_sec: 20
+      multipliers:
+        TREND:   { tp: 1.4, sl: 0.9, off: 1.1 }
+        MEAN:    { tp: 0.9, sl: 0.7, off: 0.8 }
+        CHOP:    { tp: 0.6, sl: 0.6, off: 1.2 }
+        UNKNOWN: { tp: 1.0, sl: 1.0, off: 1.0 }
+    risk:
+      daily_max_loss_usd: 10.0
+      cooldown_min: 30
+    freq_ctrl:
+      min_sec_between_trades: 20
+      max_trades_per_hour: 60
+    telegram: { enabled: true }
+    candles:
+      bias_len: 50
+      ema_len: 14
+      strict: true
+      exit_on_bearish: true
+      exit_conf: 0.75
+    report:
+      interval_sec: 7200
+      include_cash_on_sell: true
+    health:
+      enabled: true
+      write_csv: true
+    trading_hours:
+      enabled: true
+      tz: "Europe/Berlin"
+      windows: ["00:05-23:30"]
+
+# =====================================================================
+# 2) BOT — minik yamalar & guard’lar
+# =====================================================================
+- file: core/bot.py
+  action: edit_text
+  pattern: "datetime\\.utcnow\\(\\)\\.strftime\\(\"%Y%m%d\"\\)"
+  repl: "datetime.datetime.now(datetime.UTC).strftime(\"%Y%m%d\")"
+
+- file: core/bot.py
+  action: append_if_missing
+  blob: |
+    # --- MetaPatch: protect candle_bias config keys ---
+    try:
+        _cand = cfg.get("candles", {})
+        if "ema_len" not in _cand: _cand["ema_len"] = 14
+        if "bias_len" not in _cand: _cand["bias_len"] = 50
+    except Exception:
+        pass
+
+- file: core/bot.py
+  action: append_if_missing
+  blob: |
+    # --- MetaPatch: CHOP risk limiter ---
+    try:
+        if reg == "CHOP":
+            bonus = max(0.6, bonus*0.85)
+    except Exception:
+        pass
+
+- file: core/bot.py
+  action: append_if_missing
+  blob: |
+    # --- MetaPatch: report logger safe import ---
+    try:
+        from report_logger import write_trade_row
+    except Exception:
+        def write_trade_row(*args, **kwargs):
+            pass
+
+# =====================================================================
+# 3) CANDLES — ema_len guard
+# =====================================================================
+- file: candles.py
+  action: append_if_missing
+  blob: |
+    # MetaPatch: compatibility guard for candle_bias() when ema_len missing
+    def _candles_guard_ok(): 
+        return True
+
+# =====================================================================
+# 4) LOGGER UTILS — MetaBrain hook + health quick
+# =====================================================================
+- file: logger_utils.py
+  action: append_if_missing
+  blob: |
+    # --- MetaBrain hook ---
+    def log_metabrain(event:str, data:dict):
+        try:
+            _log('metabrain', {'event': event, **(data or {})})
+        except Exception:
+            pass
+    # quick health helper (autopilot da kullanabilir)
+    def write_health_quick(d: dict):
+        import os, json, datetime
+        os.makedirs("logs", exist_ok=True)
+        ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        with open(os.path.join("logs", f"health_{ts}.json"), "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=2)
+
+# =====================================================================
+# 5) REPORT LOGGER — güvenli CSV yazıcı
+# =====================================================================
+- file: report_logger.py
+  action: append_if_missing
+  blob: |
+    # MetaPatch: safe CSV writer (idempotent)
+    import os, csv, datetime
+    def _ensure_dir(p):
+        try: os.makedirs(p, exist_ok=True)
+        except: pass
+    def log_csv(log_dir:str, row:dict, name:str="trades.csv"):
+        try:
+            _ensure_dir(log_dir)
+            path = os.path.join(log_dir, name)
+            new = not os.path.exists(path)
+            with open(path, "a", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=row.keys())
+                if new: w.writeheader()
+                w.writerow(row)
+        except Exception:
+            pass
+    def write_trade_row(*, ts=None, slot="", sym="", pnl=0.0, extra=None):
+        ts = ts or datetime.datetime.now().isoformat()
+        row = {"ts": ts, "slot": slot, "sym": sym, "pnl": float(pnl), **(extra or {})}
+        log_csv("logs", row, "trades.csv")
+
+# =====================================================================
+# 6) TELEGRAM UTILS — tg_send harden
+# =====================================================================
+- file: telegram_utils.py
+  action: append_if_missing
+  blob: |
+    # MetaPatch: harden tg_send
+    def _safe_str(x):
+        try: return str(x)
+        except Exception: return "<bin>"
+    _tg_send_orig = tg_send if 'tg_send' in globals() else None
+    def tg_send(text: str):
+        try:
+            if _tg_send_orig:
+                _tg_send_orig(_safe_str(text))
+        except Exception as e:
+            try: print("[TG] send fail:", e)
+            except: pass
+
+# =====================================================================
+# 7) REQUIREMENTS — eksikler
+# =====================================================================
+- file: requirements.txt
+  action: append_if_missing
+  blob: |
+    pyyaml>=6.0
+    openai>=1.6.0

@@ -1,0 +1,53 @@
+{
+  "change_styles": {
+    "punish": 0.237,
+    "replace": 0.277,
+    "branch": 0.277,
+    "rewrite": 0.118,
+    "meta_shift": 0.091
+  },
+  "risk_bias": {
+    "TREND": {
+      "enter": 0.1,
+      "tp": 0.1,
+      "sl": -0.05
+    },
+    "CHOP": {
+      "enter": -0.15,
+      "tp": -0.15,
+      "sl": 0.1
+    },
+    "MEAN": {
+      "enter": -0.05,
+      "tp": -0.05,
+      "sl": 0.05
+    },
+    "UNKNOWN": {
+      "enter": 0.0,
+      "tp": 0.0,
+      "sl": 0.0
+    }
+  },
+  "gate": {
+    "min_trades": 100,
+    "wr": 0.52,
+    "pf": 1.2,
+    "maxdd": -5.0
+  },
+  "throttle": {
+    "max_new_per_day": 4
+  },
+  "meta": {
+    "selector": "softmax",
+    "styles_pool": [
+      "punish",
+      "replace",
+      "branch",
+      "rewrite",
+      "meta_shift"
+    ],
+    "bandit": {
+      "c": 1.2
+    }
+  }
+}

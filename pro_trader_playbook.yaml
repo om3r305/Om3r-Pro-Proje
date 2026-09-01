@@ -1,0 +1,90 @@
+meta:
+  name: "Pro Trader Playbook"
+  version: 1
+  goal: "Sermayeyi koru, fırsatta agresifleş."
+  priorities: ["risk", "likidite", "edge", "disiplin", "basitlik"]
+
+risk_framework:
+  max_risk_per_trade_pct: 0.3        # kasa %0.3 risk (taker+slip sonrası)
+  daily_max_loss_usd: 10.0           # config ile eşleşiyor
+  cooldown_after_daily_stop_min: 30
+  pyramid_wins: true
+  cut_losses_fast: true
+  breakeven_lock_after_min: 4
+  trail_on_impulse: true
+
+positioning:
+  base_entry_frac:
+    dip: 0.40
+    pred: 0.40
+    news: 0.60
+    ob:   0.50
+  conviction_boost:
+    TREND:   1.2
+    MEAN:    1.0
+    CHOP:    0.6
+    UNKNOWN: 0.9
+  candle_bias_bonus:
+    bullish: 0.10
+    neutral: 0.00
+    bearish: -1.00   # strict ise long kapat
+
+tpsl_policy:
+  level_mode_default: "per_symbol"
+  abs: { offset: 1.0, tp: 6.0, sl: -6.0 }
+  pct: { offset: 0.10, tp: 0.30, sl: -0.50 }
+  dynamic_tpsl:
+    enabled: true
+    min_scale: 0.6
+    max_scale: 1.8
+    target_vol_pct: 0.25
+  time_rules:
+    max_hold_sec: 900
+    breakeven_after_sec: 240
+    min_exit_profit_pct: 0.05
+    decay_tp_pct_per_min: 0.02
+
+execution_filters:
+  candles:
+    strict: true
+    exit_on_bearish: true
+    exit_conf: 0.75
+  orderbook:
+    max_dist_pct: 0.2
+    imbalance_mult: 2.0
+    min_wall_qty: 12000
+    min_distance_bps: 6
+
+adaptation:
+  per_symbol_tune:
+    enabled: true
+    modes: ["abs","pct","hybrid_max"]
+    pos_pnl_cut: 0.4
+    neg_pnl_cut: -0.5
+    auto_switch_after_trades: 30
+  autopilot:
+    horizons: ["2h","6h","24h"]
+    targets: { pf_min: 1.15, wr_min: 0.48, maxdd_max: -2.0 }
+    step_size: 0.10
+    throttle_min: 1800  # saniye; patch sıklığı
+
+playbook_rules:
+  - name: "Büyük zarar yok"
+    if:   "rolling_maxdd_usd <= -10"
+    then: ["set: trading_pause=30m", "reduce: entry_frac_all by 30%"]
+
+  - name: "Seri kayıp kes"
+    if:   "last_5_trades_winrate < 20%"
+    then: ["tighten: sl by 20%", "lower: tp by 10%", "cooldown: 10m"]
+
+  - name: "Rüzgar arkada"
+    if:   "regime=='TREND' and candles_bias=='bullish'"
+    then: ["boost: conviction 15%", "enable: pyramid_wins"]
+
+  - name: "OB tek başına yetmez"
+    if:   "slot=='ob' and winrate_2h<45%"
+    then: ["raise: ob.min_distance_bps to 8", "limit: ob.max_trades_per_hour to 2"]
+
+  - name: "Dip güvenlik"
+    if:   "slot=='dip' and sl_hit_rate_6h>35%"
+    then: ["switch: rules.level_mode to 'hybrid_max'", "increase: abs.offset by 0.2"]

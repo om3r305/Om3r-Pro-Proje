@@ -16,3 +16,7 @@ logs/
 
 # Secrets
 .env
+runtime/brian2026/
+*.tmp
+.env.*
+!.env.example

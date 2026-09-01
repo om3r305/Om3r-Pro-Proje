@@ -1,0 +1,81 @@
+
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Proje1 • Dashboard</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo"><div class="dot pulse"></div><h1>Brian • Pro Dashboard</h1></div>
+      <div class="controls">
+        <input id="search" placeholder="Sembol ara (örn. ETH)">
+        <button onclick="location.reload()">Yenile</button>
+      </div>
+    </header>
+
+    <section class="grid grid-4">
+      <div class="card"><h3>Kasa</h3><div class="kpi" id="kpi-cash">$0.00</div></div>
+      <div class="card"><h3>Profit Factor</h3><div class="kpi" id="kpi-pf">0.00</div></div>
+      <div class="card"><h3>Win Rate</h3><div class="kpi" id="kpi-wr">0%</div></div>
+      <div class="card"><h3>Max Drawdown</h3><div class="kpi" id="kpi-dd">0.00</div></div>
+    </section>
+
+    <section class="hero">
+      <div class="card">
+        <div class="spark"></div>
+        <h3>PnL Zaman Serisi</h3>
+        <canvas id="pnlChart" class="chart" height="220"></canvas>
+        <div class="footer"><span class="small">Son 150 işlem</span></div>
+      </div>
+      <div class="card">
+        <h3>Slot Dağılımı</h3>
+        <canvas id="slotChart" class="chart" height="220"></canvas>
+        <div class="separator"></div>
+        <div id="slotLegend" class="flex wrap"></div>
+      </div>
+    </section>
+
+    <section class="grid grid-3">
+      <div class="card">
+        <h3>Trade Akışı</h3>
+        <table>
+          <thead><tr><th>Zaman</th><th>Sembol</th><th>Yön</th><th>Slot</th><th>Adet</th><th>Fiyat</th><th>PnL</th></tr></thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Olaylar</h3>
+        <div id="events" style="max-height:380px; overflow:auto"></div>
+      </div>
+      <div class="card">
+        <h3>Runtime Overrides</h3>
+        <div id="overrides" style="max-height:380px; overflow:auto"></div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span class="tag">WS: 8765</span>
+      <span class="tag">Fallback: logs/* polling</span>
+      <span class="small">© Brian — built for speed</span>
+    </footer>
+  </div>
+
+  <div class="login-screen" id="login-screen">
+    <form class="login-card fade-in" id="login">
+      <h2>Giriş</h2>
+      <p>Panoya erişmek için kullanıcı adı ve erişim kodu girin.</p>
+      <div class="grid grid-2" style="margin-bottom:10px">
+        <input placeholder="Kullanıcı adı" required>
+        <input placeholder="Erişim kodu" type="password" required>
+      </div>
+      <button type="submit">Giriş Yap</button>
+    </form>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

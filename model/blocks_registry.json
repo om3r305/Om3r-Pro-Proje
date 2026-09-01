@@ -1,0 +1,374 @@
+{
+  "blocks": {
+    "spectral_hint_1758197016_428": {
+      "file": "spectral_hint_1758197016_428.py",
+      "created_ts": 1758197016.6335793,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758197261_577": {
+      "file": "spectral_hint_1758197261_577.py",
+      "created_ts": 1758197261.8416898,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758197773_533": {
+      "file": "spectral_hint_1758197773_533.py",
+      "created_ts": 1758197773.1379564,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758198033_890": {
+      "file": "spectral_hint_1758198033_890.py",
+      "created_ts": 1758198033.0305068,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758198290_969": {
+      "file": "spectral_hint_1758198290_969.py",
+      "created_ts": 1758198291.003703,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758198803_269": {
+      "file": "spectral_hint_1758198803_269.py",
+      "created_ts": 1758198803.829351,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758199047_895": {
+      "file": "spectral_hint_1758199047_895.py",
+      "created_ts": 1758199047.0314684,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758199815_196": {
+      "file": "spectral_hint_1758199815_196.py",
+      "created_ts": 1758199815.742767,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758200330_745": {
+      "file": "spectral_hint_1758200330_745.py",
+      "created_ts": 1758200330.9243414,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758269653_571": {
+      "file": "spectral_hint_1758269653_571.py",
+      "created_ts": 1758269653.835733,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758273810_380": {
+      "file": "spectral_hint_1758273810_380.py",
+      "created_ts": 1758273810.4146802,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758274059_433": {
+      "file": "spectral_hint_1758274059_433.py",
+      "created_ts": 1758274059.118484,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758274105_354": {
+      "file": "spectral_hint_1758274105_354.py",
+      "created_ts": 1758274105.9939065,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758274346_695": {
+      "file": "spectral_hint_1758274346_695.py",
+      "created_ts": 1758274346.3734894,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758274685_283": {
+      "file": "spectral_hint_1758274685_283.py",
+      "created_ts": 1758274685.2661128,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758275576_188": {
+      "file": "spectral_hint_1758275576_188.py",
+      "created_ts": 1758275576.7307734,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758275820_464": {
+      "file": "spectral_hint_1758275820_464.py",
+      "created_ts": 1758275820.3388946,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758276068_971": {
+      "file": "spectral_hint_1758276068_971.py",
+      "created_ts": 1758276068.9563684,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758276817_341": {
+      "file": "spectral_hint_1758276817_341.py",
+      "created_ts": 1758276817.0507302,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758277063_830": {
+      "file": "spectral_hint_1758277063_830.py",
+      "created_ts": 1758277063.6419148,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758277554_469": {
+      "file": "spectral_hint_1758277554_469.py",
+      "created_ts": 1758277554.914906,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758278285_380": {
+      "file": "spectral_hint_1758278285_380.py",
+      "created_ts": 1758278285.7593079,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758278776_295": {
+      "file": "spectral_hint_1758278776_295.py",
+      "created_ts": 1758278776.028226,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758279504_768": {
+      "file": "spectral_hint_1758279504_768.py",
+      "created_ts": 1758279504.9169748,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758280247_166": {
+      "file": "spectral_hint_1758280247_166.py",
+      "created_ts": 1758280247.361082,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758280749_840": {
+      "file": "spectral_hint_1758280749_840.py",
+      "created_ts": 1758280749.1545238,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758280996_275": {
+      "file": "spectral_hint_1758280996_275.py",
+      "created_ts": 1758280996.2464552,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758281484_932": {
+      "file": "spectral_hint_1758281484_932.py",
+      "created_ts": 1758281484.5225432,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758282719_644": {
+      "file": "spectral_hint_1758282719_644.py",
+      "created_ts": 1758282719.4147067,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758282963_956": {
+      "file": "spectral_hint_1758282963_956.py",
+      "created_ts": 1758282963.1502476,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758283212_864": {
+      "file": "spectral_hint_1758283212_864.py",
+      "created_ts": 1758283212.8731205,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758283460_645": {
+      "file": "spectral_hint_1758283460_645.py",
+      "created_ts": 1758283460.0085263,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758284480_561": {
+      "file": "spectral_hint_1758284480_561.py",
+      "created_ts": 1758284480.1765182,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758285472_346": {
+      "file": "spectral_hint_1758285472_346.py",
+      "created_ts": 1758285472.214647,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758285725_952": {
+      "file": "spectral_hint_1758285725_952.py",
+      "created_ts": 1758285725.9625392,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758285973_124": {
+      "file": "spectral_hint_1758285973_124.py",
+      "created_ts": 1758285973.7629077,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    },
+    "spectral_hint_1758286472_611": {
+      "file": "spectral_hint_1758286472_611.py",
+      "created_ts": 1758286472.5078292,
+      "spec": {
+        "shape": [
+          "value"
+        ],
+        "idea": "vol_norm scaled derivative-ish hint"
+      }
+    }
+  }
+}

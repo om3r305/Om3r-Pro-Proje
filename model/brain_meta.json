@@ -1,0 +1,32 @@
+{
+  "ts": 1758275576.7325382,
+  "wr": 0.0,
+  "pf": 0.0,
+  "n": 0,
+  "scale": {},
+  "veto_conf_min": 0.553,
+  "last_overrides": {
+    "brain.veto_conf_min": 0.553,
+    "portfolio.dip": 0.42,
+    "portfolio.pred": 0.3,
+    "portfolio.news": 0.2,
+    "portfolio.ob": 0.08,
+    "entry_frac.dip": 0.4,
+    "entry_frac.pred": 0.4,
+    "entry_frac.news": 0.6,
+    "entry_frac.ob": 0.5
+  },
+  "ts_overrides": 1758286806.7368355,
+  "portfolio": {
+    "dip": 0.42,
+    "pred": 0.3,
+    "news": 0.2,
+    "ob": 0.08
+  },
+  "entry_frac": {
+    "dip": 0.4,
+    "pred": 0.4,
+    "news": 0.6,
+    "ob": 0.5
+  }
+}
