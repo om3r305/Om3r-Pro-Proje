@@ -18,6 +18,7 @@ class StructureConfig:
     zone_width_atr:float=.35;near_zone_atr:float=.75;volume_period:int=20
     def __post_init__(self):
         if min(self.left_bars,self.right_bars,self.atr_period,self.volume_period)<1:raise ValueError("windows must be positive")
+        if min(self.break_buffer_atr,self.zone_width_atr,self.near_zone_atr)<0:raise ValueError("ATR thresholds must be non-negative")
 
 @dataclass(frozen=True,slots=True)
 class StructureCandle:
@@ -55,7 +56,7 @@ class MarketStructureFeatures:
     buying_exhaustion_proxy:bool|None;momentum_deceleration:bool|None
     momentum_recovery:bool|None;acceleration:float|None;dip_score:float|None
     rally_score:float|None;confirmed_swings:tuple[ConfirmedSwing,...]
-    schema_version:str="brian.market-structure.v1"
+    schema_version:str="brian.market-structure.v2"
     def numeric(self):
         out={"structure_state":{"DOWNTREND":-1.,"RANGE":0.,"TRANSITION":0.,"UPTREND":1.,"UNKNOWN":None}[self.state]}
         skip={"timestamp","state","latest_high_label","latest_low_label","confirmed_swings","schema_version"}
@@ -133,6 +134,9 @@ def compute_market_structure(candles:Sequence[StructureCandle],config:StructureC
                 else:bear_div=swing.price>history[-2].price and swing.rsi<history[-2].rsi
         state=_state(highs,lows);support=_zone(lows,candle.close,atr,i,rows,config.zone_width_atr,True);resistance=_zone(highs,candle.close,atr,i,rows,config.zone_width_atr,False)
         bull_sweep=bool(kl and candle.low<kl.price-buffer and candle.close>kl.price);bear_sweep=bool(kh and candle.high>kh.price+buffer and candle.close<kh.price)
+        previous_close=rows[i-1].close if i else None
+        failed_breakdown=bool(i and atr and kl and previous_close is not None and previous_close<kl.price-buffer and candle.close>kl.price)
+        failed_breakout=bool(i and atr and kh and previous_close is not None and previous_close>kh.price+buffer and candle.close<kh.price)
         bull_retest=bool(atr and last_bull and candle.low<=last_bull.price+config.zone_width_atr*atr and candle.close>last_bull.price and not bull)
         bear_retest=bool(atr and last_bear and candle.high>=last_bear.price-config.zone_width_atr*atr and candle.close<last_bear.price and not bear)
         span=max(candle.high-candle.low,1e-12);body=abs(candle.close-candle.open);upper=candle.high-max(candle.open,candle.close);lower=min(candle.open,candle.close)-candle.low
@@ -144,13 +148,16 @@ def compute_market_structure(candles:Sequence[StructureCandle],config:StructureC
         sample=volumes[i-config.volume_period+1:i+1] if mean is not None else [];sd=statistics.pstdev(sample) if sample else None
         volume_z=(candle.volume-mean)/sd if sd else (0. if mean is not None else None);relative=candle.volume/mean if mean else None
         returns=[closes[k]/closes[k-1]-1 for k in range(max(1,i-2),i+1)];accel=returns[-1]-returns[-2] if len(returns)>1 else None
-        decel=abs(returns[-1])<abs(returns[-2]) if len(returns)>1 else None;recovery=returns[-2]<0<returns[-1] if len(returns)>1 else None
+        decel=abs(returns[-1])<abs(returns[-2]) if len(returns)>1 else None
+        bullish_recovery=returns[-2]<0<returns[-1] if len(returns)>1 else None
+        bearish_recovery=returns[-2]>0>returns[-1] if len(returns)>1 else None
+        recovery=bool(bullish_recovery or bearish_recovery) if bullish_recovery is not None and bearish_recovery is not None else None
         vol_expand=relative>1.5 if relative is not None else None
         pullback=None if relative is None else bool(relative<.8 and ((state=="UPTREND" and candle.close<candle.open) or (state=="DOWNTREND" and candle.close>candle.open)))
         near_s=support[1] is not None and support[1]<=config.near_zone_atr;near_r=resistance[1] is not None and resistance[1]<=config.near_zone_atr
-        dip=_score((1. if state=="UPTREND" else 0.,1. if near_s else 0. if support[0] else None,lower/span,1. if bull_sweep else 0.,max(0.,min(1.,(50-rsi)/30)) if rsi is not None else None,1. if decel else 0. if decel is not None else None,1. if recovery else 0. if recovery is not None else None,1. if pullback else 0. if relative is not None else None))
-        rally=_score((1. if state=="DOWNTREND" else 0.,1. if near_r else 0. if resistance[0] else None,upper/span,1. if bear_sweep else 0.,max(0.,min(1.,(rsi-50)/30)) if rsi is not None else None,1. if decel else 0. if decel is not None else None,0. if recovery else 1. if recovery is not None else None,1. if pullback else 0. if relative is not None else None))
-        out.append(MarketStructureFeatures(candle.close_timestamp,state,highs[-1].price if highs else None,lows[-1].price if lows else None,highs[-1].label if highs else None,lows[-1].label if lows else None,bull and not bull_choch,bear and not bear_choch,bull_choch,bear_choch,support[0],resistance[0],support[1],resistance[1],support[2],resistance[2],support[3],resistance[3],support[4],resistance[4],bull_sweep,bear_sweep,bull_sweep,bear_sweep,bull_retest,bear_retest,bull_div,bear_div,atr,rsi,body/span,upper/span,lower/span,(candle.close-candle.low)/span,expansion,expansion<.8 if expansion is not None else None,None if atr is None else span>=1.5*atr and body/span>=.65,inside,outside,bull_run,bear_run,(candle.close-equilibrium)/atr if equilibrium is not None and atr else None,volume_z,relative,vol_expand,pullback,None if vol_expand is None else bool(vol_expand and lower/span>.5 and candle.close>candle.open),None if vol_expand is None else bool(vol_expand and upper/span>.5 and candle.close<candle.open),decel,recovery,accel,dip,rally,tuple(new)))
+        dip=_score((1. if state=="UPTREND" else 0.,1. if near_s else 0. if support[0] else None,lower/span,1. if (bull_sweep or failed_breakdown) else 0.,max(0.,min(1.,(50-rsi)/30)) if rsi is not None else None,1. if decel else 0. if decel is not None else None,1. if bullish_recovery else 0. if bullish_recovery is not None else None,1. if pullback else 0. if relative is not None else None))
+        rally=_score((1. if state=="DOWNTREND" else 0.,1. if near_r else 0. if resistance[0] else None,upper/span,1. if (bear_sweep or failed_breakout) else 0.,max(0.,min(1.,(rsi-50)/30)) if rsi is not None else None,1. if decel else 0. if decel is not None else None,1. if bearish_recovery else 0. if bearish_recovery is not None else None,1. if pullback else 0. if relative is not None else None))
+        out.append(MarketStructureFeatures(candle.close_timestamp,state,highs[-1].price if highs else None,lows[-1].price if lows else None,highs[-1].label if highs else None,lows[-1].label if lows else None,bull and not bull_choch,bear and not bear_choch,bull_choch,bear_choch,support[0],resistance[0],support[1],resistance[1],support[2],resistance[2],support[3],resistance[3],support[4],resistance[4],bull_sweep,bear_sweep,failed_breakdown,failed_breakout,bull_retest,bear_retest,bull_div,bear_div,atr,rsi,body/span,upper/span,lower/span,(candle.close-candle.low)/span,expansion,expansion<.8 if expansion is not None else None,None if atr is None else span>=1.5*atr and body/span>=.65,inside,outside,bull_run,bear_run,(candle.close-equilibrium)/atr if equilibrium is not None and atr else None,volume_z,relative,vol_expand,pullback,None if vol_expand is None else bool(vol_expand and lower/span>.5 and candle.close>candle.open),None if vol_expand is None else bool(vol_expand and upper/span>.5 and candle.close<candle.open),decel,recovery,accel,dip,rally,tuple(new)))
     return tuple(out)
 
 def join_completed_timeframes(primary:Sequence[MarketStructureFeatures],fifteen:Sequence[MarketStructureFeatures],hourly:Sequence[MarketStructureFeatures]):
@@ -159,5 +166,5 @@ def join_completed_timeframes(primary:Sequence[MarketStructureFeatures],fifteen:
     for row in primary:
         i15=bisect_right(t15,row.timestamp)-1;i1h=bisect_right(t1h,row.timestamp)-1;m15=fifteen[i15] if i15>=0 else None;h1=hourly[i1h] if i1h>=0 else None
         known=[x for x in (row.state,m15.state if m15 else None,h1.state if h1 else None) if x not in (None,"UNKNOWN")]
-        out.append({"timestamp":row.timestamp,"structure_5m":row,"structure_15m":m15,"structure_1h":h1,"mtf_agreement":len(known)==3 and len(set(known))==1,"htf_trend_ltf_pullback":bool(m15 and h1 and m15.state==h1.state and ((h1.state=="UPTREND" and row.dip_score is not None) or (h1.state=="DOWNTREND" and row.rally_score is not None))),"htf_trend_ltf_reversal":bool(m15 and h1 and m15.state==h1.state and ((h1.state=="UPTREND" and row.bullish_choch) or (h1.state=="DOWNTREND" and row.bearish_choch))),"counter_trend_warning":bool(h1 and row.state in ("UPTREND","DOWNTREND") and h1.state in ("UPTREND","DOWNTREND") and row.state!=h1.state)})
+        out.append({"timestamp":row.timestamp,"structure_5m":row,"structure_15m":m15,"structure_1h":h1,"mtf_agreement":len(known)==3 and len(set(known))==1,"htf_trend_ltf_pullback":bool(m15 and h1 and m15.state==h1.state and ((h1.state=="UPTREND" and row.dip_score is not None and row.dip_score>=.55) or (h1.state=="DOWNTREND" and row.rally_score is not None and row.rally_score>=.55))),"htf_trend_ltf_reversal":bool(m15 and h1 and m15.state==h1.state and ((h1.state=="UPTREND" and row.bullish_choch) or (h1.state=="DOWNTREND" and row.bearish_choch))),"counter_trend_warning":bool(h1 and row.state in ("UPTREND","DOWNTREND") and h1.state in ("UPTREND","DOWNTREND") and row.state!=h1.state)})
     return tuple(out)
