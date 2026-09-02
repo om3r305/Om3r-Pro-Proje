@@ -22,6 +22,8 @@ Phase 3.0 adds a reinforcement-learning challenger without giving an RL policy a
 
 State = PIT-safe market features plus explicit current position state.
 
+Each market feature is encoded as `(value, missing_flag)`. An unavailable feature is therefore not silently treated as a genuine numeric zero. Position is then appended as a three-way one-hot state.
+
 Target actions are fixed to:
 
 - `-1`: target SHORT
@@ -79,10 +81,11 @@ No outcome-based sampling is allowed.
 2. observation/execution at or beyond the 2026 cutoff hard-fails;
 3. full counterfactual action coverage is deterministic;
 4. position state is included in the Markov state;
-5. RL fitting is train-only;
-6. repeated training with identical inputs is deterministic;
-7. no exchange execution methods exist;
-8. existing Brian CI, compile, import and hard-shadow checks pass.
+5. unavailable evidence remains distinguishable from genuine numeric zero;
+6. RL fitting is train-only;
+7. repeated training with identical inputs is deterministic;
+8. no exchange execution methods exist;
+9. existing Brian CI, compile, import and hard-shadow checks pass.
 
 ## What this phase does not claim
 
