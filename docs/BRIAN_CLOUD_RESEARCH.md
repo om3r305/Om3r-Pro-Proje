@@ -46,3 +46,10 @@ datasets or experiments reaching that cutoff. The declaration remains
 Brian remains `SHADOW_RESEARCH_ONLY`. The workflows have read-only repository
 permissions, use no secrets, call no authenticated exchange endpoint, and
 contain no live order or strategy-promotion step.
+
+## Run Phase 2.7 Development
+
+Select `phase27-development` to run the separately preregistered market-
+structure research suite over the same immutable 2020–2025 development range.
+It adds Phase 2.7 ablations, regime and source-gap reports, market-structure
+summary, and equity curves to the review artifact without uploading raw data.
