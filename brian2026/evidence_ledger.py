@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from hashlib import sha256
+from types import MappingProxyType
 from typing import Any, Literal, Mapping, Sequence
 import json
 import math
@@ -22,6 +23,21 @@ def _canonical(value: Any) -> Any:
         return {str(key): _canonical(value[key]) for key in sorted(value, key=lambda item: str(item))}
     if isinstance(value, (list, tuple)):
         return [_canonical(item) for item in value]
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("evidence payload cannot contain NaN or infinity")
+        return float(value)
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    raise TypeError(f"unsupported evidence value: {type(value).__name__}")
+
+
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        frozen = {str(key): _deep_freeze(item) for key, item in value.items()}
+        return MappingProxyType(frozen)
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(item) for item in value)
     if isinstance(value, float):
         if not math.isfinite(value):
             raise ValueError("evidence payload cannot contain NaN or infinity")
@@ -78,12 +94,17 @@ class EvidenceRecord:
             raise ValueError("current final holdout status must remain INVALID_CONTAMINATED")
         if not self.evaluation_allowed and self.scope in {"validation", "locked_test"}:
             raise ValueError("locked evaluation cannot be recorded when evaluation_allowed is false")
+
+        frozen_metrics = _deep_freeze(self.metrics)
+        frozen_gates = _deep_freeze(self.gates)
+        object.__setattr__(self, "metrics", frozen_metrics)
+        object.__setattr__(self, "gates", frozen_gates)
+        object.__setattr__(self, "parent_evidence_ids", tuple(str(item) for item in self.parent_evidence_ids))
+
         if self.decision == "SHADOW_CANDIDATE" and not bool(self.gates.get("all_required_gates_passed", False)):
             raise ValueError("SHADOW_CANDIDATE requires all required scientific gates")
-        _canonical(self.metrics)
-        _canonical(self.gates)
         for parent in self.parent_evidence_ids:
-            if not str(parent).strip():
+            if not parent.strip():
                 raise ValueError("parent evidence ids must be non-empty")
         object.__setattr__(self, "evidence_id", content_hash(self.identity_payload()))
 
