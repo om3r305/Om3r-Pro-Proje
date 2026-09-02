@@ -89,8 +89,16 @@ class MultiMonthDatasetManifest:
         payload = {"dataset_id": self.dataset_id, **asdict(self)}
         target = Path(root) / "dataset_manifests" / f"{self.dataset_id}.json"
         content = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode() + b"\n"
-        if target.exists() and target.read_bytes() != content:
-            raise FileExistsError("immutable multi-month manifest conflict")
+        if target.exists():
+            existing = json.loads(target.read_text(encoding="utf-8"))
+            comparable_existing = {key: value for key, value in existing.items()
+                                   if key not in ("dataset_id", "creation_timestamp")}
+            comparable_new = {key: value for key, value in asdict(self).items()
+                              if key != "creation_timestamp"}
+            if (existing.get("dataset_id") != self.dataset_id or
+                    canonical_hash(comparable_existing) != canonical_hash(comparable_new)):
+                raise FileExistsError("immutable multi-month manifest conflict")
+            return target
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(content)
         return target
