@@ -83,7 +83,7 @@ class SandboxDecision:
         return asdict(self)
 
 
-def _finite_vector(values: Sequence[float]) -> tuple[float, ...]:
+def _finite_state(values: Sequence[float]) -> tuple[float, ...]:
     out: list[float] = []
     for value in values:
         number = float(value)
@@ -91,10 +91,20 @@ def _finite_vector(values: Sequence[float]) -> tuple[float, ...]:
     return tuple(out)
 
 
+def _encode_features(features: Sequence[float]) -> tuple[float, ...]:
+    """Encode value + explicit missing flag so unavailable evidence is not confused with zero."""
+    out: list[float] = []
+    for value in features:
+        number = float(value)
+        missing = not math.isfinite(number)
+        out.extend((0.0 if missing else number, 1.0 if missing else 0.0))
+    return tuple(out)
+
+
 def state_with_position(features: Sequence[float], position: TargetPosition) -> tuple[float, ...]:
     if position not in ACTIONS:
         raise ValueError("invalid position")
-    base = _finite_vector(features)
+    base = _encode_features(features)
     return base + (
         1.0 if position == -1 else 0.0,
         1.0 if position == 0 else 0.0,
@@ -248,7 +258,7 @@ class ConservativeFittedQAgent:
     def q_values(self, state: Sequence[float]) -> Mapping[TargetPosition, float]:
         if self.fit_partition != "train" or not self.models or self.state_width is None:
             raise RuntimeError("RL agent is not fitted")
-        row = np.asarray(_finite_vector(state), dtype=float)[None, :]
+        row = np.asarray(_finite_state(state), dtype=float)[None, :]
         if row.shape[1] != self.state_width:
             raise ValueError("state width differs from fitted model")
         return {action: float(self.models[action].predict(row)[0]) for action in ACTIONS}
