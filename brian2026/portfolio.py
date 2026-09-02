@@ -210,13 +210,16 @@ class StatefulPortfolioSimulator:
         else:return False
         self._close(bar,stop if reason=="STOP" else target if reason=="TARGET" else bar.close,reason);return True
 
-    def step(self,bar:PortfolioBar,action:Action)->None:
+    def step(self,bar:PortfolioBar,action:Action,*,forced_exit_reason:str|None=None)->None:
         if self.curve and bar.timestamp<=self.curve[-1].timestamp:raise ValueError("portfolio bars must be strictly chronological")
         if action not in ("BUY","SELL","WAIT"):raise ValueError("invalid signal")
+        if forced_exit_reason is not None and not str(forced_exit_reason).strip():raise ValueError("forced exit reason must be non-empty")
         cooldown_active=self.cooldown>0 and self.position is None
         if cooldown_active:self.cooldown-=1
         self.signals+=1;self.buy+=action=="BUY";self.sell+=action=="SELL";self.wait+=action=="WAIT"
         exited=self._lifecycle_exit(bar)
+        if not exited and self.position and forced_exit_reason is not None:
+            self._close(bar,bar.close,str(forced_exit_reason));exited=True
         if not exited and self.position:
             same=(self.position.side=="LONG" and action=="BUY") or (self.position.side=="SHORT" and action=="SELL")
             opposite=(self.position.side=="LONG" and action=="SELL") or (self.position.side=="SHORT" and action=="BUY")
