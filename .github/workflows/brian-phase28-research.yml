@@ -1,29 +1,18 @@
-name: Brian 2026 Cloud Research
+name: Brian 2026 Phase 2.8 Research
 
 on:
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: Research scope
-        required: true
-        default: smoke
-        type: choice
-        options:
-          - smoke
-          - full-development
-          - phase27-development
-          - phase28-development
   push:
     branches:
       - brian-2026
     paths:
-      - .github/BRIAN_PHASE27_RUN_REQUEST
+      - .github/BRIAN_PHASE28_RUN_REQUEST
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: brian-research-${{ github.ref }}-${{ github.event_name }}-${{ inputs.mode || 'phase27-development' }}
+  group: brian-phase28-research-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -32,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
-      BRIAN_RESEARCH_MODE: ${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}
+      BRIAN_RESEARCH_MODE: phase28-development
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -52,12 +41,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-brian-research-v2-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase24.py', 'brian2026/parquet_store.py') }}-
             ${{ runner.os }}-brian-research-v2-
-      - name: Run public-data shadow research
+      - name: Run fixed Phase 2.8 public-data shadow research
         run: python -m brian2026.cloud_runner --mode "$BRIAN_RESEARCH_MODE"
       - name: Upload review outputs
         uses: actions/upload-artifact@v4
         with:
-          name: brian-${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}-${{ github.run_id }}
+          name: brian-phase28-development-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 30
           path: |

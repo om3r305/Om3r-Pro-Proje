@@ -36,6 +36,7 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(SMOKE_END, datetime(2024, 2, 1, tzinfo=timezone.utc))
         self.assertEqual(mode_range("full-development")[1], DEVELOPMENT_END)
         self.assertEqual(mode_range("phase27-development")[1], DEVELOPMENT_END)
+        self.assertEqual(mode_range("phase28-development")[1], DEVELOPMENT_END)
         self.assertEqual(DEVELOPMENT_END.timestamp(), DEVELOPMENT_CUTOFF)
 
     def test_unsupported_mode_is_rejected(self):
@@ -64,7 +65,7 @@ class CloudRunnerTests(unittest.TestCase):
             return dataset()
 
         def forbidden_experiment(root, dataset_id):
-            raise AssertionError("smoke must not run Phase 2.5")
+            raise AssertionError("smoke must not run development experiments")
 
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "cloud_results" / "brian_cloud_summary.json"
@@ -112,6 +113,18 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(summary["phase27_experiment_id"], "p27")
         self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
         self.assertEqual(summary["holdout"]["status"], HOLDOUT_STATUS)
+
+    def test_phase28_mode_is_fixed_shadow_development_only(self):
+        full_dataset = replace(dataset(), requested_start="2020-01-01T00:00:00+00:00",
+                               requested_end="2026-01-01T00:00:00+00:00")
+        experiment = {"declaration": FINAL_HOLDOUT_DECLARATION, "experiment_id": "p28",
+                      "date_range": {"max_observed_timestamp": DEVELOPMENT_CUTOFF - .001},
+                      "candidate_decision": {"status": "INSUFFICIENT_EVIDENCE"}}
+        summary = build_cloud_summary("phase28-development", full_dataset, experiment)
+        self.assertEqual(summary["phase28_experiment_id"], "p28")
+        self.assertEqual(summary["candidate_decisions"]["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(summary["requested_range"]["end_exclusive"], DEVELOPMENT_END.isoformat())
+        self.assertFalse(summary["holdout"]["evaluation_allowed"])
 
     def test_no_exchange_execution_surface_is_introduced(self):
         engine = BrianEngine({"shadow_only": False})
