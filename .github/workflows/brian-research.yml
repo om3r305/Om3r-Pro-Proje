@@ -12,12 +12,17 @@ on:
           - smoke
           - full-development
           - phase27-development
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - .github/BRIAN_PHASE27_RUN_REQUEST
 
 permissions:
   contents: read
 
 concurrency:
-  group: brian-research-${{ github.ref }}-${{ inputs.mode }}
+  group: brian-research-${{ github.ref }}-${{ github.event_name }}-${{ inputs.mode || 'phase27-development' }}
   cancel-in-progress: false
 
 jobs:
@@ -26,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
-      BRIAN_RESEARCH_MODE: ${{ inputs.mode }}
+      BRIAN_RESEARCH_MODE: ${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -51,7 +56,7 @@ jobs:
       - name: Upload review outputs
         uses: actions/upload-artifact@v4
         with:
-          name: brian-${{ inputs.mode }}-${{ github.run_id }}
+          name: brian-${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 30
           path: |
