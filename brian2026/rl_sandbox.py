@@ -28,6 +28,7 @@ class RLSandboxConfig:
     min_samples_leaf: int = 25
     min_action_advantage_pct: float = 0.015
     max_train_transitions: int = 250_000
+    bar_seconds: float = 300.0
     random_state: int = 30
 
     def __post_init__(self) -> None:
@@ -37,8 +38,8 @@ class RLSandboxConfig:
             raise ValueError("gamma must be in [0, 1)")
         if self.fitted_q_iterations < 1 or self.trees < 1 or self.min_samples_leaf < 1:
             raise ValueError("invalid learner configuration")
-        if self.max_train_transitions < 100:
-            raise ValueError("max_train_transitions is too small")
+        if self.max_train_transitions < 100 or self.bar_seconds <= 0:
+            raise ValueError("invalid transition configuration")
 
     @property
     def round_trip_cost_bps(self) -> float:
@@ -174,14 +175,29 @@ def build_counterfactual_transitions(timestamps: Sequence[float], opens: Sequenc
         raise ValueError("market arrays and features must align")
     if x.ndim != 2:
         raise ValueError("feature_matrix must be two-dimensional")
-    out: list[SandboxTransition] = []
     selected = [int(i) for i in indices]
+    if any(right <= left for left, right in zip(selected, selected[1:])):
+        raise ValueError("transition indices must be strictly increasing")
+
+    def contiguous(left: int, right: int) -> bool:
+        return abs((t[right] - t[left]) - config.bar_seconds) <= 1e-6
+
+    out: list[SandboxTransition] = []
     for offset, i in enumerate(selected):
         if i < 0 or i + 1 >= len(t):
             raise ValueError("transition index requires a next bar")
         if t[i] >= DEVELOPMENT_CUTOFF or t[i + 1] >= DEVELOPMENT_CUTOFF:
             raise ValueError("2026 data is INVALID_CONTAMINATED and forbidden")
-        terminal = offset == len(selected) - 1 or (offset + 1 < len(selected) and selected[offset + 1] != i + 1)
+        # Official-source gaps are episode boundaries, never synthetic long-horizon transitions.
+        if not contiguous(i, i + 1):
+            continue
+        followup = (
+            offset + 1 < len(selected)
+            and selected[offset + 1] == i + 1
+            and i + 2 < len(t)
+            and contiguous(i + 1, i + 2)
+        )
+        terminal = not followup
         for before in starting_positions:
             for action in ACTIONS:
                 out.append(counterfactual_transition(
