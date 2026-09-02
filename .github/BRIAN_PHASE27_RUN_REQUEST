@@ -1,0 +1,5 @@
+phase27-development
+request=2026-09-02-audit-repair-rerun
+range=2020-01-01T00:00:00Z..2026-01-01T00:00:00Z-exclusive
+holdout=INVALID_CONTAMINATED
+execution=SHADOW_RESEARCH_ONLY
