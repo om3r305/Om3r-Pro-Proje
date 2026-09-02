@@ -76,6 +76,13 @@ class Phase30RLSandboxTests(unittest.TestCase):
         self.assertEqual(long[-3:], (0.0, 0.0, 1.0))
         self.assertEqual(short[-3:], (1.0, 0.0, 0.0))
 
+    def test_missing_feature_is_not_confused_with_numeric_zero(self):
+        missing = state_with_position((np.nan,), 0)
+        zero = state_with_position((0.0,), 0)
+        self.assertNotEqual(missing, zero)
+        self.assertEqual(missing[:2], (0.0, 1.0))
+        self.assertEqual(zero[:2], (0.0, 0.0))
+
     def test_transition_builder_generates_full_counterfactual_action_coverage(self):
         t = np.array([1_700_000_000.0, 1_700_000_300.0, 1_700_000_600.0])
         o = np.array([100.0, 101.0, 102.0])
