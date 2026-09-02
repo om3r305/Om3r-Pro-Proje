@@ -12,6 +12,7 @@ on:
           - smoke
           - full-development
           - phase27-development
+          - phase28-development
   push:
     branches:
       - brian-2026
@@ -67,3 +68,4 @@ jobs:
             research_data/phase25/equity_curves/*.parquet
             research_data/phase27/*.json
             research_data/phase27/equity_curves/*.parquet
+            research_data/phase28/*.json
