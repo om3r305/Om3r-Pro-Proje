@@ -35,6 +35,7 @@ class CloudRunnerTests(unittest.TestCase):
     def test_ranges_are_fixed_and_never_cross_cutoff(self):
         self.assertEqual(SMOKE_END, datetime(2024, 2, 1, tzinfo=timezone.utc))
         self.assertEqual(mode_range("full-development")[1], DEVELOPMENT_END)
+        self.assertEqual(mode_range("phase27-development")[1], DEVELOPMENT_END)
         self.assertEqual(DEVELOPMENT_END.timestamp(), DEVELOPMENT_CUTOFF)
 
     def test_unsupported_mode_is_rejected(self):
@@ -100,6 +101,17 @@ class CloudRunnerTests(unittest.TestCase):
         summary = build_cloud_summary("full-development", full_dataset, experiment)
         self.assertEqual(summary["candidate_decisions"], candidates)
         self.assertEqual(summary["final_holdout_declaration"], FINAL_HOLDOUT_DECLARATION)
+
+    def test_phase27_mode_uses_fixed_range_and_preserves_declarations(self):
+        full_dataset = replace(dataset(), requested_start="2020-01-01T00:00:00+00:00",
+                               requested_end="2026-01-01T00:00:00+00:00")
+        experiment = {"declaration": FINAL_HOLDOUT_DECLARATION, "experiment_id": "p27",
+                      "date_range": {"max_observed_timestamp": DEVELOPMENT_CUTOFF - .001},
+                      "candidate_decision": {"status": "INSUFFICIENT_EVIDENCE"}}
+        summary = build_cloud_summary("phase27-development", full_dataset, experiment)
+        self.assertEqual(summary["phase27_experiment_id"], "p27")
+        self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
+        self.assertEqual(summary["holdout"]["status"], HOLDOUT_STATUS)
 
     def test_no_exchange_execution_surface_is_introduced(self):
         engine = BrianEngine({"shadow_only": False})

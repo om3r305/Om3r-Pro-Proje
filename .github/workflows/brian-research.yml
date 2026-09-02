@@ -11,6 +11,7 @@ on:
         options:
           - smoke
           - full-development
+          - phase27-development
 
 permissions:
   contents: read
@@ -59,3 +60,5 @@ jobs:
             research_data/source_gap_evidence/*.json
             research_data/phase25/*.json
             research_data/phase25/equity_curves/*.parquet
+            research_data/phase27/*.json
+            research_data/phase27/equity_curves/*.parquet
