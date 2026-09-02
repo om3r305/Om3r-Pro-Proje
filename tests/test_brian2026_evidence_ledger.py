@@ -40,6 +40,26 @@ class EvidenceLedgerTests(unittest.TestCase):
         self.assertEqual(first.evidence_id, second.evidence_id)
         self.assertEqual(first.manifest(), second.manifest())
 
+    def test_payload_is_deeply_immutable_after_identity_is_created(self):
+        source_metrics = {"nested": {"scores": [1.0, 2.0]}}
+        source_gates = {"all_required_gates_passed": False}
+        record = self.record(metrics=source_metrics, gates=source_gates)
+        original_id = record.evidence_id
+
+        source_metrics["nested"]["scores"][0] = 999.0
+        source_gates["all_required_gates_passed"] = True
+        self.assertEqual(record.metrics["nested"]["scores"], (1.0, 2.0))
+        self.assertFalse(record.gates["all_required_gates_passed"])
+        self.assertEqual(record.evidence_id, original_id)
+        with self.assertRaises(TypeError):
+            record.metrics["new"] = 1.0
+        with self.assertRaises(TypeError):
+            record.metrics["nested"]["new"] = 1.0
+
+    def test_nonfinite_evidence_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "NaN or infinity"):
+            self.record(metrics={"net_pnl": float("nan")})
+
     def test_2026_data_is_forbidden(self):
         with self.assertRaisesRegex(ValueError, "INVALID_CONTAMINATED"):
             self.record(max_data_timestamp=DEVELOPMENT_CUTOFF)
