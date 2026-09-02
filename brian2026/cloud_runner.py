@@ -12,6 +12,7 @@ from .phase24 import MultiMonthDatasetManifest, build_btc_history
 from .phase25_experiment import run as run_phase25_experiment
 from .phase27_experiment import run as run_phase27_experiment
 from .phase28_experiment import run as run_phase28_experiment
+from .phase29_experiment import run as run_phase29_experiment
 from .portfolio import DEVELOPMENT_CUTOFF
 
 CLOUD_SUMMARY_SCHEMA = "brian.cloud-research-summary.v1"
@@ -19,8 +20,19 @@ DEVELOPMENT_START = datetime(2020, 1, 1, tzinfo=timezone.utc)
 DEVELOPMENT_END = datetime(2026, 1, 1, tzinfo=timezone.utc)
 SMOKE_START = datetime(2024, 1, 1, tzinfo=timezone.utc)
 SMOKE_END = datetime(2024, 2, 1, tzinfo=timezone.utc)
-SUPPORTED_MODES = ("smoke", "full-development", "phase27-development", "phase28-development")
-DEVELOPMENT_MODES = ("full-development", "phase27-development", "phase28-development")
+SUPPORTED_MODES = (
+    "smoke",
+    "full-development",
+    "phase27-development",
+    "phase28-development",
+    "phase29-development",
+)
+DEVELOPMENT_MODES = (
+    "full-development",
+    "phase27-development",
+    "phase28-development",
+    "phase29-development",
+)
 HOLDOUT_STATUS = "INVALID_CONTAMINATED"
 EXECUTION_DECLARATION = "SHADOW_RESEARCH_ONLY"
 FINAL_HOLDOUT_DECLARATION = "NO PRISTINE FINAL HOLDOUT EVALUATED"
@@ -65,6 +77,7 @@ def _experiment_key(mode: str) -> str:
         "full-development": "phase25_experiment_id",
         "phase27-development": "phase27_experiment_id",
         "phase28-development": "phase28_experiment_id",
+        "phase29-development": "phase29_experiment_id",
     }[mode]
 
 
@@ -121,6 +134,8 @@ def write_cloud_summary(summary: Mapping[str, Any], output: str | Path) -> Path:
 
 
 def _default_experiment_runner(mode: str) -> ExperimentRunner:
+    if mode == "phase29-development":
+        return run_phase29_experiment
     if mode == "phase28-development":
         return run_phase28_experiment
     if mode == "phase27-development":
