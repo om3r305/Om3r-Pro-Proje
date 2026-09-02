@@ -11,6 +11,7 @@ import tempfile
 from .phase24 import MultiMonthDatasetManifest, build_btc_history
 from .phase25_experiment import run as run_phase25_experiment
 from .phase27_experiment import run as run_phase27_experiment
+from .phase28_experiment import run as run_phase28_experiment
 from .portfolio import DEVELOPMENT_CUTOFF
 
 CLOUD_SUMMARY_SCHEMA = "brian.cloud-research-summary.v1"
@@ -18,7 +19,8 @@ DEVELOPMENT_START = datetime(2020, 1, 1, tzinfo=timezone.utc)
 DEVELOPMENT_END = datetime(2026, 1, 1, tzinfo=timezone.utc)
 SMOKE_START = datetime(2024, 1, 1, tzinfo=timezone.utc)
 SMOKE_END = datetime(2024, 2, 1, tzinfo=timezone.utc)
-SUPPORTED_MODES = ("smoke", "full-development", "phase27-development")
+SUPPORTED_MODES = ("smoke", "full-development", "phase27-development", "phase28-development")
+DEVELOPMENT_MODES = ("full-development", "phase27-development", "phase28-development")
 HOLDOUT_STATUS = "INVALID_CONTAMINATED"
 EXECUTION_DECLARATION = "SHADOW_RESEARCH_ONLY"
 FINAL_HOLDOUT_DECLARATION = "NO PRISTINE FINAL HOLDOUT EVALUATED"
@@ -30,7 +32,7 @@ ExperimentRunner = Callable[[Path, str], Mapping[str, Any]]
 def mode_range(mode: str) -> tuple[datetime, datetime]:
     if mode == "smoke":
         return SMOKE_START, SMOKE_END
-    if mode in ("full-development", "phase27-development"):
+    if mode in DEVELOPMENT_MODES:
         return DEVELOPMENT_START, DEVELOPMENT_END
     raise ValueError(f"unsupported cloud research mode: {mode}")
 
@@ -58,6 +60,14 @@ def _validate_dataset(dataset: MultiMonthDatasetManifest, requested_start: datet
         raise ValueError("dataset contains INVALID_CONTAMINATED 2026 observations")
 
 
+def _experiment_key(mode: str) -> str:
+    return {
+        "full-development": "phase25_experiment_id",
+        "phase27-development": "phase27_experiment_id",
+        "phase28-development": "phase28_experiment_id",
+    }[mode]
+
+
 def build_cloud_summary(mode: str, dataset: MultiMonthDatasetManifest,
                         experiment: Mapping[str, Any] | None = None) -> dict[str, Any]:
     start, end = mode_range(mode)
@@ -76,7 +86,7 @@ def build_cloud_summary(mode: str, dataset: MultiMonthDatasetManifest,
         "holdout": {"status": HOLDOUT_STATUS, "evaluation_allowed": False},
         "execution_declaration": EXECUTION_DECLARATION,
     }
-    if mode in ("full-development", "phase27-development"):
+    if mode in DEVELOPMENT_MODES:
         if experiment is None:
             raise ValueError(f"{mode} requires a development experiment manifest")
         if experiment.get("declaration") != FINAL_HOLDOUT_DECLARATION:
@@ -85,7 +95,7 @@ def build_cloud_summary(mode: str, dataset: MultiMonthDatasetManifest,
         if max_timestamp >= DEVELOPMENT_CUTOFF:
             raise ValueError("experiment contains INVALID_CONTAMINATED 2026 observations")
         summary.update({
-            "phase27_experiment_id" if mode == "phase27-development" else "phase25_experiment_id": experiment["experiment_id"],
+            _experiment_key(mode): experiment["experiment_id"],
             "max_observed_timestamp": max_timestamp,
             "candidate_decisions": experiment.get("candidate_decisions", experiment.get("candidate_decision")),
             "final_holdout_declaration": FINAL_HOLDOUT_DECLARATION,
@@ -110,6 +120,16 @@ def write_cloud_summary(summary: Mapping[str, Any], output: str | Path) -> Path:
     return target
 
 
+def _default_experiment_runner(mode: str) -> ExperimentRunner:
+    if mode == "phase28-development":
+        return run_phase28_experiment
+    if mode == "phase27-development":
+        return run_phase27_experiment
+    if mode == "full-development":
+        return run_phase25_experiment
+    raise ValueError(f"{mode} has no development experiment runner")
+
+
 def run_cloud(mode: str, root: str | Path = "research_data",
               output: str | Path = "cloud_results/brian_cloud_summary.json",
               *, dataset_builder: DatasetBuilder = build_btc_history,
@@ -119,8 +139,8 @@ def run_cloud(mode: str, root: str | Path = "research_data",
     dataset = dataset_builder(root, start, end)
     _validate_dataset(dataset, start, end)
     experiment = None
-    if mode in ("full-development", "phase27-development"):
-        runner = experiment_runner or (run_phase27_experiment if mode == "phase27-development" else run_phase25_experiment)
+    if mode in DEVELOPMENT_MODES:
+        runner = experiment_runner or _default_experiment_runner(mode)
         experiment = runner(Path(root), dataset.dataset_id)
     summary = build_cloud_summary(mode, dataset, experiment)
     write_cloud_summary(summary, output)
