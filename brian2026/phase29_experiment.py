@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 import argparse
 import json
-import math
 import subprocess
 import time
 
@@ -14,9 +13,7 @@ import numpy as np
 from .adaptive_quant import (
     CausalDriftMonitor,
     ChallengerVote,
-    DriftAssessment,
     DriftConfig,
-    FamiliarityAssessment,
     FamiliarityConfig,
     LeagueConfig,
     MarketFamiliarityModel,
@@ -86,8 +83,16 @@ class AdaptiveEvidencePolicy:
     @classmethod
     def manifest(cls) -> dict:
         return {
-            key: value for key, value in vars(cls).items()
-            if not key.startswith("_") and not callable(value) and not isinstance(value, classmethod)
+            "min_total_trades": cls.min_total_trades,
+            "min_trades_per_fold": cls.min_trades_per_fold,
+            "min_coverage": cls.min_coverage,
+            "min_positive_expectancy_folds": cls.min_positive_expectancy_folds,
+            "min_profit_factor": cls.min_profit_factor,
+            "max_drawdown_pct": cls.max_drawdown_pct,
+            "require_stress_positive": cls.require_stress_positive,
+            "max_ood_rate": cls.max_ood_rate,
+            "max_hard_drift_rate": cls.max_hard_drift_rate,
+            "min_mean_agreement": cls.min_mean_agreement,
         }
 
 
@@ -142,7 +147,6 @@ def _model_pair(name, spec, fold, dataset_id, feature_names, train, validation, 
     )
     return {
         "name": name,
-        "model": model,
         "validation_predictions": val_predictions,
         "test_predictions": test_predictions,
         "validation_metrics": metrics,
@@ -182,7 +186,7 @@ def _run_fold(fold, train, validation, test, labels, future, timestamps, o, h, l
     drift_monitor = CausalDriftMonitor(familiarity, DRIFT_CONFIG)
     validation_drift_scores = drift_monitor.calibrate_validation(validation_snapshots)
 
-    validation_reasoner, test_reasoner, reasoner_metrics, reasoner_weight = _reasoner_pair(
+    _, test_reasoner, reasoner_metrics, reasoner_weight = _reasoner_pair(
         validation, test, timestamps, features, labels
     )
     models = {
@@ -270,7 +274,7 @@ def _run_fold(fold, train, validation, test, labels, future, timestamps, o, h, l
         "test_hard_drift_count": sum(x.hard_drift for x in drift_rows),
         "validation_weight_receipt": weight_receipt,
     }
-    return results, diagnostics
+    return results, diagnostics, [row.action for row in full_decisions]
 
 
 def _candidate(primary_rows, policy=AdaptiveEvidencePolicy) -> dict:
@@ -357,7 +361,8 @@ def run(root: Path, dataset_id: str) -> dict:
     prereg_text = json.dumps(prereg_payload, sort_keys=True, separators=(",", ":")) + "\n"
     if prereg_path.exists() and prereg_path.read_text() != prereg_text:
         raise FileExistsError("immutable Phase 2.9 preregistration mismatch")
-    prereg_path.write_text(prereg_text)
+    if not prereg_path.exists():
+        prereg_path.write_text(prereg_text)
 
     quality_manifest = json.loads((root / "dataset_manifests" / f"{dataset_id}.json").read_text())
     excluded_months = {row["period"] for row in quality_manifest["monthly_builds"] if row["anomaly_classification"] != "NONE"}
@@ -376,7 +381,7 @@ def run(root: Path, dataset_id: str) -> dict:
         validation = np.where(target_available & (t >= train_end_ts + 3600) & (t < validation_end_ts - 3600) & (resolution_t < validation_end_ts))[0]
         test = np.where(target_available & (t >= validation_end_ts + 3600) & (t < test_end_ts) & (resolution_t < test_end_ts))[0]
         labels, neutral = _neutral_labels(train, future)
-        fold_results, fold_diag = _run_fold(
+        fold_results, fold_diag, _ = _run_fold(
             fold, train, validation, test, labels, future, t, o, h, l, c, features, dataset_id
         )
         for row in fold_results:
@@ -398,12 +403,17 @@ def run(root: Path, dataset_id: str) -> dict:
         test_all = np.where(target_available & (t >= validation_end_ts + 3600) & (t < test_end_ts) & (resolution_t < test_end_ts))[0]
         test = test_all[clean_horizon[test_all]]
         labels, _ = _neutral_labels(train, future)
-        fold_results, _ = _run_fold(
+        fold_results, _, clean_actions = _run_fold(
             200 + fold, train, validation, test, labels, future, t, o, h, l, c, features, dataset_id
         )
         primary_clean = next(row for row in fold_results if row["model"] == "ADAPTIVE_LEAGUE_FULL")
-        # Reconstruct actions on clean test from deterministic metrics by running the fold once more is avoided;
-        # source-gap report focuses on clean refit evidence and locked cost report on the clean subset itself.
+        action_by_index = dict(zip(test.tolist(), clean_actions))
+        all_actions = [action_by_index.get(int(index), "WAIT") for index in test_all]
+        sensitivity_costs = {
+            cost: _summary(_portfolio_excluding_months(
+                test_all, all_actions, t, o, h, l, c, excluded_months, cost
+            )) for cost in COSTS
+        }
         source_gap_sensitivity.append({
             "fold": fold,
             "excluded_months": sorted(excluded_months),
@@ -412,7 +422,9 @@ def run(root: Path, dataset_id: str) -> dict:
             "forced_flat_at_gap_boundaries": True,
             "clean_test_observations": len(test),
             "all_test_observations": len(test_all),
-            "primary_clean_result": primary_clean,
+            "prediction": primary_clean["prediction"],
+            "validation_weight_receipt": primary_clean["validation_weight_receipt"],
+            "cost_sensitivity": sensitivity_costs,
         })
 
     yearly_robustness = []
@@ -425,7 +437,7 @@ def run(root: Path, dataset_id: str) -> dict:
         if not len(train) or not len(validation) or not len(test):
             continue
         labels, _ = _neutral_labels(train, future)
-        fold_results, _ = _run_fold(
+        fold_results, _, _ = _run_fold(
             300 + year, train, validation, test, labels, future, t, o, h, l, c, features, dataset_id
         )
         primary_year = next(row for row in fold_results if row["model"] == "ADAPTIVE_LEAGUE_FULL")
@@ -457,7 +469,7 @@ def run(root: Path, dataset_id: str) -> dict:
         "challenger_diagnostics": diagnostics,
         "source_gap_sensitivity": source_gap_sensitivity,
         "expanding_walk_forward_yearly_robustness": yearly_robustness,
-        "phase28_baseline_experiment_id": phase28["experiment_id"],
+        "phase28_baseline_preregistration_id": phase28["preregistration_id"],
         "phase28_candidate_reference": phase28.get("candidate_decision"),
         "scientific_identity": "deterministic logical experiment id; runtime timestamp excluded",
         "execution": "SHADOW_RESEARCH_ONLY",
@@ -469,15 +481,16 @@ def run(root: Path, dataset_id: str) -> dict:
     }
     path = directory / f"{experiment_id}.json"
     text = json.dumps(manifest, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
-    if path.exists() and path.read_text() != text:
-        # Runtime duration is non-scientific; overwrite the receipt for the same logical experiment.
+    if path.exists():
         existing = json.loads(path.read_text())
-        existing.pop("runtime_seconds", None)
-        comparable = dict(manifest)
-        comparable.pop("runtime_seconds", None)
-        if existing != comparable:
+        comparable_existing = dict(existing)
+        comparable_existing.pop("runtime_seconds", None)
+        comparable_new = dict(manifest)
+        comparable_new.pop("runtime_seconds", None)
+        if comparable_existing != comparable_new:
             raise FileExistsError("immutable Phase 2.9 logical experiment mismatch")
-    path.write_text(text)
+    else:
+        path.write_text(text)
     return manifest
 
 
