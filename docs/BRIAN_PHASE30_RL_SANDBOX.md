@@ -15,6 +15,8 @@ Phase 3.0 adds a reinforcement-learning challenger without giving an RL policy a
 - Observation at bar `t` may use only information available after the completed `t` bar.
 - The earliest execution price available to an action selected from that observation is the **open of bar `t+1`**.
 - Same-close observation/execution is forbidden.
+- Primary sandbox cadence is fixed at 5 minutes (`300` seconds).
+- A source gap is an episode boundary. The builder must never bridge a missing interval and pretend that the next available record is a normal 5-minute transition.
 - Reward may use the subsequent realized market path because reward is an outcome, never an observation.
 - Every observation and every execution timestamp must be strictly earlier than 2026-01-01T00:00:00Z.
 
@@ -80,12 +82,13 @@ No outcome-based sampling is allowed.
 1. next-open execution is enforced;
 2. observation/execution at or beyond the 2026 cutoff hard-fails;
 3. full counterfactual action coverage is deterministic;
-4. position state is included in the Markov state;
-5. unavailable evidence remains distinguishable from genuine numeric zero;
-6. RL fitting is train-only;
-7. repeated training with identical inputs is deterministic;
-8. no exchange execution methods exist;
-9. existing Brian CI, compile, import and hard-shadow checks pass.
+4. source gaps terminate episodes and cannot become synthetic transitions;
+5. position state is included in the Markov state;
+6. unavailable evidence remains distinguishable from genuine numeric zero;
+7. RL fitting is train-only;
+8. repeated training with identical inputs is deterministic;
+9. no exchange execution methods exist;
+10. existing Brian CI, compile, import and hard-shadow checks pass.
 
 ## What this phase does not claim
 
