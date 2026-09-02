@@ -96,6 +96,19 @@ class Phase30RLSandboxTests(unittest.TestCase):
         self.assertEqual({row.action for row in first}, set(ACTIONS))
         self.assertEqual({row.position_before for row in first}, set(ACTIONS))
 
+    def test_source_gap_is_episode_boundary_not_a_long_transition(self):
+        t = np.array([1_700_000_000.0, 1_700_000_300.0, 1_700_001_200.0])
+        o = np.array([100.0, 101.0, 110.0])
+        h = np.array([101.0, 102.0, 111.0])
+        l = np.array([99.0, 100.0, 109.0])
+        c = np.array([100.5, 101.5, 110.5])
+        x = np.array([[0.0], [0.1], [9.9]])
+        rows = build_counterfactual_transitions(t, o, h, l, c, x, [0, 1], config=self.config())
+        # Only t0->t1 exists. t1->t2 crosses a 15-minute source gap and is omitted.
+        self.assertEqual(len(rows), len(ACTIONS) * len(ACTIONS))
+        self.assertTrue(all(row.terminal for row in rows))
+        self.assertTrue(all(row.execution_timestamp == t[1] for row in rows))
+
     def test_mutating_later_future_bar_does_not_change_current_transition(self):
         kwargs = dict(
             observation_timestamp=1_700_000_000.0,
