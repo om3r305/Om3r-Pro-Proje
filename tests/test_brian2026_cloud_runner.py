@@ -37,6 +37,7 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(mode_range("full-development")[1], DEVELOPMENT_END)
         self.assertEqual(mode_range("phase27-development")[1], DEVELOPMENT_END)
         self.assertEqual(mode_range("phase28-development")[1], DEVELOPMENT_END)
+        self.assertEqual(mode_range("phase29-development")[1], DEVELOPMENT_END)
         self.assertEqual(DEVELOPMENT_END.timestamp(), DEVELOPMENT_CUTOFF)
 
     def test_unsupported_mode_is_rejected(self):
@@ -103,27 +104,35 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(summary["candidate_decisions"], candidates)
         self.assertEqual(summary["final_holdout_declaration"], FINAL_HOLDOUT_DECLARATION)
 
+    def _development_dataset(self):
+        return replace(dataset(), requested_start="2020-01-01T00:00:00+00:00",
+                       requested_end="2026-01-01T00:00:00+00:00")
+
+    def _experiment(self, experiment_id):
+        return {"declaration": FINAL_HOLDOUT_DECLARATION, "experiment_id": experiment_id,
+                "date_range": {"max_observed_timestamp": DEVELOPMENT_CUTOFF - .001},
+                "candidate_decision": {"status": "INSUFFICIENT_EVIDENCE"}}
+
     def test_phase27_mode_uses_fixed_range_and_preserves_declarations(self):
-        full_dataset = replace(dataset(), requested_start="2020-01-01T00:00:00+00:00",
-                               requested_end="2026-01-01T00:00:00+00:00")
-        experiment = {"declaration": FINAL_HOLDOUT_DECLARATION, "experiment_id": "p27",
-                      "date_range": {"max_observed_timestamp": DEVELOPMENT_CUTOFF - .001},
-                      "candidate_decision": {"status": "INSUFFICIENT_EVIDENCE"}}
-        summary = build_cloud_summary("phase27-development", full_dataset, experiment)
+        summary = build_cloud_summary("phase27-development", self._development_dataset(), self._experiment("p27"))
         self.assertEqual(summary["phase27_experiment_id"], "p27")
         self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
         self.assertEqual(summary["holdout"]["status"], HOLDOUT_STATUS)
 
     def test_phase28_mode_is_fixed_shadow_development_only(self):
-        full_dataset = replace(dataset(), requested_start="2020-01-01T00:00:00+00:00",
-                               requested_end="2026-01-01T00:00:00+00:00")
-        experiment = {"declaration": FINAL_HOLDOUT_DECLARATION, "experiment_id": "p28",
-                      "date_range": {"max_observed_timestamp": DEVELOPMENT_CUTOFF - .001},
-                      "candidate_decision": {"status": "INSUFFICIENT_EVIDENCE"}}
-        summary = build_cloud_summary("phase28-development", full_dataset, experiment)
+        summary = build_cloud_summary("phase28-development", self._development_dataset(), self._experiment("p28"))
         self.assertEqual(summary["phase28_experiment_id"], "p28")
         self.assertEqual(summary["candidate_decisions"]["status"], "INSUFFICIENT_EVIDENCE")
         self.assertEqual(summary["requested_range"]["end_exclusive"], DEVELOPMENT_END.isoformat())
+        self.assertFalse(summary["holdout"]["evaluation_allowed"])
+
+    def test_phase29_mode_is_fixed_shadow_development_only(self):
+        summary = build_cloud_summary("phase29-development", self._development_dataset(), self._experiment("p29"))
+        self.assertEqual(summary["phase29_experiment_id"], "p29")
+        self.assertEqual(summary["candidate_decisions"]["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(summary["requested_range"]["end_exclusive"], DEVELOPMENT_END.isoformat())
+        self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
+        self.assertEqual(summary["holdout"]["status"], HOLDOUT_STATUS)
         self.assertFalse(summary["holdout"]["evaluation_allowed"])
 
     def test_no_exchange_execution_surface_is_introduced(self):
