@@ -19,7 +19,7 @@ from .dataset import _timeframe_seconds
 
 ARCHIVE_SCHEMA_VERSION = "brian.binance-archive.v1"
 OFFICIAL_ARCHIVE_ROOT = "https://data.binance.vision/data"
-SUPPORTED_SYMBOLS = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
+SUPPORTED_SYMBOLS = ("BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT")
 
 
 @dataclass(frozen=True, slots=True)
