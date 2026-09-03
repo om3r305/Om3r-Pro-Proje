@@ -1,0 +1,84 @@
+name: Brian 2026 Phase 3.6 Profit Exam
+
+on:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - .github/BRIAN_PHASE36_RUN_REQUEST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: brian-phase36-profit-exam
+  cancel-in-progress: false
+
+jobs:
+  exam:
+    if: github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Restore verified public archive cache
+        uses: actions/cache@v4
+        with:
+          path: research_data
+          key: ${{ runner.os }}-brian-phase36-v1-${{ hashFiles('brian2026/archive.py', 'brian2026/phase36_frozen_profit_exam.py') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-brian-phase36-v1-${{ hashFiles('brian2026/archive.py', 'brian2026/phase36_frozen_profit_exam.py') }}-
+            ${{ runner.os }}-brian-phase35-v1-
+
+      - name: Download locked Phase 3.5 checkpoint artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p phase35_source
+          gh run download 33766345728 --repo "${{ github.repository }}" --name brian-phase35-training-33766345728 --dir phase35_source
+          test -f phase35_source/cloud_results/phase35_training_checkpoint.json
+
+      - name: Verify locked Phase 3.5 checkpoint identity
+        run: |
+          python - <<'PY'
+          import json
+          from brian2026.counterfactual_learner import CausalCounterfactualLearner
+          from brian2026.phase36_frozen_profit_exam import PHASE35_EXPECTED_PORTABLE_FINGERPRINT, PHASE35_EXPECTED_RAW_STATE_ID
+          from brian2026.state_fingerprint import portable_state_fingerprint
+          path='phase35_source/cloud_results/phase35_training_checkpoint.json'
+          state=json.load(open(path, encoding='utf-8'))
+          learner=CausalCounterfactualLearner.from_state(state)
+          assert learner.training_state_id == PHASE35_EXPECTED_RAW_STATE_ID
+          assert portable_state_fingerprint(state) == PHASE35_EXPECTED_PORTABLE_FINGERPRINT
+          assert learner.training_manifest()['episodes_learned'] == 1000
+          PY
+
+      - name: Run preregistered frozen March-April development exam
+        run: |
+          python -m brian2026.phase36_frozen_profit_exam \
+            --checkpoint phase35_source/cloud_results/phase35_training_checkpoint.json
+
+      - name: Upload Phase 3.6 exam artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: brian-phase36-profit-exam-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            cloud_results/phase36_frozen_profit_exam.json
+            research_data/archive_manifests/*.json
