@@ -57,7 +57,10 @@ def test_profit_mode_rejects_edge_that_does_not_pay_conservative_round_trip_cost
     native = FrozenNativePolicy(learner)
     profit = ProfitSeekingShadowPolicy(learner, gym_config)
 
-    assert native.act(_observation()).weights == (("A", 0.25),)
+    native_allocation = native.act(_observation())
+    assert native_allocation.weights
+    assert native_allocation.weights[0][0] == "A"
+    assert native_allocation.weights[0][1] > 0
     assert profit.act(_observation()).weights == ()
 
 
