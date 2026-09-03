@@ -38,6 +38,7 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(mode_range("phase27-development")[1], DEVELOPMENT_END)
         self.assertEqual(mode_range("phase28-development")[1], DEVELOPMENT_END)
         self.assertEqual(mode_range("phase29-development")[1], DEVELOPMENT_END)
+        self.assertEqual(mode_range("phase31-development")[1], DEVELOPMENT_END)
         self.assertEqual(DEVELOPMENT_END.timestamp(), DEVELOPMENT_CUTOFF)
 
     def test_unsupported_mode_is_rejected(self):
@@ -133,6 +134,17 @@ class CloudRunnerTests(unittest.TestCase):
         self.assertEqual(summary["requested_range"]["end_exclusive"], DEVELOPMENT_END.isoformat())
         self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
         self.assertEqual(summary["holdout"]["status"], HOLDOUT_STATUS)
+        self.assertFalse(summary["holdout"]["evaluation_allowed"])
+
+    def test_phase31_mode_is_fixed_post_diagnostic_shadow_only(self):
+        experiment = self._experiment("p31")
+        experiment["post_diagnostic_declaration"] = "POST_DIAGNOSTIC_DEVELOPMENT_ONLY; NOT PRISTINE OOS"
+        summary = build_cloud_summary("phase31-development", self._development_dataset(), experiment)
+        self.assertEqual(summary["phase31_experiment_id"], "p31")
+        self.assertEqual(summary["candidate_decisions"]["status"], "INSUFFICIENT_EVIDENCE")
+        self.assertEqual(summary["post_diagnostic_declaration"], experiment["post_diagnostic_declaration"])
+        self.assertEqual(summary["requested_range"]["end_exclusive"], DEVELOPMENT_END.isoformat())
+        self.assertEqual(summary["execution_declaration"], EXECUTION_DECLARATION)
         self.assertFalse(summary["holdout"]["evaluation_allowed"])
 
     def test_no_exchange_execution_surface_is_introduced(self):

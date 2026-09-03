@@ -1,0 +1,56 @@
+name: Brian 2026 Phase 3.1 Research
+
+on:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - .github/BRIAN_PHASE31_RUN_REQUEST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-phase31-research-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  research:
+    if: github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      BRIAN_RESEARCH_MODE: phase31-development
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+      - name: Restore verified research cache
+        uses: actions/cache@v4
+        with:
+          path: research_data
+          key: ${{ runner.os }}-brian-research-v2-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase24.py', 'brian2026/parquet_store.py') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-brian-research-v2-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase24.py', 'brian2026/parquet_store.py') }}-
+            ${{ runner.os }}-brian-research-v2-
+      - name: Run fixed Phase 3.1 public-data shadow research
+        run: python -m brian2026.cloud_runner --mode "$BRIAN_RESEARCH_MODE"
+      - name: Upload review outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: brian-phase31-development-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            cloud_results/**
+            research_data/dataset_manifests/*.json
+            research_data/source_gap_evidence/*.json
+            research_data/phase31/*.json
