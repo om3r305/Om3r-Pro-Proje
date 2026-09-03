@@ -6,7 +6,7 @@ from typing import Protocol
 import json
 
 from .experience_memory import EpisodeExperience, ExperienceMemory, ExperienceMemoryConfig
-from .market_gym import GymFrame, MarketGym, MarketGymConfig, TargetAllocation
+from .market_gym import GymEpisodeResult, GymFrame, MarketGym, MarketGymConfig, TargetAllocation
 from .world_model import BrianWorldModel, WorldMode
 
 CURRICULUM_SCHEMA_VERSION = "brian.curriculum-runner.v1"
@@ -90,6 +90,22 @@ class CausalCurriculumPolicy(Protocol):
     def act(self, observation: PolicyObservation) -> TargetAllocation: ...
 
     def learn_after_episode(self, experience: EpisodeExperience) -> None: ...
+
+
+class ResolvedEpisodeLearner(Protocol):
+    """Optional post-episode training hook.
+
+    The callback is invoked only after the episode has terminated. It receives the fully
+    resolved market path and gym trace, but deliberately receives no world seed/source-block
+    recipe. This is a training-only credit-assignment surface, never a live decision surface.
+    """
+
+    def learn_after_resolved_episode(
+        self,
+        experience: EpisodeExperience,
+        result: GymEpisodeResult,
+        resolved_frames: tuple[GymFrame, ...],
+    ) -> None: ...
 
 
 class FlatAuditPolicy:
@@ -185,8 +201,13 @@ class CurriculumRunner:
 
             result = gym.finish()
             experience = memory.record(result, world.receipt, policy_version=policy_version)
-            # Learning is released only after the whole episode has resolved.
+            # Summary learning is released only after the whole episode has resolved.
             policy.learn_after_episode(experience)
+            # Advanced credit assignment may inspect the now-complete path, but only after
+            # termination. No seed/source-block recipe is exposed through this callback.
+            resolved_callback = getattr(policy, "learn_after_resolved_episode", None)
+            if callable(resolved_callback):
+                resolved_callback(experience, result, tuple(world.frames))
             if str(policy.policy_version) != policy_version:
                 raise ValueError("policy_version must remain stable inside one curriculum shard")
             if not str(policy.training_state_id).strip():
