@@ -184,6 +184,8 @@ class PointInTimeValue:
             raise ValueError("invalid point-in-time observation")
         if self.available_at < self.observation_time:
             raise ValueError("value cannot become available before its observation timestamp")
+        if self.available_at >= DEVELOPMENT_CUTOFF:
+            raise ValueError("2026 point-in-time historical curriculum values are INVALID_CONTAMINATED and forbidden")
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,9 +204,15 @@ def asof_value(values: Sequence[PointInTimeValue], *, decision_time: float) -> A
 
     For revision-aware series, if several vintages describe the same/older observation,
     the latest *already available* vintage wins. Future revisions are invisible.
+    The function deliberately rejects mixed-series input and the contaminated 2026 window.
     """
     if not math.isfinite(float(decision_time)):
         raise ValueError("decision_time must be finite")
+    if decision_time >= DEVELOPMENT_CUTOFF:
+        raise ValueError("2026 historical development decisions are INVALID_CONTAMINATED and forbidden")
+    series_ids = {row.series_id for row in values}
+    if len(series_ids) > 1:
+        raise ValueError("asof_value cannot mix different historical series")
     eligible = [row for row in values if row.available_at <= decision_time]
     if not eligible:
         return None
@@ -257,6 +265,8 @@ def default_curriculum_history_manifest() -> CurriculumHistoryManifest:
 def monthly_crypto_specs(symbol: str, *, start: datetime, end: datetime) -> tuple[CurriculumArchiveSpec, ...]:
     if start.tzinfo is None or end.tzinfo is None:
         raise ValueError("history planning timestamps must be timezone-aware")
+    if end.timestamp() > DEVELOPMENT_CUTOFF:
+        raise ValueError("history planning cannot cross the contaminated 2026 cutoff")
     cursor = datetime(start.year, start.month, 1, tzinfo=timezone.utc)
     finish = datetime(end.year, end.month, 1, tzinfo=timezone.utc)
     items: list[CurriculumArchiveSpec] = []
