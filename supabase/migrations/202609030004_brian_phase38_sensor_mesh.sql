@@ -27,6 +27,35 @@ create table if not exists public.brian_sensor_observations (
   constraint brian_sensor_available_has_source check ((not available) or cardinality(source_ids) > 0)
 );
 
+create table if not exists public.brian_micro_book_ticks (
+  tick_id text primary key,
+  eye_id text not null,
+  template_id text not null,
+  asset_id text not null,
+  horizon text not null,
+  observed_at timestamptz not null,
+  feature_close_at timestamptz not null,
+  starting_equity numeric not null check (starting_equity in (2,3,5,10,20)),
+  equity_before numeric not null check (equity_before >= 0),
+  period_pnl numeric not null,
+  trading_cost numeric not null check (trading_cost >= 0),
+  equity_after numeric not null check (equity_after >= 0),
+  peak_equity_after numeric not null check (peak_equity_after >= 0),
+  max_drawdown_pct_after double precision not null check (max_drawdown_pct_after between 0 and 100),
+  prior_direction smallint not null check (prior_direction between -1 and 1),
+  target_direction smallint not null check (target_direction between -1 and 1),
+  observed_mid_price numeric not null check (observed_mid_price > 0),
+  observed_spread_bps double precision not null check (observed_spread_bps >= 0),
+  signal_strength double precision not null check (signal_strength between 0 and 1),
+  signal_confidence double precision not null check (signal_confidence between 0 and 1),
+  raw_capture_id text references public.brian_raw_captures(capture_id),
+  evidence_class text not null default 'PROSPECTIVE_DEVELOPMENT_SHADOW',
+  shadow_only boolean not null default true check (shadow_only),
+  live_execution boolean not null default false check (not live_execution),
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.brian_micro_book_receipts (
   receipt_id text primary key,
   eye_id text not null,
@@ -93,26 +122,31 @@ create table if not exists public.brian_missed_opportunity_receipts (
 create index if not exists brian_sensor_obs_asset_time_idx on public.brian_sensor_observations(asset_id, observed_at desc);
 create index if not exists brian_sensor_obs_eye_time_idx on public.brian_sensor_observations(eye_id, observed_at desc);
 create index if not exists brian_sensor_obs_family_time_idx on public.brian_sensor_observations(sensor_family, observed_at desc);
+create index if not exists brian_micro_book_tick_eye_time_idx on public.brian_micro_book_ticks(eye_id, observed_at desc);
 create index if not exists brian_micro_book_eye_time_idx on public.brian_micro_book_receipts(eye_id, observed_until desc);
 create index if not exists brian_tournament_time_idx on public.brian_opportunity_tournament_rounds(observed_at desc);
 create index if not exists brian_missed_opportunity_time_idx on public.brian_missed_opportunity_receipts(resolved_at desc);
 
 alter table public.brian_sensor_observations enable row level security;
+alter table public.brian_micro_book_ticks enable row level security;
 alter table public.brian_micro_book_receipts enable row level security;
 alter table public.brian_opportunity_tournament_rounds enable row level security;
 alter table public.brian_missed_opportunity_receipts enable row level security;
 
 revoke all on public.brian_sensor_observations from anon, authenticated;
+revoke all on public.brian_micro_book_ticks from anon, authenticated;
 revoke all on public.brian_micro_book_receipts from anon, authenticated;
 revoke all on public.brian_opportunity_tournament_rounds from anon, authenticated;
 revoke all on public.brian_missed_opportunity_receipts from anon, authenticated;
 
 revoke update, delete, truncate, references, trigger on public.brian_sensor_observations from service_role;
+revoke update, delete, truncate, references, trigger on public.brian_micro_book_ticks from service_role;
 revoke update, delete, truncate, references, trigger on public.brian_micro_book_receipts from service_role;
 revoke update, delete, truncate, references, trigger on public.brian_opportunity_tournament_rounds from service_role;
 revoke update, delete, truncate, references, trigger on public.brian_missed_opportunity_receipts from service_role;
 
 grant select, insert on public.brian_sensor_observations to service_role;
+grant select, insert on public.brian_micro_book_ticks to service_role;
 grant select, insert on public.brian_micro_book_receipts to service_role;
 grant select, insert on public.brian_opportunity_tournament_rounds to service_role;
 grant select, insert on public.brian_missed_opportunity_receipts to service_role;
@@ -124,6 +158,7 @@ declare
 begin
   foreach t in array array[
     'brian_sensor_observations',
+    'brian_micro_book_ticks',
     'brian_micro_book_receipts',
     'brian_opportunity_tournament_rounds',
     'brian_missed_opportunity_receipts'
