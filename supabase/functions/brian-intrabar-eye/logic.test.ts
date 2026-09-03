@@ -381,6 +381,26 @@ Deno.test("signalVolumeBurst: relative-volume pace plus body impulse is directio
   assertAlmostEquals(signal.strength, expectedStrength, 1e-9);
 });
 
+Deno.test("signalVolumeBurst: relative-volume pace plus negative body impulse is bearish", () => {
+  const sigma = 0.001;
+  const row = {
+    current: makeBar({ quoteVolume: 250_000, open: 100 }),
+    elapsedFraction: 1,
+    medianQuoteVolume: 100_000,
+    book: { mid: 98, spreadBps: 4 },
+    sigma,
+  } as unknown as MarketRow;
+  const pace = 250_000 / Math.max(1, 0.15) / Math.max(100_000, 1e-12);
+  const body = Math.log(98 / 100);
+  const threshold = Math.max(0.00015, sigma * 0.45);
+  assert(pace >= 1.8 && Math.abs(body) >= threshold, "fixture must clear both the pace and body gates");
+  assert(body < 0, "fixture must produce a negative body return to exercise the bearish branch");
+  const signal = signalVolumeBurst(row);
+  const expectedStrength = clip(0.55 * clip(Math.abs(body) / (threshold * 3)) + 0.45 * clip((pace - 1) / 4));
+  assertEquals(signal.direction, -1);
+  assertAlmostEquals(signal.strength, expectedStrength, 1e-9);
+});
+
 // --- signalBreakout -----------------------------------------------------------
 
 function makeBaseline(n: number, high: number, low: number, close: number): Bar[] {
