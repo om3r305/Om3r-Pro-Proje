@@ -56,6 +56,7 @@ class ProspectiveCollectorTests(unittest.TestCase):
         )
         cycle = collector.collect()
         self.assertEqual(cycle.snapshot.eligible_symbols, ("AAAUSDT", "BBBUSDT"))
+        self.assertEqual(cycle.snapshot.observed_at, 102.0)
         self.assertFalse(cycle.delta.comparable)
         self.assertTrue(cycle.shadow_only)
         self.assertFalse(hasattr(collector, "api_key"))
@@ -68,6 +69,7 @@ class ProspectiveCollectorTests(unittest.TestCase):
         )
         cycle = collector.collect()
         self.assertEqual(cycle.degraded_sources, ("book_ticker",))
+        self.assertEqual(cycle.snapshot.observed_at, 102.0)
         self.assertTrue(all(row.spread_bps is None for row in cycle.snapshot.candidates))
         self.assertTrue(all(row.spread_quality == 0.50 for row in cycle.snapshot.candidates))
 
@@ -98,13 +100,14 @@ class ProspectiveCollectorTests(unittest.TestCase):
             if url.endswith("ticker/24hr"): return tickers
             if url.endswith("ticker/bookTicker"): return books
             raise AssertionError(url)
-        clock_values = iter([100.0, 200.0])
+        clock_values = iter([100.0, 101.0, 102.0, 200.0, 201.0, 202.0])
         collector = BinancePublicUniverseCollector(
             getter=get, clock=lambda: next(clock_values),
             config=UniverseConfig(min_quote_volume=1_000_000, min_trades_24h=100),
         )
         first = collector.collect()
         second = collector.collect(first.snapshot)
+        self.assertLess(first.snapshot.observed_at, second.snapshot.observed_at)
         self.assertTrue(second.delta.comparable)
         self.assertEqual(second.delta.newly_observed_symbols, ("BBBUSDT",))
 
