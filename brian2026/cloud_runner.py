@@ -13,6 +13,7 @@ from .phase25_experiment import run as run_phase25_experiment
 from .phase27_experiment import run as run_phase27_experiment
 from .phase28_experiment import run as run_phase28_experiment
 from .phase29_experiment import run as run_phase29_experiment
+from .phase31_experiment import run as run_phase31_experiment
 from .portfolio import DEVELOPMENT_CUTOFF
 
 CLOUD_SUMMARY_SCHEMA = "brian.cloud-research-summary.v1"
@@ -26,12 +27,14 @@ SUPPORTED_MODES = (
     "phase27-development",
     "phase28-development",
     "phase29-development",
+    "phase31-development",
 )
 DEVELOPMENT_MODES = (
     "full-development",
     "phase27-development",
     "phase28-development",
     "phase29-development",
+    "phase31-development",
 )
 HOLDOUT_STATUS = "INVALID_CONTAMINATED"
 EXECUTION_DECLARATION = "SHADOW_RESEARCH_ONLY"
@@ -78,6 +81,7 @@ def _experiment_key(mode: str) -> str:
         "phase27-development": "phase27_experiment_id",
         "phase28-development": "phase28_experiment_id",
         "phase29-development": "phase29_experiment_id",
+        "phase31-development": "phase31_experiment_id",
     }[mode]
 
 
@@ -113,6 +117,8 @@ def build_cloud_summary(mode: str, dataset: MultiMonthDatasetManifest,
             "candidate_decisions": experiment.get("candidate_decisions", experiment.get("candidate_decision")),
             "final_holdout_declaration": FINAL_HOLDOUT_DECLARATION,
         })
+        if mode == "phase31-development":
+            summary["post_diagnostic_declaration"] = experiment.get("post_diagnostic_declaration")
     return summary
 
 
@@ -134,6 +140,8 @@ def write_cloud_summary(summary: Mapping[str, Any], output: str | Path) -> Path:
 
 
 def _default_experiment_runner(mode: str) -> ExperimentRunner:
+    if mode == "phase31-development":
+        return run_phase31_experiment
     if mode == "phase29-development":
         return run_phase29_experiment
     if mode == "phase28-development":
