@@ -1,0 +1,54 @@
+name: Brian 2026 Phase 3.4 Profit Exam
+
+on:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - .github/BRIAN_PHASE34_RUN_REQUEST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-phase34-profit-exam-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  exam:
+    if: github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+      - name: Restore verified Phase 3.3/3.4 data cache
+        uses: actions/cache@v4
+        with:
+          path: research_data
+          key: ${{ runner.os }}-brian-phase34-profit-v1-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase33_learning_smoke.py', 'brian2026/phase34_profit_exam.py', 'brian2026/profit_mode.py') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-brian-phase34-profit-v1-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase33_learning_smoke.py', 'brian2026/phase34_profit_exam.py', 'brian2026/profit_mode.py') }}-
+            ${{ runner.os }}-brian-phase33-smoke-v1-
+      - name: Run locked Phase 3.4 profit-seeking shadow exam
+        run: python -m brian2026.phase34_profit_exam
+      - name: Upload development diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: brian-phase34-profit-exam-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            cloud_results/phase34_profit_exam.json
+            cloud_results/phase34_training_smoke.json
+            cloud_results/phase34_training_checkpoint.json
+            research_data/archive_manifests/*.json
