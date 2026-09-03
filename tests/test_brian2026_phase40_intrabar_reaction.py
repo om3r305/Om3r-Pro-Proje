@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from brian2026.global_sensor_mesh import SensorObservation
 from brian2026.intrabar_reaction import (
@@ -13,6 +16,7 @@ from brian2026.intrabar_reaction import (
 ROOT = Path(__file__).resolve().parents[1]
 EDGE = ROOT / "supabase" / "functions" / "brian-intrabar-eye" / "index.ts"
 MIGRATION = ROOT / "supabase" / "migrations" / "202609030008_brian_phase40_intrabar_reaction.sql"
+CONSENSUS_FIXTURES = ROOT / "tests" / "fixtures" / "intrabar_consensus_cases.json"
 
 
 def _obs(group: str, direction: int, strength: float, *, confidence: float = 0.95, reliability: float = 0.5) -> SensorObservation:
@@ -142,3 +146,58 @@ def test_intrabar_config_keeps_independent_confirmation_and_no_sub_30s_cron_assu
     assert cfg.scan_top_n == 50
     assert cfg.min_support_groups >= 2
     assert cfg.overextension_sigma == 3.5
+
+
+def _load_consensus_fixtures() -> list[dict]:
+    payload = json.loads(CONSENSUS_FIXTURES.read_text(encoding="utf-8"))
+    return payload["cases"]
+
+
+def _obs_from_fixture(row: dict) -> SensorObservation:
+    return SensorObservation(
+        eye_id=f"eye-{row['independent_group']}",
+        asset_id="crypto:XRPUSDT",
+        observed_at=1_788_450_000.0,
+        direction=row["direction"],
+        strength=row["strength"],
+        confidence=row["confidence"],
+        reliability=row["reliability"],
+        available=True,
+        independent_group=row["independent_group"],
+        source_ids=(f"source-{row['independent_group']}",),
+        horizon="MICRO_1_5M",
+        reason="shared fixture case",
+    )
+
+
+@pytest.mark.parametrize("case", _load_consensus_fixtures(), ids=lambda case: case["name"])
+def test_build_intrabar_consensus_matches_shared_fixtures(case: dict) -> None:
+    """Runs brian2026/intrabar_reaction.py::build_intrabar_consensus against the same JSON
+    fixtures consumed by supabase/functions/brian-intrabar-eye/logic.test.ts (deployed TS), so
+    the Python reference model and the production runtime are checked against identical inputs.
+    Cases marked shared_semantics: False are the one currently-known divergence (brian-2026 issue
+    #32 Sec 3.4) and assert this implementation's real, current behavior via python_expected --
+    not a target the two implementations have been made to agree on yet.
+    """
+    observations = [_obs_from_fixture(row) for row in case["observations"]]
+    result = build_intrabar_consensus(
+        observations,
+        extension_sigma=case["extension_sigma"],
+        decelerating=case["decelerating"],
+        fresh_velocity_direction=case["fresh_velocity_direction"],
+        taker_flow_direction=case["taker_flow_direction"],
+    )
+    expected = case["expected"] if case["shared_semantics"] else case["python_expected"]
+
+    assert result.direction == expected["direction"], case["name"]
+    assert result.eligible == expected["eligible"], case["name"]
+    if "late_chase" in expected:
+        assert result.late_chase == expected["late_chase"], case["name"]
+    if "status" in expected:
+        assert result.status == expected["status"], case["name"]
+    if "score" in expected:
+        assert result.score == pytest.approx(expected["score"], abs=1e-9), case["name"]
+    if "support_groups" in expected:
+        assert list(result.support_groups) == expected["support_groups"], case["name"]
+    if "conflict_groups" in expected:
+        assert list(result.conflict_groups) == expected["conflict_groups"], case["name"]

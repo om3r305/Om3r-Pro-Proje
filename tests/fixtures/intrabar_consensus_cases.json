@@ -1,0 +1,98 @@
+{
+  "$comment": "Shared regression fixtures for brian2026/intrabar_reaction.py::build_intrabar_consensus (Python reference model) and supabase/functions/brian-intrabar-eye/logic.ts::buildIntrabarConsensus (deployed TS). Field names mirror brian2026/global_sensor_mesh.py's SensorObservation (independent_group/direction/strength/confidence/reliability) so both loaders can consume the same 'observations' array. Values were hand-derived from each implementation's actual formula (see brian-2026 issue #32 Task 1 audit and Item 2 plan) -- do not adjust expected numbers without re-deriving them from the source, and do not add cases that require retuning production thresholds (brian-2026 issue #32 Hard Safety Rule 5).",
+  "cases": [
+    {
+      "name": "two_group_alignment_is_actionable",
+      "shared_semantics": true,
+      "observations": [
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.8, "confidence": 0.9, "reliability": 0.5 },
+        { "independent_group": "micro_taker_flow", "direction": 1, "strength": 0.7, "confidence": 0.85, "reliability": 0.5 }
+      ],
+      "extension_sigma": 0.5,
+      "decelerating": false,
+      "fresh_velocity_direction": 1,
+      "taker_flow_direction": 1,
+      "expected": { "direction": 1, "eligible": true, "late_chase": false, "status": "ACTIONABLE_SHADOW", "score": 0.263 }
+    },
+    {
+      "name": "single_group_is_not_eligible",
+      "shared_semantics": true,
+      "observations": [
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.9, "confidence": 0.9, "reliability": 0.5 }
+      ],
+      "extension_sigma": 0.0,
+      "decelerating": false,
+      "fresh_velocity_direction": 1,
+      "taker_flow_direction": 0,
+      "expected": { "direction": 1, "eligible": false, "late_chase": false, "status": "WATCH", "score": 0.243 }
+    },
+    {
+      "name": "conflicting_third_group_reduces_score_but_stays_eligible",
+      "shared_semantics": true,
+      "observations": [
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.95, "confidence": 0.95, "reliability": 0.5 },
+        { "independent_group": "micro_volume", "direction": 1, "strength": 0.9, "confidence": 0.92, "reliability": 0.5 },
+        { "independent_group": "micro_taker_flow", "direction": -1, "strength": 0.4, "confidence": 0.6, "reliability": 0.5 }
+      ],
+      "extension_sigma": 0.5,
+      "decelerating": false,
+      "fresh_velocity_direction": 1,
+      "taker_flow_direction": -1,
+      "expected": {
+        "direction": 1,
+        "eligible": true,
+        "late_chase": false,
+        "status": "ACTIONABLE_SHADOW",
+        "score": 0.2070138888888889,
+        "support_groups": ["micro_velocity", "micro_volume"],
+        "conflict_groups": ["micro_taker_flow"]
+      },
+      "note": "score must be lower than two_group_alignment_is_actionable's 0.263 despite stronger individual signals, because the third, conflicting group drags the support ratio down."
+    },
+    {
+      "name": "duplicate_group_keeps_only_higher_quality_observation",
+      "shared_semantics": true,
+      "observations": [
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.3, "confidence": 0.5, "reliability": 0.5 },
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.9, "confidence": 0.9, "reliability": 0.5 },
+        { "independent_group": "micro_taker_flow", "direction": 1, "strength": 0.7, "confidence": 0.8, "reliability": 0.5 }
+      ],
+      "extension_sigma": 0.0,
+      "decelerating": false,
+      "fresh_velocity_direction": 1,
+      "taker_flow_direction": 1,
+      "expected": { "direction": 1, "eligible": true, "late_chase": false, "status": "ACTIONABLE_SHADOW", "score": 0.274 },
+      "note": "if the by-group dedup regressed to averaging both micro_velocity rows instead of keeping the higher-quality one, score would be 0.253333... instead of 0.274 -- this case exists to catch that regression."
+    },
+    {
+      "name": "overextended_and_decelerating_is_vetoed_regardless_of_velocity",
+      "shared_semantics": true,
+      "observations": [
+        { "independent_group": "micro_velocity", "direction": 1, "strength": 0.9, "confidence": 0.9, "reliability": 0.5 },
+        { "independent_group": "micro_volume", "direction": 1, "strength": 0.85, "confidence": 0.9, "reliability": 0.5 },
+        { "independent_group": "micro_breakout", "direction": 1, "strength": 0.8, "confidence": 0.9, "reliability": 0.5 }
+      ],
+      "extension_sigma": 4.2,
+      "decelerating": true,
+      "fresh_velocity_direction": 1,
+      "taker_flow_direction": 1,
+      "expected": { "direction": 1, "eligible": true, "late_chase": true, "status": "VETOED_LATE_CHASE", "score": 0.3825 },
+      "note": "decelerating=true alone crosses the veto's OR condition in both implementations, so this case does not exercise the Sec 3.4 divergence -- see known_divergence_missing_velocity_confirmation_under_overextension for that."
+    },
+    {
+      "name": "known_divergence_missing_velocity_confirmation_under_overextension",
+      "shared_semantics": false,
+      "divergence_reason": "brian-2026 issue #32 Sec 3.4: brian2026/intrabar_reaction.py treats fresh_velocity_direction == 0 as NOT stale (stale_velocity = fresh_velocity_direction not in (0, direction)), so an overextended move with no fresh velocity confirmation is NOT vetoed by the Python reference model. supabase/functions/brian-intrabar-eye/logic.ts derives staleness from whether a micro_velocity observation is present in the evidence set at all, and treats an absent one (e.g. because the live signalVelocity() helper filtered it out below its own threshold) as stale by default (staleVelocity = velocity ? ... : true), so the identical evidence IS vetoed in the deployed runtime. Reconciling this is Item 3 on brian-2026 issue #32, not this PR -- both current behaviors are asserted here exactly as implemented, not as a target to converge on.",
+      "observations": [
+        { "independent_group": "micro_volume", "direction": 1, "strength": 0.85, "confidence": 0.9, "reliability": 0.5 },
+        { "independent_group": "micro_taker_flow", "direction": 1, "strength": 0.7, "confidence": 0.85, "reliability": 0.5 }
+      ],
+      "extension_sigma": 4.2,
+      "decelerating": false,
+      "fresh_velocity_direction": 0,
+      "taker_flow_direction": 1,
+      "python_expected": { "direction": 1, "eligible": true, "late_chase": false, "status": "ACTIONABLE_SHADOW", "score": 0.272 },
+      "ts_expected": { "direction": 1, "eligible": true, "late_chase": true, "status": "VETOED_LATE_CHASE", "score": 0.272 }
+    }
+  ]
+}
