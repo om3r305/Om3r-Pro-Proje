@@ -49,6 +49,13 @@ def test_monthly_crypto_plan_is_cutoff_safe() -> None:
     assert items[-1].filename == "ETHUSDT-1m-2025-12.zip"
     assert all(item.start < DEVELOPMENT_CUTOFF for item in items)
 
+    with pytest.raises(ValueError, match="cannot cross"):
+        monthly_crypto_specs(
+            "ETHUSDT",
+            start=datetime(2025, 12, 1, tzinfo=timezone.utc),
+            end=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        )
+
 
 def test_cross_market_registry_keeps_native_clocks_and_provider_requirements_explicit() -> None:
     by_id = {row.canonical_id: row for row in OFFICIAL_CROSS_MARKET_SERIES}
@@ -87,9 +94,22 @@ def test_asof_value_never_uses_future_release_or_future_revision() -> None:
     assert at_230.source_observation_time == 180.0
 
 
-def test_point_in_time_value_cannot_be_available_before_observation() -> None:
+def test_asof_value_rejects_mixed_series_and_contaminated_decision_window() -> None:
+    rows = (
+        PointInTimeValue("CPIAUCSL", 100.0, 120.0, 300.0, "cpi-v1"),
+        PointInTimeValue("UNRATE", 100.0, 120.0, 4.0, "unrate-v1"),
+    )
+    with pytest.raises(ValueError, match="cannot mix"):
+        asof_value(rows, decision_time=150.0)
+    with pytest.raises(ValueError, match="INVALID_CONTAMINATED"):
+        asof_value((rows[0],), decision_time=DEVELOPMENT_CUTOFF)
+
+
+def test_point_in_time_value_cannot_be_available_before_observation_or_in_2026() -> None:
     with pytest.raises(ValueError, match="before"):
         PointInTimeValue("bad", 100.0, 99.0, 1.0)
+    with pytest.raises(ValueError, match="INVALID_CONTAMINATED"):
+        PointInTimeValue("bad", DEVELOPMENT_CUTOFF - 60.0, DEVELOPMENT_CUTOFF, 1.0)
 
 
 def test_history_manifest_forbids_fake_intraday_upsampling_and_final_holdout_claim() -> None:
