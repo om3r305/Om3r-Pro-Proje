@@ -35,9 +35,22 @@ It does **not** receive:
 
 A policy may update its internal training state only after an episode has resolved and the compact `EpisodeExperience` is released.
 
-## Sharding
+## Sharding and learner-state lineage
 
-The global episode index is stable across shards. Sharding changes compute/storage boundaries, not the identity of a world. The same plan, source dataset, world-model config, episode index and policy version must reproduce the same training receipt.
+The global episode index is stable across shards. Sharding changes compute/storage boundaries, not the identity of a world.
+
+Every shard receipt records:
+
+- stable `policy_version`
+- `policy_state_in`
+- `policy_state_out`
+- global first/last episode indices
+- mode counts
+- compact experience summary hash
+
+For an adaptive learner, the next shard can require `policy_state_in == previous policy_state_out`. A mismatched checkpoint is rejected before any new life is run. This prevents 20 independent, forgetful learners from being mistaken for one continuous 100,000-life training history.
+
+The same plan, source dataset, world-model config, episode index, policy version and initial policy state must reproduce the same shard receipt.
 
 Each shard stores compact episode summaries. Full traces remain bounded by the experience-memory audit policy.
 
@@ -48,8 +61,9 @@ The 100k curriculum must **not** be launched merely because the runner exists. B
 1. a broader verified multi-asset historical curriculum dataset must exist,
 2. its provenance and calendars must be validated,
 3. cross-market alignment must not fabricate unavailable prices,
-4. the training policy/learner and its update rules must be preregistered,
-5. synthetic/replay output must remain `TRAINING_ONLY`.
+4. the training policy/learner, its initial state and update rules must be preregistered,
+5. policy checkpoints must be content-addressed/reproducible across shards,
+6. synthetic/replay output must remain `TRAINING_ONLY`.
 
 Until those gates are met, small smoke runs are allowed only to validate infrastructure.
 
