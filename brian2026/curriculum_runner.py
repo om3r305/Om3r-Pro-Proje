@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from hashlib import sha256
-from typing import Protocol, Sequence
+from typing import Protocol
 import json
-import math
 
 from .experience_memory import EpisodeExperience, ExperienceMemory, ExperienceMemoryConfig
 from .market_gym import GymFrame, MarketGym, MarketGymConfig, TargetAllocation
@@ -85,6 +84,9 @@ class CausalCurriculumPolicy(Protocol):
     @property
     def policy_version(self) -> str: ...
 
+    @property
+    def training_state_id(self) -> str: ...
+
     def act(self, observation: PolicyObservation) -> TargetAllocation: ...
 
     def learn_after_episode(self, experience: EpisodeExperience) -> None: ...
@@ -96,6 +98,10 @@ class FlatAuditPolicy:
     @property
     def policy_version(self) -> str:
         return "flat-audit-policy-v1"
+
+    @property
+    def training_state_id(self) -> str:
+        return "flat-audit-policy-state-v1"
 
     def act(self, observation: PolicyObservation) -> TargetAllocation:
         return TargetAllocation()
@@ -113,6 +119,8 @@ class CurriculumShardReceipt:
     episode_count: int
     mode_counts: tuple[tuple[str, int], ...]
     policy_version: str
+    policy_state_in: str
+    policy_state_out: str
     memory_manifest: dict[str, object]
     receipt_id: str
     training_only: bool = True
@@ -137,9 +145,15 @@ class CurriculumRunner:
         self.gym_config = gym_config
         self.memory_config = memory_config
 
-    def run_shard(self, shard_index: int, policy: CausalCurriculumPolicy) -> CurriculumShardResult:
-        if not str(policy.policy_version).strip():
-            raise ValueError("policy_version is required")
+    def run_shard(self, shard_index: int, policy: CausalCurriculumPolicy, *,
+                  expected_policy_state_in: str | None = None) -> CurriculumShardResult:
+        policy_version = str(policy.policy_version)
+        policy_state_in = str(policy.training_state_id)
+        if not policy_version.strip() or not policy_state_in.strip():
+            raise ValueError("policy_version and training_state_id are required")
+        if expected_policy_state_in is not None and policy_state_in != expected_policy_state_in:
+            raise ValueError("policy training state does not match the required previous-shard checkpoint")
+
         start, end = self.plan.shard_bounds(shard_index)
         requested = end - start
         memory_cfg = self.memory_config or ExperienceMemoryConfig(max_summaries=max(requested, 1))
@@ -170,11 +184,16 @@ class CurriculumRunner:
                 gym.step(allocation)
 
             result = gym.finish()
-            experience = memory.record(result, world.receipt, policy_version=policy.policy_version)
+            experience = memory.record(result, world.receipt, policy_version=policy_version)
             # Learning is released only after the whole episode has resolved.
             policy.learn_after_episode(experience)
+            if str(policy.policy_version) != policy_version:
+                raise ValueError("policy_version must remain stable inside one curriculum shard")
+            if not str(policy.training_state_id).strip():
+                raise ValueError("policy training_state_id became empty after learning")
             mode_counts[mode] = mode_counts.get(mode, 0) + 1
 
+        policy_state_out = str(policy.training_state_id)
         manifest = memory.compact_manifest()
         identity = {
             "schema_version": CURRICULUM_SCHEMA_VERSION,
@@ -182,7 +201,9 @@ class CurriculumRunner:
             "shard_index": shard_index,
             "first_episode_index": start,
             "last_episode_index_exclusive": end,
-            "policy_version": policy.policy_version,
+            "policy_version": policy_version,
+            "policy_state_in": policy_state_in,
+            "policy_state_out": policy_state_out,
             "mode_counts": sorted(mode_counts.items()),
             "memory_summary_hash": manifest["summary_hash"],
         }
@@ -193,7 +214,9 @@ class CurriculumRunner:
             last_episode_index_exclusive=end,
             episode_count=requested,
             mode_counts=tuple(sorted(mode_counts.items())),
-            policy_version=policy.policy_version,
+            policy_version=policy_version,
+            policy_state_in=policy_state_in,
+            policy_state_out=policy_state_out,
             memory_manifest=manifest,
             receipt_id=_hash(identity),
         )
