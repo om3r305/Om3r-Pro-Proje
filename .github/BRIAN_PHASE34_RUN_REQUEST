@@ -1,0 +1,9 @@
+phase34-profit-seeking-shadow
+training=2024-01
+exam=2024-02
+symbols=BTCUSDT,ETHUSDT,SOLUSDT
+timeframe=5m
+learning_during_exam=false
+holdout=INVALID_CONTAMINATED
+automatic_promotion=false
+live_execution=false
