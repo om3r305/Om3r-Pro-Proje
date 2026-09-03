@@ -58,6 +58,33 @@ class SpyPolicy:
         self.learned_experiences.append(experience.experience_id)
 
 
+@dataclass
+class ResolvedSpyPolicy(SpyPolicy):
+    callback_order: list[str] = field(default_factory=list)
+    resolved_lengths: list[int] = field(default_factory=list)
+
+    @property
+    def policy_version(self) -> str:
+        return "resolved-spy-policy-v1"
+
+    @property
+    def training_state_id(self) -> str:
+        return f"resolved-spy-after-{len(self.resolved_lengths)}-episodes"
+
+    def learn_after_episode(self, experience) -> None:
+        super().learn_after_episode(experience)
+        self.callback_order.append("summary")
+
+    def learn_after_resolved_episode(self, experience, result, resolved_frames) -> None:
+        assert self.callback_order[-1] == "summary"
+        assert self.learned_experiences[-1] == experience.experience_id
+        assert result.trace[-1].terminal is True
+        assert result.terminal_reason in {"PATH_END", "RUIN"} or result.terminal_reason.startswith("DATA_GAP:")
+        assert len(resolved_frames) == 5
+        self.resolved_lengths.append(len(resolved_frames))
+        self.callback_order.append("resolved")
+
+
 def small_runner(plan: CurriculumPlan) -> CurriculumRunner:
     model = BrianWorldModel(history(), WorldModelConfig(horizon_steps=4, block_length=2, seed=91))
     return CurriculumRunner(
@@ -101,6 +128,16 @@ def test_policy_sees_only_causal_prefix_and_learns_after_episode_resolution() ->
     assert output.receipt.policy_state_in == "spy-state-after-0-episodes"
     assert output.receipt.policy_state_out == "spy-state-after-1-episodes"
     assert output.receipt.memory_manifest["summary_count"] == 1
+
+
+def test_resolved_episode_callback_runs_only_after_terminal_summary_release() -> None:
+    plan = CurriculumPlan(real_replay_episodes=1, block_bootstrap_episodes=0, stress_bootstrap_episodes=0, shard_size=1)
+    policy = ResolvedSpyPolicy()
+    output = small_runner(plan).run_shard(0, policy)
+    assert policy.callback_order == ["summary", "resolved"]
+    assert policy.resolved_lengths == [5]
+    assert output.receipt.policy_state_in == "resolved-spy-after-0-episodes"
+    assert output.receipt.policy_state_out == "resolved-spy-after-1-episodes"
 
 
 def test_flat_audit_policy_proves_curriculum_itself_does_not_create_pnl() -> None:
