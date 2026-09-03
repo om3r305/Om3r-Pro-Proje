@@ -218,10 +218,11 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ error: "POST required" }, 405);
   const startedAt = new Date().toISOString();
   try {
-    const lastRun = await supabase.from("brian_collector_runs").select("finished_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("finished_at", { ascending: false }).limit(1).maybeSingle();
+    // Cadence is anchored to the prior run start, not its finish. A 10–15s runtime must not suppress the next minute's cron tick.
+    const lastRun = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
     if (lastRun.error) throw lastRun.error;
-    if (lastRun.data?.finished_at) {
-      const age = (Date.now() - Date.parse(lastRun.data.finished_at)) / 1000;
+    if (lastRun.data?.started_at) {
+      const age = (Date.now() - Date.parse(lastRun.data.started_at)) / 1000;
       if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return jsonResponse({ status: "SKIPPED_RATE_GUARD", age_seconds: Math.max(0, age), shadow_only: true, live_execution: false });
     }
 
