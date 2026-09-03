@@ -40,10 +40,11 @@ class CollectorCycle:
 class BinancePublicUniverseCollector:
     """One prospective, unauthenticated Binance Spot universe observation.
 
-    The collector has no API-key parameters and no order endpoints. Raw public
-    responses can be written to IntelligenceStore before any ranking logic is
-    applied. Top-of-book is optional; its failure degrades spread quality rather
-    than fabricating prices.
+    The collector has no API-key parameters and no order endpoints. Every raw
+    provider response is timestamped *after* the response is received and can be
+    written immediately to IntelligenceStore before any ranking logic is applied.
+    Top-of-book is optional; its failure degrades spread quality rather than
+    fabricating prices.
     """
 
     EXCHANGE_INFO = "https://api.binance.com/api/v3/exchangeInfo"
@@ -70,12 +71,11 @@ class BinancePublicUniverseCollector:
     def _capture(self, record_type: str, payload: Any, observed_at: float, source_url: str) -> str | None:
         if self.store is None:
             return None
-        captured_at = max(float(observed_at), float(self.clock()))
         capture = IntelligenceCapture(
             provider="binance_public",
             record_type=record_type,
             observed_at=float(observed_at),
-            captured_at=captured_at,
+            captured_at=float(observed_at),
             payload={"response": payload},
             provenance_uri=source_url,
         )
@@ -93,29 +93,40 @@ class BinancePublicUniverseCollector:
         return out
 
     def collect(self, previous: UniverseSnapshot | None = None) -> CollectorCycle:
-        exchange_payload = self.getter(self.EXCHANGE_INFO, self.timeout)
-        ticker_payload = self.getter(self.TICKER_24H, self.timeout)
-        observed_at = float(self.clock())
-
         captures: list[str] = []
-        for record_type, payload, url in (
-            ("exchange_info", exchange_payload, self.EXCHANGE_INFO),
-            ("ticker_24h", ticker_payload, self.TICKER_24H),
-        ):
-            capture_id = self._capture(record_type, payload, observed_at, url)
-            if capture_id is not None:
-                captures.append(capture_id)
+
+        exchange_payload = self.getter(self.EXCHANGE_INFO, self.timeout)
+        exchange_observed_at = float(self.clock())
+        capture_id = self._capture(
+            "exchange_info", exchange_payload, exchange_observed_at, self.EXCHANGE_INFO
+        )
+        if capture_id is not None:
+            captures.append(capture_id)
+
+        ticker_payload = self.getter(self.TICKER_24H, self.timeout)
+        ticker_observed_at = float(self.clock())
+        capture_id = self._capture("ticker_24h", ticker_payload, ticker_observed_at, self.TICKER_24H)
+        if capture_id is not None:
+            captures.append(capture_id)
 
         degraded: list[str] = []
         book_payload: Any = []
+        book_observed_at: float | None = None
         try:
             book_payload = self.getter(self.BOOK_TICKER, self.timeout)
-            capture_id = self._capture("book_ticker", book_payload, observed_at, self.BOOK_TICKER)
+            book_observed_at = float(self.clock())
+            capture_id = self._capture(
+                "book_ticker", book_payload, book_observed_at, self.BOOK_TICKER
+            )
             if capture_id is not None:
                 captures.append(capture_id)
         except Exception:
             degraded.append("book_ticker")
             book_payload = []
+            # Timestamp the completed degraded cycle after the optional call failed.
+            book_observed_at = float(self.clock())
+
+        observed_at = max(exchange_observed_at, ticker_observed_at, float(book_observed_at))
 
         if not isinstance(exchange_payload, Mapping) or not isinstance(exchange_payload.get("symbols"), list):
             raise ValueError("invalid Binance exchangeInfo response")
@@ -142,8 +153,14 @@ class BinancePublicUniverseCollector:
                     price_change_pct=float(ticker.get("priceChangePercent", 0.0)),
                     high_price=float(ticker.get("highPrice", 0.0)),
                     low_price=float(ticker.get("lowPrice", 0.0)),
-                    bid_price=(float(book["bidPrice"]) if book and float(book.get("bidPrice", 0.0)) > 0 else None),
-                    ask_price=(float(book["askPrice"]) if book and float(book.get("askPrice", 0.0)) > 0 else None),
+                    bid_price=(
+                        float(book["bidPrice"])
+                        if book and float(book.get("bidPrice", 0.0)) > 0 else None
+                    ),
+                    ask_price=(
+                        float(book["askPrice"])
+                        if book and float(book.get("askPrice", 0.0)) > 0 else None
+                    ),
                     spot_trading_allowed=(
                         str(metadata.get("status", "")) == "TRADING" and
                         metadata.get("isSpotTradingAllowed", True) is not False
