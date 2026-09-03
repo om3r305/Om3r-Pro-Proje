@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -9,6 +10,7 @@ const COLLECTOR_ID = "phase39-binance-usdm-derivatives";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const BUCKET = "brian-intelligence-raw";
 const TOP_N = 15;
+const LEASE_SECONDS = 240;
 
 type Candidate = { symbol?: string };
 type Obs = Record<string, unknown>;
@@ -41,6 +43,7 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return out({error:"POST required"},405);
   const startedAt = new Date().toISOString();
   try {
+    const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
     const radarResp = await supabase.from("brian_universe_snapshots").select("snapshot_id,candidates").order("observed_at",{ascending:false}).limit(1).maybeSingle();
     if (radarResp.error || !radarResp.data) throw radarResp.error ?? new Error("universe radar unavailable");
     const envelope = radarResp.data.candidates as Record<string,unknown>; const rows = Array.isArray(envelope?.candidates) ? envelope.candidates as Candidate[] : [];
@@ -76,7 +79,12 @@ Deno.serve(async (req) => {
     }
     if (observations.length) { const ins=await supabase.from("brian_sensor_observations").insert(observations); if(ins.error) throw ins.error; }
     await recordRun(startedAt,degraded.length?"DEGRADED":"SUCCESS",market.length,observations.length,degraded);
-    return out({status:degraded.length?"DEGRADED":"CAPTURED",symbols:market.length,stored_observations:observations.length,degraded_sources:degraded,learning_enabled:false,live_execution:false,shadow_only:true});
+      return out({status:degraded.length?"DEGRADED":"CAPTURED",symbols:market.length,stored_observations:observations.length,degraded_sources:degraded,learning_enabled:false,live_execution:false,shadow_only:true});
+    });
+    // Contended: another invocation already owns this collector's lease. No collector work has
+    // run and no data has been written -- see supabase/functions/_shared/collector_lease.ts.
+    if (lease.contended) return out({status:"SKIPPED_LEASE_CONTENDED",collector_id:COLLECTOR_ID,shadow_only:true,live_execution:false});
+    return lease.value!;
   } catch(e) { await recordRun(startedAt,"FAILED",0,0,[],e); return out({status:"FAILED",error:String(e),shadow_only:true},500); }
 });
 

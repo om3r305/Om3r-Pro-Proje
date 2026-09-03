@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -8,9 +9,11 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistS
 const SCHEMA_VERSION = "brian.phase38-crypto-sensor-mesh.v1";
 const EVIDENCE_CLASS = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const RAW_BUCKET = "brian-intelligence-raw";
+const COLLECTOR_ID = "brian-sensor-mesh";
 const TOP_N = 25;
 const KLINE_LIMIT = 30;
 const MIN_INTERVAL_SECONDS = 240;
+const LEASE_SECONDS = 240;
 const FEE_BPS = 10.0;
 const SLIPPAGE_BPS = 1.0;
 const LOGICAL_TEMPLATE_COUNT = 10;
@@ -115,6 +118,7 @@ Deno.serve(async (req: Request) => {
     if (lastRound.error) throw lastRound.error;
     if (lastRound.data?.observed_at) { const age = (Date.now() - Date.parse(lastRound.data.observed_at)) / 1000; if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return response({ status: "SKIPPED_RATE_GUARD", age_seconds: Math.max(0, age), shadow_only: true }); }
 
+    const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
     const latest = await supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle();
     if (latest.error || !latest.data) throw latest.error ?? new Error("universe snapshot unavailable");
     const payload = latest.data.candidates as Record<string, unknown>; const radar = Array.isArray(payload?.candidates) ? payload.candidates as RadarCandidate[] : [];
@@ -173,7 +177,12 @@ Deno.serve(async (req: Request) => {
     const roundId = await sha256(`phase38|${observedAt}|${latest.data.snapshot_id}|${rawCaptureId}`); const roundIns = await supabase.from("brian_opportunity_tournament_rounds").insert({ round_id: roundId, observed_at: observedAt, logical_eye_count: usable.length * LOGICAL_TEMPLATE_COUNT, candidate_count: finalCandidates.length, eligible_count: finalCandidates.filter((x) => x.eligible).length, virtual_allocated_usd: allocated, virtual_unallocated_usd: 500 - allocated, candidates: { schema_version: SCHEMA_VERSION, universe_snapshot_id: latest.data.snapshot_id, scanned_symbols: usable.map((x) => x.candidate.symbol), active_templates: TEMPLATES.map((x) => x.id), unavailable_template_families: ["orderbook_direction", "derivatives", "onchain", "news", "social_psychology", "cross_asset", "macro"], candidates: finalCandidates }, evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false });
     if (roundIns.error) throw roundIns.error;
 
-    return response({ status: "CAPTURED", observed_at: observedAt, universe_snapshot_id: latest.data.snapshot_id, scanned_symbols: usable.length, logical_eye_count: usable.length * LOGICAL_TEMPLATE_COUNT, stored_sensor_observations: observations.length, stored_micro_book_ticks: microTicks.length, eligible_candidates: finalCandidates.filter((x) => x.eligible).slice(0, 10), unavailable_families: ["derivatives", "onchain", "news", "social_psychology", "cross_asset", "macro"], learning_enabled: false, live_execution: false, shadow_only: true });
+      return response({ status: "CAPTURED", observed_at: observedAt, universe_snapshot_id: latest.data.snapshot_id, scanned_symbols: usable.length, logical_eye_count: usable.length * LOGICAL_TEMPLATE_COUNT, stored_sensor_observations: observations.length, stored_micro_book_ticks: microTicks.length, eligible_candidates: finalCandidates.filter((x) => x.eligible).slice(0, 10), unavailable_families: ["derivatives", "onchain", "news", "social_psychology", "cross_asset", "macro"], learning_enabled: false, live_execution: false, shadow_only: true });
+    });
+    // Contended: another invocation already owns this collector's lease. No collector work has
+    // run and no data has been written -- see supabase/functions/_shared/collector_lease.ts.
+    if (lease.contended) return response({ status: "SKIPPED_LEASE_CONTENDED", collector_id: COLLECTOR_ID, shadow_only: true, live_execution: false });
+    return lease.value!;
   } catch (error) {
     console.error("brian-sensor-mesh failed", error);
     return response({ status: "FAILED_CLOSED", error: String(error instanceof Error ? error.message : error), learning_enabled: false, live_execution: false, shadow_only: true }, 500);

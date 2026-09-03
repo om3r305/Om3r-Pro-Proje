@@ -63,17 +63,73 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: "2.1.4"
-      - name: Type-check intrabar-eye pure logic module and entrypoint
+      - name: Type-check edge-function entrypoints and the shared lease module
         run: >-
           deno check
+          supabase/functions/_shared/collector_lease.ts
+          supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
-      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting)
-        run: deno test --allow-read supabase/functions/brian-intrabar-eye
+          supabase/functions/brian-sensor-mesh/index.ts
+          supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-derivatives-eye/index.ts
+          supabase/functions/brian-fx-eye/index.ts
+          supabase/functions/brian-news-eye/index.ts
+      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting, collector lease)
+        run: >-
+          deno test --allow-read
+          supabase/functions/_shared
+          supabase/functions/brian-intrabar-eye
       - name: Lint changed edge-function TS
         run: >-
           deno lint
+          supabase/functions/_shared/collector_lease.ts
+          supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
+          supabase/functions/brian-sensor-mesh/index.ts
+          supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-derivatives-eye/index.ts
+          supabase/functions/brian-fx-eye/index.ts
+          supabase/functions/brian-news-eye/index.ts
+
+  verify-collector-lease:
+    # Real-Postgres proof that the Item 1 collector lease primitive
+    # (brian_acquire_collector_lease / brian_release_collector_lease,
+    # supabase/migrations/202609030009_brian_collector_lease.sql) is actually atomic under
+    # concurrency, per brian-2026 issue #32's requirement to prefer a small Postgres CI
+    # service / SQL integration harness over grep/text assertions. Separate job so the
+    # existing verify and verify-edge-functions jobs above are untouched. psycopg2 is
+    # deliberately not a requirements.txt dependency, so this does not change what the
+    # `verify` job installs or runs.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install collector-lease test dependencies
+        run: python -m pip install pytest psycopg2-binary
+      - name: Run collector lease Postgres concurrency/integration tests
+        env:
+          BRIAN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: python -m pytest -q tests/test_brian2026_collector_lease_postgres.py -v
