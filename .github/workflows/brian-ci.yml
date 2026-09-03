@@ -45,3 +45,35 @@ jobs:
           assert engine.shadow_only is True;
           forbidden={'buy','sell','place_order','create_order','execute_order','submit_order'};
           assert not forbidden.intersection(dir(engine))"
+
+  verify-edge-functions:
+    # Executes the actual deployed Supabase edge-function TS logic (type-check + behavioral
+    # tests). Separate job from `verify` so the existing Python pipeline above is untouched.
+    # brian-2026 issue #32: pin Deno to the version the hosted Supabase Edge Runtime is
+    # currently compatible with (Edge Runtime v1.69.4 / Deno v2.1.4, per Supabase's own
+    # changelog: https://supabase.com/changelog/37941-all-regions-now-run-deno-2-1-compatible-release),
+    # not the latest Deno release, so CI reflects what actually runs in production.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.1.4"
+      - name: Type-check intrabar-eye pure logic module and entrypoint
+        run: >-
+          deno check
+          supabase/functions/brian-intrabar-eye/logic.ts
+          supabase/functions/brian-intrabar-eye/index.ts
+          supabase/functions/brian-intrabar-eye/logic.test.ts
+      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting)
+        run: deno test --allow-read supabase/functions/brian-intrabar-eye
+      - name: Lint changed edge-function TS
+        run: >-
+          deno lint
+          supabase/functions/brian-intrabar-eye/logic.ts
+          supabase/functions/brian-intrabar-eye/index.ts
+          supabase/functions/brian-intrabar-eye/logic.test.ts
