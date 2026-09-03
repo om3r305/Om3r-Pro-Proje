@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import pytest
 
 from brian2026.curriculum_runner import (
     CurriculumPlan,
@@ -38,6 +39,10 @@ class SpyPolicy:
     @property
     def policy_version(self) -> str:
         return "spy-policy-v1"
+
+    @property
+    def training_state_id(self) -> str:
+        return f"spy-state-after-{len(self.learned_experiences)}-episodes"
 
     def act(self, observation: PolicyObservation) -> TargetAllocation:
         self.seen_lengths.append(len(observation.visible_frames))
@@ -93,6 +98,8 @@ def test_policy_sees_only_causal_prefix_and_learns_after_episode_resolution() ->
     assert len(policy.learned_experiences) == 1
     assert output.receipt.episode_count == 1
     assert output.receipt.training_only is True
+    assert output.receipt.policy_state_in == "spy-state-after-0-episodes"
+    assert output.receipt.policy_state_out == "spy-state-after-1-episodes"
     assert output.receipt.memory_manifest["summary_count"] == 1
 
 
@@ -102,6 +109,7 @@ def test_flat_audit_policy_proves_curriculum_itself_does_not_create_pnl() -> Non
     assert output.receipt.mode_counts == (
         ("BLOCK_BOOTSTRAP", 1), ("REAL_REPLAY", 1), ("STRESS_BOOTSTRAP", 1)
     )
+    assert output.receipt.policy_state_in == output.receipt.policy_state_out
     for summary in output.memory.summaries:
         assert summary.starting_equity == 500.0
         assert summary.ending_equity == 500.0
@@ -109,7 +117,7 @@ def test_flat_audit_policy_proves_curriculum_itself_does_not_create_pnl() -> Non
         assert summary.total_costs == 0.0
 
 
-def test_same_shard_same_policy_is_exactly_reproducible() -> None:
+def test_same_shard_same_initial_policy_state_is_exactly_reproducible() -> None:
     plan = CurriculumPlan(real_replay_episodes=1, block_bootstrap_episodes=2, stress_bootstrap_episodes=1, shard_size=4)
     runner = small_runner(plan)
     left = runner.run_shard(0, FlatAuditPolicy())
@@ -119,11 +127,24 @@ def test_same_shard_same_policy_is_exactly_reproducible() -> None:
     assert left.memory.summaries == right.memory.summaries
 
 
+def test_runner_rejects_wrong_previous_shard_policy_checkpoint() -> None:
+    plan = CurriculumPlan(real_replay_episodes=1, block_bootstrap_episodes=1, stress_bootstrap_episodes=0, shard_size=1)
+    runner = small_runner(plan)
+    policy = SpyPolicy()
+    first = runner.run_shard(0, policy, expected_policy_state_in="spy-state-after-0-episodes")
+    assert first.receipt.policy_state_out == "spy-state-after-1-episodes"
+    with pytest.raises(ValueError, match="previous-shard checkpoint"):
+        runner.run_shard(1, policy, expected_policy_state_in="wrong-state")
+    second = runner.run_shard(1, policy, expected_policy_state_in=first.receipt.policy_state_out)
+    assert second.receipt.policy_state_in == first.receipt.policy_state_out
+    assert second.receipt.policy_state_out == "spy-state-after-2-episodes"
+
+
 def test_shard_can_cross_curriculum_mode_boundary_without_reindexing_worlds() -> None:
     plan = CurriculumPlan(real_replay_episodes=2, block_bootstrap_episodes=2, stress_bootstrap_episodes=2, shard_size=4)
     runner = small_runner(plan)
     first = runner.run_shard(0, FlatAuditPolicy())
-    second = runner.run_shard(1, FlatAuditPolicy())
+    second = runner.run_shard(1, FlatAuditPolicy(), expected_policy_state_in=first.receipt.policy_state_out)
     assert first.receipt.first_episode_index == 0
     assert first.receipt.last_episode_index_exclusive == 4
     assert first.receipt.mode_counts == (("BLOCK_BOOTSTRAP", 2), ("REAL_REPLAY", 2))
