@@ -52,7 +52,10 @@ def _history(move: float, length: int = 40) -> MultiAssetHistory:
 
 
 def test_profit_mode_rejects_edge_that_does_not_pay_conservative_round_trip_cost() -> None:
-    learner = _trained_learner(0.0028)
+    # This prediction is deliberately inside the narrow region where the legacy/native
+    # one-way turnover penalty still permits a small long, while the conservative
+    # two-way profit objective rejects it after expected entry+exit costs.
+    learner = _trained_learner(0.00275)
     gym_config = MarketGymConfig(fee_bps=10.0, assumed_spread_bps=2.0, slippage_bps=1.0)
     native = FrozenNativePolicy(learner)
     profit = ProfitSeekingShadowPolicy(learner, gym_config)
