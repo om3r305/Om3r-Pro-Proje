@@ -129,7 +129,7 @@ def select_score_threshold(
         if action != "WAIT" and math.isfinite(float(score))
     ], dtype=float)
     if not len(eligible_scores):
-        return SelectionReceipt(float("inf"), quantile, 0, len(scores))
+        return SelectionReceipt(1.000000001, quantile, 0, len(scores))
     threshold = float(np.quantile(eligible_scores, quantile))
     eligible = sum(
         action != "WAIT" and math.isfinite(float(score)) and float(score) >= threshold
