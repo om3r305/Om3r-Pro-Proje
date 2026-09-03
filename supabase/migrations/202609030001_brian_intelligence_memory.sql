@@ -260,14 +260,17 @@ drop trigger if exists brian_opportunity_outcomes_causal on public.brian_opportu
 create trigger brian_opportunity_outcomes_causal before insert on public.brian_opportunity_outcomes for each row execute function public.brian_validate_opportunity_outcome_time();
 
 do $$
-declare t text;
+declare
+  t text;
+  trigger_name text;
 begin
   foreach t in array array[
     'brian_raw_captures','brian_intel_events','brian_entities','brian_entity_labels','brian_entity_edges',
     'brian_whale_flows','brian_source_outcomes','brian_universe_snapshots','brian_opportunity_observations','brian_opportunity_outcomes'
   ] loop
-    execute format('drop trigger if exists %I_append_only on public.%I', t, t);
-    execute format('create trigger %I_append_only before update or delete on public.%I for each row execute function public.brian_reject_mutation()', t, t);
+    trigger_name := t || '_append_only';
+    execute format('drop trigger if exists %I on public.%I', trigger_name, t);
+    execute format('create trigger %I before update or delete on public.%I for each row execute function public.brian_reject_mutation()', trigger_name, t);
   end loop;
 end;
 $$;
