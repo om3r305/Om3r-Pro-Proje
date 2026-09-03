@@ -22,6 +22,7 @@ import {
   windowReturn,
 } from "./logic.ts";
 import type { Book, IntrabarSignalRow, MarketRow, PriorTick, RadarCandidate, Signal } from "./logic.ts";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -36,6 +37,7 @@ const CORE_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"] as 
 const KLINE_LIMIT = 32;
 const AGG_TRADE_LIMIT = 200;
 const MIN_INTERVAL_SECONDS = 50;
+const LEASE_SECONDS = 55;
 const PRIOR_LOOKUP_BATCH = 40;
 const MIN_SUPPORT_GROUPS = 2;
 const MIN_CONSENSUS_SCORE = 0.18;
@@ -119,6 +121,7 @@ Deno.serve(async (req: Request) => {
       if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return jsonResponse({ status: "SKIPPED_RATE_GUARD", age_seconds: Math.max(0, age), shadow_only: true, live_execution: false });
     }
 
+    const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
     const latest = await supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle();
     if (latest.error || !latest.data) throw latest.error ?? new Error("universe snapshot unavailable");
     const universePayload = latest.data.candidates as Record<string, unknown>; const radar = Array.isArray(universePayload?.candidates) ? universePayload.candidates as RadarCandidate[] : [];
@@ -217,7 +220,12 @@ Deno.serve(async (req: Request) => {
 
     const status = degradedSources.length ? "DEGRADED" : "SUCCESS"; const stored = observations.length + events.length + microTicks.length;
     await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS, prior_lookup_batch: PRIOR_LOOKUP_BATCH });
-    return jsonResponse({ status, experiment_id: EXPERIMENT_ID, observed_at: observedAt, scanned_symbols: usable.length, signal_observations: observations.length, reaction_events: events.length, actionable_shadow: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_vetoes: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, shadow_only: true, live_execution: false });
+      return jsonResponse({ status, experiment_id: EXPERIMENT_ID, observed_at: observedAt, scanned_symbols: usable.length, signal_observations: observations.length, reaction_events: events.length, actionable_shadow: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_vetoes: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, shadow_only: true, live_execution: false });
+    });
+    // Contended: another invocation already owns this collector's lease. No collector work has
+    // run and no data has been written -- see supabase/functions/_shared/collector_lease.ts.
+    if (lease.contended) return jsonResponse({ status: "SKIPPED_LEASE_CONTENDED", collector_id: COLLECTOR_ID, shadow_only: true, live_execution: false });
+    return lease.value!;
   } catch (error) {
     const message = errorText(error);
     console.error("brian-intrabar-eye failed", message); await recordCollectorRun(startedAt, "FAILED", 0, 0, [], { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID }, error);

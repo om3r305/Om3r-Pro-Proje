@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -9,7 +10,9 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 const RAW_BUCKET = "brian-intelligence-raw";
 const PROVIDER = "binance_public";
+const COLLECTOR_ID = "brian-universe-collector";
 const MIN_INTERVAL_SECONDS = 780;
+const LEASE_SECONDS = 420;
 const CONFIG = {
   quote_asset: "USDT",
   min_quote_volume: 5_000_000,
@@ -152,6 +155,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
     const exchange = await fetchJson(EXCHANGE_INFO, true);
     const ticker = await fetchJson(TICKER_24H, true);
     const book = await fetchJson(BOOK_TICKER, false);
@@ -274,17 +278,22 @@ Deno.serve(async (req: Request) => {
     });
     if (snapshotInsert.error) throw snapshotInsert.error;
 
-    return jsonResponse({
-      status: "CAPTURED",
-      snapshot_id: snapshotId,
-      observed_at: snapshotObservedAt,
-      eligible_count: eligibleSymbols.length,
-      top_candidates: selected.slice(0, 10).map((x) => ({ symbol: x.symbol, radar_score: x.radar_score, reasons: x.reasons })),
-      newly_observed_symbols: newlyObserved,
-      degraded_sources: snapshotPayload.degraded_sources,
-      raw_encoding: "gzip",
-      shadow_only: true,
+      return jsonResponse({
+        status: "CAPTURED",
+        snapshot_id: snapshotId,
+        observed_at: snapshotObservedAt,
+        eligible_count: eligibleSymbols.length,
+        top_candidates: selected.slice(0, 10).map((x) => ({ symbol: x.symbol, radar_score: x.radar_score, reasons: x.reasons })),
+        newly_observed_symbols: newlyObserved,
+        degraded_sources: snapshotPayload.degraded_sources,
+        raw_encoding: "gzip",
+        shadow_only: true,
+      });
     });
+    // Contended: another invocation already owns this collector's lease. No collector work has
+    // run and no data has been written -- see supabase/functions/_shared/collector_lease.ts.
+    if (lease.contended) return jsonResponse({ status: "SKIPPED_LEASE_CONTENDED", collector_id: COLLECTOR_ID, shadow_only: true });
+    return lease.value!;
   } catch (error) {
     console.error("brian-universe-collector failed", error);
     return jsonResponse({ status: "FAILED_CLOSED", error: String(error instanceof Error ? error.message : error), shadow_only: true }, 500);
