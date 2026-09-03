@@ -206,6 +206,16 @@ grant execute on function public.brian_release_collector_lease(text, text) to se
 -- holds. This function does not, by itself, stop that deposed owner's already-in-flight work --
 -- see supabase/functions/_shared/collector_lease.ts for how the caller reacts to a failed
 -- renewal.
+--
+-- Also requires lease_until > v_now on the CURRENT row before renewing it. Without this, a
+-- narrower but real race exists: brian_release_collector_lease intentionally leaves owner_token
+-- unchanged when it releases (it only backdates lease_until), so an owner's own heartbeat
+-- renewal RPC that was already in flight when its work finished and the lease was released could
+-- otherwise arrive at Postgres afterward, still match on collector_id + owner_token, and push
+-- lease_until back into the future -- resurrecting a lease that was correctly released and
+-- blocking the next legitimate owner for a full TTL. Gating on the row's lease still being
+-- active at the moment of renewal closes that: a renewal arriving after release (or after
+-- genuine expiry) always fails closed, exactly like the crash-recovery case.
 create or replace function public.brian_renew_collector_lease(
   p_collector_id text,
   p_owner_token text,
@@ -233,7 +243,7 @@ begin
   update public.brian_collector_leases
     set lease_until = v_now + make_interval(secs => p_lease_seconds),
         updated_at = v_now
-    where collector_id = p_collector_id and owner_token = p_owner_token;
+    where collector_id = p_collector_id and owner_token = p_owner_token and lease_until > v_now;
   get diagnostics v_rows = row_count;
   v_renewed := v_rows > 0;
 

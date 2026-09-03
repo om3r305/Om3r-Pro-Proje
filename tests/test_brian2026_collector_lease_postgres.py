@@ -312,3 +312,40 @@ def test_renewal_keeps_a_slow_but_alive_owner_safe_from_overlap():
         assert [e[0] for e in _events(conn, collector_id)] == ["ACQUIRED", "RENEWED", "BLOCKED_ACTIVE", "EXPIRED_RECOVERY"]
     finally:
         conn.close()
+
+
+def test_renewal_after_release_cannot_resurrect_the_lease():
+    """Closes the exact race from GPT-5.6 Sol's final review on this PR:
+    brian_release_collector_lease intentionally leaves owner_token unchanged when it releases (it
+    only backdates lease_until), so a heartbeat renewal RPC that was already in flight when
+    work() finished -- and the lease was released -- could otherwise arrive at Postgres
+    afterward, still match on collector_id + owner_token, and push lease_until back into the
+    future: resurrecting a lease that was correctly released and blocking the next legitimate
+    owner for a full TTL.
+
+    Sequence proved here: acquire A -> release A -> stale/late renew A returns False and cannot
+    extend/reanimate the row -> B can acquire immediately.
+    """
+    collector_id = _collector_id()
+    conn = _connect()
+    try:
+        assert _acquire(conn, collector_id, "owner-a", 30) is True
+        assert _release(conn, collector_id, "owner-a") is True
+        row_after_release = _lease_row(conn, collector_id)
+
+        # Simulates the stale, already-in-flight heartbeat renewal RPC landing *after* release:
+        # same collector_id + owner_token as the just-released lease.
+        assert _renew(conn, collector_id, "owner-a", 30) is False, "a renewal arriving after release must not resurrect the lease"
+
+        row_after_stale_renew = _lease_row(conn, collector_id)
+        assert row_after_stale_renew == row_after_release, "a rejected (fail-closed) renewal must not change the lease row at all"
+
+        # B must be able to acquire immediately -- the stale renewal must not have blocked it by
+        # pushing lease_until back into the future.
+        assert _acquire(conn, collector_id, "owner-b", 30) is True
+        row = _lease_row(conn, collector_id)
+        assert row[0] == "owner-b"
+
+        assert [e[0] for e in _events(conn, collector_id)] == ["ACQUIRED", "RELEASED", "RENEWAL_LOST", "EXPIRED_RECOVERY"]
+    finally:
+        conn.close()

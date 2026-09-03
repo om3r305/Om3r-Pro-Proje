@@ -101,6 +101,14 @@ export async function releaseCollectorLease(
  * stopped and the release attempt completes) so the caller's own try/catch and failure-accounting
  * path still run -- a lease acquisition does not swallow collector failures. A failure to
  * release, or to renew, is logged and swallowed so it can never mask the real outcome of `work`.
+ *
+ * `clearInterval` below stops scheduling *future* heartbeat ticks; it deliberately does not (and
+ * cannot) cancel a renewal RPC that is already in flight to Postgres when `work` finishes. That
+ * in-flight renewal is still safe to let land after release: brian_renew_collector_lease (see
+ * supabase/migrations/202609030009_brian_collector_lease.sql) fails closed once the row's own
+ * lease_until is no longer in the future, which release guarantees by backdating it -- so a
+ * stale renewal arriving after release can never resurrect the lease or block the next owner,
+ * even though it still matches on owner_token (release intentionally leaves that unchanged).
  */
 export async function withCollectorLease<T>(
   client: RpcClient,
