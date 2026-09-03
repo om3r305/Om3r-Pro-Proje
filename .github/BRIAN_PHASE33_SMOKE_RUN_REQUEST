@@ -1,0 +1,10 @@
+phase33-learning-smoke
+training-only-shadow-research
+source=binance-vision-spot-monthly-checksummed
+symbols=BTCUSDT,ETHUSDT,SOLUSDT
+source_month=2024-01
+timeframe=5m-derived-from-1m
+episodes=100
+curriculum=25-real,50-bootstrap,25-stress
+shards=2x50
+holdout=INVALID_CONTAMINATED
