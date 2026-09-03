@@ -63,11 +63,13 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: "2.1.4"
-      - name: Type-check edge-function entrypoints and the shared lease module
+      - name: Type-check edge-function entrypoints and the shared lease/l2-book modules
         run: >-
           deno check
           supabase/functions/_shared/collector_lease.ts
           supabase/functions/_shared/collector_lease.test.ts
+          supabase/functions/_shared/l2_book.ts
+          supabase/functions/_shared/l2_book.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
@@ -86,6 +88,8 @@ jobs:
           deno lint
           supabase/functions/_shared/collector_lease.ts
           supabase/functions/_shared/collector_lease.test.ts
+          supabase/functions/_shared/l2_book.ts
+          supabase/functions/_shared/l2_book.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
