@@ -1,14 +1,21 @@
 -- Brian collector-level atomic lease/mutex (Item 1, brian-2026 issue #32).
 --
--- Standalone by design: creates only a plain table, two plpgsql functions, and an append-only
--- audit table, with no dependency on vault/pg_net/pg_cron or any other Supabase-specific
--- extension. That means this single file can be applied to, and exercised against, a vanilla
--- Postgres instance in CI (see tests/test_brian2026_collector_lease_postgres.py) independent of
--- the rest of the Supabase migration chain. The `create or replace function
--- public.brian_reject_mutation()` below is therefore an intentional, idempotent redefinition of
--- the identical function already created by 202609030001_brian_intelligence_memory.sql:6-17 --
--- harmless on the real deployed database (same name/args/body), but required for this file to be
--- independently applicable.
+-- This file has no dependency on vault/pg_net/pg_cron or any other Supabase-specific extension,
+-- and creates only a plain table, an append-only audit table, and plpgsql functions -- so it does
+-- not need the rest of the Supabase migration chain to be applied first. It is NOT, however,
+-- directly applicable to a bare vanilla Postgres instance as-is: the REVOKE/GRANT statements
+-- below reference the anon/authenticated/service_role roles that only exist on a real Supabase
+-- Postgres instance. It is testable on vanilla Postgres only after minimal Supabase-role
+-- bootstrap (`create role anon/authenticated/service_role` if they don't already exist) --
+-- see the fixture in tests/test_brian2026_collector_lease_postgres.py, which does exactly that
+-- before applying this file, and only in the dedicated CI test database. The production grants
+-- below are unchanged by that bootstrap and are not weakened for testability.
+--
+-- The `create or replace function public.brian_reject_mutation()` below is an intentional,
+-- idempotent redefinition of the identical function already created by
+-- 202609030001_brian_intelligence_memory.sql:6-17 -- harmless on the real deployed database
+-- (same name/args/body), but required so this file's own trigger can be created without forcing
+-- the whole prior migration chain to run first.
 --
 -- brian_collector_leases is a mutable OPERATIONAL-STATE row per collector_id -- a deliberate,
 -- explicit exception to the append-only evidence doctrine used everywhere else in this schema,
@@ -48,7 +55,7 @@ create table if not exists public.brian_collector_lease_events (
   event_id text primary key default gen_random_uuid()::text,
   collector_id text not null,
   owner_token text not null,
-  event text not null check (event in ('ACQUIRED', 'BLOCKED_ACTIVE', 'RELEASED', 'EXPIRED_RECOVERY')),
+  event text not null check (event in ('ACQUIRED', 'BLOCKED_ACTIVE', 'RELEASED', 'EXPIRED_RECOVERY', 'RENEWED', 'RENEWAL_LOST')),
   observed_at timestamptz not null default now(),
   lease_until timestamptz,
   evidence_class text not null default 'PROSPECTIVE_DEVELOPMENT_SHADOW',
@@ -180,3 +187,70 @@ $$;
 revoke all on function public.brian_release_collector_lease(text, text) from public;
 revoke all on function public.brian_release_collector_lease(text, text) from anon, authenticated;
 grant execute on function public.brian_release_collector_lease(text, text) to service_role;
+
+-- Owner-token-gated renewal/heartbeat. A fixed TTL alone is only safe for the *normal* runtime
+-- case: if a collector invocation is still genuinely alive but slower than its own lease_seconds
+-- (a slow upstream API, a slow DB round trip), the lease can expire while that invocation is
+-- still executing and still writing, letting a second invocation take over and run concurrently
+-- with the first -- exactly the overlap Item 1 exists to prevent. A live invocation is expected
+-- to call this periodically (well inside its own lease_seconds) for as long as its work is still
+-- running; see supabase/functions/_shared/collector_lease.ts's withCollectorLease, which does
+-- this automatically. Crash recovery is unchanged: if renewal calls stop (the process died, or
+-- ownership was already lost), the lease simply expires on its own TTL and
+-- brian_acquire_collector_lease's existing EXPIRED_RECOVERY path takes over -- no separate
+-- mechanism is needed for the crash case.
+--
+-- Succeeds only when collector_id + owner_token still match the current row, exactly like
+-- release: once another owner_token has taken over (via EXPIRED_RECOVERY), the deposed owner's
+-- renewal calls correctly and permanently fail rather than resurrecting a lease it no longer
+-- holds. This function does not, by itself, stop that deposed owner's already-in-flight work --
+-- see supabase/functions/_shared/collector_lease.ts for how the caller reacts to a failed
+-- renewal.
+create or replace function public.brian_renew_collector_lease(
+  p_collector_id text,
+  p_owner_token text,
+  p_lease_seconds integer
+) returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_now timestamptz := clock_timestamp();
+  v_rows integer;
+  v_renewed boolean;
+begin
+  if p_collector_id is null or length(trim(p_collector_id)) = 0 then
+    raise exception 'BRIAN_LEASE: p_collector_id is required';
+  end if;
+  if p_owner_token is null or length(trim(p_owner_token)) = 0 then
+    raise exception 'BRIAN_LEASE: p_owner_token is required';
+  end if;
+  if p_lease_seconds is null or p_lease_seconds <= 0 then
+    raise exception 'BRIAN_LEASE: p_lease_seconds must be positive';
+  end if;
+
+  update public.brian_collector_leases
+    set lease_until = v_now + make_interval(secs => p_lease_seconds),
+        updated_at = v_now
+    where collector_id = p_collector_id and owner_token = p_owner_token;
+  get diagnostics v_rows = row_count;
+  v_renewed := v_rows > 0;
+
+  insert into public.brian_collector_lease_events (collector_id, owner_token, event, observed_at, lease_until, metadata)
+  values (
+    p_collector_id,
+    p_owner_token,
+    case when v_renewed then 'RENEWED' else 'RENEWAL_LOST' end,
+    v_now,
+    case when v_renewed then v_now + make_interval(secs => p_lease_seconds) else null end,
+    jsonb_build_object('lease_seconds', p_lease_seconds)
+  );
+
+  return v_renewed;
+end;
+$$;
+
+revoke all on function public.brian_renew_collector_lease(text, text, integer) from public;
+revoke all on function public.brian_renew_collector_lease(text, text, integer) from anon, authenticated;
+grant execute on function public.brian_renew_collector_lease(text, text, integer) to service_role;

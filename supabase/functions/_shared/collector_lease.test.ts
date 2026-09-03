@@ -1,12 +1,17 @@
-// Caller-side contract tests for withCollectorLease/acquireCollectorLease/releaseCollectorLease.
+// Caller-side contract tests for
+// withCollectorLease/acquireCollectorLease/renewCollectorLease/releaseCollectorLease.
 // These use a mocked RpcClient (no network, no Postgres) to prove the calling contract: a
 // contended lease returns before any collector work begins and records the expected
-// status/metadata, work-thrown errors still propagate after release is attempted, and a failed
-// release never masks the real outcome. Real Postgres atomicity under concurrency is proven
-// separately in tests/test_brian2026_collector_lease_postgres.py against a real database.
+// status/metadata, work-thrown errors still propagate after release is attempted, a failed
+// release never masks the real outcome, and the heartbeat renews while work is alive and stops
+// once ownership is lost (using Deno's FakeTime so this needs no real delays). Real Postgres
+// atomicity under concurrency -- including the slow-but-alive-owner scenario the heartbeat
+// closes -- is proven separately in tests/test_brian2026_collector_lease_postgres.py against a
+// real database.
 
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@^1.0.0";
-import { acquireCollectorLease, releaseCollectorLease, type RpcClient, withCollectorLease } from "./collector_lease.ts";
+import { FakeTime } from "jsr:@std/testing@^1.0.0/time";
+import { acquireCollectorLease, releaseCollectorLease, renewCollectorLease, type RpcClient, withCollectorLease } from "./collector_lease.ts";
 
 interface RpcCall {
   fn: string;
@@ -43,6 +48,21 @@ Deno.test("acquireCollectorLease: an RPC error is rethrown, not swallowed as con
 Deno.test("releaseCollectorLease: true data means released", async () => {
   const { client } = mockClient({ brian_release_collector_lease: { data: true, error: null } });
   assertEquals(await releaseCollectorLease(client, "brian-intrabar-eye", "token-1"), true);
+});
+
+Deno.test("renewCollectorLease: true data means renewed", async () => {
+  const { client } = mockClient({ brian_renew_collector_lease: { data: true, error: null } });
+  assertEquals(await renewCollectorLease(client, "brian-intrabar-eye", "token-1", 55), true);
+});
+
+Deno.test("renewCollectorLease: false data means ownership was lost, not an error", async () => {
+  const { client } = mockClient({ brian_renew_collector_lease: { data: false, error: null } });
+  assertEquals(await renewCollectorLease(client, "brian-intrabar-eye", "token-1", 55), false);
+});
+
+Deno.test("renewCollectorLease: an RPC error is rethrown, not swallowed as lost ownership", async () => {
+  const { client } = mockClient({ brian_renew_collector_lease: { data: null, error: new Error("connection reset") } });
+  await assertRejects(() => renewCollectorLease(client, "brian-intrabar-eye", "token-1", 55), Error, "connection reset");
 });
 
 Deno.test("withCollectorLease: contended acquire returns immediately without running work", async () => {
@@ -120,4 +140,71 @@ Deno.test("withCollectorLease: distinct invocations use distinct owner tokens", 
   await withCollectorLease(client, "brian-universe-collector", 420, () => Promise.resolve(undefined));
   await withCollectorLease(client, "brian-universe-collector", 420, () => Promise.resolve(undefined));
   assert(seen[0] !== seen[1], "two separate invocations must not reuse the same owner token");
+});
+
+Deno.test("withCollectorLease: renews the lease on a heartbeat while work is still running", async () => {
+  const time = new FakeTime();
+  try {
+    const renewOwnerTokens: unknown[] = [];
+    let resolveWork: (() => void) | undefined;
+    const workGate = new Promise<void>((resolve) => { resolveWork = resolve; });
+    const client: RpcClient = {
+      rpc(fn, params) {
+        if (fn === "brian_acquire_collector_lease") return Promise.resolve({ data: true, error: null });
+        if (fn === "brian_renew_collector_lease") {
+          renewOwnerTokens.push(params.p_owner_token);
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (fn === "brian_release_collector_lease") return Promise.resolve({ data: true, error: null });
+        return Promise.resolve({ data: null, error: new Error(`unexpected rpc ${fn}`) });
+      },
+    };
+    // 60s lease -> heartbeat interval is floor(60/3) = 20s.
+    const resultPromise = withCollectorLease(client, "brian-intrabar-eye", 60, async () => {
+      await workGate;
+      return "done";
+    });
+    await time.tickAsync(20_000);
+    await time.tickAsync(20_000);
+    assertEquals(renewOwnerTokens.length, 2, "two 20s ticks on a 60s lease must trigger exactly two renewals");
+    assert(renewOwnerTokens[0] === renewOwnerTokens[1], "every renewal for one invocation must use the same owner token");
+    resolveWork?.();
+    const result = await resultPromise;
+    assertEquals(result.contended, false);
+    assertEquals(result.value, "done");
+  } finally {
+    time.restore();
+  }
+});
+
+Deno.test("withCollectorLease: stops renewing once a renewal reports lost ownership", async () => {
+  const time = new FakeTime();
+  try {
+    let renewCallCount = 0;
+    let resolveWork: (() => void) | undefined;
+    const workGate = new Promise<void>((resolve) => { resolveWork = resolve; });
+    const client: RpcClient = {
+      rpc(fn) {
+        if (fn === "brian_acquire_collector_lease") return Promise.resolve({ data: true, error: null });
+        if (fn === "brian_renew_collector_lease") {
+          renewCallCount += 1;
+          return Promise.resolve({ data: false, error: null }); // ownership already lost
+        }
+        if (fn === "brian_release_collector_lease") return Promise.resolve({ data: true, error: null });
+        return Promise.resolve({ data: null, error: new Error("unexpected rpc") });
+      },
+    };
+    // 30s lease -> heartbeat interval is floor(30/3) = 10s.
+    const resultPromise = withCollectorLease(client, "brian-sensor-mesh", 30, async () => {
+      await workGate;
+      return "done";
+    });
+    await time.tickAsync(10_000); // first heartbeat: renewal reports ownership lost, must stop
+    await time.tickAsync(10_000); // a second tick must NOT produce a second renewal call
+    assertEquals(renewCallCount, 1, "renewal must stop after ownership is lost, not keep retrying forever");
+    resolveWork?.();
+    await resultPromise;
+  } finally {
+    time.restore();
+  }
 });
