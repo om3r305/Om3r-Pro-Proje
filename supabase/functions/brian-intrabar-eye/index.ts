@@ -15,6 +15,7 @@ const CORE_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"] as 
 const KLINE_LIMIT = 32;
 const AGG_TRADE_LIMIT = 200;
 const MIN_INTERVAL_SECONDS = 50;
+const PRIOR_LOOKUP_BATCH = 40;
 const FEE_BPS = 10.0;
 const SLIPPAGE_BPS = 1.0;
 const MIN_SUPPORT_GROUPS = 2;
@@ -44,7 +45,7 @@ type MarketRow = {
 };
 type PriorTick = {
   eye_id: string; starting_equity: string | number; equity_after: string | number; peak_equity_after: string | number;
-  max_drawdown_pct_after: number; target_direction: number; observed_mid_price: string | number;
+  max_drawdown_pct_after: number; target_direction: number; observed_mid_price: string | number; observed_at?: string;
 };
 type Observation = {
   observation_id: string; eye_id: string; template_id: string; asset_id: string; market_domain: string;
@@ -52,13 +53,19 @@ type Observation = {
   strength: number; confidence: number; reliability: number; available: boolean; source_ids: string[];
   reason: string; evidence_class: string; shadow_only: boolean; live_execution: boolean; metadata: Record<string, unknown>;
 };
-
 type SignalRow = {
   template: typeof TEMPLATES[number]; assetId: string; candidate: RadarCandidate; market: MarketRow; signal: Signal; eyeId: string;
 };
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+}
+function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error && typeof error === "object") {
+    try { return JSON.stringify(error); } catch { return Object.prototype.toString.call(error); }
+  }
+  return String(error);
 }
 function finite(value: unknown, fallback = 0): number { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
 function clip(value: number, low = 0, high = 1): number { return Math.max(low, Math.min(high, value)); }
@@ -203,8 +210,8 @@ function microTick(params: { eyeId: string; templateId: string; assetId: string;
 async function recordCollectorRun(startedAt: string, status: "SUCCESS" | "DEGRADED" | "FAILED" | "SKIPPED", observed: number, stored: number, degraded: string[], metadata: Record<string, unknown>, error?: unknown) {
   try {
     const finishedAt = new Date().toISOString(); const runId = await sha256(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-    await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: degraded, error_class: error ? "INTRABAR_RUNTIME" : null, error_message: error ? String(error instanceof Error ? error.message : error).slice(0, 2000) : null, evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false, metadata });
-  } catch (logError) { console.error("collector run logging failed", logError); }
+    await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: degraded, error_class: error ? "INTRABAR_RUNTIME" : null, error_message: error ? errorText(error).slice(0, 2000) : null, evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false, metadata });
+  } catch (logError) { console.error("collector run logging failed", errorText(logError)); }
 }
 
 Deno.serve(async (req: Request) => {
@@ -264,8 +271,20 @@ Deno.serve(async (req: Request) => {
     const consensusEyeIds = new Map<string, string>();
     for (const market of usable) consensusEyeIds.set(`crypto:${market.candidate.symbol}`, await sha256(`intrabar-consensus|crypto:${market.candidate.symbol}`));
     const allEyeIds = [...signalRows.map((x) => x.eyeId), ...consensusEyeIds.values()];
-    const priorResp = allEyeIds.length ? await supabase.from("brian_micro_book_ticks").select("eye_id,starting_equity,equity_after,peak_equity_after,max_drawdown_pct_after,target_direction,observed_mid_price,observed_at").in("eye_id", allEyeIds).order("observed_at", { ascending: false }).limit(3000) : { data: [], error: null };
-    if (priorResp.error) throw priorResp.error; const latestByEye = new Map<string, PriorTick>(); for (const row of (priorResp.data ?? []) as PriorTick[]) if (!latestByEye.has(row.eye_id)) latestByEye.set(row.eye_id, row);
+    const priorRows: PriorTick[] = [];
+    for (let i = 0; i < allEyeIds.length; i += PRIOR_LOOKUP_BATCH) {
+      const chunk = allEyeIds.slice(i, i + PRIOR_LOOKUP_BATCH);
+      const priorResp = await supabase.from("brian_micro_book_ticks")
+        .select("eye_id,starting_equity,equity_after,peak_equity_after,max_drawdown_pct_after,target_direction,observed_mid_price,observed_at")
+        .in("eye_id", chunk)
+        .order("observed_at", { ascending: false })
+        .limit(1000);
+      if (priorResp.error) throw priorResp.error;
+      priorRows.push(...((priorResp.data ?? []) as PriorTick[]));
+    }
+    const latestByEye = new Map<string, PriorTick>();
+    priorRows.sort((a, b) => Date.parse(String(b.observed_at ?? 0)) - Date.parse(String(a.observed_at ?? 0)));
+    for (const row of priorRows) if (!latestByEye.has(row.eye_id)) latestByEye.set(row.eye_id, row);
 
     const observations: Observation[] = []; const microTicks: Record<string, unknown>[] = [];
     for (const row of signalRows) {
@@ -297,7 +316,7 @@ Deno.serve(async (req: Request) => {
       const lateChase = eligible && extensionSigma >= OVEREXTENSION_SIGMA && (market.decelerating || staleVelocity || flowConflict);
       const status = eligible && !lateChase ? "ACTIONABLE_SHADOW" : lateChase ? "VETOED_LATE_CHASE" : "WATCH"; const roundTripCostBps = 2 * (FEE_BPS + SLIPPAGE_BPS + market.book.spreadBps / 2);
       const eventId = await sha256(`${EXPERIMENT_ID}|${assetId}|${observedAt}|${direction}|${score.toFixed(12)}|${status}`);
-      events.push({ event_id: eventId, experiment_id: EXPERIMENT_ID, observed_at: observedAt, asset_id: assetId, direction, score, support_groups: support.map((x) => x.template.group).sort(), conflict_groups: conflicts.map((x) => x.template.group).sort(), source_observation_ids: support.map((x) => observations.find((o) => o.eye_id === x.eyeId)?.observation_id).filter(Boolean), observed_mid_price: market.book.mid, observed_spread_bps: market.book.spreadBps, estimated_round_trip_cost_bps: roundTripCostBps, extension_sigma: extensionSigma, late_chase: lateChase, status, reason: status === "ACTIONABLE_SHADOW" ? "independent intrabar evidence aligned before overextension veto" : status === "VETOED_LATE_CHASE" ? "signal arrived after statistically extended move without sufficient fresh continuation" : "intrabar evidence not strong/independent enough", evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false, metadata: { schema_version: SCHEMA_VERSION, decelerating: market.decelerating, return_30s: market.return30s, previous_30s_return: market.previous30sReturn, current_1m_partial: market.current.closeTime > observedMs, raw_capture_id: rawCaptureId, universe_snapshot_id: latest.data.snapshot_id } });
+      events.push({ event_id: eventId, experiment_id: EXPERIMENT_ID, observed_at: observedAt, asset_id: assetId, direction, score, support_groups: support.map((x) => x.template.group).sort(), conflict_groups: conflicts.map((x) => x.template.group).sort(), source_observation_ids: support.map((x) => observations.find((o) => o.eye_id === x.eyeId)?.observation_id).filter((value): value is string => Boolean(value)), observed_mid_price: market.book.mid, observed_spread_bps: market.book.spreadBps, estimated_round_trip_cost_bps: roundTripCostBps, extension_sigma: extensionSigma, late_chase: lateChase, status, reason: status === "ACTIONABLE_SHADOW" ? "independent intrabar evidence aligned before overextension veto" : status === "VETOED_LATE_CHASE" ? "signal arrived after statistically extended move without sufficient fresh continuation" : "intrabar evidence not strong/independent enough", evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false, metadata: { schema_version: SCHEMA_VERSION, decelerating: market.decelerating, return_30s: market.return30s, previous_30s_return: market.previous30sReturn, current_1m_partial: market.current.closeTime > observedMs, raw_capture_id: rawCaptureId, universe_snapshot_id: latest.data.snapshot_id } });
 
       const consensusEyeId = consensusEyeIds.get(assetId)!; const prior = latestByEye.get(consensusEyeId); const targetDirection = status === "ACTIONABLE_SHADOW" ? direction : 0;
       const tick = microTick({ eyeId: consensusEyeId, templateId: "intrabar-consensus", assetId, observedAt, mid: market.book.mid, spreadBps: market.book.spreadBps, strength: score, confidence: confidenceFromRadar(market.candidate, market.book), targetDirection, startingTicket: 5, rawCaptureId, prior, metadata: { status, late_chase: lateChase, support_groups: support.map((x) => x.template.group).sort(), conflict_groups: conflicts.map((x) => x.template.group).sort(), extension_sigma: extensionSigma, estimated_round_trip_cost_bps: roundTripCostBps, schema_version: SCHEMA_VERSION } });
@@ -307,10 +326,11 @@ Deno.serve(async (req: Request) => {
     if (microTicks.length) { const ins = await supabase.from("brian_micro_book_ticks").insert(microTicks); if (ins.error) throw ins.error; }
 
     const status = degradedSources.length ? "DEGRADED" : "SUCCESS"; const stored = observations.length + events.length + microTicks.length;
-    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS });
+    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS, prior_lookup_batch: PRIOR_LOOKUP_BATCH });
     return jsonResponse({ status, experiment_id: EXPERIMENT_ID, observed_at: observedAt, scanned_symbols: usable.length, signal_observations: observations.length, reaction_events: events.length, actionable_shadow: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_vetoes: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, shadow_only: true, live_execution: false });
   } catch (error) {
-    console.error("brian-intrabar-eye failed", error); await recordCollectorRun(startedAt, "FAILED", 0, 0, [], { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID }, error);
-    return jsonResponse({ status: "FAILED_CLOSED", error: String(error instanceof Error ? error.message : error), shadow_only: true, live_execution: false }, 500);
+    const message = errorText(error);
+    console.error("brian-intrabar-eye failed", message); await recordCollectorRun(startedAt, "FAILED", 0, 0, [], { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID }, error);
+    return jsonResponse({ status: "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, 500);
   }
 });
