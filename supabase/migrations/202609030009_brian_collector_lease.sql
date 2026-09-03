@@ -156,6 +156,22 @@ grant execute on function public.brian_acquire_collector_lease(text, text, integ
 -- owner_token) can never release a newer owner's lease. Backdating lease_until to now() rather
 -- than deleting the row keeps the append-only event history's lease_until values meaningful and
 -- avoids a delete-then-reinsert race on the next acquire.
+--
+-- Also atomically invalidates/rotates owner_token to a fresh, unguessable value on every
+-- successful release. This closes a residual race GPT-5.6 Sol identified in the timestamp-only
+-- guard added to brian_renew_collector_lease: a heartbeat renewal RPC captures its own
+-- v_now := clock_timestamp() as the very first statement in its function body, then can be
+-- delayed/blocked (e.g. queued behind this release's row lock) before its UPDATE actually runs.
+-- If release only backdated lease_until, that renewal's already-captured (and by now stale) v_now
+-- could still satisfy `lease_until > v_now` once release's *later* commit pushes lease_until to a
+-- timestamp still greater than the renewal's earlier one -- resurrecting a lease that was
+-- correctly released, purely because of when each side's clock was read relative to a lock wait.
+-- Rotating owner_token removes timing from the equation entirely: once this UPDATE commits, no
+-- renewal call carrying the pre-release owner_token can ever match this row again, regardless of
+-- what timestamp it captured or how long it was blocked beforehand. The lease_until > v_now guard
+-- in brian_renew_collector_lease is kept as defense-in-depth (see its own comment) -- it remains
+-- the correct protection for the separate case of a genuine TTL expiry with no release and no
+-- takeover yet.
 create or replace function public.brian_release_collector_lease(
   p_collector_id text,
   p_owner_token text
@@ -170,7 +186,9 @@ declare
   v_released boolean;
 begin
   update public.brian_collector_leases
-    set lease_until = v_now, updated_at = v_now
+    set owner_token = 'released:' || gen_random_uuid()::text,
+        lease_until = v_now,
+        updated_at = v_now
     where collector_id = p_collector_id and owner_token = p_owner_token;
   get diagnostics v_rows = row_count;
   v_released := v_rows > 0;
@@ -207,15 +225,17 @@ grant execute on function public.brian_release_collector_lease(text, text) to se
 -- see supabase/functions/_shared/collector_lease.ts for how the caller reacts to a failed
 -- renewal.
 --
--- Also requires lease_until > v_now on the CURRENT row before renewing it. Without this, a
--- narrower but real race exists: brian_release_collector_lease intentionally leaves owner_token
--- unchanged when it releases (it only backdates lease_until), so an owner's own heartbeat
--- renewal RPC that was already in flight when its work finished and the lease was released could
--- otherwise arrive at Postgres afterward, still match on collector_id + owner_token, and push
--- lease_until back into the future -- resurrecting a lease that was correctly released and
--- blocking the next legitimate owner for a full TTL. Gating on the row's lease still being
--- active at the moment of renewal closes that: a renewal arriving after release (or after
--- genuine expiry) always fails closed, exactly like the crash-recovery case.
+-- Also requires lease_until > v_now on the CURRENT row before renewing it, as defense-in-depth.
+-- The primary protection against a stale renewal resurrecting a *released* lease is now
+-- brian_release_collector_lease atomically rotating owner_token on every successful release (see
+-- its own comment): once a lease has been released, no renewal carrying the pre-release
+-- owner_token can ever match this row again, regardless of what timestamp that renewal captured
+-- or how long it was blocked before its UPDATE ran -- closing a residual race where a
+-- timestamp-only guard could be fooled by a renewal whose v_now was captured before a lock wait,
+-- but whose UPDATE only actually ran (and compared timestamps) after release had already
+-- committed a later lease_until. This lease_until > v_now predicate remains necessary for the
+-- separate case it always covered correctly: a genuine TTL expiry with no release and no
+-- takeover yet, where owner_token is still unchanged because nothing has transitioned ownership.
 create or replace function public.brian_renew_collector_lease(
   p_collector_id text,
   p_owner_token text,

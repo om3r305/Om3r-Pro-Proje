@@ -104,11 +104,13 @@ export async function releaseCollectorLease(
  *
  * `clearInterval` below stops scheduling *future* heartbeat ticks; it deliberately does not (and
  * cannot) cancel a renewal RPC that is already in flight to Postgres when `work` finishes. That
- * in-flight renewal is still safe to let land after release: brian_renew_collector_lease (see
- * supabase/migrations/202609030009_brian_collector_lease.sql) fails closed once the row's own
- * lease_until is no longer in the future, which release guarantees by backdating it -- so a
- * stale renewal arriving after release can never resurrect the lease or block the next owner,
- * even though it still matches on owner_token (release intentionally leaves that unchanged).
+ * in-flight renewal is still safe to let land after release: brian_release_collector_lease (see
+ * supabase/migrations/202609030009_brian_collector_lease.sql) atomically rotates owner_token to a
+ * fresh value on every successful release, so a stale renewal carrying the pre-release owner
+ * token can never match the row again once release has committed -- regardless of what timestamp
+ * either side captured or how long the renewal was blocked beforehand. (The row's lease_until
+ * being backdated on release, and brian_renew_collector_lease's own lease_until-must-still-be-active
+ * guard, remain as defense-in-depth for the separate genuine-TTL-expiry-with-no-release case.)
  */
 export async function withCollectorLease<T>(
   client: RpcClient,

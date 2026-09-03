@@ -24,6 +24,7 @@ grants in the migration itself are unchanged by this bootstrap.
 from __future__ import annotations
 
 import os
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -315,13 +316,17 @@ def test_renewal_keeps_a_slow_but_alive_owner_safe_from_overlap():
 
 
 def test_renewal_after_release_cannot_resurrect_the_lease():
-    """Closes the exact race from GPT-5.6 Sol's final review on this PR:
-    brian_release_collector_lease intentionally leaves owner_token unchanged when it releases (it
-    only backdates lease_until), so a heartbeat renewal RPC that was already in flight when
-    work() finished -- and the lease was released -- could otherwise arrive at Postgres
-    afterward, still match on collector_id + owner_token, and push lease_until back into the
-    future: resurrecting a lease that was correctly released and blocking the next legitimate
-    owner for a full TTL.
+    """Closes the race from GPT-5.6 Sol's review on this PR: a heartbeat renewal RPC that was
+    already in flight when work() finished -- and the lease was released -- must not be able to
+    arrive at Postgres afterward and push lease_until back into the future, resurrecting a lease
+    that was correctly released and blocking the next legitimate owner for a full TTL.
+
+    This sequential case is doubly covered now: brian_renew_collector_lease's own
+    lease_until > v_now guard rejects it, and (see
+    test_release_invalidates_the_owner_token_so_a_later_renew_cannot_use_it and
+    test_stale_inflight_renewal_cannot_resurrect_after_owner_token_rotation below)
+    brian_release_collector_lease also atomically rotates owner_token on release, so the stale
+    renewal's owner_token predicate can never match again regardless of timing.
 
     Sequence proved here: acquire A -> release A -> stale/late renew A returns False and cannot
     extend/reanimate the row -> B can acquire immediately.
@@ -349,3 +354,132 @@ def test_renewal_after_release_cannot_resurrect_the_lease():
         assert [e[0] for e in _events(conn, collector_id)] == ["ACQUIRED", "RELEASED", "RENEWAL_LOST", "EXPIRED_RECOVERY"]
     finally:
         conn.close()
+
+
+def test_release_invalidates_the_owner_token_so_a_later_renew_cannot_use_it():
+    """Regression for GPT-5.6 Sol's final review on PR #36: the lease_until > v_now guard on
+    brian_renew_collector_lease is timestamp-based, and a renewal's v_now is captured (as the
+    first statement in its function body) before it can be delayed/blocked -- so a release that
+    commits *later* could, by coincidence of when each side's clock was read, still satisfy that
+    guard. The real fix: brian_release_collector_lease now atomically rotates owner_token to a
+    fresh, unguessable value on every successful release, so a renewal carrying the OLD owner
+    token can never match the row again -- independent of any timestamp on either side.
+    """
+    collector_id = _collector_id()
+    conn = _connect()
+    try:
+        assert _acquire(conn, collector_id, "owner-a", 30) is True
+        row_before_release = _lease_row(conn, collector_id)
+        assert row_before_release[0] == "owner-a"
+
+        assert _release(conn, collector_id, "owner-a") is True
+        row_after_release = _lease_row(conn, collector_id)
+        assert row_after_release[0] != "owner-a", (
+            "release must atomically invalidate/rotate owner_token, not merely backdate lease_until"
+        )
+
+        assert _renew(conn, collector_id, "owner-a", 30) is False, "the invalidated owner token must never renew again"
+        assert _lease_row(conn, collector_id) == row_after_release, (
+            "a renewal carrying the invalidated owner token must not change the row at all"
+        )
+
+        assert _acquire(conn, collector_id, "owner-b", 30) is True
+        row = _lease_row(conn, collector_id)
+        assert row[0] == "owner-b"
+    finally:
+        conn.close()
+
+
+def test_stale_inflight_renewal_cannot_resurrect_after_owner_token_rotation():
+    """Deterministic concurrent/locking regression for GPT-5.6 Sol's final review comment: proves
+    that even in the exact adversarial ordering described there -- a renewal's clock_timestamp()
+    is captured *before* release commits, and the renewal's UPDATE is still physically blocked, in
+    flight, at the moment release commits -- the renewal cannot resurrect the lease, because
+    release's owner_token rotation makes the outcome independent of timing entirely.
+
+    Sequenced across three real connections using pg_stat_activity polling (never a fixed sleep,
+    so the ordering is deterministic rather than timing-hopeful):
+      1. conn_release runs brian_release_collector_lease inside an explicit, not-yet-committed
+         transaction. Release's own body has already executed (owner_token rotated, lease_until
+         backdated) and its UPDATE holds the row's exclusive lock, but none of that is durable or
+         visible yet.
+      2. A background thread calls brian_renew_collector_lease with the ORIGINAL owner token on a
+         separate connection. Its v_now is captured immediately (the first statement in its
+         function body runs before anything can block), then its own UPDATE blocks waiting for
+         conn_release's still-open lock -- exactly "captures v_now, then is delayed/blocked before
+         its UPDATE" from GPT's description.
+      3. Only once pg_stat_activity confirms that renewal backend is genuinely waiting on a lock
+         does the test commit conn_release -- the precise moment GPT's scenario says a
+         timestamp-only guard could be fooled.
+      4. The renewal's UPDATE then resumes and must still fail: owner_token no longer matches,
+         regardless of what either side's clock read.
+    """
+    collector_id = _collector_id()
+    conn_main = _connect()
+    try:
+        assert _acquire(conn_main, collector_id, "owner-a", 30) is True
+
+        conn_release = psycopg2.connect(DATABASE_URL)
+        conn_release.autocommit = False
+        renew_thread = None
+        try:
+            with conn_release.cursor() as cur:
+                cur.execute("select public.brian_release_collector_lease(%s, %s)", (collector_id, "owner-a"))
+                assert cur.fetchone()[0] is True, "release must succeed before we hold its transaction open"
+
+            renew_result: dict = {}
+
+            def _do_renew() -> None:
+                conn_renew = psycopg2.connect(DATABASE_URL)
+                conn_renew.autocommit = True
+                try:
+                    renew_result["value"] = _renew(conn_renew, collector_id, "owner-a", 30)
+                finally:
+                    conn_renew.close()
+
+            renew_thread = threading.Thread(target=_do_renew)
+            renew_thread.start()
+
+            conn_probe = _connect()
+            try:
+                deadline = time.monotonic() + 10.0
+                blocked = False
+                while time.monotonic() < deadline:
+                    with conn_probe.cursor() as cur:
+                        cur.execute(
+                            "select count(*) from pg_stat_activity "
+                            "where wait_event_type = 'Lock' and query ilike %s",
+                            ("%brian_renew_collector_lease%",),
+                        )
+                        if cur.fetchone()[0] > 0:
+                            blocked = True
+                            break
+                    time.sleep(0.05)
+                assert blocked, (
+                    "the renewal never reached a blocked-on-lock state within 10s; this test's "
+                    "concurrency setup assumption did not hold, not a statement about the fix itself"
+                )
+            finally:
+                conn_probe.close()
+
+            # This is the exact moment GPT's scenario targets: the already-in-flight renewal (v_now
+            # captured, now blocked) is about to see release's commit land.
+            conn_release.commit()
+        finally:
+            conn_release.close()
+
+        renew_thread.join(timeout=10.0)
+        assert not renew_thread.is_alive(), "the renewal thread did not complete after release committed"
+        assert renew_result.get("value") is False, (
+            "a renewal already in flight when release commits must still fail closed -- release "
+            "atomically invalidated the owner token it is renewing against, independent of timing"
+        )
+
+        row = _lease_row(conn_main, collector_id)
+        assert row[0] != "owner-a", "release must have rotated owner_token away from the released owner"
+
+        assert _acquire(conn_main, collector_id, "owner-b", 30) is True
+        row = _lease_row(conn_main, collector_id)
+        assert row[0] == "owner-b"
+    finally:
+        conn_main.close()
