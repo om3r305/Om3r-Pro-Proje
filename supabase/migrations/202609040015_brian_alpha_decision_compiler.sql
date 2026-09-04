@@ -33,6 +33,7 @@ create table if not exists public.brian_alpha_decisions (
   compiler_version text not null,
   observed_at timestamptz not null,
   asset_id text not null,
+  observed_reference_price numeric check (observed_reference_price is null or observed_reference_price > 0),
   action text not null check (action in ('OPEN_LONG','OPEN_SHORT','WAIT','VETO')),
   direction smallint not null check (direction between -1 and 1),
   evidence_score double precision not null check (evidence_score between 0 and 1),
