@@ -7,7 +7,7 @@
 
 import type { DynamicCostQuote } from "./dynamic_cost.ts";
 
-export const ALPHA_COMPILER_VERSION = "brian.alpha-decision-v2.1";
+export const ALPHA_COMPILER_VERSION = "brian.alpha-decision-v2.2";
 export const MIN_SUPPORT_GROUPS = 2;
 export const MIN_CONSENSUS_SCORE = 0.18;
 
@@ -55,6 +55,29 @@ export interface AlphaDecisionResult {
   vetoReason: string | null;
 }
 
+const INTRABAR_TAPE_GROUPS = new Set([
+  "micro_velocity",
+  "micro_volume",
+  "micro_breakout",
+  "micro_reclaim",
+  "micro_taker_flow",
+]);
+
+/**
+ * The five Phase 4.0 micro signals are different measurements of the same Binance 1m/aggTrade/
+ * bookTicker tape capture. They may disagree and remain individually auditable at the source,
+ * but ALPHA must never count two of them as two independent domains. Canonicalize them to one
+ * preregistered vote group before dedupe; this changes lineage accounting, not the 0.18 gate.
+ */
+export function canonicalIndependentGroup(group: string): string {
+  return INTRABAR_TAPE_GROUPS.has(group) ? "intrabar_tape" : group;
+}
+
+/** GDELT headline pressure is discovery/attention metadata, never source truth or a trade vote. */
+export function isDirectionalEvidenceAllowed(row: Pick<AlphaEvidenceRow, "sourceKind" | "independentGroup">): boolean {
+  return row.independentGroup !== "news_gdelt";
+}
+
 function clip(value: number, low = 0, high = 1): number {
   return Math.max(low, Math.min(high, value));
 }
@@ -74,8 +97,9 @@ function validateDirection(value: number): -1 | 0 | 1 {
 }
 
 /**
- * Dedupe correlated evidence by independent_group. The strongest quality row wins in each group;
- * source count is never treated as independence. Neutral/stale/unavailable rows cannot vote.
+ * Dedupe correlated evidence by canonical independent group. The strongest quality row wins in
+ * each group; source count is never treated as independence. Neutral/stale/discovery-only rows
+ * cannot vote.
  */
 export function dedupeIndependentEvidence(rows: AlphaEvidenceRow[]): {
   evidence: AlphaEvidenceRow[];
@@ -91,17 +115,19 @@ export function dedupeIndependentEvidence(rows: AlphaEvidenceRow[]): {
     finiteUnit(row.confidence, "confidence");
     finiteUnit(row.reliability, "reliability");
     if (!Number.isFinite(Date.parse(row.observedAt))) throw new Error("evidence observedAt must be a valid timestamp");
-    if (!row.fresh || row.direction === 0) {
+    if (!row.fresh || row.direction === 0 || !isDirectionalEvidenceAllowed(row)) {
       ignored.add(row.observationId);
       continue;
     }
 
+    const group = canonicalIndependentGroup(row.independentGroup);
+    const normalizedRow = group === row.independentGroup ? row : { ...row, independentGroup: group };
     const quality = row.strength * row.confidence * row.reliability;
-    const prior = byGroup.get(row.independentGroup);
+    const prior = byGroup.get(group);
     const priorQuality = prior ? prior.strength * prior.confidence * prior.reliability : Number.NEGATIVE_INFINITY;
     if (!prior || quality > priorQuality || (quality === priorQuality && row.observedAt > prior.observedAt)) {
       if (prior) ignored.add(prior.observationId);
-      byGroup.set(row.independentGroup, row);
+      byGroup.set(group, normalizedRow);
     } else {
       ignored.add(row.observationId);
     }
