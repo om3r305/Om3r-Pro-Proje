@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { requireCronAuth } from "../_shared/cron_auth.ts";
 import {
   ALPHA_COMPILER_VERSION,
   compileAlphaDecision,
@@ -8,10 +9,13 @@ import {
   type IntrabarVetoContext,
 } from "../_shared/alpha_decision.ts";
 import {
-  compileDegradedTopOfBookCost,
   compileL2Cost,
   type DynamicCostQuote,
 } from "../_shared/dynamic_cost.ts";
+import {
+  selectAlphaRuntimeCost,
+  type RuntimeL2Status,
+} from "../_shared/alpha_runtime_policy.ts";
 import { parseBinanceDepthSnapshotRaw } from "../_shared/binance_l2_wire.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -62,6 +66,13 @@ type ObservedL2Cost = {
   fetchedAt: string;
 };
 
+class ObservedL2InvalidError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ObservedL2InvalidError";
+  }
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 }
@@ -99,7 +110,7 @@ function emptyMacroContext(asOf: string, reason?: string): OfficialMacroContext 
     ...(reason ? { degraded_reason: reason } : {}),
   };
 }
-function failClosedAssetDecision(reason: string): AlphaDecisionResult {
+function failClosedAssetDecision(reason: string, vetoReason = "EVIDENCE_INVALID"): AlphaDecisionResult {
   return {
     compilerVersion: ALPHA_COMPILER_VERSION,
     action: "VETO",
@@ -115,8 +126,26 @@ function failClosedAssetDecision(reason: string): AlphaDecisionResult {
     estimatedRoundTripCostBps: null,
     fillable: null,
     reason,
-    vetoReason: "EVIDENCE_INVALID",
+    vetoReason,
   };
+}
+function vetoFromPreliminary(preliminary: AlphaDecisionResult, reason: string, vetoReason: string): AlphaDecisionResult {
+  return {
+    ...preliminary,
+    action: "VETO",
+    lateChaseVetoEventId: null,
+    costQuality: null,
+    estimatedRoundTripCostBps: null,
+    fillable: null,
+    reason,
+    vetoReason,
+  };
+}
+function preliminaryIsActionable(preliminary: AlphaDecisionResult | undefined): preliminary is AlphaDecisionResult {
+  return Boolean(
+    preliminary && preliminary.direction !== 0 &&
+    preliminary.supportGroups.length >= 2 && preliminary.evidenceScore >= 0.18
+  );
 }
 
 async function latestRadarAssets(): Promise<string[]> {
@@ -277,21 +306,25 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) throw new Error(`Binance depth HTTP ${response.status} for ${symbol}`);
   const raw = await response.text();
-  const snapshot = parseBinanceDepthSnapshotRaw(raw);
-  const quote = compileL2Cost({
-    side: direction === 1 ? "BUY" : "SELL",
-    notionalUsd: notional,
-    feeBps: FALLBACK_FEE_BPS,
-    bids: snapshot.bids.map(([price, size]) => ({ price, size })),
-    asks: snapshot.asks.map(([price, size]) => ({ price, size })),
-  });
-  const fetchedAt = new Date().toISOString();
-  return {
-    quote,
-    sourceId: `binance_public_rest_depth:${symbol}:${snapshot.lastUpdateId}`,
-    lastUpdateId: String(snapshot.lastUpdateId),
-    fetchedAt,
-  };
+  try {
+    const snapshot = parseBinanceDepthSnapshotRaw(raw);
+    const quote = compileL2Cost({
+      side: direction === 1 ? "BUY" : "SELL",
+      notionalUsd: notional,
+      feeBps: FALLBACK_FEE_BPS,
+      bids: snapshot.bids.map(([price, size]) => ({ price, size })),
+      asks: snapshot.asks.map(([price, size]) => ({ price, size })),
+    });
+    const fetchedAt = new Date().toISOString();
+    return {
+      quote,
+      sourceId: `binance_public_rest_depth:${symbol}:${snapshot.lastUpdateId}`,
+      lastUpdateId: String(snapshot.lastUpdateId),
+      fetchedAt,
+    };
+  } catch (error) {
+    throw new ObservedL2InvalidError(`observed depth snapshot rejected for ${symbol}: ${errorText(error)}`);
+  }
 }
 
 async function recordRun(startedAt: string, status: string, observed: number, stored: number, degradedSources: string[], error?: unknown) {
@@ -301,6 +334,14 @@ async function recordRun(startedAt: string, status: string, observed: number, st
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
+  try {
+    await requireCronAuth(req, supabase);
+  } catch (error) {
+    const message = errorText(error);
+    const unauthorized = message.includes("UNAUTHORIZED_CRON");
+    return json({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 503);
+  }
+
   const startedAt = new Date().toISOString();
   try {
     const last = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS","DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
@@ -319,8 +360,12 @@ Deno.serve(async (req: Request) => {
       await addFrozenPhase37Evidence(evidence, assets, evidenceNowMs);
 
       let intrabar = new Map<string, IntrabarVetoContext>();
+      let intrabarContextAvailable = true;
       try { intrabar = await loadIntrabarContexts(assets, evidenceNowMs); }
-      catch (error) { degradedSources.push(`intrabar_context:${errorText(error)}`); }
+      catch (error) {
+        intrabarContextAvailable = false;
+        degradedSources.push(`intrabar_context:${errorText(error)}`);
+      }
 
       let books = new Map<string, ReferenceBook>();
       try { books = await currentBooks(); }
@@ -338,14 +383,21 @@ Deno.serve(async (req: Request) => {
       }
 
       const l2ByAsset = new Map<string, ObservedL2Cost>();
+      const l2StatusByAsset = new Map<string, RuntimeL2Status>();
       await Promise.all(assets.map(async (asset) => {
         const preliminary = preliminaryByAsset.get(asset);
-        if (!preliminary || preliminary.direction === 0 || preliminary.supportGroups.length < 2 || preliminary.evidenceScore < 0.18) return;
+        if (!preliminaryIsActionable(preliminary)) {
+          l2StatusByAsset.set(asset, "NOT_REQUESTED");
+          return;
+        }
         const notional = ticketForScore(preliminary.evidenceScore);
         try {
           l2ByAsset.set(asset, await fetchObservedL2Cost(asset, preliminary.direction as -1 | 1, notional));
+          l2StatusByAsset.set(asset, "OBSERVED");
         } catch (error) {
-          degradedSources.push(`l2:${asset}:${errorText(error)}`);
+          const status: RuntimeL2Status = error instanceof ObservedL2InvalidError ? "INVALID" : "UNAVAILABLE";
+          l2StatusByAsset.set(asset, status);
+          degradedSources.push(`l2_${status.toLowerCase()}:${asset}:${errorText(error)}`);
         }
       }));
 
@@ -367,16 +419,26 @@ Deno.serve(async (req: Request) => {
         const rows = evidence.get(asset) ?? [];
         const referenceBook = books.get(asset);
         const observedL2 = l2ByAsset.get(asset);
+        const l2Status = l2StatusByAsset.get(asset) ?? "NOT_REQUESTED";
         const poison = poisonByAsset.get(asset);
         const preliminary = preliminaryByAsset.get(asset);
         let costQuote: DynamicCostQuote | null = null; let costId: string | null = null;
         let costSourceIds: string[] = [];
         let costMetadata: Record<string, unknown> = {};
 
-        if (!poison && preliminary && preliminary.evidenceScore >= 0.18 && preliminary.supportGroups.length >= 2 && preliminary.direction !== 0) {
+        if (!poison && preliminaryIsActionable(preliminary)) {
           const notional = ticketForScore(preliminary.evidenceScore);
-          if (observedL2) {
-            costQuote = observedL2.quote;
+          costQuote = selectAlphaRuntimeCost({
+            l2Status,
+            observedL2Quote: observedL2?.quote ?? null,
+            referenceBook: referenceBook ?? null,
+            side: preliminary.direction === 1 ? "BUY" : "SELL",
+            notionalUsd: notional,
+            feeBps: FALLBACK_FEE_BPS,
+            fallbackSlippageBps: FALLBACK_SLIPPAGE_BPS,
+          });
+
+          if (costQuote?.quality === "L2_OBSERVED" && observedL2) {
             observedL2Count++;
             costSourceIds = [observedL2.sourceId];
             costMetadata = {
@@ -384,12 +446,17 @@ Deno.serve(async (req: Request) => {
               last_update_id: observedL2.lastUpdateId,
               fetched_at: observedL2.fetchedAt,
               depth_limit: L2_DEPTH_LIMIT,
+              l2_runtime_status: l2Status,
             };
-          } else if (referenceBook) {
-            costQuote = compileDegradedTopOfBookCost({ side: preliminary.direction === 1 ? "BUY" : "SELL", notionalUsd: notional, feeBps: FALLBACK_FEE_BPS, spreadBps: referenceBook.spreadBps, assumedSlippageBps: FALLBACK_SLIPPAGE_BPS, midPrice: referenceBook.mid });
+          } else if (costQuote?.quality === "DEGRADED_TOP_OF_BOOK" && referenceBook) {
             degradedCostCount++;
             costSourceIds = ["binance_public_book_ticker"];
-            costMetadata = { source: "binance_public_book_ticker", mid_price: referenceBook.mid, fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS };
+            costMetadata = {
+              source: "binance_public_book_ticker",
+              mid_price: referenceBook.mid,
+              fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS,
+              l2_runtime_status: l2Status,
+            };
           }
           if (costQuote) {
             costId = await sha(`${ALPHA_COMPILER_VERSION}|cost|${asset}|${observedAt}|${preliminary.direction}|${notional}|${costQuote.quality}`);
@@ -400,6 +467,12 @@ Deno.serve(async (req: Request) => {
         let decision: AlphaDecisionResult;
         if (poison) {
           decision = failClosedAssetDecision(`asset evidence rejected without aborting unrelated assets: ${poison}`);
+        } else if (!intrabarContextAvailable && preliminaryIsActionable(preliminary)) {
+          decision = vetoFromPreliminary(
+            preliminary,
+            "actionable evidence cannot open because intrabar late-chase context is unavailable",
+            "CONTEXT_UNAVAILABLE",
+          );
         } else {
           try { decision = compileAlphaDecision({ evidenceRows: rows, costQuote, intrabarContext: intrabar.get(asset) ?? null }); }
           catch (error) { decision = failClosedAssetDecision(`asset compile failed closed: ${errorText(error)}`); degradedSources.push(`asset_compile:${asset}:${errorText(error)}`); }
@@ -436,6 +509,8 @@ Deno.serve(async (req: Request) => {
             frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID,
             score_is_not_expected_return_bps: true,
             cost_quality: decision.costQuality,
+            l2_runtime_status: l2Status,
+            intrabar_context_available: intrabarContextAvailable,
             reference_price: {
               value: referencePrice,
               source: observedL2 ? "binance_public_rest_depth_mid" : referenceBook ? "binance_public_book_ticker_mid" : "unavailable",
