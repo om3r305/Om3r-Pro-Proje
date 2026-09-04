@@ -571,7 +571,7 @@ export function isDepthBookTrustworthy(state: DepthBookState): boolean {
 export interface DepthBookIssue {
   venue: string;
   symbol: string;
-  kind: "invalid" | "discarded_before_snapshot" | "stale_diff_discarded" | "gap_invalidated_book" | "diff_ignored_while_invalid" | "snapshot_too_old" | "lineage_mismatch";
+  kind: "invalid" | "discarded_before_snapshot" | "stale_diff_discarded" | "gap_invalidated_book" | "diff_ignored_while_invalid" | "snapshot_too_old" | "lineage_mismatch" | "crossed_book_invalidated";
   reason: string;
   event: DepthSnapshotEvent | DepthDiffEvent;
 }
@@ -616,6 +616,53 @@ function seedFromSnapshot(event: DepthSnapshotEvent): DepthBookInternal {
   for (const level of event.bids) bids.set(canonicalDecimalKey(level.price), level);
   for (const level of event.asks) asks.set(canonicalDecimalKey(level.price), level);
   return { status: "SYNCED", lastAppliedUpdateId: BigInt(event.lastUpdateId), bids, asks };
+}
+
+/** True when the reconstructed book's own best bid/ask are crossed or locked (bestBid >=
+ * bestAsk). Only meaningful -- and only checked -- when both sides currently hold at least one
+ * level; a one-sided book (e.g. right after a partial snapshot) is not itself a crossed book. */
+function isBookCrossed(internal: DepthBookInternal): boolean {
+  const bestBid = sortedLevels(internal.bids, "desc")[0];
+  const bestAsk = sortedLevels(internal.asks, "asc")[0];
+  if (!bestBid || !bestAsk) return false;
+  return compareDecimalStrings(bestBid.price, bestAsk.price) >= 0;
+}
+
+/**
+ * Seeds the book from a snapshot, then immediately validates the reconstructed best bid/ask
+ * (per GPT-5.6 Sol's review: a corrupt/adversarial snapshot with bestBid >= bestAsk must never be
+ * reported as a trustworthy SYNCED book). Crossed -> status forced to INVALID and an issue
+ * returned, using the same INVALID/resync path a sequence gap uses -- there is only one way for a
+ * reconstructed book to be untrustworthy, not a special case per failure mode.
+ */
+function seedFromSnapshotChecked(event: DepthSnapshotEvent): { internal: DepthBookInternal; issue: DepthBookIssue | null } {
+  const internal = seedFromSnapshot(event);
+  if (isBookCrossed(internal)) {
+    internal.status = "INVALID";
+    return {
+      internal,
+      issue: { venue: event.venue, symbol: event.symbol, kind: "crossed_book_invalidated", reason: "reconstructed book is crossed/inverted (best bid >= best ask) immediately after seeding from the snapshot", event },
+    };
+  }
+  return { internal, issue: null };
+}
+
+/**
+ * Applies one complete depth diff via `tryApplyDiff`, then -- only when that application
+ * succeeded (no gap/stale issue) -- validates the resulting reconstructed best bid/ask. A diff
+ * that leaves the book crossed is treated exactly like a sequence gap: status -> INVALID, an
+ * issue is returned, and (since the mutation already happened) the crossed levels are what remain
+ * -- this is intentional: the caller must resync from a fresh snapshot either way once INVALID,
+ * and preserving the exact corrupt state is more useful for forensics than trying to roll it back.
+ */
+function tryApplyDiffChecked(internal: DepthBookInternal, event: DepthDiffEvent): DepthBookIssue | null {
+  const issue = tryApplyDiff(internal, event);
+  if (issue) return issue;
+  if (isBookCrossed(internal)) {
+    internal.status = "INVALID";
+    return { venue: event.venue, symbol: event.symbol, kind: "crossed_book_invalidated", reason: "reconstructed book is crossed/inverted (best bid >= best ask) after applying a depth diff", event };
+  }
+  return null;
 }
 
 /**
@@ -669,6 +716,11 @@ function tryApplyDiff(internal: DepthBookInternal, event: DepthDiffEvent): Depth
  *      (see its own doc comment). A real gap invalidates the book (status -> INVALID).
  *   4. While INVALID, every diff is ignored (issue "diff_ignored_while_invalid") until a fresh
  *      snapshot arrives and reseeds the book from step 1.
+ *   5. After seeding a snapshot, and after applying a complete diff, the reconstructed best
+ *      bid/ask are validated (when both sides are non-empty): a crossed/inverted result
+ *      (bestBid >= bestAsk) invalidates the book (status -> INVALID, issue
+ *      "crossed_book_invalidated") exactly like a sequence gap -- an adversarial/corrupt snapshot
+ *      or diff must never be reported as a trustworthy SYNCED book.
  *
  * A quantity of exactly "0" on a mutation is an exact deletion instruction for that price level,
  * never a parse fallback; price levels are keyed by exact decimal value (`canonicalDecimalKey`),
@@ -682,7 +734,9 @@ export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEven
     const key = keyOf(event.venue, event.symbol);
 
     if (event.kind === "depth_snapshot") {
-      internals.set(key, seedFromSnapshot(event));
+      const { internal, issue } = seedFromSnapshotChecked(event);
+      internals.set(key, internal);
+      if (issue) issues.push(issue);
       continue;
     }
 
@@ -702,7 +756,7 @@ export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEven
       continue;
     }
 
-    const issue = tryApplyDiff(internal, event);
+    const issue = tryApplyDiffChecked(internal, event);
     if (issue) issues.push(issue);
   }
 
@@ -724,11 +778,13 @@ export interface StartupSyncResult {
    *     no book is seeded, `state` is absent.
    *   - "invalid": either the input itself was invalid (a buffered/subsequent diff's venue or
    *     symbol did not match the snapshot's -- see `findLineageMismatch` -- in which case no
-   *     mutation was ever applied and `state` is absent), or replay hit a real sequence gap (in
-   *     which case `state` IS present, frozen at the last known-good pre-gap book, with
-   *     `state.status === "INVALID"` -- exactly like `reconstructDepthBook`'s own INVALID state --
-   *     but it must never be read as current/trustworthy; check `isDepthBookTrustworthy` or the
-   *     outcome tag itself before using it for anything but forensics).
+   *     mutation was ever applied and `state` is absent), or seeding/replay produced an
+   *     untrustworthy book -- a real sequence gap, or a reconstructed book left crossed/inverted
+   *     (bestBid >= bestAsk) by the snapshot itself or by a diff (in which case `state` IS
+   *     present, frozen at the last known-good state, with `state.status === "INVALID"` --
+   *     exactly like `reconstructDepthBook`'s own INVALID state -- but it must never be read as
+   *     current/trustworthy; check `isDepthBookTrustworthy` or the outcome tag itself before using
+   *     it for anything but forensics).
    */
   outcome: "synced" | "snapshot_too_old" | "invalid";
   state?: DepthBookState;
@@ -763,18 +819,22 @@ function findLineageMismatch(venue: string, symbol: string, diffs: DepthDiffEven
  *      older than the FIRST buffered diff's firstUpdateId, the snapshot is too old to align
  *      against -- returns `{ outcome: "snapshot_too_old" }` without seeding anything; the caller
  *      must fetch a newer snapshot and try again.
- *   3. Otherwise, seed the local book from the snapshot (`seedFromSnapshot`).
+ *   3. Otherwise, seed the local book from the snapshot and immediately validate its reconstructed
+ *      best bid/ask (`seedFromSnapshotChecked`) -- a corrupt/adversarial snapshot with
+ *      bestBid >= bestAsk invalidates the book on the spot, the same as a sequence gap would.
  *   4. Replay every buffered diff, then every subsequent diff, in order, through the exact same
- *      update rule steady-state uses (`tryApplyDiff`): a diff entirely covered by the snapshot (or
- *      by what's already been replayed) is discarded; a diff whose firstUpdateId is ahead of
- *      lastAppliedUpdateId + 1 is a real gap and invalidates the book; otherwise it applies
+ *      update rule steady-state uses (`tryApplyDiffChecked`): a diff entirely covered by the
+ *      snapshot (or by what's already been replayed) is discarded; a diff whose firstUpdateId is
+ *      ahead of lastAppliedUpdateId + 1 is a real gap and invalidates the book; a diff that applies
+ *      but leaves the reconstructed book crossed also invalidates it; otherwise it applies
  *      normally -- including the first diff to apply after the snapshot, which in a healthy
  *      stream will bracket the snapshot's lastUpdateId by construction, but is not special-cased
  *      here: it is just the first call to the same rule as every other diff.
  *   5. The outcome reported is derived from the resulting book's own status, never asserted
  *      independently of it: `"synced"` only when the book actually ended up SYNCED; `"invalid"`
- *      when replay hit a real gap and left it INVALID. This is what makes the strong invariant on
- *      `StartupSyncResult.outcome` hold structurally rather than by convention.
+ *      when replay hit a real gap, a crossed book, or mismatched lineage and left it INVALID. This
+ *      is what makes the strong invariant on `StartupSyncResult.outcome` hold structurally rather
+ *      than by convention.
  */
 export function synchronizeDepthBookStartup(
   bufferedDiffs: DepthDiffEvent[],
@@ -811,13 +871,14 @@ export function synchronizeDepthBookStartup(
     }
   }
 
-  const internal = seedFromSnapshot(snapshot);
+  const { internal, issue: seedIssue } = seedFromSnapshotChecked(snapshot);
+  if (seedIssue) issues.push(seedIssue);
   for (const diff of allDiffs) {
     if (internal.status === "INVALID") {
       issues.push({ venue: diff.venue, symbol: diff.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event: diff });
       continue;
     }
-    const issue = tryApplyDiff(internal, diff);
+    const issue = tryApplyDiffChecked(internal, diff);
     if (issue) issues.push(issue);
   }
 

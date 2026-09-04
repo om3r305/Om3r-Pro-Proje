@@ -691,6 +691,57 @@ Deno.test("synchronizeDepthBookStartup: no buffered diffs at all -- the snapshot
   assertEquals(result.issues.length, 0);
 });
 
+// -------------------------------------------------------------------------------------------
+// Crossed/inverted reconstructed-book integrity. The event-level adapters already reject a
+// crossed *source* message (e.g. a bookTicker with b >= a), but nothing previously validated the
+// *reconstructed* depth book's own derived best bid/ask -- an adversarial/corrupt snapshot, or a
+// diff that happens to leave the book crossed after mutation, could otherwise still be reported
+// SYNCED/trustworthy.
+// -------------------------------------------------------------------------------------------
+
+Deno.test("reconstructDepthBook: a crossed snapshot cannot produce a trustworthy SYNCED book", () => {
+  const crossedSnapshot = snapshotEvent(1000, [["20.00", "1"]], [["10.00", "1"]]); // bestBid 20.00 >= bestAsk 10.00
+  const { states, issues } = reconstructDepthBook([crossedSnapshot]);
+  const state = states.get(keyOf("binance", "BNBBTC"))!;
+  assertEquals(state.status, "INVALID");
+  assertEquals(isDepthBookTrustworthy(state), false);
+  assertEquals(issues[0].kind, "crossed_book_invalidated");
+});
+
+Deno.test("reconstructDepthBook: a valid snapshot followed by a diff that crosses the book cannot remain trustworthy SYNCED", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]); // healthy: bestBid 10.00 < bestAsk 10.10
+  const crossingDiff = diffEvent(1001, 1001, [["20.00", "5"]], []); // pushes bestBid to 20.00 >= bestAsk 10.10
+  const { states, issues } = reconstructDepthBook([snapshot, crossingDiff]);
+  const state = states.get(keyOf("binance", "BNBBTC"))!;
+  assertEquals(state.status, "INVALID");
+  assertEquals(isDepthBookTrustworthy(state), false);
+  assert(issues.some((i) => i.kind === "crossed_book_invalidated"));
+});
+
+Deno.test("synchronizeDepthBookStartup: cannot return outcome 'synced' for a crossed snapshot", () => {
+  const crossedSnapshot = snapshotEvent(1000, [["20.00", "1"]], [["10.00", "1"]]);
+  const result = synchronizeDepthBookStartup([], crossedSnapshot);
+  assertNotEquals(result.outcome, "synced");
+  assertEquals(result.outcome, "invalid");
+  assert(result.state);
+  assertEquals(result.state.status, "INVALID");
+  assertEquals(isDepthBookTrustworthy(result.state), false);
+  assert(result.issues.some((i) => i.kind === "crossed_book_invalidated"));
+});
+
+Deno.test("synchronizeDepthBookStartup: cannot return outcome 'synced' when replaying a diff causes a crossed book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const buffered = [diffEvent(999, 1001, [["10.00", "2"]])]; // healthy, applies normally
+  const crossingSubsequent = [diffEvent(1002, 1002, [["20.00", "5"]], [])]; // now bestBid 20.00 >= bestAsk 10.10
+  const result = synchronizeDepthBookStartup(buffered, snapshot, crossingSubsequent);
+  assertNotEquals(result.outcome, "synced");
+  assertEquals(result.outcome, "invalid");
+  assert(result.state);
+  assertEquals(result.state.status, "INVALID");
+  assertEquals(isDepthBookTrustworthy(result.state), false);
+  assert(result.issues.some((i) => i.kind === "crossed_book_invalidated"));
+});
+
 Deno.test("reconstructDepthBook: deterministic reconstruction of best bid/ask + top-N from snapshot + diffs, sorted correctly", () => {
   const fixtureStream = [
     snapshotEvent(1000, [["10.00", "1"], ["9.99", "1"], ["9.98", "1"]], [["10.10", "1"], ["10.11", "1"], ["10.12", "1"]]),
