@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { requireCronAuth } from "../_shared/cron_auth.ts";
 import {
   resolveAlphaAuditHorizon,
   type AlphaAuditAction,
@@ -34,6 +35,14 @@ function errorText(error: unknown) { return error instanceof Error ? `${error.na
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
+  try {
+    await requireCronAuth(req, supabase);
+  } catch (error) {
+    const message = errorText(error);
+    const unauthorized = message.includes("UNAUTHORIZED_CRON");
+    return json({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 503);
+  }
+
   const startedAt = new Date().toISOString();
   try {
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
