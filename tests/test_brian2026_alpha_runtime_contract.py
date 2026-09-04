@@ -94,7 +94,7 @@ def test_all_alpha_writers_require_application_level_cron_auth():
     auth = _text(CRON_AUTH)
     assert 'x-brian-cron-key' in auth
     assert 'brian_dashboard_auth' in auth
-    assert 'control-v2' in auth
+    assert 'control-v3' in auth
     assert 'constantTimeEqual' in auth
     for path in (COMPILER, AUDITOR, MACRO):
         text = _text(path)
