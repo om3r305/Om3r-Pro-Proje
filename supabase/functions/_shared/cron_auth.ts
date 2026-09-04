@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-const DEFAULT_AUTH_ID = "control-v2";
+const DEFAULT_AUTH_ID = "control-v3";
 
 function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
@@ -16,10 +16,10 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 /**
- * Require the same hashed cron key used by Brian Control Center before a service-role Edge
+ * Require the current hashed cron key used by Brian Control Center before a service-role Edge
  * Function can perform any write. This is intentionally independent of Supabase gateway JWT
- * verification: production should keep verify_jwt enabled as an outer gate, while this secret
- * remains the application-level cron authorization boundary.
+ * verification: production keeps verify_jwt enabled as an outer gate, while this secret remains
+ * the application-level cron authorization boundary.
  */
 export async function requireCronAuth(
   req: Request,
