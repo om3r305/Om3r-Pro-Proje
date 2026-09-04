@@ -70,11 +70,10 @@ export function resolveAlphaAuditHorizon(
   const longOpportunity = upExcursion * 10_000 > costBps;
   const shortOpportunity = -downExcursion * 10_000 > costBps;
 
-  // For action receipts expose MFE/MAE in the action's own direction: favorable is positive,
-  // adverse is negative. WAIT/VETO keep raw up/down excursions because both directions are being
-  // audited simultaneously.
-  const mfe = decision.direction === -1 ? -downExcursion : upExcursion;
-  const mae = decision.direction === -1 ? -upExcursion : downExcursion;
+  // OPEN_SHORT gets direction-aware favorable/adverse semantics. WAIT/VETO deliberately retain
+  // raw up/down excursions because their missed-opportunity audit considers both directions.
+  const mfe = decision.action === "OPEN_SHORT" ? -downExcursion : upExcursion;
+  const mae = decision.action === "OPEN_SHORT" ? -upExcursion : downExcursion;
 
   let classification: string;
   let explanation: string;
