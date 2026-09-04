@@ -1,7 +1,10 @@
-const CACHE='monster-coins-pro-shell-v1';
-const ASSETS=['/','/manifest.webmanifest','/logo.svg'];
+const CACHE='monster-coins-pro-shell-v3';
+const ASSETS=['/','/app.css','/app.js','/manifest.webmanifest','/brand.svg','/logo.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
+self.addEventListener('activate',event=>event.waitUntil(Promise.all([
+  self.clients.claim(),
+  caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))
+])));
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
   event.respondWith(fetch(event.request).then(response=>{
@@ -9,4 +12,23 @@ self.addEventListener('fetch',event=>{
     caches.open(CACHE).then(cache=>cache.put(event.request,copy));
     return response;
   }).catch(()=>caches.match(event.request).then(response=>response||caches.match('/'))));
+});
+self.addEventListener('message',event=>{
+  if(event.data?.type!=='NOTIFY') return;
+  const {title,body,tag}=event.data;
+  event.waitUntil(self.registration.showNotification(title||'Monster Coins Pro',{
+    body:body||'',
+    icon:'/logo.svg',
+    badge:'/logo.svg',
+    tag:tag||'monster-coins-pro',
+    renotify:true,
+    data:{url:'/'}
+  }));
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(list=>{
+    const existing=list.find(client=>'focus' in client);
+    return existing?existing.focus():clients.openWindow('/');
+  }));
 });
