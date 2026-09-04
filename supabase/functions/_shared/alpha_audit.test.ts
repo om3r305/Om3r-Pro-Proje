@@ -96,3 +96,22 @@ Deno.test("OPEN_SHORT reports favorable down move as positive MFE and up move as
   assert(Math.abs(resolved.mae - (-0.03)) < 1e-12);
   assert(Math.abs(resolved.directionAdjusted - 0.04) < 1e-12);
 });
+
+Deno.test("VETO keeps two-sided raw excursion semantics even when compiler direction is nonzero", () => {
+  const resolved = resolveAlphaAuditHorizon({
+    observedAt: "2026-09-04T12:00:00Z",
+    action: "VETO",
+    direction: -1,
+    referencePrice: 100,
+    estimatedRoundTripCostBps: 10,
+  }, 300, [
+    { observed_at: "2026-09-04T12:01:00Z", observed_mid_price: 103, estimated_round_trip_cost_bps: 10 },
+    { observed_at: "2026-09-04T12:03:00Z", observed_mid_price: 95, estimated_round_trip_cost_bps: 10 },
+    { observed_at: "2026-09-04T12:05:00Z", observed_mid_price: 96, estimated_round_trip_cost_bps: 10 },
+  ]);
+  assert(resolved);
+  assert(Math.abs(resolved.mfe - 0.03) < 1e-12);
+  assert(Math.abs(resolved.mae - (-0.05)) < 1e-12);
+  assert(resolved.longOpportunity);
+  assert(resolved.shortOpportunity);
+});
