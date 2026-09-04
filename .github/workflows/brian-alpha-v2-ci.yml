@@ -27,6 +27,9 @@ jobs:
           supabase/functions/_shared/alpha_decision.test.ts
           supabase/functions/_shared/alpha_audit.ts
           supabase/functions/_shared/alpha_audit.test.ts
+          supabase/functions/_shared/alpha_runtime_policy.ts
+          supabase/functions/_shared/alpha_runtime_policy.test.ts
+          supabase/functions/_shared/cron_auth.ts
           supabase/functions/brian-alpha-decision-compiler/index.ts
           supabase/functions/brian-missed-opportunity-auditor/index.ts
           supabase/functions/brian-official-macro-eye/index.ts
@@ -36,6 +39,7 @@ jobs:
           supabase/functions/_shared/dynamic_cost.test.ts
           supabase/functions/_shared/alpha_decision.test.ts
           supabase/functions/_shared/alpha_audit.test.ts
+          supabase/functions/_shared/alpha_runtime_policy.test.ts
       - name: Lint ALPHA v2 TypeScript
         run: >-
           deno lint
@@ -45,6 +49,9 @@ jobs:
           supabase/functions/_shared/alpha_decision.test.ts
           supabase/functions/_shared/alpha_audit.ts
           supabase/functions/_shared/alpha_audit.test.ts
+          supabase/functions/_shared/alpha_runtime_policy.ts
+          supabase/functions/_shared/alpha_runtime_policy.test.ts
+          supabase/functions/_shared/cron_auth.ts
           supabase/functions/brian-alpha-decision-compiler/index.ts
           supabase/functions/brian-missed-opportunity-auditor/index.ts
           supabase/functions/brian-official-macro-eye/index.ts
