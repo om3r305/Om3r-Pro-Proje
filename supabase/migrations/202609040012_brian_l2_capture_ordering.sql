@@ -149,6 +149,85 @@ grant select, insert on public.brian_l2_capture_session_events to service_role;
 revoke update, delete, truncate, references, trigger on public.brian_l2_source_events from service_role;
 grant select, insert on public.brian_l2_source_events to service_role;
 
+-- Database-enforced raw segment chain. A collector session starts at arrival_seq=1 and every later
+-- immutable segment must begin exactly after the prior segment. This prevents gaps/overlaps from
+-- becoming silently replayable just because a buggy writer managed to construct individually
+-- contiguous segments.
+create or replace function public.brian_l2_validate_raw_segment_chain()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  prior_last bigint;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('brian-l2-raw-chain|' || new.collector_session_id, 0));
+  select max(last_arrival_seq)
+    into prior_last
+    from public.brian_l2_raw_segments
+   where collector_session_id = new.collector_session_id;
+
+  if prior_last is null then
+    if new.first_arrival_seq <> 1 then
+      raise exception 'BRIAN_L2_LINEAGE: first raw segment for session % must start at arrival_seq 1, got %',
+        new.collector_session_id, new.first_arrival_seq;
+    end if;
+  elsif new.first_arrival_seq <> prior_last + 1 then
+    raise exception 'BRIAN_L2_LINEAGE: raw segment chain for session % expected next arrival_seq %, got %',
+      new.collector_session_id, prior_last + 1, new.first_arrival_seq;
+  end if;
+  return new;
+end
+$$;
+
+-- A normalized source event must point to the exact raw message position that owns its global
+-- arrival sequence. The FK alone proves only "same segment/session"; this trigger proves
+-- raw_message_index and arrival_seq cannot be mismatched within that segment.
+create or replace function public.brian_l2_validate_source_raw_pointer()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  segment_first bigint;
+  segment_count integer;
+begin
+  select first_arrival_seq, message_count
+    into segment_first, segment_count
+    from public.brian_l2_raw_segments
+   where segment_id = new.raw_segment_id
+     and collector_session_id = new.collector_session_id;
+
+  if not found then
+    raise exception 'BRIAN_L2_LINEAGE: referenced raw segment/session does not exist';
+  end if;
+  if new.raw_message_index < 0 or new.raw_message_index >= segment_count then
+    raise exception 'BRIAN_L2_LINEAGE: raw_message_index % is outside segment message_count %',
+      new.raw_message_index, segment_count;
+  end if;
+  if new.arrival_seq <> segment_first + new.raw_message_index then
+    raise exception 'BRIAN_L2_LINEAGE: arrival_seq % does not match raw segment position % + index %',
+      new.arrival_seq, segment_first, new.raw_message_index;
+  end if;
+  return new;
+end
+$$;
+
+revoke all on function public.brian_l2_validate_raw_segment_chain() from public, anon, authenticated, service_role;
+revoke all on function public.brian_l2_validate_source_raw_pointer() from public, anon, authenticated, service_role;
+
+drop trigger if exists brian_l2_raw_segment_chain_guard on public.brian_l2_raw_segments;
+create trigger brian_l2_raw_segment_chain_guard
+  before insert on public.brian_l2_raw_segments
+  for each row execute function public.brian_l2_validate_raw_segment_chain();
+
+drop trigger if exists brian_l2_source_raw_pointer_guard on public.brian_l2_source_events;
+create trigger brian_l2_source_raw_pointer_guard
+  before insert on public.brian_l2_source_events
+  for each row execute function public.brian_l2_validate_source_raw_pointer();
+
 drop trigger if exists brian_l2_raw_segments_append_only on public.brian_l2_raw_segments;
 create trigger brian_l2_raw_segments_append_only
   before update or delete on public.brian_l2_raw_segments
