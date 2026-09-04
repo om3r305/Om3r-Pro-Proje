@@ -116,7 +116,9 @@ Deno.test("l2 capture: stale diff is ordered but does not move the applied updat
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
   acceptDiff(session, diff("BTCUSDT", "101", "102"));
-  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
+  // The snapshot must not be older than the first buffered U. A snapshot at 101 is a valid
+  // startup anchor; replay advances the local baseline through the buffered event to 102.
+  acceptSnapshot(session, snapshot("BTCUSDT", "101"));
   assertEquals(session.state("BTCUSDT").lastAppliedUpdateId, "102");
   const stale = acceptDiff(session, diff("BTCUSDT", "100", "102"));
   assertEquals(stale.disposition, "stale");
@@ -132,7 +134,7 @@ Deno.test("l2 capture: true sequence gap opens a new sync generation and buffers
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
   acceptDiff(session, diff("BTCUSDT", "101", "102"));
-  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
+  acceptSnapshot(session, snapshot("BTCUSDT", "101"));
   const gap = acceptDiff(session, diff("BTCUSDT", "110", "111"));
   assertEquals(gap.disposition, "gap_resync");
   assertEquals(gap.previousSyncGeneration, 1);
@@ -154,9 +156,9 @@ Deno.test("l2 capture: transport reconnect invalidates every symbol baseline and
   const session = new L2CaptureSession("session-a", ["BTCUSDT", "ETHUSDT"]);
   session.startConnection();
   acceptDiff(session, diff("BTCUSDT", "101", "102"));
-  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
+  acceptSnapshot(session, snapshot("BTCUSDT", "101"));
   acceptDiff(session, diff("ETHUSDT", "201", "202"));
-  acceptSnapshot(session, snapshot("ETHUSDT", "200"));
+  acceptSnapshot(session, snapshot("ETHUSDT", "201"));
   assertEquals(session.startConnection(), 2);
   assertEquals(session.state("BTCUSDT").status, "SYNCING");
   assertEquals(session.state("ETHUSDT").status, "SYNCING");
