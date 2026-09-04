@@ -30,6 +30,33 @@ Deno.test("alpha compiler: correlated duplicate group counts once", () => {
   ]);
   assertEquals(d.evidence.length, 2);
   assert(d.ignoredObservationIds.includes("b"));
+  assertEquals(d.evidence.map((x) => x.independentGroup), ["derivatives_taker", "intrabar_tape"]);
+});
+
+Deno.test("alpha compiler: different micro signals from one intrabar tape count as one independent vote", () => {
+  const out = compileAlphaDecision({
+    evidenceRows: [
+      row({ observationId: "velocity", independentGroup: "micro_velocity", direction: 1 }),
+      row({ observationId: "breakout", independentGroup: "micro_breakout", direction: 1 }),
+    ],
+    costQuote: cost,
+  });
+  assertEquals(out.independentGroupCount, 1);
+  assertEquals(out.supportGroups, ["intrabar_tape"]);
+  assertEquals(out.action, "WAIT");
+});
+
+Deno.test("alpha compiler: GDELT discovery headline pressure cannot vote direction", () => {
+  const out = compileAlphaDecision({
+    evidenceRows: [
+      row({ observationId: "gdelt", sourceKind: "news_attention", independentGroup: "news_gdelt", direction: 1 }),
+      row({ observationId: "deriv", independentGroup: "derivatives_taker", direction: 1 }),
+    ],
+    costQuote: cost,
+  });
+  assertEquals(out.independentGroupCount, 1);
+  assert(out.ignoredObservationIds.includes("gdelt"));
+  assertEquals(out.action, "WAIT");
 });
 
 Deno.test("alpha compiler: stale and neutral evidence cannot vote", () => {
@@ -52,7 +79,7 @@ Deno.test("alpha compiler: two strong independent aligned groups can open long u
   assertEquals(out.action, "OPEN_LONG");
   assertEquals(out.direction, 1);
   assert(out.evidenceScore >= 0.18);
-  assertEquals(out.supportGroups, ["derivatives_taker", "micro_velocity"]);
+  assertEquals(out.supportGroups, ["derivatives_taker", "intrabar_tape"]);
 });
 
 Deno.test("alpha compiler: one independent group remains WAIT even if very strong", () => {
