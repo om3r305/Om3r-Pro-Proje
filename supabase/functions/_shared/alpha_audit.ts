@@ -15,6 +15,7 @@ export type AlphaAuditPricePoint = {
 };
 
 function finite(v: unknown, fallback = 0) {
+  if (v == null || (typeof v === "string" && !v.trim())) return fallback;
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
