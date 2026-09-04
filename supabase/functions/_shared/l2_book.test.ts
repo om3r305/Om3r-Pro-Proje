@@ -584,17 +584,101 @@ Deno.test("synchronizeDepthBookStartup: the first remaining buffered event brack
   assertEquals(result.issues.length, 0);
 });
 
-Deno.test("synchronizeDepthBookStartup: a real gap among the buffered or subsequent diffs still invalidates the book", () => {
+Deno.test("synchronizeDepthBookStartup: a real gap among the buffered or subsequent diffs invalidates the book AND the outcome is never 'synced'", () => {
+  // This is the exact API-invariant bug from GPT-5.6 Sol's review: outcome must never be "synced"
+  // while the resulting book is INVALID. A caller gating on outcome === "synced" alone must never
+  // be handed an untrustworthy book.
   const buffered = [diffEvent(999, 1001, [["10.00", "2"]])]; // U=999 <= snapshot.lastUpdateId+1, u=1001 > lastUpdateId -- applies
   const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
   const subsequent = [diffEvent(1010, 1012, [["10.00", "999"]])]; // gap: expected firstUpdateId 1002
   const result = synchronizeDepthBookStartup(buffered, snapshot, subsequent);
-  assertEquals(result.outcome, "synced", "synchronizeDepthBookStartup itself still succeeds -- the resulting book is what's invalidated");
+  assertEquals(result.outcome, "invalid", "outcome must reflect that a real gap left the book untrustworthy, not report success");
   assert(result.state);
   assertEquals(result.state.status, "INVALID");
   assertEquals(isDepthBookTrustworthy(result.state), false);
   assertEquals(result.state.bids[0], { price: "10.00", size: "2" }, "the post-gap diff must never be applied");
   assert(result.issues.some((i) => i.kind === "gap_invalidated_book"));
+});
+
+Deno.test("synchronizeDepthBookStartup: outcome === 'synced' is a strong invariant -- it implies state exists, is SYNCED, and is trustworthy", () => {
+  // A property check across every fixture stream used above that reached "synced", rather than
+  // trusting the outcome tag on its own.
+  const scenarios: Array<[DepthDiffEvent[], DepthSnapshotEvent, DepthDiffEvent[]?]> = [
+    [[], snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]])],
+    [[diffEvent(999, 1001, [["10.00", "2"]])], snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]])],
+  ];
+  for (const [buffered, snapshot, subsequent] of scenarios) {
+    const result = synchronizeDepthBookStartup(buffered, snapshot, subsequent ?? []);
+    if (result.outcome === "synced") {
+      assert(result.state, "outcome 'synced' must always carry a state");
+      assertEquals(result.state.status, "SYNCED");
+      assertEquals(isDepthBookTrustworthy(result.state), true);
+    }
+  }
+});
+
+// -------------------------------------------------------------------------------------------
+// synchronizeDepthBookStartup -- venue/symbol lineage isolation. reconstructDepthBook isolates
+// events by (venue,symbol) automatically (a separate internal book per key); this primitive
+// works against a single snapshot + flat diff arrays, so a diff for the wrong venue/symbol must
+// be caught explicitly before it can mutate or advance the snapshot's book.
+// -------------------------------------------------------------------------------------------
+
+function diffEventFor(venue: string, symbol: string, U: number, u: number, b: [string, string][] = []): DepthDiffEvent {
+  const base = diffEvent(U, u, b);
+  return { ...base, venue, symbol };
+}
+
+Deno.test("synchronizeDepthBookStartup: a wrong-symbol buffered diff cannot mutate or advance the snapshot book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]); // binance / BNBBTC
+  const foreignSymbolDiff = diffEventFor("binance", "ETHUSDT", 1001, 1001, [["10.00", "999999"]]);
+  const result = synchronizeDepthBookStartup([foreignSymbolDiff], snapshot);
+  assertEquals(result.outcome, "invalid");
+  assertEquals(result.state, undefined, "no mutation must ever be applied -- not even seeding -- once a mismatch is found");
+  assertEquals(result.issues[0].kind, "lineage_mismatch");
+});
+
+Deno.test("synchronizeDepthBookStartup: a wrong-venue buffered diff cannot mutate or advance the snapshot book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]); // binance / BNBBTC
+  const foreignVenueDiff = diffEventFor("fixture-illustrative-venue", "BNBBTC", 1001, 1001, [["10.00", "999999"]]);
+  const result = synchronizeDepthBookStartup([foreignVenueDiff], snapshot);
+  assertEquals(result.outcome, "invalid");
+  assertEquals(result.state, undefined);
+  assertEquals(result.issues[0].kind, "lineage_mismatch");
+});
+
+Deno.test("synchronizeDepthBookStartup: a wrong-symbol subsequent diff cannot mutate or advance the snapshot book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const validBuffered = [diffEvent(999, 1001, [["10.00", "2"]])];
+  const foreignSymbolDiff = diffEventFor("binance", "ETHUSDT", 1002, 1002, [["10.00", "999999"]]);
+  const result = synchronizeDepthBookStartup(validBuffered, snapshot, [foreignSymbolDiff]);
+  assertEquals(result.outcome, "invalid");
+  assertEquals(result.state, undefined, "the mismatch must be caught before even the valid buffered diff is applied");
+  assertEquals(result.issues[0].kind, "lineage_mismatch");
+});
+
+Deno.test("synchronizeDepthBookStartup: a wrong-venue subsequent diff cannot mutate or advance the snapshot book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const validBuffered = [diffEvent(999, 1001, [["10.00", "2"]])];
+  const foreignVenueDiff = diffEventFor("fixture-illustrative-venue", "BNBBTC", 1002, 1002, [["10.00", "999999"]]);
+  const result = synchronizeDepthBookStartup(validBuffered, snapshot, [foreignVenueDiff]);
+  assertEquals(result.outcome, "invalid");
+  assertEquals(result.state, undefined);
+  assertEquals(result.issues[0].kind, "lineage_mismatch");
+});
+
+Deno.test("synchronizeDepthBookStartup: mixed lineage can never produce a trustworthy SYNCED result", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const mixedStreams: DepthDiffEvent[][] = [
+    [diffEventFor("binance", "ETHUSDT", 1001, 1001)],
+    [diffEventFor("fixture-illustrative-venue", "BNBBTC", 1001, 1001)],
+    [diffEvent(999, 1001, [["10.00", "2"]]), diffEventFor("binance", "ETHUSDT", 1002, 1002)],
+  ];
+  for (const stream of mixedStreams) {
+    const result = synchronizeDepthBookStartup(stream, snapshot);
+    assertNotEquals(result.outcome, "synced");
+    if (result.state) assertEquals(isDepthBookTrustworthy(result.state), false);
+  }
 });
 
 Deno.test("synchronizeDepthBookStartup: no buffered diffs at all -- the snapshot alone seeds the book", () => {

@@ -571,7 +571,7 @@ export function isDepthBookTrustworthy(state: DepthBookState): boolean {
 export interface DepthBookIssue {
   venue: string;
   symbol: string;
-  kind: "invalid" | "discarded_before_snapshot" | "stale_diff_discarded" | "gap_invalidated_book" | "diff_ignored_while_invalid" | "snapshot_too_old";
+  kind: "invalid" | "discarded_before_snapshot" | "stale_diff_discarded" | "gap_invalidated_book" | "diff_ignored_while_invalid" | "snapshot_too_old" | "lineage_mismatch";
   reason: string;
   event: DepthSnapshotEvent | DepthDiffEvent;
 }
@@ -715,11 +715,35 @@ export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEven
 }
 
 export interface StartupSyncResult {
-  /** "snapshot_too_old" when the snapshot cannot be used as-is and a newer one must be fetched;
-   * no book is seeded in that case. */
-  outcome: "synced" | "snapshot_too_old";
+  /**
+   * `outcome === "synced"` is a strong invariant: it is returned if and only if `state` is
+   * present, `state.status === "SYNCED"`, and `isDepthBookTrustworthy(state)` is `true`. A caller
+   * may gate on `outcome === "synced"` alone without separately re-checking `state.status`.
+   *
+   *   - "snapshot_too_old": the snapshot cannot be used as-is and a newer one must be fetched;
+   *     no book is seeded, `state` is absent.
+   *   - "invalid": either the input itself was invalid (a buffered/subsequent diff's venue or
+   *     symbol did not match the snapshot's -- see `findLineageMismatch` -- in which case no
+   *     mutation was ever applied and `state` is absent), or replay hit a real sequence gap (in
+   *     which case `state` IS present, frozen at the last known-good pre-gap book, with
+   *     `state.status === "INVALID"` -- exactly like `reconstructDepthBook`'s own INVALID state --
+   *     but it must never be read as current/trustworthy; check `isDepthBookTrustworthy` or the
+   *     outcome tag itself before using it for anything but forensics).
+   */
+  outcome: "synced" | "snapshot_too_old" | "invalid";
   state?: DepthBookState;
   issues: DepthBookIssue[];
+}
+
+/** Returns the first diff whose venue or symbol does not match the given ones, or null if every
+ * diff belongs to the same (venue, symbol). Used to fail closed before `synchronizeDepthBookStartup`
+ * applies any mutation -- a snapshot for one venue/symbol must never be advanced or mutated by a
+ * diff that actually belongs to a different one. */
+function findLineageMismatch(venue: string, symbol: string, diffs: DepthDiffEvent[]): DepthDiffEvent | null {
+  for (const diff of diffs) {
+    if (diff.venue !== venue || diff.symbol !== symbol) return diff;
+  }
+  return null;
 }
 
 /**
@@ -728,18 +752,29 @@ export interface StartupSyncResult {
  * reducer discards pre-snapshot diffs rather than buffering them -- this is the primitive that
  * does implement the real buffering procedure):
  *
- *   1. If any diffs were buffered before the snapshot arrived, and the snapshot's lastUpdateId is
+ *   1. Every buffered and subsequent diff must belong to the exact same (venue, symbol) as the
+ *      snapshot. If any diff does not, fail closed BEFORE seeding or applying anything: returns
+ *      `{ outcome: "invalid" }` with no `state` at all. `reconstructDepthBook` isolates events by
+ *      (venue, symbol) automatically (a separate internal book per key); this primitive works
+ *      against a single snapshot + flat diff arrays, so it must check this explicitly instead --
+ *      a foreign diff must never be allowed to mutate or advance another symbol's book, and mixed
+ *      lineage must never be able to produce a `"synced"` result.
+ *   2. If any diffs were buffered before the snapshot arrived, and the snapshot's lastUpdateId is
  *      older than the FIRST buffered diff's firstUpdateId, the snapshot is too old to align
  *      against -- returns `{ outcome: "snapshot_too_old" }` without seeding anything; the caller
  *      must fetch a newer snapshot and try again.
- *   2. Otherwise, seed the local book from the snapshot (`seedFromSnapshot`).
- *   3. Replay every buffered diff, then every subsequent diff, in order, through the exact same
+ *   3. Otherwise, seed the local book from the snapshot (`seedFromSnapshot`).
+ *   4. Replay every buffered diff, then every subsequent diff, in order, through the exact same
  *      update rule steady-state uses (`tryApplyDiff`): a diff entirely covered by the snapshot (or
  *      by what's already been replayed) is discarded; a diff whose firstUpdateId is ahead of
  *      lastAppliedUpdateId + 1 is a real gap and invalidates the book; otherwise it applies
  *      normally -- including the first diff to apply after the snapshot, which in a healthy
  *      stream will bracket the snapshot's lastUpdateId by construction, but is not special-cased
  *      here: it is just the first call to the same rule as every other diff.
+ *   5. The outcome reported is derived from the resulting book's own status, never asserted
+ *      independently of it: `"synced"` only when the book actually ended up SYNCED; `"invalid"`
+ *      when replay hit a real gap and left it INVALID. This is what makes the strong invariant on
+ *      `StartupSyncResult.outcome` hold structurally rather than by convention.
  */
 export function synchronizeDepthBookStartup(
   bufferedDiffs: DepthDiffEvent[],
@@ -747,6 +782,19 @@ export function synchronizeDepthBookStartup(
   subsequentDiffs: DepthDiffEvent[] = [],
 ): StartupSyncResult {
   const issues: DepthBookIssue[] = [];
+  const allDiffs = [...bufferedDiffs, ...subsequentDiffs];
+
+  const mismatch = findLineageMismatch(snapshot.venue, snapshot.symbol, allDiffs);
+  if (mismatch) {
+    issues.push({
+      venue: snapshot.venue,
+      symbol: snapshot.symbol,
+      kind: "lineage_mismatch",
+      reason: `diff venue/symbol (${mismatch.venue}/${mismatch.symbol}) does not match the snapshot's (${snapshot.venue}/${snapshot.symbol}); refusing to apply any mutation from mismatched lineage`,
+      event: mismatch,
+    });
+    return { outcome: "invalid", issues };
+  }
 
   if (bufferedDiffs.length > 0) {
     const firstBufferedUpdateId = BigInt(bufferedDiffs[0].firstUpdateId);
@@ -764,7 +812,7 @@ export function synchronizeDepthBookStartup(
   }
 
   const internal = seedFromSnapshot(snapshot);
-  for (const diff of [...bufferedDiffs, ...subsequentDiffs]) {
+  for (const diff of allDiffs) {
     if (internal.status === "INVALID") {
       issues.push({ venue: diff.venue, symbol: diff.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event: diff });
       continue;
@@ -773,5 +821,6 @@ export function synchronizeDepthBookStartup(
     if (issue) issues.push(issue);
   }
 
-  return { outcome: "synced", state: toDepthBookState(snapshot.venue, snapshot.symbol, internal), issues };
+  const state = toDepthBookState(snapshot.venue, snapshot.symbol, internal);
+  return { outcome: state.status === "SYNCED" ? "synced" : "invalid", state, issues };
 }
