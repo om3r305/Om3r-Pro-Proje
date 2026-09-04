@@ -1,8 +1,9 @@
 // Brian 2026 real-L2 capture session semantics.
 //
-// Infrastructure only. This module assigns a deterministic total arrival order to real venue
-// depth events and tracks the snapshot/resync generation each event belongs to. It produces no
-// trading signal, action, target, order, or promotion decision.
+// Infrastructure only. Raw transport arrivals receive their authoritative total-order sequence
+// *before* normalization/interpretation. The normalized event then consumes that reservation and
+// is assigned to the snapshot/resync generation determined by the state transition. No trading
+// signal, action, target, order, or promotion decision exists here.
 
 import {
   BINANCE_VENUE,
@@ -85,7 +86,8 @@ export function classifyDepthDiffSequence(
 
 export class L2CaptureSession {
   readonly collectorSessionId: string;
-  private arrivalSeq = 0;
+  private reservedArrivalSeq = 0;
+  private consumedArrivalSeq = 0;
   private connectionGeneration = 0;
   private readonly states = new Map<string, SymbolCaptureState>();
 
@@ -120,14 +122,22 @@ export class L2CaptureSession {
     return this.connectionGeneration;
   }
 
-  nextArrivalSeq(): number {
-    this.arrivalSeq += 1;
-    if (!Number.isSafeInteger(this.arrivalSeq)) throw new Error("arrival sequence exhausted safe integer range");
-    return this.arrivalSeq;
+  /** Reserve the authoritative total-order slot at the raw transport boundary, before JSON
+   * normalization or any market interpretation happens. */
+  reserveArrivalSeq(): number {
+    this.reservedArrivalSeq += 1;
+    if (!Number.isSafeInteger(this.reservedArrivalSeq)) {
+      throw new Error("arrival sequence exhausted safe integer range");
+    }
+    return this.reservedArrivalSeq;
   }
 
   currentArrivalSeq(): number {
-    return this.arrivalSeq;
+    return this.reservedArrivalSeq;
+  }
+
+  currentConsumedArrivalSeq(): number {
+    return this.consumedArrivalSeq;
   }
 
   symbols(): string[] {
@@ -146,11 +156,11 @@ export class L2CaptureSession {
     };
   }
 
-  acceptDepthDiff(event: DepthDiffEvent): DiffCaptureResult {
+  acceptDepthDiff(event: DepthDiffEvent, arrivalSeq: number): DiffCaptureResult {
     this.assertBinanceDepthEvent(event);
     const state = this.requireState(event.symbol);
     this.requireStartedConnection(state);
-    const arrivalSeq = this.nextArrivalSeq();
+    this.consumeReservedArrival(arrivalSeq);
 
     if (state.status === "SYNCING") {
       state.bufferedDiffs.push({ arrivalSeq, event });
@@ -173,9 +183,9 @@ export class L2CaptureSession {
       state.syncGeneration += 1;
       state.status = "SYNCING";
       state.lastAppliedUpdateId = null;
-      // The gap-revealing message becomes the first buffered event of the new resync generation.
-      // A snapshot fetched immediately after the gap may lag this message; keeping it lets
-      // synchronizeDepthBookStartup reject that stale snapshot instead of falsely declaring sync.
+      // The gap-revealing message belongs to and becomes the first buffered event of the new
+      // resync generation. A REST snapshot that lags it must therefore fail `snapshot_too_old`
+      // rather than falsely declaring a clean sync with an empty buffer.
       state.bufferedDiffs = [{ arrivalSeq, event }];
       return {
         envelope: this.envelope(state, arrivalSeq, event),
@@ -191,15 +201,15 @@ export class L2CaptureSession {
     };
   }
 
-  acceptDepthSnapshot(event: DepthSnapshotEvent): SnapshotCaptureResult {
+  acceptDepthSnapshot(event: DepthSnapshotEvent, arrivalSeq: number): SnapshotCaptureResult {
     this.assertBinanceDepthEvent(event);
     const state = this.requireState(event.symbol);
     this.requireStartedConnection(state);
     if (state.status !== "SYNCING") {
       throw new Error(`snapshot for ${state.symbol} received while capture state is already SYNCED`);
     }
+    this.consumeReservedArrival(arrivalSeq);
 
-    const arrivalSeq = this.nextArrivalSeq();
     const envelope = this.envelope(state, arrivalSeq, event);
     const buffered = [...state.bufferedDiffs]
       .sort((a, b) => a.arrivalSeq - b.arrivalSeq)
@@ -216,18 +226,32 @@ export class L2CaptureSession {
 
     if (sync.outcome === "snapshot_too_old") {
       // Keep the existing buffered diffs in the same generation. A newer snapshot can still
-      // bridge them; clearing the buffer here would erase the very evidence needed to prove it.
+      // bridge them; clearing the buffer here would erase the evidence needed to prove it.
       return { envelope, disposition: "snapshot_too_old", issues };
     }
 
     // The generation itself is untrustworthy (real gap, crossed snapshot/book, lineage problem).
-    // Start a clean generation. Subsequent WS diffs will buffer while the worker fetches a fresh
-    // snapshot; the failed snapshot and its old buffered events remain persisted for forensics.
+    // Start a clean generation. Subsequent WS diffs buffer while the worker fetches a fresh
+    // snapshot; the failed snapshot and old buffered events remain persisted for forensics.
     state.syncGeneration += 1;
     state.status = "SYNCING";
     state.lastAppliedUpdateId = null;
     state.bufferedDiffs = [];
     return { envelope, disposition: "invalid_resync", issues };
+  }
+
+  private consumeReservedArrival(arrivalSeq: number): void {
+    if (!Number.isSafeInteger(arrivalSeq) || arrivalSeq <= 0) {
+      throw new Error("arrivalSeq must be a positive safe integer reservation");
+    }
+    if (arrivalSeq > this.reservedArrivalSeq) {
+      throw new Error(`arrivalSeq ${arrivalSeq} was not reserved`);
+    }
+    const expected = this.consumedArrivalSeq + 1;
+    if (arrivalSeq !== expected) {
+      throw new Error(`arrivalSeq must be consumed in strict order; expected ${expected}, got ${arrivalSeq}`);
+    }
+    this.consumedArrivalSeq = arrivalSeq;
   }
 
   private envelope<TEvent extends DepthDiffEvent | DepthSnapshotEvent>(
@@ -258,6 +282,8 @@ export class L2CaptureSession {
   }
 
   private assertBinanceDepthEvent(event: DepthDiffEvent | DepthSnapshotEvent): void {
-    if (event.venue !== BINANCE_VENUE) throw new Error(`real L2 capture currently supports Binance only, got ${event.venue}`);
+    if (event.venue !== BINANCE_VENUE) {
+      throw new Error(`real L2 capture currently supports Binance only, got ${event.venue}`);
+    }
   }
 }
