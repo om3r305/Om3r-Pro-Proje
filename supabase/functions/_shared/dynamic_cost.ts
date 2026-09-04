@@ -90,7 +90,6 @@ export function compileL2Cost(params: {
   const feeBps = finiteNonnegative(params.feeBps, "feeBps");
   const { parsedBids, parsedAsks, bestBid, bestAsk, referenceMid } = validatedBook(params.bids, params.asks);
   const levels = params.side === "BUY" ? parsedAsks : parsedBids;
-  const best = params.side === "BUY" ? bestAsk : bestBid;
 
   let remaining = requested;
   let filledQuote = 0;
