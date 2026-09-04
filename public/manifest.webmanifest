@@ -1,0 +1,27 @@
+{
+  "id": "/dashboard",
+  "name": "Monster Coins Pro — Brian Control Center",
+  "short_name": "Monster Pro",
+  "description": "Mobile-first SHADOW-only observability and paper-trading dashboard for Brian Market OS.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "background_color": "#05070d",
+  "theme_color": "#070a12",
+  "orientation": "any",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {"name": "Dashboard", "short_name": "Dashboard", "url": "/dashboard#overview"},
+    {"name": "Trades", "short_name": "Trades", "url": "/dashboard#trades"},
+    {"name": "System Health", "short_name": "Health", "url": "/dashboard#health"}
+  ]
+}
