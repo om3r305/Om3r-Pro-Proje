@@ -68,6 +68,8 @@ jobs:
           supabase/functions/_shared/l2_book.test.ts
           supabase/functions/_shared/emergent_mover.ts
           supabase/functions/_shared/emergent_mover.test.ts
+          supabase/functions/_shared/emergent_mover_coverage.ts
+          supabase/functions/_shared/emergent_mover_coverage.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
@@ -90,6 +92,9 @@ jobs:
           supabase/functions/_shared/l2_book.ts
           supabase/functions/_shared/l2_book.test.ts
           supabase/functions/_shared/emergent_mover.ts
+          supabase/functions/_shared/emergent_mover.test.ts
+          supabase/functions/_shared/emergent_mover_coverage.ts
+          supabase/functions/_shared/emergent_mover_coverage.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
@@ -101,7 +106,7 @@ jobs:
           supabase/functions/brian-news-eye/index.ts
 
   verify-collector-lease:
-    # Real-Postgres proof that the collector lease primitive is atomic under concurrency.
+    # Real Postgres validates both the lease primitive and new append-only market-data stores.
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -125,9 +130,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install collector-lease test dependencies
+      - name: Install Postgres integration test dependencies
         run: python -m pip install pytest psycopg2-binary
-      - name: Run collector lease Postgres concurrency/integration tests
+      - name: Run real Postgres concurrency and migration-integrity tests
         env:
           BRIAN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-        run: python -m pytest -q tests/test_brian2026_collector_lease_postgres.py -v
+        run: >-
+          python -m pytest -q
+          tests/test_brian2026_collector_lease_postgres.py
+          tests/test_brian2026_emergent_mover_postgres.py
+          -v
