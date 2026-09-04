@@ -91,5 +91,8 @@ Deno.serve(async (req: Request) => {
       return json({ status, feeds_ok: FEEDS.length - degraded.length, feeds_failed: degraded.length, observed_items: observed, intel_events: events.length, recent_macro_observations: observations.length, degraded_sources: degraded, direction_inference: false, shadow_only: true, live_execution: false });
     });
     if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shadow_only: true, live_execution: false }); return lease.value!;
-  } catch (error) { try { await recordRun(started, "FAILED", 0, 0, [], error); } catch {} return json({ status: "FAILED_CLOSED", error: errorText(error), shadow_only: true, live_execution: false }, 500); }
+  } catch (error) {
+    try { await recordRun(started, "FAILED", 0, 0, [], error); } catch { /* collector-run logging must not mask the primary failure */ }
+    return json({ status: "FAILED_CLOSED", error: errorText(error), shadow_only: true, live_execution: false }, 500);
+  }
 });
