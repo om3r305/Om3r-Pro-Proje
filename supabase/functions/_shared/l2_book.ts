@@ -18,12 +18,23 @@
 //      qty change, so consecutive messages are not required to be consecutive update ids -- large
 //      jumps are normal, not data loss. Only equal-or-behind values are meaningful (duplicate/
 //      stale), never "not exactly +1".
-//   4. Implementing Binance's actual documented local-order-book procedure for the depth path:
-//      align a REST snapshot's lastUpdateId against buffered diffs' [U,u] range, then require
-//      strict continuity (next diff's U === previous applied u + 1) once synced. A real gap fails
-//      closed: the reconstructed book is marked INVALID and must not be exposed as current state
-//      until a fresh snapshot resyncs it -- exactly Binance's own "discard the local book and
-//      restart" instruction, not "flag and keep applying".
+//   4. Implementing Binance's actual documented local-order-book procedure for the depth path,
+//      corrected a second time per GPT-5.6 Sol's follow-up review: the per-diff update rule is
+//      the inequality Binance actually documents, not a "normally equal" observation --
+//      (a) ignore (discard, no state change) a diff whose finalUpdateId (u) is at or behind the
+//      locally-applied update id; (b) a diff whose firstUpdateId (U) is *strictly greater* than
+//      localUpdateId + 1 is a real gap -- something was missed -- and invalidates the book;
+//      (c) anything else, including a diff that overlaps already-applied history but still
+//      extends past it, applies normally. This same single rule (`tryApplyDiff`) is used both for
+//      steady-state updates and to replay the buffered diffs after a startup snapshot, so there is
+//      one source of truth for what "valid" means, not two subtly different formulas. A real gap
+//      fails closed: the reconstructed book is marked INVALID and must not be exposed as current
+//      state until a fresh snapshot resyncs it -- Binance's own "discard the local book and
+//      restart" instruction, not "flag and keep applying". Startup buffering (fetch a snapshot,
+//      discard buffered diffs it already covers, replay the rest) is its own explicit pure
+//      primitive, `synchronizeDepthBookStartup`, so this module never claims to buffer
+//      pre-snapshot diffs inside the plain ordered-stream reducer when it actually only discards
+//      them there.
 //   5. Preserving exact decimal price/size strings end to end. Prices/sizes are never parsed to
 //      JS `number` in the source-event or book-state layers (a `number` cannot represent every
 //      decimal string exactly and silently rounds); comparisons and zero-quantity deletion use
@@ -68,6 +79,21 @@ export function isValidDecimalString(value: unknown): value is string {
 
 export function isValidIntegerString(value: unknown): value is string {
   return typeof value === "string" && INTEGER_STRING_RE.test(value);
+}
+
+/**
+ * Validates a venue update/sequence id (Binance's u/U/lastUpdateId are int64) before it is ever
+ * stringified. A string is accepted whenever it matches the integer format -- strings are
+ * lossless regardless of magnitude. A `number` is accepted only when it is a safe integer
+ * (<= Number.MAX_SAFE_INTEGER): a real int64 id larger than that, if it ever arrived as a JS
+ * `number` (e.g. via naive JSON.parse upstream), may already have been silently rounded before
+ * this code ever sees it -- stringifying that rounded value would fabricate a precise-looking but
+ * wrong id instead of failing closed. Reject it instead of laundering the precision loss.
+ */
+export function isSafeIntegerIdInput(value: unknown): value is string | number {
+  if (typeof value === "string") return isValidIntegerString(value);
+  if (typeof value === "number") return Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
+  return false;
 }
 
 export function isValidEpochMillis(value: unknown): value is number {
@@ -255,7 +281,7 @@ export const binanceBookTickerAdapter: VenueBookAdapter<BinanceRawBookTicker, To
     const tsError = validateContextTimestamps(context);
     if (tsError) return { ok: false, reason: tsError };
     if (typeof raw.s !== "string" || raw.s.length === 0) return { ok: false, reason: "missing symbol (s)" };
-    if (!isValidIntegerString(String(raw.u))) return { ok: false, reason: `invalid updateId (u): ${JSON.stringify(raw.u)}` };
+    if (!isSafeIntegerIdInput(raw.u)) return { ok: false, reason: `invalid or unsafe updateId (u): ${JSON.stringify(raw.u)}` };
     for (const [field, value] of [["b", raw.b], ["B", raw.B], ["a", raw.a], ["A", raw.A]] as const) {
       if (!isValidDecimalString(value)) return { ok: false, reason: `invalid decimal for ${field}: ${JSON.stringify(value)}` };
     }
@@ -299,7 +325,7 @@ export const binanceDepthSnapshotAdapter: VenueBookAdapter<BinanceRawDepthSnapsh
     const tsError = validateContextTimestamps(context);
     if (tsError) return { ok: false, reason: tsError };
     if (!context.symbol) return { ok: false, reason: "context.symbol is required for a Binance depth snapshot (the REST payload does not include one)" };
-    if (!isValidIntegerString(String(raw.lastUpdateId))) return { ok: false, reason: `invalid lastUpdateId: ${JSON.stringify(raw.lastUpdateId)}` };
+    if (!isSafeIntegerIdInput(raw.lastUpdateId)) return { ok: false, reason: `invalid or unsafe lastUpdateId: ${JSON.stringify(raw.lastUpdateId)}` };
     const bids = parseLevels(raw.bids);
     if (!bids.ok) return bids;
     const asks = parseLevels(raw.asks);
@@ -347,8 +373,11 @@ export const binanceDepthDiffAdapter: VenueBookAdapter<BinanceRawDepthDiff, Dept
     if (tsError) return { ok: false, reason: tsError };
     if (raw.e !== "depthUpdate") return { ok: false, reason: `unexpected event type: ${JSON.stringify(raw.e)}` };
     if (typeof raw.s !== "string" || raw.s.length === 0) return { ok: false, reason: "missing symbol (s)" };
-    if (!isValidIntegerString(String(raw.U)) || !isValidIntegerString(String(raw.u))) {
-      return { ok: false, reason: `invalid U/u: ${JSON.stringify(raw.U)}/${JSON.stringify(raw.u)}` };
+    if (!isSafeIntegerIdInput(raw.U) || !isSafeIntegerIdInput(raw.u)) {
+      return { ok: false, reason: `invalid or unsafe U/u: ${JSON.stringify(raw.U)}/${JSON.stringify(raw.u)}` };
+    }
+    if (BigInt(raw.U) > BigInt(raw.u)) {
+      return { ok: false, reason: `U (firstUpdateId, ${raw.U}) must not exceed u (finalUpdateId, ${raw.u})` };
     }
     if (!isValidEpochMillis(raw.E)) return { ok: false, reason: `invalid event time (E): ${JSON.stringify(raw.E)}` };
     const bidMutations = parseLevels(raw.b);
@@ -407,7 +436,7 @@ export const fixtureTopOfBookAdapter: VenueBookAdapter<FixtureRawTopOfBook, TopO
       if (!isValidDecimalString(value)) return { ok: false, reason: `invalid decimal for ${field}: ${JSON.stringify(value)}` };
     }
     if (compareDecimalStrings(raw.bestBid.price, raw.bestAsk.price) >= 0) return { ok: false, reason: "bid/ask inversion: best_bid >= best_ask" };
-    if (raw.sequence != null && !isValidIntegerString(String(raw.sequence))) return { ok: false, reason: `invalid sequence: ${JSON.stringify(raw.sequence)}` };
+    if (raw.sequence != null && !isSafeIntegerIdInput(raw.sequence)) return { ok: false, reason: `invalid or unsafe sequence: ${JSON.stringify(raw.sequence)}` };
 
     const freshness = computeFreshness(raw.time, context.ingestAt);
     return {
@@ -518,7 +547,7 @@ export function reduceTopOfBookEvents(events: TopOfBookEvent[]): ReduceTopOfBook
 // fails closed -- see file header point 4.
 // -------------------------------------------------------------------------------------------
 
-export type DepthBookStatus = "UNSYNCED" | "SYNCING" | "SYNCED" | "INVALID";
+export type DepthBookStatus = "UNSYNCED" | "SYNCED" | "INVALID";
 
 export interface DepthBookState {
   venue: string;
@@ -542,7 +571,7 @@ export function isDepthBookTrustworthy(state: DepthBookState): boolean {
 export interface DepthBookIssue {
   venue: string;
   symbol: string;
-  kind: "invalid" | "buffered_before_snapshot" | "stale_diff_discarded" | "awaiting_aligned_diff" | "gap_invalidated_book" | "diff_ignored_while_invalid";
+  kind: "invalid" | "discarded_before_snapshot" | "stale_diff_discarded" | "gap_invalidated_book" | "diff_ignored_while_invalid" | "snapshot_too_old";
   reason: string;
   event: DepthSnapshotEvent | DepthDiffEvent;
 }
@@ -581,28 +610,65 @@ function toDepthBookState(venue: string, symbol: string, internal: DepthBookInte
   };
 }
 
+function seedFromSnapshot(event: DepthSnapshotEvent): DepthBookInternal {
+  const bids = new Map<string, DecimalQuote>();
+  const asks = new Map<string, DecimalQuote>();
+  for (const level of event.bids) bids.set(canonicalDecimalKey(level.price), level);
+  for (const level of event.asks) asks.set(canonicalDecimalKey(level.price), level);
+  return { status: "SYNCED", lastAppliedUpdateId: BigInt(event.lastUpdateId), bids, asks };
+}
+
 /**
- * Reconstructs current depth-book state from an ordered stream of depth snapshots and diffs,
- * following Binance's own documented procedure for managing a local order book:
+ * The single update rule Binance's Spot docs actually document for applying a depth diff to an
+ * already-seeded local book (used both for steady-state updates and to replay buffered diffs
+ * after a startup snapshot -- see file header point 4):
  *
- *   1. Buffer diffs until a snapshot arrives (status stays UNSYNCED).
- *   2. On a snapshot, discard any earlier buffering and seed the book from it (status -> SYNCING).
- *      A later snapshot always resets synchronization from scratch -- it is strictly newer ground
- *      truth than anything reconstructed from diffs so far.
- *   3. While SYNCING: discard a diff entirely covered by the snapshot (its finalUpdateId <=
- *      snapshot lastUpdateId) as a stale/old diff. Apply the first diff whose [firstUpdateId,
- *      finalUpdateId] range brackets lastAppliedUpdateId + 1 (Binance's alignment rule) and
- *      transition to SYNCED. A diff that arrives too early for alignment is held as
- *      "awaiting_aligned_diff" (this reducer does not fail closed here -- there is no
- *      contradiction yet, just insufficient information; a live collector would keep listening or
- *      fetch a fresher snapshot).
- *   4. While SYNCED: discard a diff whose finalUpdateId <= lastAppliedUpdateId (a stale/duplicate
- *      replay). Otherwise require exact continuity -- firstUpdateId === lastAppliedUpdateId + 1.
- *      A real gap (continuity broken) invalidates the book (status -> INVALID) and the violating
- *      diff is NOT applied -- per Binance's own instruction, a detected gap means "discard the
- *      local book and resync", not "best-effort keep going".
- *   5. While INVALID: every diff is ignored (issue "diff_ignored_while_invalid") until a fresh
- *      snapshot arrives and resets synchronization from step 2.
+ *   - a diff whose finalUpdateId (u) is at or behind the locally-applied update id is entirely
+ *     covered by what's already applied -- ignore it (discard, no state change).
+ *   - a diff whose firstUpdateId (U) is *strictly greater* than localUpdateId + 1 means something
+ *     was missed -- a real gap. Invalidate the book (status -> INVALID) and do NOT apply it.
+ *   - anything else applies normally, INCLUDING a diff that overlaps already-applied history
+ *     (firstUpdateId <= localUpdateId) as long as it still extends past it (finalUpdateId >
+ *     localUpdateId) -- an overlapping-but-covering diff must never be falsely invalidated.
+ *
+ * Mutates `internal` in place; returns the issue to record, or null if the diff applied cleanly.
+ */
+function tryApplyDiff(internal: DepthBookInternal, event: DepthDiffEvent): DepthBookIssue | null {
+  const firstId = BigInt(event.firstUpdateId);
+  const finalId = BigInt(event.finalUpdateId);
+  const lastApplied = internal.lastAppliedUpdateId as bigint;
+
+  if (finalId <= lastApplied) {
+    return { venue: event.venue, symbol: event.symbol, kind: "stale_diff_discarded", reason: `diff finalUpdateId ${event.finalUpdateId} is at or behind the local update id ${lastApplied}`, event };
+  }
+  if (firstId > lastApplied + 1n) {
+    internal.status = "INVALID";
+    return { venue: event.venue, symbol: event.symbol, kind: "gap_invalidated_book", reason: `sequence gap: diff firstUpdateId ${event.firstUpdateId} is ahead of local update id + 1 (${lastApplied + 1n}); events were missed`, event };
+  }
+
+  applyMutations(internal.bids, event.bidMutations);
+  applyMutations(internal.asks, event.askMutations);
+  internal.lastAppliedUpdateId = finalId;
+  internal.status = "SYNCED";
+  return null;
+}
+
+/**
+ * Reconstructs current depth-book state from an ordered stream of depth snapshots and diffs.
+ *
+ *   1. A depth_snapshot always seeds (or reseeds) the book fresh via `seedFromSnapshot` -- a
+ *      snapshot is strictly newer ground truth than anything reconstructed from diffs so far, so
+ *      it always wins immediately (status -> SYNCED).
+ *   2. A diff arriving before any snapshot has seeded the book for that (venue, symbol) is
+ *      discarded -- issue "discarded_before_snapshot". This reducer does NOT buffer pre-snapshot
+ *      diffs; if you need Binance's actual startup buffering procedure (fetch a snapshot, discard
+ *      what it already covers, replay the rest), use `synchronizeDepthBookStartup` instead, which
+ *      is the explicit primitive for that. Do not read "discarded" as "buffered" -- they are not
+ *      the same thing.
+ *   3. Once seeded, every diff is applied via `tryApplyDiff` -- the single Binance update rule
+ *      (see its own doc comment). A real gap invalidates the book (status -> INVALID).
+ *   4. While INVALID, every diff is ignored (issue "diff_ignored_while_invalid") until a fresh
+ *      snapshot arrives and reseeds the book from step 1.
  *
  * A quantity of exactly "0" on a mutation is an exact deletion instruction for that price level,
  * never a parse fallback; price levels are keyed by exact decimal value (`canonicalDecimalKey`),
@@ -616,69 +682,28 @@ export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEven
     const key = keyOf(event.venue, event.symbol);
 
     if (event.kind === "depth_snapshot") {
-      const bids = new Map<string, DecimalQuote>();
-      const asks = new Map<string, DecimalQuote>();
-      for (const level of event.bids) bids.set(canonicalDecimalKey(level.price), level);
-      for (const level of event.asks) asks.set(canonicalDecimalKey(level.price), level);
-      internals.set(key, {
-        status: "SYNCING",
-        lastAppliedUpdateId: BigInt(event.lastUpdateId),
-        bids,
-        asks,
-      });
+      internals.set(key, seedFromSnapshot(event));
       continue;
     }
 
     // event.kind === "depth_diff"
     let internal = internals.get(key);
-    if (!internal) {
-      internal = { status: "UNSYNCED", lastAppliedUpdateId: null, bids: new Map(), asks: new Map() };
-      internals.set(key, internal);
-    }
-
-    if (internal.status === "UNSYNCED") {
-      issues.push({ venue: event.venue, symbol: event.symbol, kind: "buffered_before_snapshot", reason: "diff received before any snapshot; buffering is the caller's responsibility -- this reducer just records that no snapshot has seeded the book yet", event });
+    if (!internal || internal.status === "UNSYNCED") {
+      if (!internal) {
+        internal = { status: "UNSYNCED", lastAppliedUpdateId: null, bids: new Map(), asks: new Map() };
+        internals.set(key, internal);
+      }
+      issues.push({ venue: event.venue, symbol: event.symbol, kind: "discarded_before_snapshot", reason: "diff received before any snapshot seeded the book for this venue/symbol; it is discarded, not buffered -- use synchronizeDepthBookStartup for real startup buffering semantics", event });
       continue;
     }
 
-    const firstId = BigInt(event.firstUpdateId);
-    const finalId = BigInt(event.finalUpdateId);
-    const lastApplied = internal.lastAppliedUpdateId as bigint;
-
-    if (internal.status === "SYNCING") {
-      if (finalId <= lastApplied) {
-        issues.push({ venue: event.venue, symbol: event.symbol, kind: "stale_diff_discarded", reason: `diff finalUpdateId ${event.finalUpdateId} is covered by the snapshot (lastUpdateId ${lastApplied})`, event });
-        continue;
-      }
-      if (firstId > lastApplied + 1n) {
-        issues.push({ venue: event.venue, symbol: event.symbol, kind: "awaiting_aligned_diff", reason: `diff firstUpdateId ${event.firstUpdateId} does not bracket snapshot lastUpdateId+1 (${lastApplied + 1n}); waiting for an aligning diff`, event });
-        continue;
-      }
-      applyMutations(internal.bids, event.bidMutations);
-      applyMutations(internal.asks, event.askMutations);
-      internal.lastAppliedUpdateId = finalId;
-      internal.status = "SYNCED";
+    if (internal.status === "INVALID") {
+      issues.push({ venue: event.venue, symbol: event.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event });
       continue;
     }
 
-    if (internal.status === "SYNCED") {
-      if (finalId <= lastApplied) {
-        issues.push({ venue: event.venue, symbol: event.symbol, kind: "stale_diff_discarded", reason: `diff finalUpdateId ${event.finalUpdateId} is at or behind last applied ${lastApplied}`, event });
-        continue;
-      }
-      if (firstId !== lastApplied + 1n) {
-        internal.status = "INVALID";
-        issues.push({ venue: event.venue, symbol: event.symbol, kind: "gap_invalidated_book", reason: `sequence gap: expected next firstUpdateId ${lastApplied + 1n}, got ${event.firstUpdateId}`, event });
-        continue;
-      }
-      applyMutations(internal.bids, event.bidMutations);
-      applyMutations(internal.asks, event.askMutations);
-      internal.lastAppliedUpdateId = finalId;
-      continue;
-    }
-
-    // internal.status === "INVALID"
-    issues.push({ venue: event.venue, symbol: event.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event });
+    const issue = tryApplyDiff(internal, event);
+    if (issue) issues.push(issue);
   }
 
   const states = new Map<string, DepthBookState>();
@@ -687,4 +712,66 @@ export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEven
     states.set(key, toDepthBookState(venue, symbolParts.join(":"), internal));
   }
   return { states, issues };
+}
+
+export interface StartupSyncResult {
+  /** "snapshot_too_old" when the snapshot cannot be used as-is and a newer one must be fetched;
+   * no book is seeded in that case. */
+  outcome: "synced" | "snapshot_too_old";
+  state?: DepthBookState;
+  issues: DepthBookIssue[];
+}
+
+/**
+ * Implements Binance's actual documented startup procedure for a local order book, as its own
+ * explicit pure primitive (per GPT-5.6 Sol's review: `reconstructDepthBook`'s plain ordered-stream
+ * reducer discards pre-snapshot diffs rather than buffering them -- this is the primitive that
+ * does implement the real buffering procedure):
+ *
+ *   1. If any diffs were buffered before the snapshot arrived, and the snapshot's lastUpdateId is
+ *      older than the FIRST buffered diff's firstUpdateId, the snapshot is too old to align
+ *      against -- returns `{ outcome: "snapshot_too_old" }` without seeding anything; the caller
+ *      must fetch a newer snapshot and try again.
+ *   2. Otherwise, seed the local book from the snapshot (`seedFromSnapshot`).
+ *   3. Replay every buffered diff, then every subsequent diff, in order, through the exact same
+ *      update rule steady-state uses (`tryApplyDiff`): a diff entirely covered by the snapshot (or
+ *      by what's already been replayed) is discarded; a diff whose firstUpdateId is ahead of
+ *      lastAppliedUpdateId + 1 is a real gap and invalidates the book; otherwise it applies
+ *      normally -- including the first diff to apply after the snapshot, which in a healthy
+ *      stream will bracket the snapshot's lastUpdateId by construction, but is not special-cased
+ *      here: it is just the first call to the same rule as every other diff.
+ */
+export function synchronizeDepthBookStartup(
+  bufferedDiffs: DepthDiffEvent[],
+  snapshot: DepthSnapshotEvent,
+  subsequentDiffs: DepthDiffEvent[] = [],
+): StartupSyncResult {
+  const issues: DepthBookIssue[] = [];
+
+  if (bufferedDiffs.length > 0) {
+    const firstBufferedUpdateId = BigInt(bufferedDiffs[0].firstUpdateId);
+    const snapshotLastUpdateId = BigInt(snapshot.lastUpdateId);
+    if (snapshotLastUpdateId < firstBufferedUpdateId) {
+      issues.push({
+        venue: snapshot.venue,
+        symbol: snapshot.symbol,
+        kind: "snapshot_too_old",
+        reason: `snapshot lastUpdateId ${snapshot.lastUpdateId} is older than the first buffered diff's firstUpdateId ${bufferedDiffs[0].firstUpdateId}; a newer snapshot is required before syncing can proceed`,
+        event: snapshot,
+      });
+      return { outcome: "snapshot_too_old", issues };
+    }
+  }
+
+  const internal = seedFromSnapshot(snapshot);
+  for (const diff of [...bufferedDiffs, ...subsequentDiffs]) {
+    if (internal.status === "INVALID") {
+      issues.push({ venue: diff.venue, symbol: diff.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event: diff });
+      continue;
+    }
+    const issue = tryApplyDiff(internal, diff);
+    if (issue) issues.push(issue);
+  }
+
+  return { outcome: "synced", state: toDepthBookState(snapshot.venue, snapshot.symbol, internal), issues };
 }

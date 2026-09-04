@@ -15,6 +15,7 @@ import {
   FIXTURE_VENUE,
   fixtureTopOfBookAdapter,
   isDepthBookTrustworthy,
+  isSafeIntegerIdInput,
   isValidDecimalString,
   isValidEpochMillis,
   isValidIntegerString,
@@ -23,6 +24,7 @@ import {
   keyOf,
   reconstructDepthBook,
   reduceTopOfBookEvents,
+  synchronizeDepthBookStartup,
   type BinanceRawDepthDiff,
   type BinanceRawDepthSnapshot,
   type DepthDiffEvent,
@@ -59,6 +61,21 @@ Deno.test("isValidIntegerString: accepts non-negative integer strings only", () 
   assert(!isValidIntegerString("-5"));
   assert(!isValidIntegerString("abc"));
   assert(!isValidIntegerString(400900217));
+});
+
+Deno.test("isSafeIntegerIdInput: accepts a lossless string of any magnitude, but rejects an unsafe JS number", () => {
+  assert(isSafeIntegerIdInput("400900217"));
+  assert(isSafeIntegerIdInput(400900217));
+  // Binance ids are int64; a number already above Number.MAX_SAFE_INTEGER may have been rounded
+  // by JSON.parse before this code ever sees it -- reject it rather than launder that precision
+  // loss into a confident-looking string.
+  assert(!isSafeIntegerIdInput(Number.MAX_SAFE_INTEGER + 10));
+  // The same magnitude arriving as an exact string is still lossless and must be accepted.
+  assert(isSafeIntegerIdInput("9223372036854775807"));
+  assert(!isSafeIntegerIdInput(-5));
+  assert(!isSafeIntegerIdInput(1.5));
+  assert(!isSafeIntegerIdInput("abc"));
+  assert(!isSafeIntegerIdInput(null));
 });
 
 Deno.test("isValidEpochMillis: accepts a positive finite number only", () => {
@@ -149,6 +166,14 @@ Deno.test("binanceBookTickerAdapter: fails closed on a malformed decimal field i
 Deno.test("binanceBookTickerAdapter: fails closed on a malformed updateId", () => {
   const result = binanceBookTickerAdapter.normalize(officialBookTicker({ u: "not-an-id" }), ctx());
   assertEquals(result.ok, false);
+});
+
+Deno.test("binanceBookTickerAdapter: fails closed on an unsafe numeric updateId, preserves a large one losslessly as a string", () => {
+  assertEquals(binanceBookTickerAdapter.normalize(officialBookTicker({ u: Number.MAX_SAFE_INTEGER + 10 }), ctx()).ok, false);
+  const result = binanceBookTickerAdapter.normalize(officialBookTicker({ u: "9223372036854775807" }), ctx());
+  assert(result.ok);
+  if (!result.ok) return;
+  assertEquals(result.event.updateId, "9223372036854775807", "an int64-range id given as a string must be preserved exactly, not truncated/rounded");
 });
 
 Deno.test("binanceBookTickerAdapter: fails closed on an invalid ingestAt timestamp rather than silently defaulting", () => {
@@ -254,6 +279,11 @@ Deno.test("binanceDepthSnapshotAdapter: fails closed on a malformed level entry 
   assertEquals(result.ok, false);
 });
 
+Deno.test("binanceDepthSnapshotAdapter: fails closed on an unsafe numeric lastUpdateId", () => {
+  const result = binanceDepthSnapshotAdapter.normalize(officialDepthSnapshot({ lastUpdateId: Number.MAX_SAFE_INTEGER + 10 }), ctx({ symbol: "BNBBTC" }));
+  assertEquals(result.ok, false);
+});
+
 // -------------------------------------------------------------------------------------------
 // binanceDepthDiffAdapter -- official payload shape: {e,E,s,U,u,b,a}.
 // -------------------------------------------------------------------------------------------
@@ -299,6 +329,18 @@ Deno.test("binanceDepthDiffAdapter: fails closed on invalid U/u", () => {
   assertEquals(binanceDepthDiffAdapter.normalize(officialDepthDiff({ u: "abc" }), ctx()).ok, false);
 });
 
+Deno.test("binanceDepthDiffAdapter: fails closed on an unsafe numeric U or u", () => {
+  assertEquals(binanceDepthDiffAdapter.normalize(officialDepthDiff({ U: Number.MAX_SAFE_INTEGER + 10 }), ctx()).ok, false);
+  assertEquals(binanceDepthDiffAdapter.normalize(officialDepthDiff({ u: Number.MAX_SAFE_INTEGER + 10 }), ctx()).ok, false);
+});
+
+Deno.test("binanceDepthDiffAdapter: fails closed when U > u", () => {
+  const result = binanceDepthDiffAdapter.normalize(officialDepthDiff({ U: 200, u: 160 }), ctx());
+  assertEquals(result.ok, false);
+  if (result.ok) return;
+  assert(result.reason.includes("U"), `expected the rejection to name U/u, got: ${result.reason}`);
+});
+
 // -------------------------------------------------------------------------------------------
 // fixtureTopOfBookAdapter -- explicitly synthetic, must never claim a real venue's identity.
 // -------------------------------------------------------------------------------------------
@@ -327,6 +369,17 @@ Deno.test("fixtureTopOfBookAdapter: normalizes a structurally different raw shap
   assertEquals(result.event.ageMs, 50);
 });
 
+Deno.test("fixtureTopOfBookAdapter: fails closed on an unsafe numeric sequence", () => {
+  const raw = {
+    product: "XYZ-TEST",
+    time: "2026-09-04T00:00:00.030Z",
+    bestBid: { price: "60000.10", size: "0.8" },
+    bestAsk: { price: "60000.60", size: "1.2" },
+    sequence: Number.MAX_SAFE_INTEGER + 10,
+  };
+  assertEquals(fixtureTopOfBookAdapter.normalize(raw, ctx()).ok, false);
+});
+
 Deno.test("fixtureTopOfBookAdapter: rejects a crossed/inverted book just like the Binance adapter", () => {
   const raw = {
     product: "XYZ-TEST",
@@ -338,7 +391,9 @@ Deno.test("fixtureTopOfBookAdapter: rejects a crossed/inverted book just like th
 });
 
 // -------------------------------------------------------------------------------------------
-// reconstructDepthBook -- Binance's real snapshot + buffered-diff synchronization procedure.
+// reconstructDepthBook -- the plain ordered-stream reducer. It seeds from a snapshot immediately
+// and applies diffs via the single Binance update rule; it does NOT buffer pre-snapshot diffs
+// (see synchronizeDepthBookStartup below for that).
 // -------------------------------------------------------------------------------------------
 
 function snapshotEvent(lastUpdateId: number, bids: [string, string][], asks: [string, string][]): DepthSnapshotEvent {
@@ -353,31 +408,45 @@ function diffEvent(U: number, u: number, b: [string, string][] = [], a: [string,
   return result.event;
 }
 
-Deno.test("reconstructDepthBook: a diff arriving before any snapshot is buffered, not applied", () => {
+Deno.test("reconstructDepthBook: a diff arriving before any snapshot is discarded (honestly, not claimed as buffered)", () => {
   const diff = diffEvent(1, 5);
   const { states, issues } = reconstructDepthBook([diff]);
   const state = states.get(keyOf("binance", "BNBBTC"))!;
   assertEquals(state.status, "UNSYNCED");
   assertEquals(state.bids.length, 0);
-  assertEquals(issues[0].kind, "buffered_before_snapshot");
+  assertEquals(issues[0].kind, "discarded_before_snapshot");
   assertEquals(isDepthBookTrustworthy(state), false);
 });
 
-Deno.test("reconstructDepthBook: snapshot + buffered-diff alignment -- a stale diff is discarded, the aligning diff applies", () => {
-  // Binance's own documented example shape: lastUpdateId=1000; a diff entirely covered by the
-  // snapshot (finalUpdateId <= 1000) must be discarded; the diff bracketing 1001 is the real
-  // alignment point and must be the one applied.
+Deno.test("reconstructDepthBook: a snapshot seeds the book immediately, then a covered diff is discarded and the next diff applies", () => {
   const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
-  const staleDiff = diffEvent(990, 1000, [["9.00", "5"]]); // entirely covered by the snapshot
-  const aligningDiff = diffEvent(1001, 1001, [["10.00", "2"]]); // brackets lastUpdateId+1 = 1001
+  const coveredDiff = diffEvent(990, 1000, [["9.00", "5"]]); // entirely covered by the snapshot
+  const nextDiff = diffEvent(1001, 1001, [["10.00", "2"]]); // firstUpdateId === lastAppliedUpdateId + 1
 
-  const { states, issues } = reconstructDepthBook([snapshot, staleDiff, aligningDiff]);
+  const { states, issues } = reconstructDepthBook([snapshot, coveredDiff, nextDiff]);
   const state = states.get(keyOf("binance", "BNBBTC"))!;
   assertEquals(state.status, "SYNCED");
   assertEquals(state.lastAppliedUpdateId, 1001n);
-  assertEquals(state.bids[0], { price: "10.00", size: "2" }, "the aligning diff's mutation must have been applied");
+  assertEquals(state.bids[0], { price: "10.00", size: "2" }, "the next diff's mutation must have been applied");
   const kinds = issues.map((i) => i.kind);
   assert(kinds.includes("stale_diff_discarded"), "the diff covered by the snapshot must be discarded, not applied");
+});
+
+Deno.test("reconstructDepthBook: an overlapping-but-covering diff is accepted, not falsely invalidated", () => {
+  // Blocker from GPT-5.6 Sol's follow-up review: requiring firstUpdateId === lastApplied + 1
+  // exactly is too strict. Binance's documented rule only fails closed when firstUpdateId is
+  // STRICTLY AHEAD of lastApplied + 1; a diff whose range starts at or before what's already
+  // applied, but still extends past it, must be accepted.
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const d1 = diffEvent(1001, 1005, [["10.00", "2"]]); // lastApplied -> 1005
+  const overlapping = diffEvent(1002, 1010, [["10.00", "9"]]); // U=1002 <= 1005, but u=1010 > 1005
+
+  const { states, issues } = reconstructDepthBook([snapshot, d1, overlapping]);
+  const state = states.get(keyOf("binance", "BNBBTC"))!;
+  assertEquals(state.status, "SYNCED", "an overlapping-but-covering diff must never be falsely invalidated");
+  assertEquals(state.lastAppliedUpdateId, 1010n);
+  assertEquals(state.bids[0], { price: "10.00", size: "9" }, "the overlapping diff's mutation must have been applied");
+  assertEquals(issues.filter((i) => i.kind === "gap_invalidated_book").length, 0);
 });
 
 Deno.test("reconstructDepthBook: continuity holds across consecutive aligned diffs", () => {
@@ -436,7 +505,7 @@ Deno.test("reconstructDepthBook: once INVALID, further diffs are ignored until a
   const freshSnapshot = snapshotEvent(2000, [["11.00", "5"]], [["11.10", "5"]]);
   const { states: statesAfterResync } = reconstructDepthBook([snapshot, d1, gapDiff, anotherPostGapDiff, freshSnapshot]);
   const afterResync = statesAfterResync.get(keyOf("binance", "BNBBTC"))!;
-  assertEquals(afterResync.status, "SYNCING", "a fresh snapshot must reset synchronization from scratch");
+  assertEquals(afterResync.status, "SYNCED", "a fresh snapshot must reset synchronization from scratch and seed immediately");
   assertEquals(afterResync.bids[0], { price: "11.00", size: "5" });
 });
 
@@ -463,6 +532,79 @@ Deno.test("reconstructDepthBook: '25.10' and '25.1' address the same price level
   const state = states.get(keyOf("binance", "BNBBTC"))!;
   assertEquals(state.bids.length, 1, "must be recognized as the same level, not a second one");
   assertEquals(state.bids[0].size, "7");
+});
+
+// -------------------------------------------------------------------------------------------
+// synchronizeDepthBookStartup -- the explicit pure primitive for Binance's real startup
+// buffering procedure (fetch a snapshot, discard what it already covers, replay the rest),
+// distinct from reconstructDepthBook's plain ordered-stream reducer above.
+// -------------------------------------------------------------------------------------------
+
+Deno.test("synchronizeDepthBookStartup: a snapshot older than the first buffered diff's U is rejected, requesting a refetch", () => {
+  const buffered = [diffEvent(1001, 1005)];
+  const snapshot = snapshotEvent(999, [["10.00", "1"]], [["10.10", "1"]]); // 999 < 1001
+  const result = synchronizeDepthBookStartup(buffered, snapshot);
+  assertEquals(result.outcome, "snapshot_too_old");
+  assertEquals(result.state, undefined, "no book may be seeded from a snapshot that's too old to align");
+  assertEquals(result.issues[0].kind, "snapshot_too_old");
+});
+
+Deno.test("synchronizeDepthBookStartup: buffered diffs entirely covered by the snapshot are discarded before replay", () => {
+  const buffered = [
+    diffEvent(990, 1000, [["9.00", "5"]]), // finalUpdateId 1000 <= snapshot.lastUpdateId 1000 -- covered
+    diffEvent(1001, 1005, [["10.00", "2"]]), // the real first remaining event: U=1001 <= 1000+1, u=1005 > 1000
+  ];
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const result = synchronizeDepthBookStartup(buffered, snapshot);
+  assertEquals(result.outcome, "synced");
+  assert(result.state);
+  assertEquals(result.state.status, "SYNCED");
+  assertEquals(result.state.lastAppliedUpdateId, 1005n);
+  assertEquals(result.state.bids[0], { price: "10.00", size: "2" });
+  assertEquals(result.issues.map((i) => i.kind), ["stale_diff_discarded"]);
+});
+
+Deno.test("synchronizeDepthBookStartup: the first remaining buffered event brackets the snapshot's lastUpdateId, then normal update rules apply to the rest", () => {
+  // By construction (per Binance's documented procedure): after discarding u <= lastUpdateId,
+  // the first remaining event's [U,u] range contains lastUpdateId. Here lastUpdateId=1000 and the
+  // first remaining diff is U=1000,u=1002 -- U <= 1000 <= u holds. Once that's seeded, the rest
+  // of the buffered stream (and any subsequent live diffs) replay through the same rules as
+  // steady-state reconstructDepthBook.
+  const firstRemaining = diffEvent(1000, 1002, [["10.00", "2"]]);
+  const buffered = [firstRemaining];
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  assert(BigInt(firstRemaining.firstUpdateId) <= 1000n && 1000n <= BigInt(firstRemaining.finalUpdateId), "test fixture precondition: U <= snapshot.lastUpdateId <= u");
+
+  const subsequent = [diffEvent(1003, 1003, [["10.00", "3"]])];
+  const result = synchronizeDepthBookStartup(buffered, snapshot, subsequent);
+  assertEquals(result.outcome, "synced");
+  assert(result.state);
+  assertEquals(result.state.lastAppliedUpdateId, 1003n, "then normal update rules apply to subsequent diffs");
+  assertEquals(result.state.bids[0], { price: "10.00", size: "3" });
+  assertEquals(result.issues.length, 0);
+});
+
+Deno.test("synchronizeDepthBookStartup: a real gap among the buffered or subsequent diffs still invalidates the book", () => {
+  const buffered = [diffEvent(999, 1001, [["10.00", "2"]])]; // U=999 <= snapshot.lastUpdateId+1, u=1001 > lastUpdateId -- applies
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const subsequent = [diffEvent(1010, 1012, [["10.00", "999"]])]; // gap: expected firstUpdateId 1002
+  const result = synchronizeDepthBookStartup(buffered, snapshot, subsequent);
+  assertEquals(result.outcome, "synced", "synchronizeDepthBookStartup itself still succeeds -- the resulting book is what's invalidated");
+  assert(result.state);
+  assertEquals(result.state.status, "INVALID");
+  assertEquals(isDepthBookTrustworthy(result.state), false);
+  assertEquals(result.state.bids[0], { price: "10.00", size: "2" }, "the post-gap diff must never be applied");
+  assert(result.issues.some((i) => i.kind === "gap_invalidated_book"));
+});
+
+Deno.test("synchronizeDepthBookStartup: no buffered diffs at all -- the snapshot alone seeds the book", () => {
+  const snapshot = snapshotEvent(1000, [["10.00", "1"]], [["10.10", "1"]]);
+  const result = synchronizeDepthBookStartup([], snapshot);
+  assertEquals(result.outcome, "synced");
+  assert(result.state);
+  assertEquals(result.state.status, "SYNCED");
+  assertEquals(result.state.lastAppliedUpdateId, 1000n);
+  assertEquals(result.issues.length, 0);
 });
 
 Deno.test("reconstructDepthBook: deterministic reconstruction of best bid/ask + top-N from snapshot + diffs, sorted correctly", () => {
