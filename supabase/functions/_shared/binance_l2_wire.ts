@@ -22,6 +22,20 @@ function objectRecord(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/** Binance may emit a serverShutdown transport-control event before closing a market-data
+ * connection. It is not an L2 depth event and must trigger reconnect, not data-corruption logic. */
+export function isBinanceServerShutdownRaw(rawJson: string): boolean {
+  try {
+    const outer = objectRecord(JSON.parse(rawJson), "Binance WebSocket message");
+    const candidate = outer.data && typeof outer.data === "object" && !Array.isArray(outer.data)
+      ? outer.data as Record<string, unknown>
+      : outer;
+    return candidate.e === "serverShutdown";
+  } catch {
+    return false;
+  }
+}
+
 /** Exact top-level-ish unsigned integer token extraction. Binance's depth message/snapshot schema
  * contains each target key exactly once. Refuse ambiguous/missing input instead of guessing. */
 export function extractExactUnsignedInteger(rawJson: string, key: string): string {
