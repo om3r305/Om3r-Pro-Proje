@@ -1,6 +1,7 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@^1.0.0";
 import {
   extractExactUnsignedInteger,
+  isBinanceServerShutdownRaw,
   parseBinanceCombinedDepthRaw,
   parseBinanceDepthSnapshotRaw,
 } from "./binance_l2_wire.ts";
@@ -17,13 +18,18 @@ Deno.test("Binance L2 wire: combined diff preserves int64 update IDs as exact st
 
 Deno.test("Binance L2 wire: REST snapshot preserves exact lastUpdateId", () => {
   const raw = `{"lastUpdateId":${HUGE},"bids":[["100.0","1"]],"asks":[["101.0","2"]]}`;
-  const parsed = parseBinanceDepthSnapshotRaw(raw);
-  assertEquals(parsed.lastUpdateId, HUGE);
+  assertEquals(parseBinanceDepthSnapshotRaw(raw).lastUpdateId, HUGE);
 });
 
 Deno.test("Binance L2 wire: combined stream name must match payload symbol and cadence", () => {
   const raw = `{"stream":"ethusdt@depth@100ms","data":{"e":"depthUpdate","E":1770000000000,"s":"BTCUSDT","U":1,"u":2,"b":[],"a":[]}}`;
   assertThrows(() => parseBinanceCombinedDepthRaw(raw), Error, "lineage mismatch");
+});
+
+Deno.test("Binance L2 wire: serverShutdown is transport control, not a depth event", () => {
+  assertEquals(isBinanceServerShutdownRaw('{"stream":"!serverShutdown","data":{"e":"serverShutdown","E":1770000000000}}'), true);
+  assertEquals(isBinanceServerShutdownRaw('{"e":"serverShutdown","E":1770000000000}'), true);
+  assertEquals(isBinanceServerShutdownRaw('{"e":"depthUpdate"}'), false);
 });
 
 Deno.test("Binance L2 wire: missing or ambiguous exact integer tokens fail closed", () => {
