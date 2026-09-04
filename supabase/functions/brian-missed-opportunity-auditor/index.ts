@@ -66,6 +66,8 @@ Deno.serve(async (req: Request) => {
       const missedRows: Record<string, unknown>[] = [];
       let skippedMissingReferencePrice = 0;
       let skippedUnresolved = 0;
+      let alphaReferencePathPoints = 0;
+      let intrabarPathPoints = 0;
 
       for (const [asset, assetDecisions] of byAsset) {
         const auditableDecisions = assetDecisions.filter((d) => {
@@ -77,11 +79,35 @@ Deno.serve(async (req: Request) => {
         if (!auditableDecisions.length) continue;
         const minAt = auditableDecisions[0].observed_at;
         const maxTarget = new Date(Math.min(nowMs, Math.max(...auditableDecisions.map((d) => Date.parse(d.observed_at) + 3600_000)) + 120_000)).toISOString();
-        const priceResp = await supabase.from("brian_intrabar_reaction_events")
+
+        // The compiler persists an immutable market reference for every asset every minute, even
+        // when the action is WAIT. This is the primary prospective price path for audit horizons.
+        // It avoids relying on conditional Intrabar reaction events, which are intentionally sparse.
+        const alphaPathResp = await supabase.from("brian_alpha_decisions")
+          .select("observed_at,observed_reference_price,estimated_round_trip_cost_bps")
+          .eq("asset_id", asset).gte("observed_at", minAt).lte("observed_at", maxTarget)
+          .not("observed_reference_price", "is", null).order("observed_at", { ascending: true }).limit(5000);
+        if (alphaPathResp.error) throw alphaPathResp.error;
+        const alphaPoints: AlphaAuditPricePoint[] = (alphaPathResp.data ?? []).map((row) => ({
+          observed_at: String(row.observed_at),
+          observed_mid_price: row.observed_reference_price as string | number,
+          estimated_round_trip_cost_bps: row.estimated_round_trip_cost_bps as string | number | null,
+        }));
+        alphaReferencePathPoints += alphaPoints.length;
+
+        // Intrabar points remain a secondary contemporaneous path, especially useful for cost
+        // evidence on WAIT/VETO decisions. Both sources were captured prospectively before audit.
+        const intrabarResp = await supabase.from("brian_intrabar_reaction_events")
           .select("observed_at,observed_mid_price,estimated_round_trip_cost_bps")
-          .eq("asset_id", asset).gte("observed_at", minAt).lte("observed_at", maxTarget).order("observed_at", { ascending: true }).limit(5000);
-        if (priceResp.error) throw priceResp.error;
-        const points = (priceResp.data ?? []) as AlphaAuditPricePoint[];
+          .eq("asset_id", asset).gte("observed_at", minAt).lte("observed_at", maxTarget)
+          .order("observed_at", { ascending: true }).limit(5000);
+        if (intrabarResp.error) throw intrabarResp.error;
+        const intrabarPoints = (intrabarResp.data ?? []) as AlphaAuditPricePoint[];
+        intrabarPathPoints += intrabarPoints.length;
+
+        const points = [...alphaPoints, ...intrabarPoints]
+          .filter((p) => Number.isFinite(Date.parse(p.observed_at)))
+          .sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
 
         for (const d of auditableDecisions) for (const horizon of HORIZONS) {
           if (Date.parse(d.observed_at) + horizon * 1000 > nowMs) continue;
@@ -113,6 +139,7 @@ Deno.serve(async (req: Request) => {
             explanation: resolved.explanation,
             metadata: {
               reference_price_source: "brian_alpha_decisions.observed_reference_price",
+              path_price_sources: ["brian_alpha_decisions.observed_reference_price", "brian_intrabar_reaction_events.observed_mid_price"],
               original_action: d.action,
               estimated_round_trip_cost_bps: resolved.costBps,
               up_excursion: resolved.upExcursion,
@@ -128,9 +155,6 @@ Deno.serve(async (req: Request) => {
           if (d.action === "WAIT" || d.action === "VETO") {
             const bestExcursion = Math.max(resolved.upExcursion, -resolved.downExcursion);
             const receiptId = await sha(`alpha-missed|${d.decision_id}|${horizon}`);
-            // The shared historical receipt table supports WAIT rather than VETO; preserve the
-            // exact original ALPHA action in the outcome metadata above instead of fabricating a
-            // BUY/SELL action here.
             missedRows.push({
               receipt_id: receiptId,
               asset_id: d.asset_id,
@@ -167,6 +191,9 @@ Deno.serve(async (req: Request) => {
           missed_receipt_count: missedRows.length,
           skipped_missing_reference_price: skippedMissingReferencePrice,
           skipped_unresolved: skippedUnresolved,
+          alpha_reference_path_points: alphaReferencePathPoints,
+          intrabar_path_points: intrabarPathPoints,
+          audit_path_semantics: "prospective_alpha_reference_primary_plus_intrabar_secondary",
           audit_cost_semantics: "fail_closed_no_zero_fallback",
           reference_price_source: "brian_alpha_decisions.observed_reference_price",
           horizons_seconds: HORIZONS,
@@ -179,6 +206,8 @@ Deno.serve(async (req: Request) => {
         skipped_unresolved: skippedUnresolved,
         outcomes_written: outcomeRows.length,
         missed_receipts_written: missedRows.length,
+        alpha_reference_path_points: alphaReferencePathPoints,
+        intrabar_path_points: intrabarPathPoints,
         horizons_seconds: HORIZONS,
         reference_price_source: "brian_alpha_decisions.observed_reference_price",
         shadow_only: true,
