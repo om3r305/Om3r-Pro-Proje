@@ -3,7 +3,9 @@
 // Each line embeds the venue JSON text verbatim as the value of `raw`. This preserves raw integer
 // and decimal lexemes for audit even when a downstream JSON parser would coerce a large integer
 // through JS Number. Every raw L2 transport arrival in a collector session is assigned a sequence,
-// so a persisted segment must be contiguous as well as ordered.
+// so a persisted segment must be contiguous as well as ordered. If a malformed message cannot be
+// assigned a truthful symbol/sync generation, those raw-only metadata fields remain null rather
+// than being fabricated.
 
 export type L2RawSource = "binance_spot_diff_depth_ws" | "binance_spot_rest_depth_snapshot";
 
@@ -11,9 +13,9 @@ export interface RawL2Item {
   collectorSessionId: string;
   arrivalSeq: number;
   connectionGeneration: number;
-  syncGeneration: number;
+  syncGeneration: number | null;
   source: L2RawSource;
-  symbol: string;
+  symbol: string | null;
   collectorReceivedAt: string;
   rawJson: string;
 }
@@ -62,12 +64,16 @@ export function buildRawL2Segment(items: RawL2Item[]): RawL2Segment {
     if (item.collectorSessionId.trim() !== session) throw new Error("raw L2 segment cannot mix collector sessions");
     ensurePositiveSafeInteger(item.arrivalSeq, `items[${index}].arrivalSeq`);
     ensurePositiveSafeInteger(item.connectionGeneration, `items[${index}].connectionGeneration`);
-    ensurePositiveSafeInteger(item.syncGeneration, `items[${index}].syncGeneration`);
+    if (item.syncGeneration !== null) {
+      ensurePositiveSafeInteger(item.syncGeneration, `items[${index}].syncGeneration`);
+    }
     if (prior !== null && item.arrivalSeq !== prior + 1) {
       throw new Error(`raw L2 segment arrival_seq must be contiguous; expected ${prior + 1}, got ${item.arrivalSeq}`);
     }
     prior = item.arrivalSeq;
-    if (!item.symbol.trim()) throw new Error(`items[${index}].symbol is required`);
+    if (item.symbol !== null && !item.symbol.trim()) {
+      throw new Error(`items[${index}].symbol must be non-empty when present`);
+    }
     const receivedMs = Date.parse(item.collectorReceivedAt);
     if (!Number.isFinite(receivedMs)) throw new Error(`items[${index}].collectorReceivedAt must be valid`);
     validateRawJson(item.rawJson);
