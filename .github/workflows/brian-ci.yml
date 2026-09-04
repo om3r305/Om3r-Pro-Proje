@@ -47,12 +47,8 @@ jobs:
           assert not forbidden.intersection(dir(engine))"
 
   verify-edge-functions:
-    # Executes the actual deployed Supabase edge-function TS logic (type-check + behavioral
-    # tests). Separate job from `verify` so the existing Python pipeline above is untouched.
-    # brian-2026 issue #32: pin Deno to the version the hosted Supabase Edge Runtime is
-    # currently compatible with (Edge Runtime v1.69.4 / Deno v2.1.4, per Supabase's own
-    # changelog: https://supabase.com/changelog/37941-all-regions-now-run-deno-2-1-compatible-release),
-    # not the latest Deno release, so CI reflects what actually runs in production.
+    # Executes the actual Supabase edge-function TS logic (type-check + behavioral tests).
+    # Deno stays pinned to the hosted Supabase-compatible version used by this project.
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -63,51 +59,49 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: "2.1.4"
-      - name: Type-check edge-function entrypoints and the shared lease/l2-book modules
+      - name: Type-check edge-function entrypoints and shared modules
         run: >-
           deno check
           supabase/functions/_shared/collector_lease.ts
           supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/_shared/l2_book.ts
           supabase/functions/_shared/l2_book.test.ts
+          supabase/functions/_shared/emergent_mover.ts
+          supabase/functions/_shared/emergent_mover.test.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
           supabase/functions/brian-sensor-mesh/index.ts
           supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-emergent-mover/index.ts
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
-      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting, collector lease)
+      - name: Run behavioral Deno tests
         run: >-
           deno test --allow-read
           supabase/functions/_shared
           supabase/functions/brian-intrabar-eye
-      - name: Lint changed edge-function TS
+      - name: Lint edge-function TS
         run: >-
           deno lint
           supabase/functions/_shared/collector_lease.ts
           supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/_shared/l2_book.ts
           supabase/functions/_shared/l2_book.test.ts
+          supabase/functions/_shared/emergent_mover.ts
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
           supabase/functions/brian-sensor-mesh/index.ts
           supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-emergent-mover/index.ts
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
 
   verify-collector-lease:
-    # Real-Postgres proof that the Item 1 collector lease primitive
-    # (brian_acquire_collector_lease / brian_release_collector_lease,
-    # supabase/migrations/202609030009_brian_collector_lease.sql) is actually atomic under
-    # concurrency, per brian-2026 issue #32's requirement to prefer a small Postgres CI
-    # service / SQL integration harness over grep/text assertions. Separate job so the
-    # existing verify and verify-edge-functions jobs above are untouched. psycopg2 is
-    # deliberately not a requirements.txt dependency, so this does not change what the
-    # `verify` job installs or runs.
+    # Real-Postgres proof that the collector lease primitive is atomic under concurrency.
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
     runs-on: ubuntu-latest
     timeout-minutes: 15
