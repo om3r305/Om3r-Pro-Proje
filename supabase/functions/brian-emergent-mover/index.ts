@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { assessRequiredTickerCoverage } from "../_shared/emergent_mover_coverage.ts";
 import {
   buildEmergentMoverFrame,
   buildEmergentMoverReport,
@@ -60,7 +61,6 @@ async function fetchJson(
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json();
-    // Point-in-time observation is stamped after the provider response is received.
     return { payload, observedAt: new Date().toISOString(), degraded: false };
   } catch (error) {
     if (required) throw error;
@@ -132,7 +132,9 @@ function eligibleSymbolsFromSnapshot(payload: unknown): string[] {
   if (!payload || typeof payload !== "object") throw new Error("universe snapshot payload missing");
   const raw = payload as Record<string, unknown>;
   if (!Array.isArray(raw.eligible_symbols)) throw new Error("universe snapshot eligible_symbols missing");
-  const symbols = [...new Set(raw.eligible_symbols.map((value) => String(value).trim().toUpperCase()).filter(Boolean))];
+  const symbols = [...new Set(raw.eligible_symbols
+    .map((value) => String(value).trim().toUpperCase())
+    .filter(Boolean))];
   symbols.sort();
   if (!symbols.length) throw new Error("universe snapshot has no eligible symbols");
   return symbols;
@@ -177,8 +179,7 @@ function marketRows(
             spreadBps = 10_000 * (ask - bid) / mid;
           }
         } catch {
-          // Per-symbol top-of-book corruption degrades spread context only. The ticker row remains
-          // prospective evidence and no synthetic spread is fabricated.
+          // Top-of-book is optional context. Per-symbol corruption never fabricates a spread.
           spreadBps = null;
         }
       }
@@ -205,8 +206,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
-      // Rate guard is intentionally INSIDE the lease. That closes the race where two invocations
-      // both observe an old frame before one of them obtains and releases the lease.
+      // Rate guard lives inside the lease so two simultaneous invocations cannot both pass it.
       const latestFrame = await supabase
         .from("brian_emergent_mover_frames")
         .select("observed_at,state")
@@ -247,11 +247,13 @@ Deno.serve(async (req: Request) => {
       }
       const eligibleSymbols = eligibleSymbolsFromSnapshot(universe.data.candidates);
 
-      const ticker = await fetchJson(TICKER_24H, true);
-      const book = await fetchJson(BOOK_TICKER, false);
+      const [ticker, book] = await Promise.all([
+        fetchJson(TICKER_24H, true),
+        fetchJson(BOOK_TICKER, false),
+      ]);
       const observedAt = new Date().toISOString();
 
-      // Persist provider truth before the scout interprets or ranks it.
+      // Provider truth is persisted before interpretation/ranking.
       const rawCaptureIds = [
         await persistRaw("emergent_ticker_24h", ticker.payload, ticker.observedAt, TICKER_24H),
       ];
@@ -260,13 +262,32 @@ Deno.serve(async (req: Request) => {
       }
 
       const mapped = marketRows(eligibleSymbols, ticker.payload, book.payload, book.degraded);
-      if (!mapped.rows.length) throw new Error("no valid emergent mover market rows");
-      const currentFrame = buildEmergentMoverFrame(mapped.rows, { observed_at: observedAt, source: PROVIDER });
+      const coverage = assessRequiredTickerCoverage(
+        eligibleSymbols,
+        mapped.rows.map((row) => row.symbol),
+      );
+      if (!coverage.complete) {
+        // Do not persist a partial cross-section: it would distort percentile ranks and poison
+        // the next prospective baseline. Raw provider truth above is intentionally retained.
+        return jsonResponse({
+          status: "SKIPPED_INCOMPLETE_REQUIRED_TICKER",
+          universe_snapshot_id: universe.data.snapshot_id,
+          required_ticker_coverage: coverage,
+          dropped_symbols: mapped.dropped,
+          raw_capture_ids: rawCaptureIds,
+          learning_enabled: false,
+          live_execution: false,
+          shadow_only: true,
+        });
+      }
 
+      const currentFrame = buildEmergentMoverFrame(mapped.rows, {
+        observed_at: observedAt,
+        source: PROVIDER,
+      });
       let previousFrame: EmergentMoverFrame | null = null;
       if (latestFrame.data?.state) {
-        // Internal persistence is still treated as untrusted input: schema/lineage/ranges are
-        // revalidated before comparison instead of cast-through.
+        // Persisted JSON is revalidated rather than trusted/cast through.
         previousFrame = parseEmergentMoverFrame(latestFrame.data.state);
       }
       const report = buildEmergentMoverReport(previousFrame, currentFrame);
@@ -282,7 +303,7 @@ Deno.serve(async (req: Request) => {
         comparison_age_ms: report.comparison_age_ms,
         comparable: report.comparable,
         eligible_count: currentFrame.rows.length,
-        dropped_symbol_count: mapped.dropped.length,
+        dropped_symbol_count: 0,
         degraded_sources: book.degraded ? ["book_ticker"] : [],
         raw_capture_ids: rawCaptureIds,
         state: currentFrame,
@@ -311,7 +332,6 @@ Deno.serve(async (req: Request) => {
           reasons: candidate.reasons,
         })),
         degraded_sources: book.degraded ? ["book_ticker"] : [],
-        dropped_symbols: mapped.dropped,
         measurement_notes: report.measurement_notes,
         evidence_class: "PROSPECTIVE_DEVELOPMENT_SHADOW",
         learning_enabled: false,
