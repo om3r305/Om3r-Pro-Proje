@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildHourlyReport, derivePolicySnapshot, formatTelegramReport, type HourlyReportPayload, type ShadowTick } from "./logic.ts";
 
 const SUPABASE_URL=Deno.env.get("SUPABASE_URL")!;const SERVICE_ROLE_KEY=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;const supabase=createClient(SUPABASE_URL,SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
-const SOURCE_EXPERIMENT_ID="phase37-prospective-live-20260903";const EVIDENCE_CLASS="PROSPECTIVE_DEVELOPMENT_SHADOW";const AUTH_ID="control-v1";
+const SOURCE_EXPERIMENT_ID="phase37-prospective-live-20260903";const EVIDENCE_CLASS="PROSPECTIVE_DEVELOPMENT_SHADOW";const AUTH_ID="control-v2";
 const ALLOWED_ORIGIN=/^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;const ALLOWED_EXACT=new Set(["https://monster-coins-pro-seven.vercel.app","https://monster-coins-pro-oemer-yildirim.vercel.app","https://monster-coins-pro-git-brian-2026-oemer-yildirim.vercel.app","http://localhost:3000","http://127.0.0.1:3000"]);
 
 type SessionEvent={event_id:string;session_id:string;event_kind:"START"|"PAUSE";requested_at:string;starting_equity:number|string|null;policy_scope:"BOTH"|"NATIVE"|"PROFIT"|null;source_experiment_id:string};type SessionState={start:SessionEvent;last_event:SessionEvent;active:boolean;ended_at:string|null};type ReportRow={report_id:string;session_id:string;policy_kind:"NATIVE"|"PROFIT";window_start:string;window_end:string;generated_at:string;payload:HourlyReportPayload;telegram_attempted:boolean;telegram_sent:boolean;telegram_error:string|null};
