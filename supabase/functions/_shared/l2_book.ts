@@ -1,169 +1,379 @@
-// Reflex/L2 event-state foundation (brian-2026 issue #32, task after Item 1). Observation
-// infrastructure only: a normalized Level-2/best-book event contract, one primary-venue
-// normalizer plus a second, structurally distinct venue adapter to prove the boundary is real
-// (not one venue's field names baked into the contract), and a minimal pure reducer that rebuilds
-// current best-book state from an ordered event stream while flagging duplicates, out-of-order
-// arrivals, sequence gaps, staleness, and bid/ask inversion.
+// Reflex/L2 event-state foundation (brian-2026 issue #32). Observation infrastructure only.
 //
-// This module contains NO OBI/OFI signal, NO micro-price predictor, NO decision threshold, and NO
-// order placement -- it only captures and normalizes state. Nothing in brian-2026 calls this module
-// yet; wiring a live collector to a real venue feed, and any alpha built on top of this state, are
-// explicitly out of scope for this foundation and are follow-up work. No Phase 3.7 file is touched
-// or imported here.
+// This is a semantic correction of the first version of this module, per GPT-5.6 Sol's review on
+// PR #37 (cross-checked against official Binance Spot and Coinbase Exchange WebSocket docs). The
+// first version conflated several distinct concepts into one generic "NormalizedBookEvent" and
+// got Binance's bookTicker.u semantics wrong. This version fixes that by:
 //
-// Every function here is pure: no Deno.serve, no network fetch, no Supabase client, no
-// Date.now()/crypto calls that would make output depend on wall-clock time. Callers (a future live
-// collector) supply collectorReceivedAt/ingestAt explicitly, which is what makes the reducer's
-// "deterministic rebuild from a fixture stream" property possible -- the same event array always
-// reduces to the same state, in tests and in production alike.
+//   1. Separating normalized SOURCE EVENTS (what a venue actually sent, kind-discriminated: a
+//      top-of-book tick, a depth snapshot, or a depth diff) from derived BOOK STATE (the
+//      reconstructed current best-book / depth-book, which is a *function of* a source event
+//      stream, not a property of any single message).
+//   2. Matching real venue wire shapes exactly. Binance's bookTicker payload is only
+//      {u,s,b,B,a,A} -- no event time, no depth. Its diff-depth payload is a different message:
+//      {e,E,s,U,u,b,a}. Its REST/partial-depth snapshot is a third shape: {lastUpdateId,bids,asks}.
+//      Synthesizing depth fields into a bookTicker-shaped event (as the first version did) does
+//      not correspond to anything a real venue sends.
+//   3. Not treating Binance bookTicker.u as a +1 sequence. bookTicker is emitted on best-price/
+//      qty change, so consecutive messages are not required to be consecutive update ids -- large
+//      jumps are normal, not data loss. Only equal-or-behind values are meaningful (duplicate/
+//      stale), never "not exactly +1".
+//   4. Implementing Binance's actual documented local-order-book procedure for the depth path:
+//      align a REST snapshot's lastUpdateId against buffered diffs' [U,u] range, then require
+//      strict continuity (next diff's U === previous applied u + 1) once synced. A real gap fails
+//      closed: the reconstructed book is marked INVALID and must not be exposed as current state
+//      until a fresh snapshot resyncs it -- exactly Binance's own "discard the local book and
+//      restart" instruction, not "flag and keep applying".
+//   5. Preserving exact decimal price/size strings end to end. Prices/sizes are never parsed to
+//      JS `number` in the source-event or book-state layers (a `number` cannot represent every
+//      decimal string exactly and silently rounds); comparisons and zero-quantity deletion use
+//      exact scaled-BigInt decimal arithmetic instead. Malformed decimal/integer/timestamp fields
+//      fail the whole normalize() call closed (an explicit `{ ok: false, reason }`) rather than
+//      being coerced to 0/null and silently accepted.
+//   6. Keeping non-negative "age" (how stale is this, for freshness gating) and signed
+//      "clock skew" (ingestAt minus the reference timestamp, which can be negative) as two
+//      separate fields, instead of collapsing both into one clamped-to-zero number that would
+//      hide a skewed or reordered clock as if the data were simply fresh.
+//   7. Not naming the illustrative second-venue adapter after a real exchange. It normalizes a
+//      deliberately synthetic, structurally-different raw shape solely to prove the adapter
+//      boundary is a real seam; it is exported under an explicitly fictional venue id
+//      (FIXTURE_VENUE) so it can never be mistaken for real Coinbase (or any other real venue)
+//      lineage. A real second-venue adapter is follow-up work, built from that venue's own
+//      official docs at that time.
+//
+// Every function here remains pure: no Deno.serve, no network fetch, no Supabase client, and no
+// Date.now() -- every timestamp is supplied by the caller, which is what makes the reducers'
+// fixture-stream reconstructions deterministic. Nothing in brian-2026 calls this module yet. No
+// OBI/OFI signal, no micro-price predictor, no decision threshold, no order placement.
 
 export const EVIDENCE_CLASS = "PROSPECTIVE_DEVELOPMENT_SHADOW" as const;
-export const DEFAULT_DEPTH_N = 5;
-export const DEFAULT_STALE_AFTER_MS = 5_000;
-
 export const BINANCE_VENUE = "binance";
-export const COINBASE_VENUE = "coinbase";
+// Deliberately not a real exchange name -- see file header point 7. Never treat this venue id as
+// live market data or wire it to any real order/execution surface.
+export const FIXTURE_VENUE = "fixture-illustrative-venue";
 
-function finite(value: unknown, fallback = 0): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+// -------------------------------------------------------------------------------------------
+// Exact-decimal helpers. Every price/size the venue sends is a decimal string; we keep it that
+// way through the event/state boundary and only ever compare/subtract/detect-zero via
+// scaled-BigInt integer arithmetic, never via `Number(...)`, which cannot represent every decimal
+// exactly and would silently reintroduce the rounding this module exists to avoid.
+// -------------------------------------------------------------------------------------------
+
+const DECIMAL_STRING_RE = /^\d+(\.\d+)?$/;
+const INTEGER_STRING_RE = /^\d+$/;
+
+export function isValidDecimalString(value: unknown): value is string {
+  return typeof value === "string" && DECIMAL_STRING_RE.test(value);
 }
 
-// ---------------------------------------------------------------------------------------------
-// Normalized contract
-// ---------------------------------------------------------------------------------------------
-
-export interface DepthLevel {
-  price: number;
-  size: number;
+export function isValidIntegerString(value: unknown): value is string {
+  return typeof value === "string" && INTEGER_STRING_RE.test(value);
 }
 
-export interface NormalizedBookEvent {
+export function isValidEpochMillis(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+export function isValidIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
+}
+
+function scaledBigInt(value: string): { scaled: bigint; scale: number } {
+  const [intPart, fracPart = ""] = value.split(".");
+  return { scaled: BigInt((intPart || "0") + fracPart), scale: fracPart.length };
+}
+
+/** Exact decimal comparison via integer arithmetic -- never loses precision the way
+ * `Number(a) - Number(b)` could for high-precision venue decimals. */
+export function compareDecimalStrings(a: string, b: string): -1 | 0 | 1 {
+  const da = scaledBigInt(a);
+  const db = scaledBigInt(b);
+  const scale = Math.max(da.scale, db.scale);
+  const av = da.scaled * 10n ** BigInt(scale - da.scale);
+  const bv = db.scaled * 10n ** BigInt(scale - db.scale);
+  if (av < bv) return -1;
+  if (av > bv) return 1;
+  return 0;
+}
+
+export function isZeroQuantity(value: string): boolean {
+  return compareDecimalStrings(value, "0") === 0;
+}
+
+/** Canonicalizes a decimal string for use as a price-level map key, so "25.10" and "25.1" are
+ * treated as the same level (as real venues do), without ever going through a lossy float. */
+export function canonicalDecimalKey(value: string): string {
+  let { scaled, scale } = scaledBigInt(value);
+  while (scale > 0 && scaled % 10n === 0n) {
+    scaled /= 10n;
+    scale -= 1;
+  }
+  return `${scaled.toString()}e-${scale}`;
+}
+
+function sortedLevels(levels: Map<string, DecimalQuote>, direction: "desc" | "asc"): DecimalQuote[] {
+  const arr = [...levels.values()];
+  arr.sort((a, b) => (direction === "desc" ? -1 : 1) * compareDecimalStrings(a.price, b.price));
+  return arr;
+}
+
+// -------------------------------------------------------------------------------------------
+// Freshness / clock skew
+// -------------------------------------------------------------------------------------------
+
+export interface Freshness {
+  /** ingestAt - referenceAt, clamped to >= 0. "How stale is this", for freshness gating. */
+  ageMs: number;
+  /** ingestAt - referenceAt, NOT clamped. Negative means the reference timestamp is ahead of
+   * ingestAt (clock skew, or a reordered/backdated message) -- a real, observable data-quality
+   * fact that clamping to 0 would silently hide. */
+  clockSkewMs: number;
+}
+
+export function computeFreshness(referenceAt: string, ingestAt: string): Freshness {
+  const raw = Date.parse(ingestAt) - Date.parse(referenceAt);
+  return { ageMs: Math.max(0, raw), clockSkewMs: raw };
+}
+
+// -------------------------------------------------------------------------------------------
+// Source events: what a venue actually sent, normalized but not yet reduced into book state.
+// -------------------------------------------------------------------------------------------
+
+export interface DecimalQuote {
+  price: string;
+  size: string;
+}
+
+export interface SourceEventMeta {
   venue: string;
   symbol: string;
-  /** Exchange-reported event time (ISO-8601), when the venue provides one; null otherwise. */
+  /** Exchange-reported event time (ISO-8601), when the venue's message carries one; null for
+   * message types that don't (e.g. Binance bookTicker has no event time). */
   exchangeEventAt: string | null;
   /** When the collector received the raw message off the wire (ISO-8601). */
   collectorReceivedAt: string;
   /** When normalization ran and produced this event (ISO-8601). */
   ingestAt: string;
-  /** Opaque venue update/sequence id, as a string (ids can exceed safe-integer range); null if the venue does not provide one for this message. */
-  sourceSequence: string | null;
-  bestBid: number;
-  bestAsk: number;
-  midPrice: number;
-  spread: number;
-  /** Top-N levels, best-first. May be fewer than depthN if the raw message did not carry that many. */
-  bids: DepthLevel[];
-  asks: DepthLevel[];
-  /** The N this event's bids/asks were capped to -- explicit, configurable, not a trading threshold. */
-  depthN: number;
-  /** Raw fields worth preserving for audit/lineage (which venue, which raw ids) without keeping the entire raw payload. */
+  ageMs: number;
+  clockSkewMs: number;
   sourceLineage: Record<string, unknown>;
-  /** ingestAt - (exchangeEventAt ?? collectorReceivedAt), in milliseconds, clamped to >= 0. */
-  freshnessMs: number;
   evidenceClass: typeof EVIDENCE_CLASS;
   shadowOnly: true;
 }
 
+/** A top-of-book tick (e.g. Binance bookTicker). Carries only the best bid/ask -- no depth, no
+ * claim about intervening order-book updates the venue didn't emit a tick for. */
+export interface TopOfBookEvent extends SourceEventMeta {
+  kind: "top_of_book";
+  /** Venue update id, when the venue provides one (e.g. Binance's `u`). This is monotonic
+   * evidence only -- NOT a +1 sequence -- see file header point 3. */
+  updateId: string | null;
+  bestBid: DecimalQuote;
+  bestAsk: DecimalQuote;
+}
+
+/** A full or partial depth snapshot (e.g. Binance REST /api/v3/depth or a partial-depth stream). */
+export interface DepthSnapshotEvent extends SourceEventMeta {
+  kind: "depth_snapshot";
+  lastUpdateId: string;
+  bids: DecimalQuote[];
+  asks: DecimalQuote[];
+}
+
+/** An incremental depth diff (e.g. Binance's <symbol>@depth stream). Carries only the levels that
+ * changed -- it does NOT carry a complete book or a best bid/ask, and must never be treated as
+ * one. */
+export interface DepthDiffEvent extends SourceEventMeta {
+  kind: "depth_diff";
+  /** Binance `U`: first update id covered by this event. */
+  firstUpdateId: string;
+  /** Binance `u`: final (last) update id covered by this event. */
+  finalUpdateId: string;
+  bidMutations: DecimalQuote[];
+  askMutations: DecimalQuote[];
+}
+
+export type BookSourceEvent = TopOfBookEvent | DepthSnapshotEvent | DepthDiffEvent;
+
+export type NormalizeResult<TEvent> =
+  | { ok: true; event: TEvent }
+  | { ok: false; reason: string };
+
 export interface NormalizeContext {
   collectorReceivedAt: string;
   ingestAt: string;
-  /** Defaults to DEFAULT_DEPTH_N. Explicit/configurable per call, never a trading threshold. */
-  depthN?: number;
+  /** Required only by adapters whose raw payload does not self-report a symbol (e.g. Binance's
+   * REST depth snapshot response, which omits it -- the caller supplied it in the request URL). */
+  symbol?: string;
 }
 
-export interface BookValidationResult {
-  valid: boolean;
-  reason?: string;
-}
-
-/** Rejects a non-positive or crossed/inverted book (best_bid >= best_ask). This is the one
- * hard invariant every venue adapter (and the reducer, as defense-in-depth) enforces before an
- * event is ever treated as current state. */
-export function validateBookEvent(event: Pick<NormalizedBookEvent, "bestBid" | "bestAsk">): BookValidationResult {
-  if (!(event.bestBid > 0) || !(event.bestAsk > 0)) {
-    return { valid: false, reason: "non-positive best_bid/best_ask" };
-  }
-  if (event.bestBid >= event.bestAsk) {
-    return { valid: false, reason: "bid/ask inversion: best_bid >= best_ask" };
-  }
-  return { valid: true };
-}
-
-function freshnessMs(exchangeEventAt: string | null, collectorReceivedAt: string, ingestAt: string): number {
-  const reference = exchangeEventAt ?? collectorReceivedAt;
-  const ms = Date.parse(ingestAt) - Date.parse(reference);
-  return Number.isFinite(ms) ? Math.max(0, ms) : 0;
-}
-
-export type NormalizeResult =
-  | { ok: true; event: NormalizedBookEvent }
-  | { ok: false; reason: string };
-
-export interface VenueBookAdapter<TRaw> {
+export interface VenueBookAdapter<TRaw, TEvent extends SourceEventMeta = SourceEventMeta> {
   venue: string;
-  normalize(raw: TRaw, context: NormalizeContext): NormalizeResult;
+  normalize(raw: TRaw, context: NormalizeContext): NormalizeResult<TEvent>;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Primary venue adapter: Binance best-bookTicker (+ optional depth levels on the same message).
-// ---------------------------------------------------------------------------------------------
+function validateContextTimestamps(context: NormalizeContext): string | null {
+  if (!isValidIsoTimestamp(context.collectorReceivedAt)) return `invalid collectorReceivedAt: ${JSON.stringify(context.collectorReceivedAt)}`;
+  if (!isValidIsoTimestamp(context.ingestAt)) return `invalid ingestAt: ${JSON.stringify(context.ingestAt)}`;
+  return null;
+}
 
+function parseLevels(raw: unknown): { ok: true; levels: DecimalQuote[] } | { ok: false; reason: string } {
+  if (!Array.isArray(raw)) return { ok: false, reason: `levels must be an array, got ${JSON.stringify(raw)}` };
+  const levels: DecimalQuote[] = [];
+  for (const entry of raw) {
+    if (!Array.isArray(entry) || entry.length < 2) return { ok: false, reason: `malformed level entry: ${JSON.stringify(entry)}` };
+    const [price, size] = entry;
+    if (!isValidDecimalString(price)) return { ok: false, reason: `invalid level price: ${JSON.stringify(price)}` };
+    if (!isValidDecimalString(size)) return { ok: false, reason: `invalid level size: ${JSON.stringify(size)}` };
+    levels.push({ price, size });
+  }
+  return { ok: true, levels };
+}
+
+// -------------------------------------------------------------------------------------------
+// Binance adapters -- one per real, distinct message shape. None of these invent fields the
+// official payload does not have, and none synthesize depth into a top-of-book message or vice
+// versa.
+// -------------------------------------------------------------------------------------------
+
+/** Official Binance Spot <symbol>@bookTicker payload. Exactly {u,s,b,B,a,A} -- no event time, no
+ * depth arrays. (docs: "Pushes any update to the best bid or ask's price or quantity in real-time
+ * for a specified symbol.") */
 export interface BinanceRawBookTicker {
-  /** Update id, when present (Binance bookTicker/depth streams both expose one). */
-  u?: number | string;
-  /** Symbol, e.g. "BTCUSDT". */
+  u: number | string;
   s: string;
-  /** Best bid price/qty as strings, matching Binance's wire format. */
   b: string;
   B: string;
-  /** Best ask price/qty as strings. */
   a: string;
   A: string;
-  /** Event time in epoch ms, present on stream messages but not on the plain REST bookTicker snapshot. */
-  E?: number;
-  /** Optional depth levels beyond best, as [price, qty] string pairs -- present only when the
-   * collector also captured a depth snapshot/diff for this symbol at this instant. */
-  bids?: [string, string][];
-  asks?: [string, string][];
 }
 
-export const binanceBookTickerAdapter: VenueBookAdapter<BinanceRawBookTicker> = {
+export const binanceBookTickerAdapter: VenueBookAdapter<BinanceRawBookTicker, TopOfBookEvent> = {
   venue: BINANCE_VENUE,
-  normalize(raw, context): NormalizeResult {
-    const bestBid = finite(raw.b);
-    const bestAsk = finite(raw.a);
-    const validation = validateBookEvent({ bestBid, bestAsk });
-    if (!validation.valid) return { ok: false, reason: validation.reason! };
+  normalize(raw, context): NormalizeResult<TopOfBookEvent> {
+    const tsError = validateContextTimestamps(context);
+    if (tsError) return { ok: false, reason: tsError };
+    if (typeof raw.s !== "string" || raw.s.length === 0) return { ok: false, reason: "missing symbol (s)" };
+    if (!isValidIntegerString(String(raw.u))) return { ok: false, reason: `invalid updateId (u): ${JSON.stringify(raw.u)}` };
+    for (const [field, value] of [["b", raw.b], ["B", raw.B], ["a", raw.a], ["A", raw.A]] as const) {
+      if (!isValidDecimalString(value)) return { ok: false, reason: `invalid decimal for ${field}: ${JSON.stringify(value)}` };
+    }
+    if (compareDecimalStrings(raw.b, raw.a) >= 0) return { ok: false, reason: "bid/ask inversion: best_bid >= best_ask" };
 
-    const depthN = context.depthN ?? DEFAULT_DEPTH_N;
-    const bids = raw.bids?.length
-      ? raw.bids.slice(0, depthN).map(([price, size]) => ({ price: finite(price), size: finite(size) }))
-      : [{ price: bestBid, size: finite(raw.B) }];
-    const asks = raw.asks?.length
-      ? raw.asks.slice(0, depthN).map(([price, size]) => ({ price: finite(price), size: finite(size) }))
-      : [{ price: bestAsk, size: finite(raw.A) }];
-    const exchangeEventAt = raw.E != null ? new Date(raw.E).toISOString() : null;
-
+    const freshness = computeFreshness(context.collectorReceivedAt, context.ingestAt);
     return {
       ok: true,
       event: {
+        kind: "top_of_book",
+        venue: BINANCE_VENUE,
+        symbol: raw.s,
+        exchangeEventAt: null,
+        collectorReceivedAt: context.collectorReceivedAt,
+        ingestAt: context.ingestAt,
+        ageMs: freshness.ageMs,
+        clockSkewMs: freshness.clockSkewMs,
+        updateId: String(raw.u),
+        bestBid: { price: raw.b, size: raw.B },
+        bestAsk: { price: raw.a, size: raw.A },
+        sourceLineage: { venue: BINANCE_VENUE, updateId: String(raw.u), symbol: raw.s },
+        evidenceClass: EVIDENCE_CLASS,
+        shadowOnly: true,
+      },
+    };
+  },
+};
+
+/** Official Binance REST /api/v3/depth (or partial-depth stream) payload: {lastUpdateId,bids,asks}.
+ * The response itself carries no symbol -- the caller requested one -- so `context.symbol` is
+ * required here. */
+export interface BinanceRawDepthSnapshot {
+  lastUpdateId: number | string;
+  bids: [string, string][];
+  asks: [string, string][];
+}
+
+export const binanceDepthSnapshotAdapter: VenueBookAdapter<BinanceRawDepthSnapshot, DepthSnapshotEvent> = {
+  venue: BINANCE_VENUE,
+  normalize(raw, context): NormalizeResult<DepthSnapshotEvent> {
+    const tsError = validateContextTimestamps(context);
+    if (tsError) return { ok: false, reason: tsError };
+    if (!context.symbol) return { ok: false, reason: "context.symbol is required for a Binance depth snapshot (the REST payload does not include one)" };
+    if (!isValidIntegerString(String(raw.lastUpdateId))) return { ok: false, reason: `invalid lastUpdateId: ${JSON.stringify(raw.lastUpdateId)}` };
+    const bids = parseLevels(raw.bids);
+    if (!bids.ok) return bids;
+    const asks = parseLevels(raw.asks);
+    if (!asks.ok) return asks;
+
+    const freshness = computeFreshness(context.collectorReceivedAt, context.ingestAt);
+    return {
+      ok: true,
+      event: {
+        kind: "depth_snapshot",
+        venue: BINANCE_VENUE,
+        symbol: context.symbol,
+        exchangeEventAt: null,
+        collectorReceivedAt: context.collectorReceivedAt,
+        ingestAt: context.ingestAt,
+        ageMs: freshness.ageMs,
+        clockSkewMs: freshness.clockSkewMs,
+        lastUpdateId: String(raw.lastUpdateId),
+        bids: bids.levels,
+        asks: asks.levels,
+        sourceLineage: { venue: BINANCE_VENUE, lastUpdateId: String(raw.lastUpdateId), symbol: context.symbol },
+        evidenceClass: EVIDENCE_CLASS,
+        shadowOnly: true,
+      },
+    };
+  },
+};
+
+/** Official Binance <symbol>@depth diff-depth stream payload: {e,E,s,U,u,b,a}. `b`/`a` are level
+ * MUTATIONS (a quantity of "0" deletes that price level) -- never a complete book. */
+export interface BinanceRawDepthDiff {
+  e: "depthUpdate";
+  E: number;
+  s: string;
+  U: number | string;
+  u: number | string;
+  b: [string, string][];
+  a: [string, string][];
+}
+
+export const binanceDepthDiffAdapter: VenueBookAdapter<BinanceRawDepthDiff, DepthDiffEvent> = {
+  venue: BINANCE_VENUE,
+  normalize(raw, context): NormalizeResult<DepthDiffEvent> {
+    const tsError = validateContextTimestamps(context);
+    if (tsError) return { ok: false, reason: tsError };
+    if (raw.e !== "depthUpdate") return { ok: false, reason: `unexpected event type: ${JSON.stringify(raw.e)}` };
+    if (typeof raw.s !== "string" || raw.s.length === 0) return { ok: false, reason: "missing symbol (s)" };
+    if (!isValidIntegerString(String(raw.U)) || !isValidIntegerString(String(raw.u))) {
+      return { ok: false, reason: `invalid U/u: ${JSON.stringify(raw.U)}/${JSON.stringify(raw.u)}` };
+    }
+    if (!isValidEpochMillis(raw.E)) return { ok: false, reason: `invalid event time (E): ${JSON.stringify(raw.E)}` };
+    const bidMutations = parseLevels(raw.b);
+    if (!bidMutations.ok) return bidMutations;
+    const askMutations = parseLevels(raw.a);
+    if (!askMutations.ok) return askMutations;
+
+    const exchangeEventAt = new Date(raw.E).toISOString();
+    const freshness = computeFreshness(exchangeEventAt, context.ingestAt);
+    return {
+      ok: true,
+      event: {
+        kind: "depth_diff",
         venue: BINANCE_VENUE,
         symbol: raw.s,
         exchangeEventAt,
         collectorReceivedAt: context.collectorReceivedAt,
         ingestAt: context.ingestAt,
-        sourceSequence: raw.u != null ? String(raw.u) : null,
-        bestBid,
-        bestAsk,
-        midPrice: (bestBid + bestAsk) / 2,
-        spread: bestAsk - bestBid,
-        bids,
-        asks,
-        depthN,
-        sourceLineage: { venue: BINANCE_VENUE, updateId: raw.u ?? null, symbol: raw.s },
-        freshnessMs: freshnessMs(exchangeEventAt, context.collectorReceivedAt, context.ingestAt),
+        ageMs: freshness.ageMs,
+        clockSkewMs: freshness.clockSkewMs,
+        firstUpdateId: String(raw.U),
+        finalUpdateId: String(raw.u),
+        bidMutations: bidMutations.levels,
+        askMutations: askMutations.levels,
+        sourceLineage: { venue: BINANCE_VENUE, U: String(raw.U), u: String(raw.u), symbol: raw.s },
         evidenceClass: EVIDENCE_CLASS,
         shadowOnly: true,
       },
@@ -171,208 +381,310 @@ export const binanceBookTickerAdapter: VenueBookAdapter<BinanceRawBookTicker> = 
   },
 };
 
-// ---------------------------------------------------------------------------------------------
-// Second venue adapter: proves the adapter boundary is a real seam, not a Binance-shaped
-// contract with a second name on it. Field names/shape below are a simplified, illustrative
-// second-venue message -- deliberately structurally different from Binance's (nested price/size
-// pairs, a top-level ISO timestamp, a `sequence` field instead of `u`) -- not a byte-for-byte copy
-// of any single real exchange's current wire format; wiring an actual second live venue is a
-// follow-up task and must be verified against that venue's real API docs at that time.
-// ---------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
+// Fixture (explicitly synthetic) second-venue adapter -- proves the adapter boundary accepts a
+// structurally different raw shape without being, or claiming to be, any real exchange. See file
+// header point 7. Do not rename venue to a real exchange without implementing that exchange's
+// actual official payload.
+// -------------------------------------------------------------------------------------------
 
-export interface SecondVenueRawTicker {
+export interface FixtureRawTopOfBook {
   product: string;
   time: string;
   bestBid: { price: string; size: string };
   bestAsk: { price: string; size: string };
-  depth?: { bids: { price: string; size: string }[]; asks: { price: string; size: string }[] };
   sequence?: number | string;
 }
 
-export const secondVenueTickerAdapter: VenueBookAdapter<SecondVenueRawTicker> = {
-  venue: COINBASE_VENUE,
-  normalize(raw, context): NormalizeResult {
-    const bestBid = finite(raw.bestBid.price);
-    const bestAsk = finite(raw.bestAsk.price);
-    const validation = validateBookEvent({ bestBid, bestAsk });
-    if (!validation.valid) return { ok: false, reason: validation.reason! };
+export const fixtureTopOfBookAdapter: VenueBookAdapter<FixtureRawTopOfBook, TopOfBookEvent> = {
+  venue: FIXTURE_VENUE,
+  normalize(raw, context): NormalizeResult<TopOfBookEvent> {
+    const tsError = validateContextTimestamps(context);
+    if (tsError) return { ok: false, reason: tsError };
+    if (typeof raw.product !== "string" || raw.product.length === 0) return { ok: false, reason: "missing product" };
+    if (!isValidIsoTimestamp(raw.time)) return { ok: false, reason: `invalid exchange event time: ${JSON.stringify(raw.time)}` };
+    for (const [field, value] of [["bestBid.price", raw.bestBid?.price], ["bestBid.size", raw.bestBid?.size], ["bestAsk.price", raw.bestAsk?.price], ["bestAsk.size", raw.bestAsk?.size]] as const) {
+      if (!isValidDecimalString(value)) return { ok: false, reason: `invalid decimal for ${field}: ${JSON.stringify(value)}` };
+    }
+    if (compareDecimalStrings(raw.bestBid.price, raw.bestAsk.price) >= 0) return { ok: false, reason: "bid/ask inversion: best_bid >= best_ask" };
+    if (raw.sequence != null && !isValidIntegerString(String(raw.sequence))) return { ok: false, reason: `invalid sequence: ${JSON.stringify(raw.sequence)}` };
 
-    const depthN = context.depthN ?? DEFAULT_DEPTH_N;
-    const bids = raw.depth?.bids.length
-      ? raw.depth.bids.slice(0, depthN).map((l) => ({ price: finite(l.price), size: finite(l.size) }))
-      : [{ price: bestBid, size: finite(raw.bestBid.size) }];
-    const asks = raw.depth?.asks.length
-      ? raw.depth.asks.slice(0, depthN).map((l) => ({ price: finite(l.price), size: finite(l.size) }))
-      : [{ price: bestAsk, size: finite(raw.bestAsk.size) }];
-
+    const freshness = computeFreshness(raw.time, context.ingestAt);
     return {
       ok: true,
       event: {
-        venue: COINBASE_VENUE,
+        kind: "top_of_book",
+        venue: FIXTURE_VENUE,
         symbol: raw.product,
-        exchangeEventAt: raw.time ?? null,
+        exchangeEventAt: raw.time,
         collectorReceivedAt: context.collectorReceivedAt,
         ingestAt: context.ingestAt,
-        sourceSequence: raw.sequence != null ? String(raw.sequence) : null,
-        bestBid,
-        bestAsk,
-        midPrice: (bestBid + bestAsk) / 2,
-        spread: bestAsk - bestBid,
-        bids,
-        asks,
-        depthN,
-        sourceLineage: { venue: COINBASE_VENUE, product: raw.product, sequence: raw.sequence ?? null },
-        freshnessMs: freshnessMs(raw.time ?? null, context.collectorReceivedAt, context.ingestAt),
+        ageMs: freshness.ageMs,
+        clockSkewMs: freshness.clockSkewMs,
+        updateId: raw.sequence != null ? String(raw.sequence) : null,
+        bestBid: { price: raw.bestBid.price, size: raw.bestBid.size },
+        bestAsk: { price: raw.bestAsk.price, size: raw.bestAsk.size },
+        sourceLineage: { venue: FIXTURE_VENUE, product: raw.product, sequence: raw.sequence ?? null },
         evidenceClass: EVIDENCE_CLASS,
         shadowOnly: true,
       },
     };
   },
 };
-
-// ---------------------------------------------------------------------------------------------
-// Sequence and freshness classification
-// ---------------------------------------------------------------------------------------------
-
-export type SequenceClassification = "no_sequence" | "expected" | "duplicate" | "out_of_order" | "gap";
-
-function parseSequence(sourceSequence: string | null): bigint | null {
-  if (sourceSequence === null) return null;
-  try {
-    return BigInt(sourceSequence);
-  } catch {
-    return null;
-  }
-}
-
-/** Compares a candidate sequence id against the last one this reducer applied for the same
- * (venue, symbol). `previous`/`current` are already-parsed bigints (or null when the venue didn't
- * supply one). Pure and total: every (previous, current) pair maps to exactly one classification. */
-export function classifySequence(previous: bigint | null, current: bigint | null): SequenceClassification {
-  if (current === null) return "no_sequence";
-  if (previous === null) return "expected";
-  if (current === previous) return "duplicate";
-  if (current < previous) return "out_of_order";
-  if (current === previous + 1n) return "expected";
-  return "gap";
-}
-
-export type FreshnessClassification = "FRESH" | "STALE";
-
-export function classifyFreshness(freshnessMsValue: number, staleAfterMs: number = DEFAULT_STALE_AFTER_MS): FreshnessClassification {
-  return freshnessMsValue > staleAfterMs ? "STALE" : "FRESH";
-}
-
-// ---------------------------------------------------------------------------------------------
-// Reducer: rebuild current best-book state from an ordered event stream.
-// ---------------------------------------------------------------------------------------------
-
-export interface BookState {
-  venue: string;
-  symbol: string;
-  /** The latest event actually applied to reach this state. */
-  event: NormalizedBookEvent;
-  lastSequence: bigint | null;
-  freshness: FreshnessClassification;
-  /** Count of events applied (not ignored/rejected) to reach this state, including the current one. */
-  appliedCount: number;
-}
-
-export interface BookStateIssue {
-  venue: string;
-  symbol: string;
-  kind: "invalid" | "duplicate" | "out_of_order" | "gap";
-  reason: string;
-  event: NormalizedBookEvent;
-}
-
-export interface ReduceResult {
-  /** Keyed by `${venue}:${symbol}` -- see keyOf. */
-  states: Map<string, BookState>;
-  issues: BookStateIssue[];
-}
 
 export function keyOf(venue: string, symbol: string): string {
   return `${venue}:${symbol}`;
 }
 
+// -------------------------------------------------------------------------------------------
+// Top-of-book state: "latest wins" with duplicate/out-of-order detection based on a
+// non-decreasing update id. Deliberately NOT a +1/gap invariant -- see file header point 3.
+// -------------------------------------------------------------------------------------------
+
+export interface TopOfBookState {
+  venue: string;
+  symbol: string;
+  event: TopOfBookEvent;
+  lastUpdateId: bigint | null;
+  appliedCount: number;
+}
+
+export interface TopOfBookIssue {
+  venue: string;
+  symbol: string;
+  kind: "invalid" | "duplicate" | "out_of_order";
+  reason: string;
+  event: TopOfBookEvent;
+}
+
+export interface ReduceTopOfBookResult {
+  states: Map<string, TopOfBookState>;
+  issues: TopOfBookIssue[];
+}
+
 /**
- * Folds an ordered array of normalized events into current per-(venue,symbol) best-book state.
- * "Ordered" means arrival/processing order, not necessarily monotonically increasing venue
- * sequence numbers -- detecting when it is NOT monotonic is exactly this function's job.
+ * Folds an ordered top-of-book event stream into current per-(venue,symbol) state.
  *
- * Per event:
- *   - bid/ask inversion (defense-in-depth; adapters should already have rejected this) -> issue
- *     kind "invalid", state unchanged.
- *   - duplicate sourceSequence (matches the last applied sequence for this venue+symbol) -> issue
- *     kind "duplicate", state unchanged: a replay must never silently re-apply.
- *   - out-of-order sourceSequence (behind the last applied sequence) -> issue kind "out_of_order",
- *     state unchanged: a straggler must never regress state that a newer event already advanced.
- *   - sequence gap (jumps ahead by more than one) -> issue kind "gap", but the event IS still
- *     applied -- state must keep moving forward on incomplete history rather than freeze forever
- *     waiting for updates that may never arrive; the gap is recorded for reconciliation instead.
- *   - no sequence id at all -> always applied (best-effort, arrival-order only), and does not
- *     reset the sequence baseline: a later sequenced event is still compared against the last
- *     sequence this reducer actually saw.
- *   - freshness (FRESH/STALE) is computed and stored on every applied state regardless of the
- *     above, since staleness is a property of an individual event, not of sequencing.
+ *   - bid/ask inversion (defense-in-depth; adapters already reject this) -> issue "invalid",
+ *     state unchanged.
+ *   - an update id equal to the last applied one -> issue "duplicate", state unchanged.
+ *   - an update id behind the last applied one -> issue "out_of_order", state unchanged.
+ *   - any update id strictly ahead of the last applied one, by any margin -> always accepted.
+ *     There is no gap concept here: a real venue's top-of-book stream (e.g. Binance bookTicker)
+ *     is emitted on price/qty change, not on a fixed cadence, so large jumps between consecutive
+ *     update ids are normal traffic, not evidence of missed messages.
+ *   - an event with no update id at all -> always accepted (best-effort, arrival-order only), and
+ *     does not reset the update-id baseline for a later event that does carry one.
  */
-export function reduceBookEvents(events: NormalizedBookEvent[], options?: { staleAfterMs?: number }): ReduceResult {
-  const staleAfterMs = options?.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
-  const states = new Map<string, BookState>();
-  const issues: BookStateIssue[] = [];
+export function reduceTopOfBookEvents(events: TopOfBookEvent[]): ReduceTopOfBookResult {
+  const states = new Map<string, TopOfBookState>();
+  const issues: TopOfBookIssue[] = [];
 
   for (const event of events) {
-    const validation = validateBookEvent(event);
-    if (!validation.valid) {
-      issues.push({ venue: event.venue, symbol: event.symbol, kind: "invalid", reason: validation.reason!, event });
+    if (compareDecimalStrings(event.bestBid.price, event.bestAsk.price) >= 0) {
+      issues.push({ venue: event.venue, symbol: event.symbol, kind: "invalid", reason: "bid/ask inversion: best_bid >= best_ask", event });
       continue;
     }
 
     const key = keyOf(event.venue, event.symbol);
     const prior = states.get(key) ?? null;
-    const currentSeq = parseSequence(event.sourceSequence);
-    const classification = classifySequence(prior?.lastSequence ?? null, currentSeq);
+    const currentId = event.updateId != null ? BigInt(event.updateId) : null;
 
-    if (classification === "duplicate") {
-      issues.push({
-        venue: event.venue,
-        symbol: event.symbol,
-        kind: "duplicate",
-        reason: `duplicate sourceSequence ${event.sourceSequence}`,
-        event,
-      });
-      continue;
-    }
-    if (classification === "out_of_order") {
-      issues.push({
-        venue: event.venue,
-        symbol: event.symbol,
-        kind: "out_of_order",
-        reason: `sourceSequence ${event.sourceSequence} is behind last applied sequence ${prior?.lastSequence ?? "null"}`,
-        event,
-      });
-      continue;
-    }
-    if (classification === "gap") {
-      issues.push({
-        venue: event.venue,
-        symbol: event.symbol,
-        kind: "gap",
-        reason: `sequence gap for ${key}: expected ${(prior!.lastSequence as bigint) + 1n}, got ${currentSeq}`,
-        event,
-      });
+    if (currentId != null && prior?.lastUpdateId != null) {
+      if (currentId === prior.lastUpdateId) {
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "duplicate", reason: `duplicate updateId ${event.updateId}`, event });
+        continue;
+      }
+      if (currentId < prior.lastUpdateId) {
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "out_of_order", reason: `updateId ${event.updateId} is behind last applied ${prior.lastUpdateId}`, event });
+        continue;
+      }
     }
 
     states.set(key, {
       venue: event.venue,
       symbol: event.symbol,
       event,
-      lastSequence: currentSeq ?? prior?.lastSequence ?? null,
-      freshness: classifyFreshness(event.freshnessMs, staleAfterMs),
+      lastUpdateId: currentId ?? prior?.lastUpdateId ?? null,
       appliedCount: (prior?.appliedCount ?? 0) + 1,
     });
   }
 
+  return { states, issues };
+}
+
+// -------------------------------------------------------------------------------------------
+// Depth book reconstruction: Binance's actual documented local-order-book procedure. A real gap
+// fails closed -- see file header point 4.
+// -------------------------------------------------------------------------------------------
+
+export type DepthBookStatus = "UNSYNCED" | "SYNCING" | "SYNCED" | "INVALID";
+
+export interface DepthBookState {
+  venue: string;
+  symbol: string;
+  status: DepthBookStatus;
+  lastAppliedUpdateId: bigint | null;
+  /**
+   * Best-first. Only trustworthy as "the current book" when status === "SYNCED". Once status
+   * becomes "INVALID" these are frozen at the last known-good (pre-gap) state, kept only for
+   * forensic/debugging purposes -- callers MUST check `status` (or call `isDepthBookTrustworthy`)
+   * before using them as live state. Never truncated -- every level currently held is returned.
+   */
+  bids: DecimalQuote[];
+  asks: DecimalQuote[];
+}
+
+export function isDepthBookTrustworthy(state: DepthBookState): boolean {
+  return state.status === "SYNCED";
+}
+
+export interface DepthBookIssue {
+  venue: string;
+  symbol: string;
+  kind: "invalid" | "buffered_before_snapshot" | "stale_diff_discarded" | "awaiting_aligned_diff" | "gap_invalidated_book" | "diff_ignored_while_invalid";
+  reason: string;
+  event: DepthSnapshotEvent | DepthDiffEvent;
+}
+
+export interface ReconstructDepthBookResult {
+  states: Map<string, DepthBookState>;
+  issues: DepthBookIssue[];
+}
+
+interface DepthBookInternal {
+  status: DepthBookStatus;
+  lastAppliedUpdateId: bigint | null;
+  bids: Map<string, DecimalQuote>;
+  asks: Map<string, DecimalQuote>;
+}
+
+function applyMutations(levels: Map<string, DecimalQuote>, mutations: DecimalQuote[]): void {
+  for (const mutation of mutations) {
+    const key = canonicalDecimalKey(mutation.price);
+    if (isZeroQuantity(mutation.size)) {
+      levels.delete(key);
+    } else {
+      levels.set(key, mutation);
+    }
+  }
+}
+
+function toDepthBookState(venue: string, symbol: string, internal: DepthBookInternal): DepthBookState {
+  return {
+    venue,
+    symbol,
+    status: internal.status,
+    lastAppliedUpdateId: internal.lastAppliedUpdateId,
+    bids: sortedLevels(internal.bids, "desc"),
+    asks: sortedLevels(internal.asks, "asc"),
+  };
+}
+
+/**
+ * Reconstructs current depth-book state from an ordered stream of depth snapshots and diffs,
+ * following Binance's own documented procedure for managing a local order book:
+ *
+ *   1. Buffer diffs until a snapshot arrives (status stays UNSYNCED).
+ *   2. On a snapshot, discard any earlier buffering and seed the book from it (status -> SYNCING).
+ *      A later snapshot always resets synchronization from scratch -- it is strictly newer ground
+ *      truth than anything reconstructed from diffs so far.
+ *   3. While SYNCING: discard a diff entirely covered by the snapshot (its finalUpdateId <=
+ *      snapshot lastUpdateId) as a stale/old diff. Apply the first diff whose [firstUpdateId,
+ *      finalUpdateId] range brackets lastAppliedUpdateId + 1 (Binance's alignment rule) and
+ *      transition to SYNCED. A diff that arrives too early for alignment is held as
+ *      "awaiting_aligned_diff" (this reducer does not fail closed here -- there is no
+ *      contradiction yet, just insufficient information; a live collector would keep listening or
+ *      fetch a fresher snapshot).
+ *   4. While SYNCED: discard a diff whose finalUpdateId <= lastAppliedUpdateId (a stale/duplicate
+ *      replay). Otherwise require exact continuity -- firstUpdateId === lastAppliedUpdateId + 1.
+ *      A real gap (continuity broken) invalidates the book (status -> INVALID) and the violating
+ *      diff is NOT applied -- per Binance's own instruction, a detected gap means "discard the
+ *      local book and resync", not "best-effort keep going".
+ *   5. While INVALID: every diff is ignored (issue "diff_ignored_while_invalid") until a fresh
+ *      snapshot arrives and resets synchronization from step 2.
+ *
+ * A quantity of exactly "0" on a mutation is an exact deletion instruction for that price level,
+ * never a parse fallback; price levels are keyed by exact decimal value (`canonicalDecimalKey`),
+ * so "25.10" and "25.1" are treated as one level, matching real venue semantics.
+ */
+export function reconstructDepthBook(events: (DepthSnapshotEvent | DepthDiffEvent)[]): ReconstructDepthBookResult {
+  const internals = new Map<string, DepthBookInternal>();
+  const issues: DepthBookIssue[] = [];
+
+  for (const event of events) {
+    const key = keyOf(event.venue, event.symbol);
+
+    if (event.kind === "depth_snapshot") {
+      const bids = new Map<string, DecimalQuote>();
+      const asks = new Map<string, DecimalQuote>();
+      for (const level of event.bids) bids.set(canonicalDecimalKey(level.price), level);
+      for (const level of event.asks) asks.set(canonicalDecimalKey(level.price), level);
+      internals.set(key, {
+        status: "SYNCING",
+        lastAppliedUpdateId: BigInt(event.lastUpdateId),
+        bids,
+        asks,
+      });
+      continue;
+    }
+
+    // event.kind === "depth_diff"
+    let internal = internals.get(key);
+    if (!internal) {
+      internal = { status: "UNSYNCED", lastAppliedUpdateId: null, bids: new Map(), asks: new Map() };
+      internals.set(key, internal);
+    }
+
+    if (internal.status === "UNSYNCED") {
+      issues.push({ venue: event.venue, symbol: event.symbol, kind: "buffered_before_snapshot", reason: "diff received before any snapshot; buffering is the caller's responsibility -- this reducer just records that no snapshot has seeded the book yet", event });
+      continue;
+    }
+
+    const firstId = BigInt(event.firstUpdateId);
+    const finalId = BigInt(event.finalUpdateId);
+    const lastApplied = internal.lastAppliedUpdateId as bigint;
+
+    if (internal.status === "SYNCING") {
+      if (finalId <= lastApplied) {
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "stale_diff_discarded", reason: `diff finalUpdateId ${event.finalUpdateId} is covered by the snapshot (lastUpdateId ${lastApplied})`, event });
+        continue;
+      }
+      if (firstId > lastApplied + 1n) {
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "awaiting_aligned_diff", reason: `diff firstUpdateId ${event.firstUpdateId} does not bracket snapshot lastUpdateId+1 (${lastApplied + 1n}); waiting for an aligning diff`, event });
+        continue;
+      }
+      applyMutations(internal.bids, event.bidMutations);
+      applyMutations(internal.asks, event.askMutations);
+      internal.lastAppliedUpdateId = finalId;
+      internal.status = "SYNCED";
+      continue;
+    }
+
+    if (internal.status === "SYNCED") {
+      if (finalId <= lastApplied) {
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "stale_diff_discarded", reason: `diff finalUpdateId ${event.finalUpdateId} is at or behind last applied ${lastApplied}`, event });
+        continue;
+      }
+      if (firstId !== lastApplied + 1n) {
+        internal.status = "INVALID";
+        issues.push({ venue: event.venue, symbol: event.symbol, kind: "gap_invalidated_book", reason: `sequence gap: expected next firstUpdateId ${lastApplied + 1n}, got ${event.firstUpdateId}`, event });
+        continue;
+      }
+      applyMutations(internal.bids, event.bidMutations);
+      applyMutations(internal.asks, event.askMutations);
+      internal.lastAppliedUpdateId = finalId;
+      continue;
+    }
+
+    // internal.status === "INVALID"
+    issues.push({ venue: event.venue, symbol: event.symbol, kind: "diff_ignored_while_invalid", reason: "book is invalidated pending resync; diff ignored", event });
+  }
+
+  const states = new Map<string, DepthBookState>();
+  for (const [key, internal] of internals) {
+    const [venue, ...symbolParts] = key.split(":");
+    states.set(key, toDepthBookState(venue, symbolParts.join(":"), internal));
+  }
   return { states, issues };
 }
