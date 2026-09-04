@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { requireCronAuth } from "../_shared/cron_auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -68,6 +69,14 @@ async function recordRun(started: string, status: string, observed: number, stor
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
+  try {
+    await requireCronAuth(req, supabase);
+  } catch (error) {
+    const message = errorText(error);
+    const unauthorized = message.includes("UNAUTHORIZED_CRON");
+    return json({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 503);
+  }
+
   const started = new Date().toISOString();
   try {
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
