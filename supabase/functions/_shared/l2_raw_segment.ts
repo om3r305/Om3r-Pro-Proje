@@ -1,11 +1,10 @@
 // Lossless raw L2 segment framing for Brian 2026 capture.
 //
-// Each line embeds the venue JSON text verbatim as the value of `raw`. This preserves raw integer
-// and decimal lexemes for audit even when a downstream JSON parser would coerce a large integer
-// through JS Number. Every raw L2 transport arrival in a collector session is assigned a sequence,
-// so a persisted segment must be contiguous as well as ordered. If a malformed message cannot be
-// assigned a truthful symbol/sync generation, those raw-only metadata fields remain null rather
-// than being fabricated.
+// Valid venue JSON is embedded verbatim as the `raw` JSON value so integer/decimal lexemes remain
+// exact. If the venue delivers malformed text, the exact text is still retained as `raw_text`
+// with `raw_valid_json:false`; the worker can then fail closed without losing the provider bytes.
+// Every L2 transport arrival in a collector session is assigned a sequence, so a segment must be
+// contiguous as well as ordered. Unknown symbol/sync metadata remains null rather than invented.
 
 export type L2RawSource = "binance_spot_diff_depth_ws" | "binance_spot_rest_depth_snapshot";
 
@@ -33,10 +32,14 @@ function ensurePositiveSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive safe integer`);
 }
 
-function validateRawJson(value: string): void {
-  if (!value.trim()) throw new Error("rawJson is required");
-  // Validate syntax only. Never reserialize the raw value; its original text is embedded below.
-  JSON.parse(value);
+function isValidJsonText(value: string): boolean {
+  if (!value) return false;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function line(item: RawL2Item): string {
@@ -49,7 +52,10 @@ function line(item: RawL2Item): string {
     symbol: item.symbol,
     collector_received_at: item.collectorReceivedAt,
   });
-  return `${meta.slice(0, -1)},"raw":${item.rawJson}}`;
+  if (isValidJsonText(item.rawJson)) {
+    return `${meta.slice(0, -1)},"raw_valid_json":true,"raw":${item.rawJson}}`;
+  }
+  return `${meta.slice(0, -1)},"raw_valid_json":false,"raw_text":${JSON.stringify(item.rawJson)}}`;
 }
 
 export function buildRawL2Segment(items: RawL2Item[]): RawL2Segment {
@@ -76,7 +82,7 @@ export function buildRawL2Segment(items: RawL2Item[]): RawL2Segment {
     }
     const receivedMs = Date.parse(item.collectorReceivedAt);
     if (!Number.isFinite(receivedMs)) throw new Error(`items[${index}].collectorReceivedAt must be valid`);
-    validateRawJson(item.rawJson);
+    if (!item.rawJson) throw new Error(`items[${index}].rawJson is required`);
     if (!observedAt || receivedMs < Date.parse(observedAt)) observedAt = item.collectorReceivedAt;
     lines.push(line(item));
   }
