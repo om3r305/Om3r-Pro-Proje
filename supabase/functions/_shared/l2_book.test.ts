@@ -78,13 +78,26 @@ Deno.test("isSafeIntegerIdInput: accepts a lossless string of any magnitude, but
   assert(!isSafeIntegerIdInput(null));
 });
 
-Deno.test("isValidEpochMillis: accepts a positive finite number only", () => {
+Deno.test("isValidEpochMillis: accepts a positive integer millisecond timestamp representable as a JS Date", () => {
   assert(isValidEpochMillis(1672515782136));
   assert(!isValidEpochMillis(0));
   assert(!isValidEpochMillis(-5));
   assert(!isValidEpochMillis(NaN));
   assert(!isValidEpochMillis(Infinity));
   assert(!isValidEpochMillis("1672515782136"));
+});
+
+Deno.test("isValidEpochMillis: rejects a positive finite number outside JS Date's representable range, without throwing", () => {
+  // Number.MAX_SAFE_INTEGER (9007199254740991) is far larger than Date's own representable bound
+  // (+/-8,640,000,000,000,000ms) -- `new Date(...).toISOString()` on it throws RangeError, so this
+  // must be rejected before any adapter ever reaches that call.
+  assert(!isValidEpochMillis(Number.MAX_SAFE_INTEGER));
+});
+
+Deno.test("isValidEpochMillis: rejects a fractional millisecond value", () => {
+  // Binance's E is an integer millisecond timestamp; a fractional value is not a value that
+  // field can actually carry, even though `new Date(1.5)` would not itself throw.
+  assert(!isValidEpochMillis(1.5));
 });
 
 Deno.test("isValidIsoTimestamp: accepts a parseable timestamp, rejects garbage", () => {
@@ -322,6 +335,31 @@ Deno.test("binanceDepthDiffAdapter: rejects an unexpected event type", () => {
 Deno.test("binanceDepthDiffAdapter: fails closed on an invalid event time instead of throwing or defaulting", () => {
   const result = binanceDepthDiffAdapter.normalize(officialDepthDiff({ E: -1 }), ctx());
   assertEquals(result.ok, false);
+});
+
+Deno.test("binanceDepthDiffAdapter: E = Number.MAX_SAFE_INTEGER fails closed and does not throw", () => {
+  // Regression for the exact bug: this value passes a naive "finite and positive" check but is
+  // outside JS Date's representable range, so `new Date(raw.E).toISOString()` would throw
+  // RangeError if reached. normalize() must return `{ ok: false }` instead of throwing.
+  let result;
+  try {
+    result = binanceDepthDiffAdapter.normalize(officialDepthDiff({ E: Number.MAX_SAFE_INTEGER }), ctx());
+  } catch (error) {
+    throw new Error(`normalize() must fail closed, not throw, for an out-of-range E; it threw: ${error}`);
+  }
+  assertEquals(result.ok, false);
+});
+
+Deno.test("binanceDepthDiffAdapter: a fractional E fails closed", () => {
+  const result = binanceDepthDiffAdapter.normalize(officialDepthDiff({ E: 1.5 }), ctx());
+  assertEquals(result.ok, false);
+});
+
+Deno.test("binanceDepthDiffAdapter: the normal official E value is still accepted", () => {
+  const result = binanceDepthDiffAdapter.normalize(officialDepthDiff(), ctx()); // official example E: 1672515782136
+  assert(result.ok);
+  if (!result.ok) return;
+  assertEquals(result.event.exchangeEventAt, new Date(1672515782136).toISOString());
 });
 
 Deno.test("binanceDepthDiffAdapter: fails closed on invalid U/u", () => {

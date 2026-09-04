@@ -96,8 +96,16 @@ export function isSafeIntegerIdInput(value: unknown): value is string | number {
   return false;
 }
 
+/** The largest epoch-millisecond value JavaScript's Date can represent (the documented ECMA-262
+ * limit: ±100,000,000 days from the epoch). Number.MAX_SAFE_INTEGER is far larger than this, so a
+ * positive safe integer alone is not sufficient -- a value beyond this bound produces an Invalid
+ * Date, and calling `.toISOString()` on one throws RangeError instead of failing closed. */
+const MAX_REPRESENTABLE_DATE_EPOCH_MILLIS = 8_640_000_000_000_000;
+
 export function isValidEpochMillis(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) return false;
+  if (value > MAX_REPRESENTABLE_DATE_EPOCH_MILLIS) return false;
+  return !Number.isNaN(new Date(value).getTime());
 }
 
 export function isValidIsoTimestamp(value: unknown): value is string {
