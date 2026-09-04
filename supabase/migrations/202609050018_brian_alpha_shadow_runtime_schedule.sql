@@ -1,6 +1,25 @@
 -- Brian ALPHA v2 production SHADOW runtime schedule.
 -- No live execution. Phase 3.7 remains frozen/read-only.
 -- Calls are protected by both Supabase gateway JWT verification and Brian's hashed cron key.
+-- Idempotent by job name so migration-history drift can never multiply scheduled writers.
+
+do $brian$
+declare
+  v_jobid bigint;
+begin
+  for v_jobid in
+    select jobid
+      from cron.job
+     where jobname in (
+       'brian-alpha-decision-compiler-1m',
+       'brian-missed-opportunity-auditor-5m',
+       'brian-official-macro-eye-10m'
+     )
+  loop
+    perform cron.unschedule(v_jobid);
+  end loop;
+end
+$brian$;
 
 select cron.schedule(
   'brian-alpha-decision-compiler-1m',
