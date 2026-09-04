@@ -22,6 +22,16 @@ function objectRecord(value: unknown, name: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function requireUnsignedJsonIntegerField(value: unknown, name: string): void {
+  // Do not require Number.isSafeInteger here: the exact lexical parser below deliberately supports
+  // int64-shaped provider IDs beyond JS's lossless integer range. This check proves the field is
+  // actually present at the parsed schema location and is a non-negative JSON numeric integer,
+  // preventing an unrelated/escaped string token elsewhere in raw JSON from impersonating it.
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${name} must be an unsigned numeric JSON integer field`);
+  }
+}
+
 /** Binance may emit a serverShutdown transport-control event before closing a market-data
  * connection. It is not an L2 depth event and must trigger reconnect, not data-corruption logic. */
 export function isBinanceServerShutdownRaw(rawJson: string): boolean {
@@ -36,8 +46,9 @@ export function isBinanceServerShutdownRaw(rawJson: string): boolean {
   }
 }
 
-/** Exact top-level-ish unsigned integer token extraction. Binance's depth message/snapshot schema
- * contains each target key exactly once. Refuse ambiguous/missing input instead of guessing. */
+/** Exact unsigned integer token extraction. Binance's accepted depth schema contains each target
+ * key exactly once. Refuse ambiguous/missing input instead of guessing. Parsed-location checks in
+ * the public parsers additionally prove the matching field exists in the expected object. */
 export function extractExactUnsignedInteger(rawJson: string, key: string): string {
   if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key)) throw new Error("invalid JSON key selector");
   const expression = new RegExp(`"${key}"\\s*:\\s*(\\d+)`, "g");
@@ -51,8 +62,8 @@ export function extractExactUnsignedInteger(rawJson: string, key: string): strin
 function exactLevelArray(value: unknown, name: string): [string, string][] {
   if (!Array.isArray(value)) throw new Error(`${name} must be an array`);
   return value.map((entry, index) => {
-    if (!Array.isArray(entry) || entry.length < 2) {
-      throw new Error(`${name}[${index}] must be a [price,quantity] tuple`);
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      throw new Error(`${name}[${index}] must be exactly a [price,quantity] tuple`);
     }
     if (typeof entry[0] !== "string" || typeof entry[1] !== "string") {
       throw new Error(`${name}[${index}] price/quantity must be strings`);
@@ -68,6 +79,8 @@ export function parseBinanceCombinedDepthRaw(rawJson: string): BinanceCombinedDe
   if (data.e !== "depthUpdate") throw new Error(`unexpected Binance event type: ${String(data.e)}`);
   if (typeof data.s !== "string" || !data.s.trim()) throw new Error("depth symbol missing");
   if (typeof data.E !== "number" || !Number.isSafeInteger(data.E)) throw new Error("depth event time E must be a safe integer");
+  requireUnsignedJsonIntegerField(data.U, "depth U");
+  requireUnsignedJsonIntegerField(data.u, "depth u");
 
   const expectedStream = `${data.s.toLowerCase()}@depth@100ms`;
   if (outer.stream.toLowerCase() !== expectedStream) {
@@ -90,6 +103,7 @@ export function parseBinanceCombinedDepthRaw(rawJson: string): BinanceCombinedDe
 
 export function parseBinanceDepthSnapshotRaw(rawJson: string): BinanceRawDepthSnapshot {
   const raw = objectRecord(JSON.parse(rawJson), "depth snapshot");
+  requireUnsignedJsonIntegerField(raw.lastUpdateId, "snapshot lastUpdateId");
   return {
     lastUpdateId: extractExactUnsignedInteger(rawJson, "lastUpdateId"),
     bids: exactLevelArray(raw.bids, "bids"),
