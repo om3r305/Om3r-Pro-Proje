@@ -64,6 +64,12 @@ jobs:
           supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/_shared/l2_book.ts
           supabase/functions/_shared/l2_book.test.ts
+          supabase/functions/_shared/binance_l2_wire.ts
+          supabase/functions/_shared/binance_l2_wire.test.ts
+          supabase/functions/_shared/l2_capture_session.ts
+          supabase/functions/_shared/l2_capture_session.test.ts
+          supabase/functions/_shared/l2_raw_segment.ts
+          supabase/functions/_shared/l2_raw_segment.test.ts
           supabase/functions/_shared/emergent_mover.ts
           supabase/functions/_shared/emergent_mover.test.ts
           supabase/functions/_shared/emergent_mover_coverage.ts
@@ -80,12 +86,18 @@ jobs:
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
+          workers/brian-l2-capture/config.ts
+          workers/brian-l2-capture/config.test.ts
+          workers/brian-l2-capture/storage.ts
+          workers/brian-l2-capture/worker.ts
+          workers/brian-l2-capture/main.ts
       - name: Run behavioral Deno tests
         run: >-
           deno test --allow-read
           supabase/functions/_shared
           supabase/functions/brian-intrabar-eye
           supabase/functions/brian-control-center
+          workers/brian-l2-capture
       - name: Lint edge-function TS
         run: >-
           deno lint
@@ -93,6 +105,12 @@ jobs:
           supabase/functions/_shared/collector_lease.test.ts
           supabase/functions/_shared/l2_book.ts
           supabase/functions/_shared/l2_book.test.ts
+          supabase/functions/_shared/binance_l2_wire.ts
+          supabase/functions/_shared/binance_l2_wire.test.ts
+          supabase/functions/_shared/l2_capture_session.ts
+          supabase/functions/_shared/l2_capture_session.test.ts
+          supabase/functions/_shared/l2_raw_segment.ts
+          supabase/functions/_shared/l2_raw_segment.test.ts
           supabase/functions/_shared/emergent_mover.ts
           supabase/functions/_shared/emergent_mover.test.ts
           supabase/functions/_shared/emergent_mover_coverage.ts
@@ -109,6 +127,11 @@ jobs:
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
+          workers/brian-l2-capture/config.ts
+          workers/brian-l2-capture/config.test.ts
+          workers/brian-l2-capture/storage.ts
+          workers/brian-l2-capture/worker.ts
+          workers/brian-l2-capture/main.ts
 
   verify-collector-lease:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
@@ -144,4 +167,5 @@ jobs:
           tests/test_brian2026_collector_lease_postgres.py
           tests/test_brian2026_emergent_mover_postgres.py
           tests/test_brian2026_control_center_postgres.py
+          tests/test_brian2026_l2_capture_postgres.py
           -v
