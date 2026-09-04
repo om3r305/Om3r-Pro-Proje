@@ -26,6 +26,7 @@ function v4UiPatch(){
 }
 
 addEventListener('load',()=>{
+  try{clearInterval(v3UniverseTimer);v3UniverseTimer=null}catch{}
   v4UiPatch();
   setTimeout(async()=>{try{await v4LoadHistory();v4ScheduleUniverse();connect();render()}catch(e){console.warn('dip-v4-init',e);toast('V4 market verisi yüklenemedi: '+String(e.message||e).slice(0,80))}},50);
 });
