@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Monster Coins Pro — Brian Control Center",
+  "short_name": "Monster Pro",
+  "description": "SHADOW-only observability dashboard for Brian Market OS.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "orientation": "any",
+  "categories": ["finance", "business", "productivity"],
+  "icons": [
+    {"src": "/logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}
