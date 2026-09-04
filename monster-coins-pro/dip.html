@@ -25,20 +25,20 @@
   </aside>
   <main class="main dipMain">
     <header class="top">
-      <div class="desktopTitle"><div class="eyebrow">Brian · Isolated Lab</div><h1>Aggressive Dip Expert V2</h1><div class="sub">Binance Spot · Brian chart uzmanı · adaptive dip / entry / exit / pozisyon büyüklüğü</div></div>
-      <div class="mobileBrand"><img src="/logo.svg" alt="Monster Pro"><div><div class="eyebrow">Monster Coins Pro</div><b>Dip Expert V2</b><div class="sub">SHADOW ONLY</div></div></div>
+      <div class="desktopTitle"><div class="eyebrow">Brian · Isolated Lab</div><h1>Aggressive Dip Expert V4</h1><div class="sub">Native 1m/5m/15m/1h · BTC regime · order-flow · book pressure · cost-aware shadow execution</div></div>
+      <div class="mobileBrand"><img src="/logo.svg" alt="Monster Pro"><div><div class="eyebrow">Monster Coins Pro</div><b>Dip Expert V4</b><div class="sub">SHADOW ONLY</div></div></div>
       <div id="onlinePill" class="statusPill"><span class="dot off"></span><span id="onlineText">CONNECTING</span></div>
     </header>
-    <div class="banner dipBanner"><div><strong>EXPERT V2 · AGGRESSIVE SHADOW</strong> · İlk açıldığı fiyatı dip saymaz. Önce Binance geçmişini okur, sonra session başladıktan sonra oluşan yeni dip/rebound'u bekler.</div><div id="sessionBanner" class="rightNote">SESSION YOK</div></div>
+    <div class="banner dipBanner"><div><strong>EXPERT V4 · SHADOW ONLY</strong> · Dip tek başına giriş değildir. V4 maliyet, BTC rejimi, 5m/15m/1h yapı, taker akışı ve order-book baskısını birlikte görmeden pozisyon açmaz.</div><div id="sessionBanner" class="rightNote">SESSION YOK</div></div>
 
     <section class="card dipControl" id="dipSettings">
       <div class="expertTopGrid">
         <div class="group"><label>Ayrı sanal kasa (USDT)</label><div class="capitalEditor"><span>$</span><input id="capitalInput" type="number" inputmode="decimal" min="10" max="1000000" step="50" value="500"></div></div>
         <div class="group"><label>Uzmanın kullanabileceği kasa</label><div class="capitalEditor expertLocked"><span>$</span><input id="tradeInput" type="number" value="500" disabled><b>AI</b></div></div>
-        <div class="expertModeCard"><span class="badge green">CHART EXPERT V2</span><b>Giriş + çıkış + işlem büyüklüğü otomatik</b><small>Structure · trend · momentum · volume · mean reversion · ATR</small></div>
+        <div class="expertModeCard"><span class="badge green">MICROSTRUCTURE EXPERT V4</span><b>Rejim + order flow + gerçek spread/depth + risk sizing</b><small>12 dinamik market · max 2 pozisyon · 1x validation · BTC beta · 5m structure</small></div>
       </div>
 
-      <div class="symbolPicker"><div class="pickerTitle"><b>Favori Coinler</b><span>6 likit altcoin · her biri ayrı dip state</span></div><div id="symbolButtons" class="symbolButtons"><button class="symbolToggle active" data-symbol="ETHUSDT">ETH</button><button class="symbolToggle active" data-symbol="XRPUSDT">XRP</button><button class="symbolToggle active" data-symbol="SOLUSDT">SOL</button><button class="symbolToggle active" data-symbol="BNBUSDT">BNB</button><button class="symbolToggle active" data-symbol="DOGEUSDT">DOGE</button><button class="symbolToggle active" data-symbol="ADAUSDT">ADA</button></div></div>
+      <div class="symbolPicker"><div class="pickerTitle"><b>Otomatik Market Scanner</b><span>V4 otomatik tarar · bu butonlar yalnız eski fallback görünümüdür</span></div><div id="symbolButtons" class="symbolButtons"><button class="symbolToggle active" data-symbol="ETHUSDT">ETH</button><button class="symbolToggle active" data-symbol="XRPUSDT">XRP</button><button class="symbolToggle active" data-symbol="SOLUSDT">SOL</button><button class="symbolToggle active" data-symbol="BNBUSDT">BNB</button><button class="symbolToggle active" data-symbol="DOGEUSDT">DOGE</button><button class="symbolToggle active" data-symbol="ADAUSDT">ADA</button></div></div>
 
       <details class="expertFallback"><summary>Teknik fallback / paper cost ayarları</summary><div class="dipControlGrid fallbackGrid">
         <div class="group"><label>V1 kademe</label><div class="inlineUnit"><input id="stepPctInput" type="number" min="0.01" max="10" step="0.01" value="0.15"><span>%</span></div></div>
@@ -49,34 +49,44 @@
         <div class="group compactCosts"><label>Paper cost</label><div class="costPair"><span>Fee</span><input id="feeInput" type="number" min="0" max="500" step="1" value="10"><span>bps</span><span>Slip</span><input id="slippageInput" type="number" min="0" max="500" step="1" value="1"><span>bps</span></div></div>
       </div></details>
 
-      <div class="dipActions"><button id="startBtn" class="btn green">▶ Expert V2 Başlat</button><button id="restartBtn" class="btn amberBtn">↻ Yeni Kasa ile Restart</button><button id="pauseBtn" class="btn purple">Ⅱ Pause</button><a class="btn ghost linkBtn" href="/">← Ana Dashboard</a></div>
-      <div class="dipRuleLine">Yeni kural: <b>120 tamamlanmış Binance 1m mumundan baseline</b> → session sonrası yeni düşük fiyat oluşmadan ALMA → Brian chart uzmanı kalite/volatiliteyi hesaplasın → dipten <b id="ruleRebound">AI</b> dönüşte adaptif BUY → maliyetin üstünde uzman hedefi / momentum fade ile <b id="ruleTp">AI</b> SELL. Açılış fiyatı artık dip değildir.</div>
+      <div class="dipActions"><button id="startBtn" class="btn green">▶ Expert V4 Başlat</button><button id="restartBtn" class="btn amberBtn">↻ V4 Temiz Kasa ile Restart</button><button id="pauseBtn" class="btn purple">Ⅱ Pause</button><a class="btn ghost linkBtn" href="/">← Ana Dashboard</a></div>
+      <div class="dipRuleLine">V4: <b>dip = radar</b> → native 5m ATR ile yeterli hareket → BTC/15m/1h rejim → <b>OFI + bid/ask pressure</b> ile dönüş onayı → beklenen move en az <b>2.5× gerçekçi round-trip cost</b> → risk tabanlı size → max 2 pozisyon → 5m structure / flow / hard-time / target-trail çıkışı.</div>
     </section>
 
     <section class="kpis dipKpis">
       <article class="card kpi"><div class="label">Dip Equity</div><div id="kpiEquity" class="value">$500.00</div><div id="kpiEquityMeta" class="meta">ayrı shadow kasa</div></article>
       <article class="card kpi"><div class="label">Realized P&amp;L</div><div id="kpiPnl" class="value">$0.00</div><div id="kpiPnlMeta" class="meta">fee + slippage dahil</div></article>
-      <article class="card kpi"><div class="label">Açık Pozisyon</div><div id="kpiOpen" class="value">0</div><div id="kpiOpenMeta" class="meta">6 coin radar</div></article>
-      <article class="card kpi"><div class="label">Win Rate</div><div id="kpiWin" class="value">—</div><div id="kpiWinMeta" class="meta">kapanan dip işlemleri</div></article>
-      <article class="card kpi"><div class="label">İşlem</div><div id="kpiTrades" class="value">0</div><div id="kpiTradesMeta" class="meta">BUY + SELL çiftleri</div></article>
-      <article class="card kpi"><div class="label">Engine</div><div id="kpiEngine" class="value amber">IDLE</div><div id="kpiEngineMeta" class="meta">Chart Expert V2</div></article>
+      <article class="card kpi"><div class="label">Açık Pozisyon</div><div id="kpiOpen" class="value">0</div><div id="kpiOpenMeta" class="meta">max 2 · V4 heat guard</div></article>
+      <article class="card kpi"><div class="label">Win Rate</div><div id="kpiWin" class="value">—</div><div id="kpiWinMeta" class="meta">kapanan işlemler</div></article>
+      <article class="card kpi"><div class="label">İşlem</div><div id="kpiTrades" class="value">0</div><div id="kpiTradesMeta" class="meta">kapalı round trips</div></article>
+      <article class="card kpi"><div class="label">Engine</div><div id="kpiEngine" class="value amber">V4 IDLE</div><div id="kpiEngineMeta" class="meta">micro + HTF + cost gate</div></article>
     </section>
 
     <div class="dipLayout">
       <div class="dipStack">
-        <section class="card panel dipChartPanel" id="chartPanel"><div class="head chartHead"><div><div class="title"><span id="chartSymbol">ETHUSDT</span> · 1m</div><div id="chartSub" class="note">Binance Spot + Brian Chart Expert V2</div></div><div class="chartHeadRight"><div id="lastPrice" class="livePrice">—</div><span id="sourceBadge" class="badge green">BINANCE SPOT</span></div></div><div id="chartWrap" class="candleWrap"><canvas id="candleCanvas"></canvas><div id="chartOverlay" class="chartOverlay"><span>Binance baseline yükleniyor…</span></div></div><div class="chartLegend"><span><i class="legendDot ma7"></i>Structure Ref</span><span><i class="legendDot dip"></i>DİP</span><span><i class="legendDot buy"></i>BUY</span><span><i class="legendDot sell"></i>SELL</span></div></section>
+        <section class="card panel dipChartPanel" id="chartPanel"><div class="head chartHead"><div><div class="title"><span id="chartSymbol">ETHUSDT</span> · 1m</div><div id="chartSub" class="note">Binance Spot + V4 native timeframe context</div></div><div class="chartHeadRight"><div id="lastPrice" class="livePrice">—</div><span id="sourceBadge" class="badge green">BINANCE SPOT</span></div></div><div id="chartWrap" class="candleWrap"><canvas id="candleCanvas"></canvas><div id="chartOverlay" class="chartOverlay"><span>V4 native timeframe verisi yükleniyor…</span></div></div><div class="chartLegend"><span><i class="legendDot ma7"></i>Structure Ref</span><span><i class="legendDot dip"></i>DİP</span><span><i class="legendDot buy"></i>BUY</span><span><i class="legendDot sell"></i>SELL</span></div></section>
 
-        <section class="card panel" id="dipLog"><div class="head"><div><div class="title">Dip / Buy / Sell Log</div><div class="note">Kayıtlar burada sabit pencerede kalır; içeride yukarı-aşağı kaydır</div></div><span class="badge green">APPEND ONLY</span></div><div class="tableWrap dipLogScroll"><table class="table dipTable"><thead><tr><th>Zaman</th><th>Olay</th><th>Coin</th><th>Fiyat</th><th>Dip</th><th>Entry</th><th>P&amp;L</th><th>Not</th></tr></thead><tbody id="eventRows"><tr><td colspan="8">Henüz dip olayı yok.</td></tr></tbody></table></div></section>
+        <section class="card panel" id="dipLog"><div class="head"><div><div class="title">Dip / Buy / Sell Log</div><div class="note">V4 giriş/çıkış + funnel telemetrisi · sabit kaydırılabilir pencere</div></div><span class="badge green">APPEND ONLY</span></div><div class="tableWrap dipLogScroll"><table class="table dipTable"><thead><tr><th>Zaman</th><th>Olay</th><th>Coin</th><th>Fiyat</th><th>Dip</th><th>Entry</th><th>P&amp;L</th><th>Not</th></tr></thead><tbody id="eventRows"><tr><td colspan="8">Henüz V4 olayı yok.</td></tr></tbody></table></div></section>
       </div>
 
       <div class="dipStack right" id="watchlist">
-        <section class="card panel"><div class="head"><div><div class="title">Coin Radar · Expert</div><div class="note">Ref low + adaptive dip / buy / sell / size canlı görünür</div></div><span id="radarStatus" class="badge">WAIT</span></div><div id="coinRadar" class="coinRadar"></div></section>
-        <section class="card panel"><div class="head"><div><div class="title">Brian Chart Expert</div><div class="note">Mevcut Brian uzmanlarının mantığı Dip Lab'a izole adaptör olarak taşındı</div></div><span class="badge green">V2</span></div><div class="logicSteps"><div><b>1</b><span>120 kapalı Binance mumundan ATR, EMA, RSI, z-score ve yapısal swing low/high çıkarır.</span></div><div><b>2</b><span>Structure + trend + momentum + volume + mean-reversion oylarını ağırlıklandırır.</span></div><div><b>3</b><span>Session açılış fiyatını dip kabul etmez; yeni post-start low şarttır.</span></div><div><b>4</b><span>Her coin için dip derinliğini ve rebound mesafesini volatiliteye göre ayrı belirler.</span></div><div><b>5</b><span>İşlem büyüklüğünü uzman güvenine göre kasanın yaklaşık %4–24'ü arasında seçer.</span></div><div><b>6</b><span>Hedefi fee+slippage maliyetinin üstünde kurar; kâr ilerledikten sonra momentum sönerse erken çıkar.</span></div></div><div class="analysisOnly">Bu V2, normal Brian'ın frozen Phase 3.7 kararlarını değiştirmez. Aynı uzman mantığını yalnızca ayrı SHADOW Dip Lab verisine uygular.</div></section>
+        <section class="card panel"><div class="head"><div><div class="title">Coin Radar · Expert V4</div><div class="note">Edge/cost · ATR5 · OFI · book pressure · BTC beta · veto nedeni</div></div><span id="radarStatus" class="badge">WAIT</span></div><div id="coinRadar" class="coinRadar"></div></section>
+        <section class="card panel"><div class="head"><div><div class="title">Brian Microstructure Expert</div><div class="note">V4 yalnız Dip Lab içinde; normal Brian frozen kalır</div></div><span class="badge green">V4</span></div><div class="logicSteps"><div><b>1</b><span>Binance evreninden likit/hareketli marketleri tarar; maliyet başına hareketi düşük olanı eler.</span></div><div><b>2</b><span>Native 1m + 5m + 15m + 1h ve BTC rejimi/beta ile altcoin hareketini piyasa dumpından ayırır.</span></div><div><b>3</b><span>Dip sadece adaydır; aggTrade order-flow ve depth5 bid/ask pressure dönüşü doğrulamadan LONG yok.</span></div><div><b>4</b><span>SHORT yalnız USD-M perpetual marketi olan coinde, futures tape/book ve HTF düşüşüyle simüle edilir.</span></div><div><b>5</b><span>Beklenen hareket maliyetin 2.5 katından küçükse işlem yok; stop/target en az 1.35 R:R korunur.</span></div><div><b>6</b><span>Max 2 pozisyon, portfolio heat, pair-loss guard, global stop guard ve sert time-exit sermayeyi korur.</span></div></div><div class="analysisOnly">SHADOW/PAPER ONLY. V4 gerçek emir göndermez ve frozen Phase 3.7 karar ağacına import edilmez.</div></section>
         <section class="card panel"><div class="head"><div><div class="title">Session / Cloud</div><div class="note">telefon ve PC aynı append-only logu görür</div></div></div><div class="healthGrid"><div class="row"><div><div class="rtitle">Dip Session</div><div id="sessionTimes" class="rmeta">—</div></div><b id="sessionState" class="amber">IDLE</b></div><div class="row"><div><div class="rtitle">Binance Feed</div><div id="feedMeta" class="rmeta">bağlanıyor</div></div><b id="feedState" class="amber">WAIT</b></div><div class="row"><div><div class="rtitle">Cloud Log</div><div id="cloudMeta" class="rmeta">Supabase brian-dip-trader</div></div><b id="cloudState" class="amber">CHECK</b></div></div><div class="lockBanner">🔒 Gerçek Binance order endpoint yok. Bu bölümün bakiyesi ve işlemleri ana Brian Control Center'dan tamamen ayrıdır.</div></section>
       </div>
     </div>
   </main>
 </div>
 <nav class="bottomNav dipBottomNav"><a href="/"><span>▦</span><span>Dashboard</span></a><a class="active" href="/dip.html"><span>⚡</span><span>Dip</span></a><a href="#chartPanel"><span>⌁</span><span>Grafik</span></a><a href="#watchlist"><span>◈</span><span>Radar</span></a><a href="#dipSettings"><span>⚙</span><span>Ayar</span></a></nav>
-<div id="toast" class="toast"></div><script src="/dip.js" defer></script><script src="/dip-expert-v2.js" defer></script><script src="/dip-expert-v3.js" defer></script>
+<div id="toast" class="toast"></div>
+<script src="/dip.js" defer></script>
+<script src="/dip-expert-v2.js" defer></script>
+<script src="/dip-expert-v3.js" defer></script>
+<script src="/dip-expert-v4-core.js" defer></script>
+<script src="/dip-expert-v4-market.js" defer></script>
+<script src="/dip-expert-v4-risk.js" defer></script>
+<script src="/dip-expert-v4-engine.js" defer></script>
+<script src="/dip-expert-v4-streams.js" defer></script>
+<script src="/dip-expert-v4-session.js" defer></script>
+<script src="/dip-expert-v4-ui.js" defer></script>
 </body></html>
