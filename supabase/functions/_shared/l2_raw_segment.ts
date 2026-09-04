@@ -1,9 +1,9 @@
-// Lossless-ish raw L2 segment framing for Brian 2026 capture.
+// Lossless raw L2 segment framing for Brian 2026 capture.
 //
-// Each line embeds the venue JSON text verbatim as the value of `raw`. This preserves the raw
-// integer/decimal lexemes for audit even when downstream JSON parsers would otherwise coerce a
-// large integer through JS Number. The normalized event table is ordered separately by the same
-// collector_session_id + arrival_seq pair.
+// Each line embeds the venue JSON text verbatim as the value of `raw`. This preserves raw integer
+// and decimal lexemes for audit even when a downstream JSON parser would coerce a large integer
+// through JS Number. Every raw L2 transport arrival in a collector session is assigned a sequence,
+// so a persisted segment must be contiguous as well as ordered.
 
 export type L2RawSource = "binance_spot_diff_depth_ws" | "binance_spot_rest_depth_snapshot";
 
@@ -55,7 +55,7 @@ export function buildRawL2Segment(items: RawL2Item[]): RawL2Segment {
   const session = items[0].collectorSessionId.trim();
   if (!session) throw new Error("collectorSessionId is required");
 
-  let prior = 0;
+  let prior: number | null = null;
   let observedAt = "";
   const lines: string[] = [];
   for (const [index, item] of items.entries()) {
@@ -63,7 +63,9 @@ export function buildRawL2Segment(items: RawL2Item[]): RawL2Segment {
     ensurePositiveSafeInteger(item.arrivalSeq, `items[${index}].arrivalSeq`);
     ensurePositiveSafeInteger(item.connectionGeneration, `items[${index}].connectionGeneration`);
     ensurePositiveSafeInteger(item.syncGeneration, `items[${index}].syncGeneration`);
-    if (item.arrivalSeq <= prior) throw new Error("raw L2 segment arrival_seq must be strictly increasing");
+    if (prior !== null && item.arrivalSeq !== prior + 1) {
+      throw new Error(`raw L2 segment arrival_seq must be contiguous; expected ${prior + 1}, got ${item.arrivalSeq}`);
+    }
     prior = item.arrivalSeq;
     if (!item.symbol.trim()) throw new Error(`items[${index}].symbol is required`);
     const receivedMs = Date.parse(item.collectorReceivedAt);
