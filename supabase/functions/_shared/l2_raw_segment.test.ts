@@ -9,7 +9,7 @@ function item(arrivalSeq: number, rawJson: string, overrides: Partial<RawL2Item>
     syncGeneration: 1,
     source: "binance_spot_diff_depth_ws",
     symbol: "BTCUSDT",
-    collectorReceivedAt: `2026-09-04T10:00:0${arrivalSeq}.000Z`,
+    collectorReceivedAt: `2026-09-04T10:00:0${Math.min(arrivalSeq, 9)}.000Z`,
     rawJson,
     ...overrides,
   };
@@ -32,10 +32,11 @@ Deno.test("raw L2 segment preserves exact raw integer/decimal lexemes and total 
   assert(segment.ndjson.indexOf('"arrival_seq":1') < segment.ndjson.indexOf('"arrival_seq":2'));
 });
 
-Deno.test("raw L2 segment rejects mixed sessions, duplicates/out-of-order sequence and malformed JSON", () => {
+Deno.test("raw L2 segment rejects mixed sessions, duplicate/gapped sequence and malformed JSON", () => {
   assertThrows(() => buildRawL2Segment([
     item(1, "{}"), item(2, "{}", { collectorSessionId: "session-b" }),
   ]), Error, "cannot mix");
-  assertThrows(() => buildRawL2Segment([item(2, "{}"), item(2, "{}")]), Error, "strictly increasing");
+  assertThrows(() => buildRawL2Segment([item(2, "{}"), item(2, "{}")]), Error, "contiguous");
+  assertThrows(() => buildRawL2Segment([item(10, "{}"), item(12, "{}")] ), Error, "expected 11");
   assertThrows(() => buildRawL2Segment([item(1, "{bad")]), SyntaxError);
 });
