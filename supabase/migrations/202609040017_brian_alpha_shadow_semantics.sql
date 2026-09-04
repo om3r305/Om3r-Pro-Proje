@@ -28,7 +28,7 @@ declare
 begin
   -- First determine whether this decision is later than the latest already-materialized state.
   -- This mirrors capture_alpha_shadow_position_event()'s <= out-of-order/same-time guard without
-  -- reading a future event as if it existed at the decision timestamp.
+  -- reading an event newer than the decision timestamp as if it were causal evidence.
   select event_ts
     into latest_event_ts
     from public.brian_alpha_shadow_position_events
@@ -42,7 +42,7 @@ begin
       into causal_prior_position
       from public.brian_alpha_shadow_position_events
      where asset_id=new.asset_id
-       and event_ts < new.observed_at
+       and event_ts <= new.observed_at
      order by event_ts desc,created_at desc,event_id desc
      limit 1;
     alpha_intent := coalesce(causal_prior_position,0);
