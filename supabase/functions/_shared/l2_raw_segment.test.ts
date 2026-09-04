@@ -32,11 +32,20 @@ Deno.test("raw L2 segment preserves exact raw integer/decimal lexemes and total 
   assert(segment.ndjson.indexOf('"arrival_seq":1') < segment.ndjson.indexOf('"arrival_seq":2'));
 });
 
-Deno.test("raw L2 segment rejects mixed sessions, duplicate/gapped sequence and malformed JSON", () => {
+Deno.test("raw L2 segment retains malformed provider text with null unknown lineage", () => {
+  const segment = buildRawL2Segment([
+    item(1, "{bad", { symbol: null, syncGeneration: null }),
+  ]);
+  assert(segment.ndjson.includes('"raw_valid_json":false'));
+  assert(segment.ndjson.includes('"raw_text":"{bad"'));
+  assert(segment.ndjson.includes('"symbol":null'));
+  assert(segment.ndjson.includes('"sync_generation":null'));
+});
+
+Deno.test("raw L2 segment rejects mixed sessions and duplicate/gapped sequence", () => {
   assertThrows(() => buildRawL2Segment([
     item(1, "{}"), item(2, "{}", { collectorSessionId: "session-b" }),
   ]), Error, "cannot mix");
   assertThrows(() => buildRawL2Segment([item(2, "{}"), item(2, "{}")]), Error, "contiguous");
   assertThrows(() => buildRawL2Segment([item(10, "{}"), item(12, "{}")] ), Error, "expected 11");
-  assertThrows(() => buildRawL2Segment([item(1, "{bad")]), SyntaxError);
 });
