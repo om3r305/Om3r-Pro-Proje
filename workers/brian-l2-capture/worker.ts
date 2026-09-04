@@ -207,13 +207,12 @@ export class BrianRealL2Worker {
     }
     this.activeSocket = ws;
 
-    // Install the close observer immediately after OPEN so a close during any later DB/session
-    // write cannot be missed and leave the connection cycle waiting forever.
     const closePromise = new Promise<{ code: number; reason: string }>((resolve) => {
       ws.addEventListener("close", (event) => resolve({ code: event.code, reason: event.reason }), { once: true });
     });
 
     let fatal: FatalCaptureError | null = null;
+    const readFatal = (): FatalCaptureError | null => fatal;
     let processing: Promise<void> = Promise.resolve();
     const snapshotLoops = new Map<string, Promise<void>>();
 
@@ -227,8 +226,6 @@ export class BrianRealL2Worker {
         if (fatal) throw fatal;
         return await work();
       });
-      // Keep the serializer alive long enough to drain/observe the fatal state; never silently
-      // continue meaningful capture work after the first failure.
       processing = task.then(() => undefined, (error) => markFatal(error));
       return task;
     };
@@ -260,8 +257,6 @@ export class BrianRealL2Worker {
       }).catch(() => undefined);
     });
     ws.addEventListener("error", () => {
-      // Once OPEN, WebSocket errors are transport failures. The close event drives a clean new
-      // connection generation; data-integrity failures use markFatal instead.
       try { ws.close(); } catch { /* ignored */ }
     });
 
@@ -316,14 +311,15 @@ export class BrianRealL2Worker {
         arrivalSeqBoundary: this.session.currentArrivalSeq(),
         details: { code: closeInfo.code, reason: closeInfo.reason },
       });
-      if (fatal) {
+      const fatalForLog = readFatal();
+      if (fatalForLog) {
         await this.sink.recordSessionEvent({
           collectorSessionId: this.session.collectorSessionId,
           eventKind: "FAILED",
           venue: BINANCE_VENUE,
           connectionGeneration,
           arrivalSeqBoundary: this.session.currentArrivalSeq(),
-          details: { error: fatal.message },
+          details: { error: fatalForLog.message },
         });
       }
     } catch (error) {
@@ -332,7 +328,8 @@ export class BrianRealL2Worker {
       this.activeSocket = null;
     }
 
-    if (fatal) throw fatal;
+    const fatalAfterFinalize = readFatal();
+    if (fatalAfterFinalize) throw fatalAfterFinalize;
     if (!this.stopped) {
       throw new Error(`Binance L2 WebSocket closed (${closeInfo.code}: ${closeInfo.reason})`);
     }
@@ -343,17 +340,14 @@ export class BrianRealL2Worker {
     collectorReceivedAt: string,
     connectionGeneration: number,
   ): Promise<DiffCaptureResult> {
-    // Reserve order before JSON parse/normalization.
     const arrivalSeq = this.session.reserveArrivalSeq();
     let symbol: string | null = null;
     let result: DiffCaptureResult;
 
-    // Only parse/normalize/state-transition failures take the raw-only forensic path. Persistence
-    // failures after a normalized append must NOT append the same arrival a second time.
     try {
       const wire = parseBinanceCombinedDepthRaw(rawJson);
       symbol = wire.data.s.toUpperCase();
-      this.session.state(symbol); // fail unknown/config-mismatched symbol before state mutation
+      this.session.state(symbol);
       const normalized = binanceDepthDiffAdapter.normalize(wire.data, {
         collectorReceivedAt,
         ingestAt: new Date().toISOString(),
@@ -419,13 +413,12 @@ export class BrianRealL2Worker {
     return result;
   }
 
-  private async snapshotLoop<T>(
+  private async snapshotLoop(
     symbol: string,
     connectionGeneration: number,
     signal: AbortSignal,
     enqueue: <R>(work: () => Promise<R> | R) => Promise<R>,
   ): Promise<void> {
-    void (null as T | null); // keeps generic caller type erased; no runtime significance
     let retryMs = SNAPSHOT_RETRY_MIN_MS;
     while (!signal.aborted && !this.stopped) {
       const state = this.session.state(symbol);
