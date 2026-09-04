@@ -3,7 +3,7 @@
 //
 // `last_price` across consecutive prospective frames is used for the actual short-horizon
 // price displacement. Binance 24h price-change/volume/trade-count fields are rolling-window
-// measurements; their deltas are kept as diagnostics and are never mislabeled as interval flow.
+// measurements; their deltas are diagnostics and are never mislabeled as interval flow.
 
 export const EMERGENT_MOVER_FRAME_SCHEMA = "brian.emergent-mover-frame.v1" as const;
 export const EMERGENT_MOVER_REPORT_SCHEMA = "brian.emergent-mover-report.v1" as const;
@@ -107,7 +107,9 @@ export const DEFAULT_EMERGENT_MOVER_CONFIG: EmergentMoverConfig = Object.freeze(
 });
 
 function requiredNumber(value: unknown, name: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${name} must be a finite number`);
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${name} must be a finite number`);
+  }
   return value;
 }
 
@@ -140,7 +142,8 @@ export function percentileRanks(values: number[]): number[] {
   values.forEach((value, i) => requiredNumber(value, `values[${i}]`));
   if (!values.length) return [];
   if (values.length === 1) return [1];
-  const order = values.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value || a.index - b.index);
+  const order = values.map((value, index) => ({ value, index }))
+    .sort((a, b) => a.value - b.value || a.index - b.index);
   const out = new Array<number>(values.length).fill(0);
   const denominator = values.length - 1;
   for (let start = 0; start < order.length;) {
@@ -193,7 +196,9 @@ export function buildEmergentMoverFrame(
     const high = nonNegative(input.high_price_24h, `rows[${i}].high_price_24h`);
     const low = nonNegative(input.low_price_24h, `rows[${i}].low_price_24h`);
     if (high < low) throw new Error(`rows[${i}] high cannot be below low`);
-    const spread = input.spread_bps === null ? null : nonNegative(input.spread_bps, `rows[${i}].spread_bps`);
+    const spread = input.spread_bps === null
+      ? null
+      : nonNegative(input.spread_bps, `rows[${i}].spread_bps`);
     return { symbol, last, volume, trades, change, range: 100 * (high - low) / last, spread };
   }).sort((a, b) => a.symbol.localeCompare(b.symbol));
 
@@ -278,14 +283,29 @@ function topReasons(items: Array<{ label: string; rank: number }>): string[] {
     .map((item) => item.label);
 }
 
+/**
+ * Relative-rank movement can strengthen evidence, but it cannot create a mover by itself.
+ * At least one observable on the symbol itself must change in an emergence-like direction.
+ */
+export function hasSelfEmergenceEvidence(features: EmergentMoverFeatures): boolean {
+  return features.price_impulse_abs_pct > 0 ||
+    features.range_delta_pct > 0 ||
+    features.quote_volume_log_delta > 0 ||
+    features.trades_log_delta > 0;
+}
+
 export function buildEmergentMoverReport(
   previous: EmergentMoverFrame | null,
   current: EmergentMoverFrame,
   config: EmergentMoverConfig = DEFAULT_EMERGENT_MOVER_CONFIG,
 ): EmergentMoverReport {
   const now = parseEmergentMoverFrame(current);
-  if (!Number.isInteger(config.max_candidates) || config.max_candidates <= 0) throw new Error("max_candidates must be a positive integer");
-  if (!Number.isFinite(config.max_comparison_age_ms) || config.max_comparison_age_ms <= 0) throw new Error("max_comparison_age_ms must be positive");
+  if (!Number.isInteger(config.max_candidates) || config.max_candidates <= 0) {
+    throw new Error("max_candidates must be a positive integer");
+  }
+  if (!Number.isFinite(config.max_comparison_age_ms) || config.max_comparison_age_ms <= 0) {
+    throw new Error("max_comparison_age_ms must be positive");
+  }
   const base = {
     schema_version: EMERGENT_MOVER_REPORT_SCHEMA,
     source: now.source,
@@ -293,6 +313,7 @@ export function buildEmergentMoverReport(
     measurement_notes: [
       "research_attention_only_no_trade_action",
       "short_return_uses_consecutive_frame_last_price",
+      "relative_rank_change_cannot_create_candidate_without_symbol_self_evidence",
       "24h_price_change_quote_volume_and_trade_count_deltas_are_rolling_window_displacement_not_interval_flow",
       "newly_observed_symbols_require_a_later_frame_before_mover_ranking",
     ],
@@ -300,9 +321,17 @@ export function buildEmergentMoverReport(
     shadow_only: true as const,
   };
   if (previous === null) {
-    return { ...base, baseline_observed_at: null, comparison_age_ms: null, comparable: false,
-      comparison_issue: "no_baseline", compared_symbol_count: 0, newly_observed_symbols: [],
-      disappeared_symbols: [], candidates: [] };
+    return {
+      ...base,
+      baseline_observed_at: null,
+      comparison_age_ms: null,
+      comparable: false,
+      comparison_issue: "no_baseline",
+      compared_symbol_count: 0,
+      newly_observed_symbols: [],
+      disappeared_symbols: [],
+      candidates: [],
+    };
   }
 
   const before = parseEmergentMoverFrame(previous);
@@ -312,9 +341,17 @@ export function buildEmergentMoverReport(
   if (nowMs <= beforeMs) throw new Error("emergent frames must be chronological");
   const ageMs = nowMs - beforeMs;
   if (ageMs > config.max_comparison_age_ms) {
-    return { ...base, baseline_observed_at: before.observed_at, comparison_age_ms: ageMs,
-      comparable: false, comparison_issue: "comparison_too_old", compared_symbol_count: 0,
-      newly_observed_symbols: [], disappeared_symbols: [], candidates: [] };
+    return {
+      ...base,
+      baseline_observed_at: before.observed_at,
+      comparison_age_ms: ageMs,
+      comparable: false,
+      comparison_issue: "comparison_too_old",
+      compared_symbol_count: 0,
+      newly_observed_symbols: [],
+      disappeared_symbols: [],
+      candidates: [],
+    };
   }
 
   const oldMap = new Map(before.rows.map((row) => [row.symbol, row]));
@@ -383,14 +420,26 @@ export function buildEmergentMoverReport(
       evidence_class: "PROSPECTIVE_DEVELOPMENT_SHADOW" as const,
       shadow_only: true as const,
     };
-  }).sort((a, b) => b.attention_score - a.attention_score ||
-    b.features.price_impulse_abs_pct - a.features.price_impulse_abs_pct || a.symbol.localeCompare(b.symbol));
+  }).sort((a, b) =>
+    b.attention_score - a.attention_score ||
+    b.features.price_impulse_abs_pct - a.features.price_impulse_abs_pct ||
+    a.symbol.localeCompare(b.symbol)
+  );
 
-  const candidates = ranked.filter((candidate) => candidate.attention_score > 0)
+  const candidates = ranked
+    .filter((candidate) => candidate.attention_score > 0 && hasSelfEmergenceEvidence(candidate.features))
     .slice(0, config.max_candidates)
     .map((candidate, i) => ({ ...candidate, rank: i + 1 }));
 
-  return { ...base, baseline_observed_at: before.observed_at, comparison_age_ms: ageMs,
-    comparable: true, comparison_issue: null, compared_symbol_count: common.length,
-    newly_observed_symbols: newlyObserved, disappeared_symbols: disappeared, candidates };
+  return {
+    ...base,
+    baseline_observed_at: before.observed_at,
+    comparison_age_ms: ageMs,
+    comparable: true,
+    comparison_issue: null,
+    compared_symbol_count: common.length,
+    newly_observed_symbols: newlyObserved,
+    disappeared_symbols: disappeared,
+    candidates,
+  };
 }
