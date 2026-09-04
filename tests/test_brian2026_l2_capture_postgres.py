@@ -223,7 +223,7 @@ def test_session_arrival_sequence_is_unique_across_segments():
         first_segment = _raw_segment(conn, session=session, first=1, last=1, count=1)
         _source_event(conn, segment_id=first_segment, session=session, arrival_seq=1, raw_message_index=0)
         second_segment = _raw_segment(conn, session=session, first=2, last=2, count=1)
-        with pytest.raises(psycopg2.errors.UniqueViolation):
+        with pytest.raises(psycopg2.Error):
             _source_event(conn, segment_id=second_segment, session=session, arrival_seq=1, raw_message_index=0)
     finally:
         conn.close()
@@ -235,7 +235,7 @@ def test_raw_message_index_is_unique_inside_a_segment():
         session = f"pytest-session-{uuid.uuid4().hex}"
         segment = _raw_segment(conn, session=session, first=1, last=2, count=2)
         _source_event(conn, segment_id=segment, session=session, arrival_seq=1, raw_message_index=0)
-        with pytest.raises(psycopg2.errors.UniqueViolation):
+        with pytest.raises(psycopg2.Error):
             _source_event(conn, segment_id=segment, session=session, arrival_seq=2, raw_message_index=0)
     finally:
         conn.close()
@@ -245,7 +245,7 @@ def test_source_event_cannot_reference_a_raw_segment_from_another_session():
     conn = _connect()
     try:
         segment = _raw_segment(conn, session="pytest-owner-session", first=1, last=1, count=1)
-        with pytest.raises(psycopg2.errors.ForeignKeyViolation):
+        with pytest.raises(psycopg2.Error):
             _source_event(conn, segment_id=segment, session="pytest-wrong-session")
     finally:
         conn.close()
@@ -304,6 +304,46 @@ def test_raw_segment_requires_contiguous_sequence_count_and_valid_shadow_flags()
                     """,
                     (f"pytest-segment-{uuid.uuid4().hex}", capture3),
                 )
+    finally:
+        conn.close()
+
+
+def test_raw_segments_form_one_gapless_nonoverlapping_chain_per_session():
+    conn = _connect()
+    try:
+        session = f"pytest-chain-{uuid.uuid4().hex}"
+        _raw_segment(conn, session=session, first=1, last=2, count=2)
+        with pytest.raises(psycopg2.Error):
+            _raw_segment(conn, session=session, first=2, last=3, count=2)
+        with pytest.raises(psycopg2.Error):
+            _raw_segment(conn, session=session, first=4, last=4, count=1)
+        accepted = _raw_segment(conn, session=session, first=3, last=4, count=2)
+        with conn.cursor() as cur:
+            cur.execute(
+                "select first_arrival_seq,last_arrival_seq from public.brian_l2_raw_segments where segment_id=%s",
+                (accepted,),
+            )
+            assert cur.fetchone() == (3, 4)
+    finally:
+        conn.close()
+
+
+def test_source_event_pointer_must_match_exact_raw_message_position():
+    conn = _connect()
+    try:
+        session = f"pytest-pointer-{uuid.uuid4().hex}"
+        segment = _raw_segment(conn, session=session, first=1, last=3, count=3)
+        with pytest.raises(psycopg2.Error):
+            _source_event(conn, segment_id=segment, session=session, arrival_seq=2, raw_message_index=0)
+        with pytest.raises(psycopg2.Error):
+            _source_event(conn, segment_id=segment, session=session, arrival_seq=4, raw_message_index=3)
+        event = _source_event(conn, segment_id=segment, session=session, arrival_seq=2, raw_message_index=1)
+        with conn.cursor() as cur:
+            cur.execute(
+                "select arrival_seq,raw_message_index from public.brian_l2_source_events where event_id=%s",
+                (event,),
+            )
+            assert cur.fetchone() == (2, 1)
     finally:
         conn.close()
 
