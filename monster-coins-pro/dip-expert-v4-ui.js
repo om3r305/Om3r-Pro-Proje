@@ -1,3 +1,17 @@
+// Final V4 execution override: model book-walk impact relative to touch, not mid, and use the correct side of book.
+v4ImpactBps=function(sym,venue='SPOT',notional=100,bookSide='BUY'){
+  const x=(venue==='USDM_PERP'?v4PerpBook[sym]:v4SpotBook[sym])||{},levels=bookSide==='SELL'?(x.bids||[]):(x.asks||[]);
+  if(!levels.length)return 2;const touch=Number(levels[0][0]);if(!(touch>0))return 2;
+  let rem=Math.max(1,notional),spent=0,qty=0;
+  for(const [p,q] of levels){const cap=p*q,take=Math.min(rem,cap);spent+=take;qty+=take/p;rem-=take;if(rem<=0)break;}
+  if(rem>0)return Math.min(50,8+rem/notional*25);
+  const vwap=qty?spent/qty:touch;return Math.max(0,bookSide==='SELL'?(touch/vwap-1)*10000:(vwap/touch-1)*10000);
+};
+v4Fill=function(sym,venue,side,notional,isExit=false){
+  const bk=v4BookMetrics(sym,venue),slipCfg=Number(book.cfg?.slippage_bps??1),bookSide=(!isExit&&side==='LONG')||(isExit&&side==='SHORT')?'BUY':'SELL',impact=v4ImpactBps(sym,venue,notional,bookSide),slipBps=Math.max(slipCfg,impact),mid=bk.mid||Number(live[sym]);
+  let px=mid;if(side==='LONG')px=(bk.ask||mid)*(1+slipBps/10000);else px=(bk.bid||mid)*(1-slipBps/10000);if(isExit){if(side==='LONG')px=(bk.bid||mid)*(1-slipBps/10000);else px=(bk.ask||mid)*(1+slipBps/10000);}return{px,slipBps,spreadBps:bk.spreadBps};
+};
+
 note=function(e){const m=e.metadata||{};if(m.expert_v4){if(e.event_kind==='ENGINE_START')return`V4 · ${m.universe_size||12} market · max ${m.max_open||2} · microstructure`;if(e.event_kind==='DIP_ARMED')return`${m.side||'LONG'} arm · ATR5 ${Number(m.atr5_pct||0).toFixed(2)}% · idioZ ${Number(m.idio_z||0).toFixed(2)} · cost edge ${Number(m.edge_ratio||0).toFixed(1)}x`;if(e.event_kind==='BUY'||e.event_kind==='SHORT_OPEN')return`${m.mode} · ${m.venue} · ${cash(m.margin)} · stop ${Number(m.stop_pct||0).toFixed(2)}% · TP ${Number(m.target_pct||0).toFixed(2)}% · cost ${Number(m.cost_pct||0).toFixed(2)}%`;if(e.event_kind==='SELL'||e.event_kind==='SHORT_CLOSE')return`${m.exit_reason||'EXIT'} · ${Number(m.hold_min||0).toFixed(1)} dk · ${m.venue||''}`;if(e.event_kind==='INFO'&&m.info==='ENTRY_FUNNEL')return`Funnel ${m.entered}/${m.evaluated} · ${Object.entries(m.rejected||{}).map(([k,v])=>`${k}:${v}`).join(' ')}`;}return _v4PrevNote(e);};
 
 function v4RadarRow(sym){
