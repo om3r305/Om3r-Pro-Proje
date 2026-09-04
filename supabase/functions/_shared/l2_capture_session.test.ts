@@ -49,21 +49,45 @@ function snapshot(symbol: string, last: string): DepthSnapshotEvent {
   };
 }
 
-Deno.test("l2 capture: arrival_seq is a deterministic total order even when timestamps are identical", () => {
+function acceptDiff(session: L2CaptureSession, event: DepthDiffEvent) {
+  const seq = session.reserveArrivalSeq();
+  return session.acceptDepthDiff(event, seq);
+}
+
+function acceptSnapshot(session: L2CaptureSession, event: DepthSnapshotEvent) {
+  const seq = session.reserveArrivalSeq();
+  return session.acceptDepthSnapshot(event, seq);
+}
+
+Deno.test("l2 capture: raw-boundary reservations define deterministic total order before interpretation", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
-  const a = session.acceptDepthDiff(diff("BTCUSDT", "101", "102"));
-  const b = session.acceptDepthDiff(diff("BTCUSDT", "103", "104"));
-  const c = session.acceptDepthSnapshot(snapshot("BTCUSDT", "102"));
-  assertEquals([a.envelope.arrivalSeq, b.envelope.arrivalSeq, c.envelope.arrivalSeq], [1, 2, 3]);
+  const seq1 = session.reserveArrivalSeq();
+  const seq2 = session.reserveArrivalSeq();
+  assertEquals([seq1, seq2], [1, 2]);
+  const a = session.acceptDepthDiff(diff("BTCUSDT", "101", "102"), seq1);
+  const b = session.acceptDepthDiff(diff("BTCUSDT", "103", "104"), seq2);
+  assertEquals([a.envelope.arrivalSeq, b.envelope.arrivalSeq], [1, 2]);
+  assertEquals(session.currentConsumedArrivalSeq(), 2);
+});
+
+Deno.test("l2 capture: reserved arrivals cannot be consumed out of order or reused", () => {
+  const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
+  session.startConnection();
+  const one = session.reserveArrivalSeq();
+  const two = session.reserveArrivalSeq();
+  assertThrows(() => session.acceptDepthDiff(diff("BTCUSDT", "103", "104"), two), Error, "strict order");
+  session.acceptDepthDiff(diff("BTCUSDT", "101", "102"), one);
+  session.acceptDepthDiff(diff("BTCUSDT", "103", "104"), two);
+  assertThrows(() => session.acceptDepthDiff(diff("BTCUSDT", "105", "106"), two), Error, "strict order");
 });
 
 Deno.test("l2 capture: startup buffers WS diffs then synchronizes against a covering snapshot", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   assertEquals(session.startConnection(), 1);
-  assertEquals(session.acceptDepthDiff(diff("BTCUSDT", "101", "102")).disposition, "buffered");
-  assertEquals(session.acceptDepthDiff(diff("BTCUSDT", "103", "104")).disposition, "buffered");
-  const synced = session.acceptDepthSnapshot(snapshot("BTCUSDT", "102"));
+  assertEquals(acceptDiff(session, diff("BTCUSDT", "101", "102")).disposition, "buffered");
+  assertEquals(acceptDiff(session, diff("BTCUSDT", "103", "104")).disposition, "buffered");
+  const synced = acceptSnapshot(session, snapshot("BTCUSDT", "102"));
   assertEquals(synced.disposition, "synced");
   assertEquals(session.state("BTCUSDT"), {
     symbol: "BTCUSDT",
@@ -78,23 +102,23 @@ Deno.test("l2 capture: startup buffers WS diffs then synchronizes against a cove
 Deno.test("l2 capture: snapshot older than first buffered diff stays in same generation and retains evidence", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
-  session.acceptDepthDiff(diff("BTCUSDT", "110", "111"));
-  const old = session.acceptDepthSnapshot(snapshot("BTCUSDT", "100"));
+  acceptDiff(session, diff("BTCUSDT", "110", "111"));
+  const old = acceptSnapshot(session, snapshot("BTCUSDT", "100"));
   assertEquals(old.disposition, "snapshot_too_old");
   assertEquals(session.state("BTCUSDT").syncGeneration, 1);
   assertEquals(session.state("BTCUSDT").bufferedDiffCount, 1);
-  const fresh = session.acceptDepthSnapshot(snapshot("BTCUSDT", "110"));
+  const fresh = acceptSnapshot(session, snapshot("BTCUSDT", "110"));
   assertEquals(fresh.disposition, "synced");
   assertEquals(session.state("BTCUSDT").lastAppliedUpdateId, "111");
 });
 
-Deno.test("l2 capture: stale diff is persisted/ordered but does not move the applied update baseline", () => {
+Deno.test("l2 capture: stale diff is ordered but does not move the applied update baseline", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
-  session.acceptDepthDiff(diff("BTCUSDT", "101", "102"));
-  session.acceptDepthSnapshot(snapshot("BTCUSDT", "100"));
+  acceptDiff(session, diff("BTCUSDT", "101", "102"));
+  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
   assertEquals(session.state("BTCUSDT").lastAppliedUpdateId, "102");
-  const stale = session.acceptDepthDiff(diff("BTCUSDT", "100", "102"));
+  const stale = acceptDiff(session, diff("BTCUSDT", "100", "102"));
   assertEquals(stale.disposition, "stale");
   assertEquals(stale.envelope.arrivalSeq, 3);
   assertEquals(session.state("BTCUSDT").lastAppliedUpdateId, "102");
@@ -107,9 +131,9 @@ Deno.test("l2 capture: overlapping diff that extends history applies normally", 
 Deno.test("l2 capture: true sequence gap opens a new sync generation and buffers the gap-revealing diff", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
   session.startConnection();
-  session.acceptDepthDiff(diff("BTCUSDT", "101", "102"));
-  session.acceptDepthSnapshot(snapshot("BTCUSDT", "100"));
-  const gap = session.acceptDepthDiff(diff("BTCUSDT", "110", "111"));
+  acceptDiff(session, diff("BTCUSDT", "101", "102"));
+  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
+  const gap = acceptDiff(session, diff("BTCUSDT", "110", "111"));
   assertEquals(gap.disposition, "gap_resync");
   assertEquals(gap.previousSyncGeneration, 1);
   assertEquals(gap.envelope.syncGeneration, 2);
@@ -121,20 +145,18 @@ Deno.test("l2 capture: true sequence gap opens a new sync generation and buffers
     lastAppliedUpdateId: null,
     bufferedDiffCount: 1,
   });
-  const tooOld = session.acceptDepthSnapshot(snapshot("BTCUSDT", "105"));
-  assertEquals(tooOld.disposition, "snapshot_too_old");
-  const recovered = session.acceptDepthSnapshot(snapshot("BTCUSDT", "110"));
-  assertEquals(recovered.disposition, "synced");
+  assertEquals(acceptSnapshot(session, snapshot("BTCUSDT", "105")).disposition, "snapshot_too_old");
+  assertEquals(acceptSnapshot(session, snapshot("BTCUSDT", "110")).disposition, "synced");
   assertEquals(session.state("BTCUSDT").lastAppliedUpdateId, "111");
 });
 
 Deno.test("l2 capture: transport reconnect invalidates every symbol baseline and starts fresh generations", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT", "ETHUSDT"]);
   session.startConnection();
-  session.acceptDepthDiff(diff("BTCUSDT", "101", "102"));
-  session.acceptDepthSnapshot(snapshot("BTCUSDT", "100"));
-  session.acceptDepthDiff(diff("ETHUSDT", "201", "202"));
-  session.acceptDepthSnapshot(snapshot("ETHUSDT", "200"));
+  acceptDiff(session, diff("BTCUSDT", "101", "102"));
+  acceptSnapshot(session, snapshot("BTCUSDT", "100"));
+  acceptDiff(session, diff("ETHUSDT", "201", "202"));
+  acceptSnapshot(session, snapshot("ETHUSDT", "200"));
   assertEquals(session.startConnection(), 2);
   assertEquals(session.state("BTCUSDT").status, "SYNCING");
   assertEquals(session.state("ETHUSDT").status, "SYNCING");
@@ -145,7 +167,14 @@ Deno.test("l2 capture: transport reconnect invalidates every symbol baseline and
 
 Deno.test("l2 capture: unknown symbol and pre-connection events fail closed", () => {
   const session = new L2CaptureSession("session-a", ["BTCUSDT"]);
-  assertThrows(() => session.acceptDepthDiff(diff("BTCUSDT", "1", "2")), Error, "startConnection");
-  session.startConnection();
-  assertThrows(() => session.acceptDepthDiff(diff("ETHUSDT", "1", "2")), Error, "not part");
+  const pre = session.reserveArrivalSeq();
+  assertThrows(() => session.acceptDepthDiff(diff("BTCUSDT", "1", "2"), pre), Error, "startConnection");
+
+  // A failed precondition is fatal to that test session's arrival chain, as intended. Start a new
+  // clean session to test unknown-symbol lineage rather than pretending the rejected raw arrival
+  // never existed.
+  const clean = new L2CaptureSession("session-b", ["BTCUSDT"]);
+  clean.startConnection();
+  const unknown = clean.reserveArrivalSeq();
+  assertThrows(() => clean.acceptDepthDiff(diff("ETHUSDT", "1", "2"), unknown), Error, "not part");
 });
