@@ -32,9 +32,8 @@ export function resolveAlphaAuditHorizon(
   if (!Number.isFinite(observedMs)) return null;
   const targetMs = observedMs + horizonSeconds * 1000;
 
-  // Resolution may use a near-target point up to +120s when cadence is sparse, but path
-  // excursion is strictly bounded by the requested horizon. Post-horizon prices must never
-  // inflate MFE/MAE or a missed-opportunity receipt.
+  // Terminal resolution may use the first point at/after the requested horizon, with at most
+  // +120s tolerance for sparse cadence. A pre-horizon point is never relabelled as the horizon.
   const resolutionEligible = points
     .filter((p) => {
       const t = Date.parse(p.observed_at);
@@ -43,12 +42,14 @@ export function resolveAlphaAuditHorizon(
     .sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
   if (!resolutionEligible.length) return null;
 
-  const afterTarget = resolutionEligible.filter((p) => Date.parse(p.observed_at) >= targetMs);
-  const resolvedPoint = afterTarget[0] ?? resolutionEligible.at(-1)!;
-  if (Math.abs(Date.parse(resolvedPoint.observed_at) - targetMs) > 120_000) return null;
+  const resolvedPoint = resolutionEligible.find((p) => Date.parse(p.observed_at) >= targetMs);
+  if (!resolvedPoint) return null;
+  if (Date.parse(resolvedPoint.observed_at) - targetMs > 120_000) return null;
   const resolved = finite(resolvedPoint.observed_mid_price);
   if (!(resolved > 0)) return null;
 
+  // Excursion and fallback-cost evidence are strictly in-horizon. The +120s terminal tolerance
+  // can resolve price only; it must never import future path/cost information into the receipt.
   const excursionPoints = resolutionEligible.filter((p) => Date.parse(p.observed_at) <= targetMs);
   const prices = excursionPoints.map((p) => finite(p.observed_mid_price)).filter((p) => p > 0);
   if (!prices.length) return null;
@@ -58,7 +59,7 @@ export function resolveAlphaAuditHorizon(
   const downExcursion = minPx / reference - 1;
   const directionAdjusted = decision.direction === 0 ? 0 : decision.direction * gross;
 
-  const fallbackCost = resolutionEligible
+  const fallbackCost = excursionPoints
     .map((p) => finite(p.estimated_round_trip_cost_bps, NaN))
     .find((x) => Number.isFinite(x) && x >= 0);
   const decisionCost = finite(decision.estimatedRoundTripCostBps, NaN);
