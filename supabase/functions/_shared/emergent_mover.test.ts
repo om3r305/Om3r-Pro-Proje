@@ -89,20 +89,31 @@ Deno.test("emergent mover: downside last-price displacement is direction -1, nev
   assertEquals("side" in candidate, false);
 });
 
-Deno.test("emergent mover: rolling 24h price-change displacement alone is not mislabeled as short-return direction", () => {
+Deno.test("emergent mover: rolling 24h price-change displacement alone is diagnostic, not a mover candidate", () => {
   const previous = frame("2026-09-04T08:00:00.000Z", [market("AAAUSDT"), market("PEERUSDT")]);
   const current = frame("2026-09-04T08:05:00.000Z", [
     market("AAAUSDT", { last_price: 10, price_change_pct_24h: 20 }),
     market("PEERUSDT", { last_price: 10 }),
   ]);
   const report = buildEmergentMoverReport(previous, current);
-  const aaa = report.candidates.find((row) => row.symbol === "AAAUSDT");
-  if (aaa) {
-    assertEquals(aaa.features.short_return_pct, 0);
-    assertEquals(aaa.observed_change_direction, 0);
-    assertEquals(aaa.features.rolling_price_change_delta_pct_24h, 18);
-  }
+  assertEquals(report.candidates.find((row) => row.symbol === "AAAUSDT"), undefined);
   assert(report.measurement_notes.some((note) => note.includes("rolling_window_displacement_not_interval_flow")));
+});
+
+Deno.test("emergent mover: peer weakness cannot manufacture a mover when the symbol itself is unchanged", () => {
+  const previous = frame("2026-09-04T08:00:00.000Z", [
+    market("UNCHANGEDUSDT", { quote_volume_24h: 20_000_000, trades_24h: 20_000 }),
+    market("PEER1USDT", { quote_volume_24h: 40_000_000, trades_24h: 40_000 }),
+    market("PEER2USDT", { quote_volume_24h: 30_000_000, trades_24h: 30_000 }),
+  ]);
+  const current = frame("2026-09-04T08:05:00.000Z", [
+    market("UNCHANGEDUSDT", { quote_volume_24h: 20_000_000, trades_24h: 20_000 }),
+    market("PEER1USDT", { quote_volume_24h: 10_000_000, trades_24h: 10_000 }),
+    market("PEER2USDT", { quote_volume_24h: 15_000_000, trades_24h: 15_000 }),
+  ]);
+  const report = buildEmergentMoverReport(previous, current);
+  assertEquals(report.candidates.find((row) => row.symbol === "UNCHANGEDUSDT"), undefined);
+  assert(report.measurement_notes.includes("relative_rank_change_cannot_create_candidate_without_symbol_self_evidence"));
 });
 
 Deno.test("emergent mover: stale baseline fails closed instead of comparing unrelated regimes", () => {
