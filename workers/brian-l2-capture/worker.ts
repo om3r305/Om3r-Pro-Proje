@@ -251,8 +251,22 @@ export class BrianRealL2Worker {
         return;
       }
       const collectorReceivedAt = new Date().toISOString();
+      let arrivalSeq: number;
+      try {
+        // Reserve the authoritative order at the raw transport callback, before JSON parsing,
+        // normalization, persistence, or any book-state interpretation.
+        arrivalSeq = this.session.reserveArrivalSeq();
+      } catch (error) {
+        markFatal(error);
+        return;
+      }
       void enqueue(async () => {
-        const result = await this.handleWsDepthRaw(rawJson, collectorReceivedAt, connectionGeneration);
+        const result = await this.handleWsDepthRaw(
+          rawJson,
+          collectorReceivedAt,
+          connectionGeneration,
+          arrivalSeq,
+        );
         if (result.disposition === "gap_resync") ensureSnapshotLoop(result.envelope.event.symbol);
       }).catch(() => undefined);
     });
@@ -339,8 +353,8 @@ export class BrianRealL2Worker {
     rawJson: string,
     collectorReceivedAt: string,
     connectionGeneration: number,
+    arrivalSeq: number,
   ): Promise<DiffCaptureResult> {
-    const arrivalSeq = this.session.reserveArrivalSeq();
     let symbol: string | null = null;
     let result: DiffCaptureResult;
 
@@ -445,11 +459,15 @@ export class BrianRealL2Worker {
 
       const rawJson = await response.text();
       const collectorReceivedAt = new Date().toISOString();
+      // The completed REST snapshot response is also a raw transport arrival in the same global
+      // collector order as WS messages. Reserve before enqueue/parse for deterministic replay.
+      const arrivalSeq = this.session.reserveArrivalSeq();
       const result = await enqueue(() => this.handleSnapshotRaw(
         symbol,
         rawJson,
         collectorReceivedAt,
         connectionGeneration,
+        arrivalSeq,
       ));
       if (result.disposition === "synced") return;
       retryMs = result.disposition === "snapshot_too_old"
@@ -464,8 +482,8 @@ export class BrianRealL2Worker {
     rawJson: string,
     collectorReceivedAt: string,
     connectionGeneration: number,
+    arrivalSeq: number,
   ): Promise<SnapshotCaptureResult> {
-    const arrivalSeq = this.session.reserveArrivalSeq();
     let result: SnapshotCaptureResult;
 
     try {
