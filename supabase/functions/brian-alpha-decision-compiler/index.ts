@@ -3,10 +3,16 @@ import { withCollectorLease } from "../_shared/collector_lease.ts";
 import {
   ALPHA_COMPILER_VERSION,
   compileAlphaDecision,
+  type AlphaDecisionResult,
   type AlphaEvidenceRow,
   type IntrabarVetoContext,
 } from "../_shared/alpha_decision.ts";
-import { compileDegradedTopOfBookCost, type DynamicCostQuote } from "../_shared/dynamic_cost.ts";
+import {
+  compileDegradedTopOfBookCost,
+  compileL2Cost,
+  type DynamicCostQuote,
+} from "../_shared/dynamic_cost.ts";
+import { parseBinanceDepthSnapshotRaw } from "../_shared/binance_l2_wire.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -20,6 +26,8 @@ const CORE_ASSETS = ["crypto:BTCUSDT", "crypto:ETHUSDT", "crypto:SOLUSDT", "cryp
 const MAX_ASSETS = 25;
 const FALLBACK_FEE_BPS = 10;
 const FALLBACK_SLIPPAGE_BPS = 1;
+const L2_DEPTH_LIMIT = 100;
+const FROZEN_PHASE37_EXPERIMENT_ID = "phase37-prospective-live-20260903";
 const MACRO_CONTEXT_WINDOW_MS = 60 * 60_000;
 const MAX_MACRO_CONTEXT_EVENTS = 24;
 
@@ -43,6 +51,15 @@ type OfficialMacroContext = {
   event_count: number;
   latest_observed_at: string | null;
   events: OfficialMacroContextEvent[];
+  degraded_reason?: string;
+};
+
+type ReferenceBook = { mid: number; spreadBps: number };
+type ObservedL2Cost = {
+  quote: DynamicCostQuote;
+  sourceId: string;
+  lastUpdateId: string;
+  fetchedAt: string;
 };
 
 function json(body: unknown, status = 200) {
@@ -70,6 +87,37 @@ function ticketForScore(score: number): number {
   // Reuses the existing Phase 3.8 virtual-ticket schedule; not tuned from Sep-4.
   return score >= 0.8 ? 20 : score >= 0.6 ? 10 : score >= 0.4 ? 5 : 3;
 }
+function emptyMacroContext(asOf: string, reason?: string): OfficialMacroContext {
+  return {
+    role: "context_only_no_direction_vote",
+    direction_vote: 0,
+    window_minutes: 60,
+    as_of: asOf,
+    event_count: 0,
+    latest_observed_at: null,
+    events: [],
+    ...(reason ? { degraded_reason: reason } : {}),
+  };
+}
+function failClosedAssetDecision(reason: string): AlphaDecisionResult {
+  return {
+    compilerVersion: ALPHA_COMPILER_VERSION,
+    action: "VETO",
+    direction: 0,
+    evidenceScore: 0,
+    independentGroupCount: 0,
+    supportGroups: [],
+    conflictGroups: [],
+    sourceObservationIds: [],
+    ignoredObservationIds: [],
+    lateChaseVetoEventId: null,
+    costQuality: null,
+    estimatedRoundTripCostBps: null,
+    fillable: null,
+    reason,
+    vetoReason: "EVIDENCE_INVALID",
+  };
+}
 
 async function latestRadarAssets(): Promise<string[]> {
   const out = new Set<string>(CORE_ASSETS);
@@ -96,6 +144,7 @@ async function loadSensorEvidence(assets: string[], nowMs: number): Promise<Map<
   const resp = await supabase.from("brian_sensor_observations")
     .select("observation_id,asset_id,sensor_family,horizon,independent_group,observed_at,direction,strength,confidence,reliability,available,reason")
     .in("asset_id", assets).gte("observed_at", since).eq("available", true)
+    .neq("independent_group", "news_gdelt")
     .order("observed_at", { ascending: false }).limit(6000);
   if (resp.error) throw resp.error;
   for (const r of resp.data ?? []) {
@@ -131,12 +180,18 @@ async function addDipEvidence(map: Map<string, AlphaEvidenceRow[]>, assets: stri
 
 async function addFrozenPhase37Evidence(map: Map<string, AlphaEvidenceRow[]>, assets: string[], nowMs: number) {
   const latest = await supabase.from("brian_live_shadow_ticks")
-    .select("tick_id,policy_kind,observed_at,target_weights")
+    .select("tick_id,experiment_id,policy_kind,observed_at,target_weights")
+    .eq("experiment_id", FROZEN_PHASE37_EXPERIMENT_ID)
+    .in("policy_kind", ["NATIVE", "PROFIT"])
     .lte("observed_at", new Date(nowMs).toISOString())
-    .order("observed_at", { ascending: false }).limit(2);
+    .order("observed_at", { ascending: false }).limit(20);
   if (latest.error) return;
   const allowed = new Set(assets);
+  const seenPolicies = new Set<string>();
   for (const r of latest.data ?? []) {
+    const policy = String(r.policy_kind);
+    if (seenPolicies.has(policy)) continue;
+    seenPolicies.add(policy);
     const observedAt = String(r.observed_at); if (nowMs - Date.parse(observedAt) > 10 * 60_000) continue;
     const weights = (r.target_weights ?? {}) as Record<string, unknown>;
     for (const [symbol, rawWeight] of Object.entries(weights)) {
@@ -144,7 +199,7 @@ async function addFrozenPhase37Evidence(map: Map<string, AlphaEvidenceRow[]>, as
       const weight = finite(rawWeight); if (Math.abs(weight) <= 1e-12) continue;
       const rows = map.get(asset) ?? [];
       // NATIVE and PROFIT share one independent group because they descend from the same frozen model.
-      rows.push({ observationId: `phase37:${r.tick_id}`, sourceKind: "phase37_frozen_control", independentGroup: "phase37_frozen_model", direction: weight > 0 ? 1 : -1, strength: clip(Math.abs(weight) / 0.35), confidence: 1, reliability: 0.5, observedAt, horizon: "FAST_5_30M", fresh: true, reason: `frozen Phase 3.7 ${r.policy_kind} target weight` });
+      rows.push({ observationId: `phase37:${r.tick_id}`, sourceKind: "phase37_frozen_control", independentGroup: "phase37_frozen_model", direction: weight > 0 ? 1 : -1, strength: clip(Math.abs(weight) / 0.35), confidence: 1, reliability: 0.5, observedAt, horizon: "FAST_5_30M", fresh: true, reason: `frozen Phase 3.7 ${policy} target weight` });
       map.set(asset, rows);
     }
   }
@@ -202,11 +257,11 @@ async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Ma
   return map;
 }
 
-async function currentBooks(): Promise<Map<string, { mid: number; spreadBps: number }>> {
+async function currentBooks(): Promise<Map<string, ReferenceBook>> {
   const r = await fetch("https://api.binance.com/api/v3/ticker/bookTicker", { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow/1.0" }, signal: AbortSignal.timeout(8_000) });
   if (!r.ok) throw new Error(`Binance bookTicker HTTP ${r.status}`);
   const payload = await r.json(); if (!Array.isArray(payload)) throw new Error("invalid Binance bookTicker payload");
-  const map = new Map<string, { mid: number; spreadBps: number }>();
+  const map = new Map<string, ReferenceBook>();
   for (const x of payload) {
     if (!x || typeof x !== "object") continue; const row = x as Record<string, unknown>; const symbol = String(row.symbol ?? "").toUpperCase();
     const bid = finite(row.bidPrice), ask = finite(row.askPrice); if (!symbol || !(bid > 0) || !(ask >= bid)) continue;
@@ -215,9 +270,33 @@ async function currentBooks(): Promise<Map<string, { mid: number; spreadBps: num
   return map;
 }
 
-async function recordRun(startedAt: string, status: string, observed: number, stored: number, error?: unknown) {
+async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: number): Promise<ObservedL2Cost> {
+  const symbol = asset.includes(":") ? asset.split(":", 2)[1] : asset;
+  if (!/^[A-Z0-9]+USDT$/.test(symbol)) throw new Error(`unsupported Binance L2 asset ${asset}`);
+  const url = `https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(symbol)}&limit=${L2_DEPTH_LIMIT}`;
+  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(8_000) });
+  if (!response.ok) throw new Error(`Binance depth HTTP ${response.status} for ${symbol}`);
+  const raw = await response.text();
+  const snapshot = parseBinanceDepthSnapshotRaw(raw);
+  const quote = compileL2Cost({
+    side: direction === 1 ? "BUY" : "SELL",
+    notionalUsd: notional,
+    feeBps: FALLBACK_FEE_BPS,
+    bids: snapshot.bids.map(([price, size]) => ({ price, size })),
+    asks: snapshot.asks.map(([price, size]) => ({ price, size })),
+  });
+  const fetchedAt = new Date().toISOString();
+  return {
+    quote,
+    sourceId: `binance_public_rest_depth:${symbol}:${snapshot.lastUpdateId}`,
+    lastUpdateId: String(snapshot.lastUpdateId),
+    fetchedAt,
+  };
+}
+
+async function recordRun(startedAt: string, status: string, observed: number, stored: number, degradedSources: string[], error?: unknown) {
   const finishedAt = new Date().toISOString(); const runId = await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: [], error_class: error ? "ALPHA_COMPILER_ERROR" : null, error_message: error ? errorText(error).slice(0, 1500) : null, evidence_class: EVIDENCE, shadow_only: true, live_execution: false, metadata: { compiler_version: ALPHA_COMPILER_VERSION } });
+  await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: degradedSources, error_class: error ? "ALPHA_COMPILER_ERROR" : null, error_message: error ? errorText(error).slice(0, 1500) : null, evidence_class: EVIDENCE, shadow_only: true, live_execution: false, metadata: { compiler_version: ALPHA_COMPILER_VERSION, frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID } });
 }
 
 Deno.serve(async (req: Request) => {
@@ -230,35 +309,110 @@ Deno.serve(async (req: Request) => {
 
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const evidenceNowMs = Date.now();
-      const assets = await latestRadarAssets(); const evidence = await loadSensorEvidence(assets, evidenceNowMs);
-      await addDipEvidence(evidence, assets, evidenceNowMs); await addFrozenPhase37Evidence(evidence, assets, evidenceNowMs);
-      const intrabar = await loadIntrabarContexts(assets, evidenceNowMs); const books = await currentBooks();
-      const observedAt = new Date().toISOString();
-      const macroContext = await loadOfficialMacroContext(Date.parse(observedAt), observedAt);
+      const degradedSources: string[] = [];
+      const assets = await latestRadarAssets();
 
+      let evidence = new Map<string, AlphaEvidenceRow[]>();
+      try { evidence = await loadSensorEvidence(assets, evidenceNowMs); }
+      catch (error) { degradedSources.push(`sensor_evidence:${errorText(error)}`); }
+      await addDipEvidence(evidence, assets, evidenceNowMs);
+      await addFrozenPhase37Evidence(evidence, assets, evidenceNowMs);
+
+      let intrabar = new Map<string, IntrabarVetoContext>();
+      try { intrabar = await loadIntrabarContexts(assets, evidenceNowMs); }
+      catch (error) { degradedSources.push(`intrabar_context:${errorText(error)}`); }
+
+      let books = new Map<string, ReferenceBook>();
+      try { books = await currentBooks(); }
+      catch (error) { degradedSources.push(`book_ticker:${errorText(error)}`); }
+
+      const preliminaryByAsset = new Map<string, AlphaDecisionResult>();
+      const poisonByAsset = new Map<string, string>();
+      for (const asset of assets) {
+        try {
+          preliminaryByAsset.set(asset, compileAlphaDecision({ evidenceRows: evidence.get(asset) ?? [], costQuote: null, intrabarContext: intrabar.get(asset) ?? null }));
+        } catch (error) {
+          poisonByAsset.set(asset, errorText(error));
+          degradedSources.push(`evidence_invalid:${asset}:${errorText(error)}`);
+        }
+      }
+
+      const l2ByAsset = new Map<string, ObservedL2Cost>();
+      await Promise.all(assets.map(async (asset) => {
+        const preliminary = preliminaryByAsset.get(asset);
+        if (!preliminary || preliminary.direction === 0 || preliminary.supportGroups.length < 2 || preliminary.evidenceScore < 0.18) return;
+        const notional = ticketForScore(preliminary.evidenceScore);
+        try {
+          l2ByAsset.set(asset, await fetchObservedL2Cost(asset, preliminary.direction as -1 | 1, notional));
+        } catch (error) {
+          degradedSources.push(`l2:${asset}:${errorText(error)}`);
+        }
+      }));
+
+      const macroAsOf = new Date().toISOString();
+      let macroContext = emptyMacroContext(macroAsOf);
+      try { macroContext = await loadOfficialMacroContext(Date.parse(macroAsOf), macroAsOf); }
+      catch (error) {
+        const reason = errorText(error);
+        degradedSources.push(`official_macro_context:${reason}`);
+        macroContext = emptyMacroContext(macroAsOf, reason);
+      }
+
+      // Decision time is after all evidence/cost/context reads, so every attached input is causal.
+      const observedAt = new Date().toISOString();
       const decisionRows: Record<string, unknown>[] = []; const costRows: Record<string, unknown>[] = [];
+      let observedL2Count = 0; let degradedCostCount = 0;
+
       for (const asset of assets) {
         const rows = evidence.get(asset) ?? [];
         const referenceBook = books.get(asset);
-        // First pass: eligibility without cost. Missing cost intentionally VETOs an otherwise actionable candidate.
-        const preliminary = compileAlphaDecision({ evidenceRows: rows, costQuote: null, intrabarContext: intrabar.get(asset) ?? null });
+        const observedL2 = l2ByAsset.get(asset);
+        const poison = poisonByAsset.get(asset);
+        const preliminary = preliminaryByAsset.get(asset);
         let costQuote: DynamicCostQuote | null = null; let costId: string | null = null;
-        if (preliminary.evidenceScore >= 0.18 && preliminary.supportGroups.length >= 2 && preliminary.direction !== 0) {
-          if (referenceBook) {
-            const notional = ticketForScore(preliminary.evidenceScore);
+        let costSourceIds: string[] = [];
+        let costMetadata: Record<string, unknown> = {};
+
+        if (!poison && preliminary && preliminary.evidenceScore >= 0.18 && preliminary.supportGroups.length >= 2 && preliminary.direction !== 0) {
+          const notional = ticketForScore(preliminary.evidenceScore);
+          if (observedL2) {
+            costQuote = observedL2.quote;
+            observedL2Count++;
+            costSourceIds = [observedL2.sourceId];
+            costMetadata = {
+              source: "binance_public_rest_depth_snapshot",
+              last_update_id: observedL2.lastUpdateId,
+              fetched_at: observedL2.fetchedAt,
+              depth_limit: L2_DEPTH_LIMIT,
+            };
+          } else if (referenceBook) {
             costQuote = compileDegradedTopOfBookCost({ side: preliminary.direction === 1 ? "BUY" : "SELL", notionalUsd: notional, feeBps: FALLBACK_FEE_BPS, spreadBps: referenceBook.spreadBps, assumedSlippageBps: FALLBACK_SLIPPAGE_BPS, midPrice: referenceBook.mid });
-            costId = await sha(`${ALPHA_COMPILER_VERSION}|cost|${asset}|${observedAt}|${preliminary.direction}|${notional}`);
-            costRows.push({ quote_id: costId, compiler_version: ALPHA_COMPILER_VERSION, asset_id: asset, observed_at: observedAt, side: costQuote.side, requested_notional_usd: costQuote.requestedNotionalUsd, filled_notional_usd: costQuote.filledNotionalUsd, fill_ratio: costQuote.fillRatio, fillable: costQuote.fillable, fee_bps: costQuote.feeBps, spread_bps: costQuote.spreadBps, depth_slippage_bps: costQuote.depthSlippageBps, one_way_cost_bps: costQuote.oneWayCostBps, estimated_round_trip_cost_bps: costQuote.estimatedRoundTripCostBps, quality: costQuote.quality, source_ids: [], reason: costQuote.reason, metadata: { mid_price: referenceBook.mid, fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS }, evidence_class: EVIDENCE, shadow_only: true, live_execution: false });
+            degradedCostCount++;
+            costSourceIds = ["binance_public_book_ticker"];
+            costMetadata = { source: "binance_public_book_ticker", mid_price: referenceBook.mid, fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS };
+          }
+          if (costQuote) {
+            costId = await sha(`${ALPHA_COMPILER_VERSION}|cost|${asset}|${observedAt}|${preliminary.direction}|${notional}|${costQuote.quality}`);
+            costRows.push({ quote_id: costId, compiler_version: ALPHA_COMPILER_VERSION, asset_id: asset, observed_at: observedAt, side: costQuote.side, requested_notional_usd: costQuote.requestedNotionalUsd, filled_notional_usd: costQuote.filledNotionalUsd, fill_ratio: costQuote.fillRatio, fillable: costQuote.fillable, fee_bps: costQuote.feeBps, spread_bps: costQuote.spreadBps, depth_slippage_bps: costQuote.depthSlippageBps, one_way_cost_bps: costQuote.oneWayCostBps, estimated_round_trip_cost_bps: costQuote.estimatedRoundTripCostBps, quality: costQuote.quality, source_ids: costSourceIds, reason: costQuote.reason, metadata: costMetadata, evidence_class: EVIDENCE, shadow_only: true, live_execution: false });
           }
         }
-        const decision = compileAlphaDecision({ evidenceRows: rows, costQuote, intrabarContext: intrabar.get(asset) ?? null });
+
+        let decision: AlphaDecisionResult;
+        if (poison) {
+          decision = failClosedAssetDecision(`asset evidence rejected without aborting unrelated assets: ${poison}`);
+        } else {
+          try { decision = compileAlphaDecision({ evidenceRows: rows, costQuote, intrabarContext: intrabar.get(asset) ?? null }); }
+          catch (error) { decision = failClosedAssetDecision(`asset compile failed closed: ${errorText(error)}`); degradedSources.push(`asset_compile:${asset}:${errorText(error)}`); }
+        }
+
+        const referencePrice = observedL2?.quote.referenceMid ?? referenceBook?.mid ?? null;
         const decisionId = await sha(`${ALPHA_COMPILER_VERSION}|decision|${asset}|${observedAt}|${decision.action}|${decision.direction}|${decision.evidenceScore.toFixed(12)}`);
         decisionRows.push({
           decision_id: decisionId,
           compiler_version: ALPHA_COMPILER_VERSION,
           observed_at: observedAt,
           asset_id: asset,
-          observed_reference_price: referenceBook?.mid ?? null,
+          observed_reference_price: referencePrice,
           action: decision.action,
           direction: decision.direction,
           evidence_score: decision.evidenceScore,
@@ -278,12 +432,14 @@ Deno.serve(async (req: Request) => {
             ignored_observation_ids: decision.ignoredObservationIds,
             source_evidence_ids_all: decision.sourceObservationIds,
             emergent_mover_role: "attention_only",
+            gdelt_role: "discovery_only_no_direction_vote",
+            frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID,
             score_is_not_expected_return_bps: true,
             cost_quality: decision.costQuality,
             reference_price: {
-              value: referenceBook?.mid ?? null,
-              source: referenceBook ? "binance_public_book_ticker_mid" : "unavailable",
-              captured_at: observedAt,
+              value: referencePrice,
+              source: observedL2 ? "binance_public_rest_depth_mid" : referenceBook ? "binance_public_book_ticker_mid" : "unavailable",
+              captured_at: observedL2?.fetchedAt ?? observedAt,
             },
             official_macro_context: macroContext,
           },
@@ -295,14 +451,15 @@ Deno.serve(async (req: Request) => {
 
       if (costRows.length) { const ins = await supabase.from("brian_dynamic_cost_quotes").insert(costRows); if (ins.error) throw ins.error; }
       if (decisionRows.length) { const ins = await supabase.from("brian_alpha_decisions").insert(decisionRows); if (ins.error) throw ins.error; }
-      await recordRun(startedAt, "SUCCESS", assets.length, costRows.length + decisionRows.length);
-      return json({ status: "CAPTURED", compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, cost_quality: "DEGRADED_TOP_OF_BOOK", shadow_only: true, live_execution: false });
+      const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
+      await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources);
+      return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shadow_only: true, live_execution: false });
     });
     if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shadow_only: true, live_execution: false });
     return lease.value!;
   } catch (error) {
     console.error("brian-alpha-decision-compiler-v2 failed", errorText(error));
-    try { await recordRun(startedAt, "FAILED", 0, 0, error); } catch { /* logging must not mask primary error */ }
+    try { await recordRun(startedAt, "FAILED", 0, 0, [], error); } catch { /* logging must not mask primary error */ }
     return json({ status: "FAILED_CLOSED", error: errorText(error), shadow_only: true, live_execution: false }, 500);
   }
 });
