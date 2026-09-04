@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "rm -rf .vercel-static && mkdir -p .vercel-static && cp -R monster-coins-pro/. .vercel-static/",
+  "outputDirectory": ".vercel-static",
+  "cleanUrls": true,
+  "trailingSlash": false
+}
