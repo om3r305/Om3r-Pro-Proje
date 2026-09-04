@@ -214,7 +214,7 @@ export class L2CaptureSession {
     const buffered = [...state.bufferedDiffs]
       .sort((a, b) => a.arrivalSeq - b.arrivalSeq)
       .map((item) => item.event);
-    const sync = synchronizeDepthBookStartup(event, buffered);
+    const sync = synchronizeDepthBookStartup(buffered, event);
     const issues = sync.issues.map((issue) => `${issue.kind}:${issue.reason}`);
 
     if (sync.outcome === "synced" && sync.state?.lastAppliedUpdateId != null) {
