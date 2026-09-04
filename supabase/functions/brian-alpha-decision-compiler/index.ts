@@ -20,6 +20,30 @@ const CORE_ASSETS = ["crypto:BTCUSDT", "crypto:ETHUSDT", "crypto:SOLUSDT", "cryp
 const MAX_ASSETS = 25;
 const FALLBACK_FEE_BPS = 10;
 const FALLBACK_SLIPPAGE_BPS = 1;
+const MACRO_CONTEXT_WINDOW_MS = 60 * 60_000;
+const MAX_MACRO_CONTEXT_EVENTS = 24;
+
+type OfficialMacroContextEvent = {
+  observation_id: string;
+  observed_at: string;
+  independent_group: string;
+  source_ids: string[];
+  reason: string;
+  organization: string | null;
+  title: string | null;
+  published_at: string | null;
+  provenance_uri: string | null;
+};
+
+type OfficialMacroContext = {
+  role: "context_only_no_direction_vote";
+  direction_vote: 0;
+  window_minutes: 60;
+  as_of: string;
+  event_count: number;
+  latest_observed_at: string | null;
+  events: OfficialMacroContextEvent[];
+};
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -108,6 +132,7 @@ async function addDipEvidence(map: Map<string, AlphaEvidenceRow[]>, assets: stri
 async function addFrozenPhase37Evidence(map: Map<string, AlphaEvidenceRow[]>, assets: string[], nowMs: number) {
   const latest = await supabase.from("brian_live_shadow_ticks")
     .select("tick_id,policy_kind,observed_at,target_weights")
+    .lte("observed_at", new Date(nowMs).toISOString())
     .order("observed_at", { ascending: false }).limit(2);
   if (latest.error) return;
   const allowed = new Set(assets);
@@ -123,6 +148,44 @@ async function addFrozenPhase37Evidence(map: Map<string, AlphaEvidenceRow[]>, as
       map.set(asset, rows);
     }
   }
+}
+
+async function loadOfficialMacroContext(asOfMs: number, asOf: string): Promise<OfficialMacroContext> {
+  const since = new Date(asOfMs - MACRO_CONTEXT_WINDOW_MS).toISOString();
+  const resp = await supabase.from("brian_sensor_observations")
+    .select("observation_id,observed_at,independent_group,source_ids,reason,metadata")
+    .eq("asset_id", "global:MACRO")
+    .eq("sensor_family", "official_macro_event")
+    .eq("available", true)
+    .eq("direction", 0)
+    .gte("observed_at", since)
+    .lte("observed_at", asOf)
+    .order("observed_at", { ascending: false })
+    .limit(MAX_MACRO_CONTEXT_EVENTS);
+  if (resp.error) throw resp.error;
+  const events: OfficialMacroContextEvent[] = (resp.data ?? []).map((row) => {
+    const md = (row.metadata ?? {}) as Record<string, unknown>;
+    return {
+      observation_id: String(row.observation_id),
+      observed_at: String(row.observed_at),
+      independent_group: String(row.independent_group),
+      source_ids: Array.isArray(row.source_ids) ? row.source_ids.map(String) : [],
+      reason: String(row.reason ?? "official macro event"),
+      organization: md.organization == null ? null : String(md.organization),
+      title: md.title == null ? null : String(md.title),
+      published_at: md.published_at == null ? null : String(md.published_at),
+      provenance_uri: md.provenance_uri == null ? null : String(md.provenance_uri),
+    };
+  });
+  return {
+    role: "context_only_no_direction_vote",
+    direction_vote: 0,
+    window_minutes: 60,
+    as_of: asOf,
+    event_count: events.length,
+    latest_observed_at: events[0]?.observed_at ?? null,
+    events,
+  };
 }
 
 async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Map<string, IntrabarVetoContext>> {
@@ -166,34 +229,74 @@ Deno.serve(async (req: Request) => {
     if (last.data?.started_at) { const age = (Date.now() - Date.parse(last.data.started_at)) / 1000; if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return json({ status: "SKIPPED_RATE_GUARD", age_seconds: age, shadow_only: true, live_execution: false }); }
 
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
-      const nowMs = Date.now(); const observedAt = new Date(nowMs).toISOString();
-      const assets = await latestRadarAssets(); const evidence = await loadSensorEvidence(assets, nowMs);
-      await addDipEvidence(evidence, assets, nowMs); await addFrozenPhase37Evidence(evidence, assets, nowMs);
-      const intrabar = await loadIntrabarContexts(assets, nowMs); const books = await currentBooks();
+      const evidenceNowMs = Date.now();
+      const assets = await latestRadarAssets(); const evidence = await loadSensorEvidence(assets, evidenceNowMs);
+      await addDipEvidence(evidence, assets, evidenceNowMs); await addFrozenPhase37Evidence(evidence, assets, evidenceNowMs);
+      const intrabar = await loadIntrabarContexts(assets, evidenceNowMs); const books = await currentBooks();
+      const observedAt = new Date().toISOString();
+      const macroContext = await loadOfficialMacroContext(Date.parse(observedAt), observedAt);
 
       const decisionRows: Record<string, unknown>[] = []; const costRows: Record<string, unknown>[] = [];
       for (const asset of assets) {
         const rows = evidence.get(asset) ?? [];
+        const referenceBook = books.get(asset);
         // First pass: eligibility without cost. Missing cost intentionally VETOs an otherwise actionable candidate.
         const preliminary = compileAlphaDecision({ evidenceRows: rows, costQuote: null, intrabarContext: intrabar.get(asset) ?? null });
         let costQuote: DynamicCostQuote | null = null; let costId: string | null = null;
         if (preliminary.evidenceScore >= 0.18 && preliminary.supportGroups.length >= 2 && preliminary.direction !== 0) {
-          const book = books.get(asset); if (book) {
+          if (referenceBook) {
             const notional = ticketForScore(preliminary.evidenceScore);
-            costQuote = compileDegradedTopOfBookCost({ side: preliminary.direction === 1 ? "BUY" : "SELL", notionalUsd: notional, feeBps: FALLBACK_FEE_BPS, spreadBps: book.spreadBps, assumedSlippageBps: FALLBACK_SLIPPAGE_BPS, midPrice: book.mid });
+            costQuote = compileDegradedTopOfBookCost({ side: preliminary.direction === 1 ? "BUY" : "SELL", notionalUsd: notional, feeBps: FALLBACK_FEE_BPS, spreadBps: referenceBook.spreadBps, assumedSlippageBps: FALLBACK_SLIPPAGE_BPS, midPrice: referenceBook.mid });
             costId = await sha(`${ALPHA_COMPILER_VERSION}|cost|${asset}|${observedAt}|${preliminary.direction}|${notional}`);
-            costRows.push({ quote_id: costId, compiler_version: ALPHA_COMPILER_VERSION, asset_id: asset, observed_at: observedAt, side: costQuote.side, requested_notional_usd: costQuote.requestedNotionalUsd, filled_notional_usd: costQuote.filledNotionalUsd, fill_ratio: costQuote.fillRatio, fillable: costQuote.fillable, fee_bps: costQuote.feeBps, spread_bps: costQuote.spreadBps, depth_slippage_bps: costQuote.depthSlippageBps, one_way_cost_bps: costQuote.oneWayCostBps, estimated_round_trip_cost_bps: costQuote.estimatedRoundTripCostBps, quality: costQuote.quality, source_ids: [], reason: costQuote.reason, metadata: { mid_price: book.mid, fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS }, evidence_class: EVIDENCE, shadow_only: true, live_execution: false });
+            costRows.push({ quote_id: costId, compiler_version: ALPHA_COMPILER_VERSION, asset_id: asset, observed_at: observedAt, side: costQuote.side, requested_notional_usd: costQuote.requestedNotionalUsd, filled_notional_usd: costQuote.filledNotionalUsd, fill_ratio: costQuote.fillRatio, fillable: costQuote.fillable, fee_bps: costQuote.feeBps, spread_bps: costQuote.spreadBps, depth_slippage_bps: costQuote.depthSlippageBps, one_way_cost_bps: costQuote.oneWayCostBps, estimated_round_trip_cost_bps: costQuote.estimatedRoundTripCostBps, quality: costQuote.quality, source_ids: [], reason: costQuote.reason, metadata: { mid_price: referenceBook.mid, fallback_slippage_bps: FALLBACK_SLIPPAGE_BPS }, evidence_class: EVIDENCE, shadow_only: true, live_execution: false });
           }
         }
         const decision = compileAlphaDecision({ evidenceRows: rows, costQuote, intrabarContext: intrabar.get(asset) ?? null });
         const decisionId = await sha(`${ALPHA_COMPILER_VERSION}|decision|${asset}|${observedAt}|${decision.action}|${decision.direction}|${decision.evidenceScore.toFixed(12)}`);
-        decisionRows.push({ decision_id: decisionId, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, asset_id: asset, action: decision.action, direction: decision.direction, evidence_score: decision.evidenceScore, independent_group_count: decision.independentGroupCount, support_groups: decision.supportGroups, conflict_groups: decision.conflictGroups, source_observation_ids: decision.sourceObservationIds.filter((id) => !id.startsWith("dip:") && !id.startsWith("phase37:")), source_intrabar_event_ids: decision.lateChaseVetoEventId ? [decision.lateChaseVetoEventId] : [], source_cost_quote_id: costId, requested_virtual_notional_usd: costQuote?.requestedNotionalUsd ?? 0, gross_edge_bps: null, estimated_round_trip_cost_bps: decision.estimatedRoundTripCostBps, net_edge_bps: null, veto_reason: decision.vetoReason, reason: decision.reason, metadata: { ignored_observation_ids: decision.ignoredObservationIds, source_evidence_ids_all: decision.sourceObservationIds, emergent_mover_role: "attention_only", score_is_not_expected_return_bps: true, cost_quality: decision.costQuality }, evidence_class: EVIDENCE, shadow_only: true, live_execution: false });
+        decisionRows.push({
+          decision_id: decisionId,
+          compiler_version: ALPHA_COMPILER_VERSION,
+          observed_at: observedAt,
+          asset_id: asset,
+          observed_reference_price: referenceBook?.mid ?? null,
+          action: decision.action,
+          direction: decision.direction,
+          evidence_score: decision.evidenceScore,
+          independent_group_count: decision.independentGroupCount,
+          support_groups: decision.supportGroups,
+          conflict_groups: decision.conflictGroups,
+          source_observation_ids: decision.sourceObservationIds.filter((id) => !id.startsWith("dip:") && !id.startsWith("phase37:")),
+          source_intrabar_event_ids: decision.lateChaseVetoEventId ? [decision.lateChaseVetoEventId] : [],
+          source_cost_quote_id: costId,
+          requested_virtual_notional_usd: costQuote?.requestedNotionalUsd ?? 0,
+          gross_edge_bps: null,
+          estimated_round_trip_cost_bps: decision.estimatedRoundTripCostBps,
+          net_edge_bps: null,
+          veto_reason: decision.vetoReason,
+          reason: decision.reason,
+          metadata: {
+            ignored_observation_ids: decision.ignoredObservationIds,
+            source_evidence_ids_all: decision.sourceObservationIds,
+            emergent_mover_role: "attention_only",
+            score_is_not_expected_return_bps: true,
+            cost_quality: decision.costQuality,
+            reference_price: {
+              value: referenceBook?.mid ?? null,
+              source: referenceBook ? "binance_public_book_ticker_mid" : "unavailable",
+              captured_at: observedAt,
+            },
+            official_macro_context: macroContext,
+          },
+          evidence_class: EVIDENCE,
+          shadow_only: true,
+          live_execution: false,
+        });
       }
 
       if (costRows.length) { const ins = await supabase.from("brian_dynamic_cost_quotes").insert(costRows); if (ins.error) throw ins.error; }
       if (decisionRows.length) { const ins = await supabase.from("brian_alpha_decisions").insert(decisionRows); if (ins.error) throw ins.error; }
       await recordRun(startedAt, "SUCCESS", assets.length, costRows.length + decisionRows.length);
-      return json({ status: "CAPTURED", compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, cost_quality: "DEGRADED_TOP_OF_BOOK", shadow_only: true, live_execution: false });
+      return json({ status: "CAPTURED", compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, cost_quality: "DEGRADED_TOP_OF_BOOK", shadow_only: true, live_execution: false });
     });
     if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shadow_only: true, live_execution: false });
     return lease.value!;
