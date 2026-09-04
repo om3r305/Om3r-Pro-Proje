@@ -3,6 +3,11 @@
 Skipped outside the dedicated CI Postgres job. The test applies the existing intelligence-memory
 base migration first because migration 011 references brian_universe_snapshots and the shared
 brian_reject_mutation() trigger function.
+
+The vanilla postgres:16 service container does not ship Supabase's platform roles. The bootstrap
+below mirrors the hosted role semantics that matter here: `service_role` has BYPASSRLS in Supabase.
+Table grants are still tested separately, so BYPASSRLS does not grant UPDATE/DELETE privileges that
+the migration deliberately revokes.
 """
 
 from __future__ import annotations
@@ -42,6 +47,10 @@ begin
   end if;
 end
 $$;
+-- Hosted Supabase's service_role is an elevated server-side role with BYPASSRLS. This ALTER is
+-- intentionally unconditional because the collector-lease test module may have created the
+-- vanilla-CI placeholder role earlier in the same Postgres service container.
+alter role service_role bypassrls;
 """
 
 
@@ -119,6 +128,16 @@ def _insert_frame(
             ),
         )
     return frame_id
+
+
+def test_ci_service_role_matches_supabase_bypassrls_semantics():
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select rolbypassrls from pg_roles where rolname = 'service_role'")
+            assert cur.fetchone() == (True,)
+    finally:
+        conn.close()
 
 
 def test_valid_shadow_frame_inserts_and_service_role_can_read_it():
