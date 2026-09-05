@@ -17,5 +17,3 @@ BEGIN
   END IF;
 END
 $$;
-
-COMMENT ON EXTENSION pg_cron IS 'Brian 2026 uses guarded cadences for high-write shadow telemetry; ALPHA compiler remains 1m.';
