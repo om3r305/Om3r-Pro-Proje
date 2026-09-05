@@ -113,3 +113,11 @@ renderKpi = function(){
     $('kpiEngine').className='value amber';
   }
 };
+
+// iOS standalone + black-translucent places page content underneath the system status bar.
+// Keep the full-screen look, but paint an opaque safe-area curtain so KPI text never sits under signal/Wi-Fi/battery icons.
+addEventListener('DOMContentLoaded',()=>{
+  const style=document.createElement('style');
+  style.textContent=`@supports (padding-top: env(safe-area-inset-top)){body:before{content:"";position:fixed;z-index:2147483000;top:0;left:0;right:0;height:env(safe-area-inset-top);background:#05070d;pointer-events:none}.dipMain{padding-top:max(10px,env(safe-area-inset-top))}}`;
+  document.head.appendChild(style);
+});
