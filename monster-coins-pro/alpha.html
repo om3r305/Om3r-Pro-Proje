@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#05070d">
+  <title>Brian ALPHA v2 — Live Shadow</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#05070d;color:#edf6ff}
+    *{box-sizing:border-box}body{margin:0;background:#05070d;color:#edf6ff}.wrap{max-width:1500px;margin:auto;padding:22px}.top{display:flex;gap:18px;align-items:center;justify-content:space-between;margin-bottom:18px}.eyebrow{font-size:12px;letter-spacing:.15em;color:#7f91aa;text-transform:uppercase}.title{font-size:28px;font-weight:800}.pill{border:1px solid #263246;border-radius:999px;padding:9px 13px;font-weight:800}.ok{color:#29f1aa}.warn{color:#ffd166}.bad{color:#ff6b7a}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.card{background:#0b121f;border:1px solid #1d2a3f;border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.18)}.metric .k{font-size:12px;color:#7f91aa;text-transform:uppercase}.metric .v{font-size:26px;font-weight:800;margin-top:6px}.layout{display:grid;grid-template-columns:2fr 1fr;gap:14px}.stack{display:grid;gap:14px}.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.head h2{font-size:17px;margin:0}.sub{font-size:12px;color:#8191a8}.tableWrap{overflow:auto}.table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{padding:10px 8px;border-bottom:1px solid #1a2638;text-align:left;white-space:nowrap}.tag{display:inline-flex;padding:4px 7px;border-radius:7px;font-weight:800}.long{background:rgba(41,241,170,.12);color:#29f1aa}.short{background:rgba(255,107,122,.12);color:#ff6b7a}.wait{background:rgba(255,209,102,.10);color:#ffd166}.veto{background:rgba(171,122,255,.12);color:#b995ff}.row{padding:12px;border:1px solid #1b2a40;border-radius:12px;margin-top:8px}.rowTop{display:flex;justify-content:space-between;gap:8px}.meta{font-size:12px;color:#8fa1b8;margin-top:5px;line-height:1.45}.reason{white-space:normal;max-width:680px;color:#b9c6d8}.tiny{font-size:11px;color:#708197}.back{color:#90a8c7;text-decoration:none}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.layout{grid-template-columns:1fr}.wrap{padding:12px}.title{font-size:22px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div><div class="eyebrow">Monster Coins Pro · Brian Market OS</div><div class="title">ALPHA v2 · Live Shadow Monitor</div><div class="sub">Gerçek emir yok · unified decision body · immutable reference · L2 cost</div></div><div><a class="back" href="/">← Ana Dashboard</a> &nbsp; <span id="state" class="pill">CONNECTING</span></div></div>
+  <div class="grid">
+    <div class="card metric"><div class="k">Son karar</div><div id="last" class="v">—</div><div id="lastMeta" class="sub">—</div></div>
+    <div class="card metric"><div class="k">Açık shadow yön</div><div id="positionsCount" class="v">—</div><div class="sub">direction-only position book</div></div>
+    <div class="card metric"><div class="k">Son 80 karar</div><div id="actionMix" class="v">—</div><div class="sub">OPEN / WAIT / VETO</div></div>
+    <div class="card metric"><div class="k">Audit</div><div id="auditCount" class="v">—</div><div id="auditMeta" class="sub">5 / 15 / 60m</div></div>
+  </div>
+  <div class="layout">
+    <div class="stack">
+      <section class="card"><div class="head"><div><h2>ALPHA Decision Feed</h2><div class="sub">OPEN_LONG / OPEN_SHORT / WAIT / VETO</div></div><span class="tiny">10 sn refresh</span></div><div class="tableWrap"><table class="table"><thead><tr><th>Zaman</th><th>Coin</th><th>Aksiyon</th><th>Score</th><th>Groups</th><th>Cost</th><th>Reference</th><th>Neden</th></tr></thead><tbody id="decisions"><tr><td colspan="8">Veri bekleniyor…</td></tr></tbody></table></div></section>
+      <section class="card"><div class="head"><div><h2>Outcome Audit</h2><div class="sub">cost-aware prospective 5m / 15m / 60m sonuçları</div></div></div><div id="outcomes"></div></section>
+    </div>
+    <div class="stack">
+      <section class="card"><div class="head"><div><h2>Shadow Positions</h2><div class="sub">WAIT/VETO mevcut yönü HOLD eder</div></div></div><div id="positions"></div></section>
+      <section class="card"><div class="head"><div><h2>Collector Health</h2><div class="sub">ALPHA runtime</div></div></div><div id="collectors"></div></section>
+    </div>
+  </div>
+</div>
+<script>
+const API='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-control-center';
+const KEY_STORAGE='mcp-dashboard-key-v1';
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+const num=(v,d=3)=>Number.isFinite(Number(v))?Number(v).toLocaleString('en-US',{maximumFractionDigits:d}):'—';
+const clock=v=>v?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(v)):'—';
+const cls=a=>a==='OPEN_LONG'?'long':a==='OPEN_SHORT'?'short':a==='VETO'?'veto':'wait';
+const sym=a=>String(a||'').replace(/^crypto:/,'');
+async function load(){
+  const key=localStorage.getItem(KEY_STORAGE)||'';
+  if(!key){$('state').textContent='DASHBOARD KEY YOK';$('state').className='pill bad';return;}
+  try{
+    const r=await fetch(API,{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'})});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||data.status||('HTTP '+r.status));
+    const a=data.alpha_v2||{};const ds=a.decisions||[], ps=a.positions||[], os=a.outcomes||[];
+    $('state').textContent=a.status||'UNKNOWN';$('state').className='pill '+(a.online?'ok':'bad');
+    $('last').textContent=ds[0]?.action||'—';$('lastMeta').textContent=ds[0]?`${sym(ds[0].asset_id)} · ${clock(ds[0].observed_at)} · score ${num(ds[0].evidence_score,4)}`:'karar yok';
+    $('positionsCount').textContent=String(ps.filter(p=>Number(p.position)!==0).length);
+    const mix=ds.reduce((m,d)=>(m[d.action]=(m[d.action]||0)+1,m),{});$('actionMix').textContent=`${(mix.OPEN_LONG||0)+(mix.OPEN_SHORT||0)} / ${mix.WAIT||0} / ${mix.VETO||0}`;
+    $('auditCount').textContent=String(os.length);$('auditMeta').textContent=os[0]?`Son: ${clock(os[0].resolved_at)} · ${os[0].horizon_seconds/60}m`:'audit bekleniyor';
+    $('decisions').innerHTML=ds.slice(0,40).map(d=>`<tr><td>${clock(d.observed_at)}</td><td><b>${esc(sym(d.asset_id))}</b></td><td><span class="tag ${cls(d.action)}">${esc(d.action)}</span></td><td>${num(d.evidence_score,4)}</td><td>${esc((d.support_groups||[]).join(' + ')||'—')}</td><td>${d.estimated_round_trip_cost_bps==null?'—':num(d.estimated_round_trip_cost_bps,2)+' bps'}</td><td>${num(d.observed_reference_price,8)}</td><td class="reason">${esc(d.reason||d.veto_reason||'—')}</td></tr>`).join('')||'<tr><td colspan="8">Karar yok</td></tr>';
+    $('positions').innerHTML=ps.map(p=>{const side=Number(p.position)>0?'LONG':Number(p.position)<0?'SHORT':'FLAT';const move=Number(p.entry_price)>0&&Number(p.last_reference_price)>0?((Number(p.last_reference_price)/Number(p.entry_price)-1)*10000*(Number(p.position)||1)):null;return `<div class="row"><div class="rowTop"><b>${esc(sym(p.asset_id))} · <span class="${side==='LONG'?'ok':side==='SHORT'?'bad':''}">${side}</span></b><span>${move==null?'—':(move>=0?'+':'')+move.toFixed(2)+' bps'}</span></div><div class="meta">Entry ${num(p.entry_price,8)} · Last ${num(p.last_reference_price,8)}<br>Entry ${clock(p.entry_ts)} · Son state ${clock(p.last_action_at)} · ${esc(p.last_event_type||'—')}</div></div>`}).join('')||'<div class="row">Pozisyon yok</div>';
+    $('outcomes').innerHTML=os.slice(0,20).map(o=>`<div class="row"><div class="rowTop"><b>${esc(sym(o.asset_id))} · ${o.horizon_seconds/60}m</b><span class="${Number(o.direction_adjusted_return)>=0?'ok':'bad'}">${Number.isFinite(Number(o.direction_adjusted_return))?((Number(o.direction_adjusted_return)*10000).toFixed(2)+' bps'):'—'}</span></div><div class="meta">${esc(o.classification)} · MFE ${Number.isFinite(Number(o.mfe))?(Number(o.mfe)*10000).toFixed(1)+' bps':'—'} · MAE ${Number.isFinite(Number(o.mae))?(Number(o.mae)*10000).toFixed(1)+' bps':'—'} · ${clock(o.resolved_at)}</div></div>`).join('')||'<div class="row">Audit sonucu yok</div>';
+    const cs=a.collectors||{};$('collectors').innerHTML=Object.entries(cs).map(([k,v])=>`<div class="row"><div class="rowTop"><b>${esc(k)}</b><span class="${v.status==='SUCCESS'?'ok':'warn'}">${esc(v.status)}</span></div><div class="meta">${clock(v.started_at)}${v.error_message?'<br>'+esc(v.error_message):''}</div></div>`).join('')||'<div class="row">Collector verisi yok</div>';
+  }catch(e){$('state').textContent='ERROR';$('state').className='pill bad';$('lastMeta').textContent=String(e.message||e)}
+}
+load();setInterval(load,10000);
+</script>
+</body>
+</html>
