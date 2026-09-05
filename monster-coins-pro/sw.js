@@ -1,5 +1,12 @@
-const CACHE='monster-coins-pro-shell-v3';
-const ASSETS=['/','/app.css','/app.js','/manifest.webmanifest','/brand.svg','/logo.svg'];
+const CACHE='monster-coins-pro-shell-v5';
+const ASSETS=[
+  '/','/app.css','/app.js','/manifest.webmanifest','/brand.svg','/logo.svg',
+  '/dip.html','/dip.css','/dip.js',
+  '/dip-expert-v2.js','/dip-expert-v3.js',
+  '/dip-expert-v4-core.js','/dip-expert-v4-market.js','/dip-expert-v4-risk.js',
+  '/dip-expert-v4-engine.js','/dip-expert-v4-streams.js','/dip-expert-v4-session.js',
+  '/dip-expert-v4-ui.js','/dip-expert-v4-hotfix.js','/dip-expert-v5-brain.js'
+];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([
   self.clients.claim(),
