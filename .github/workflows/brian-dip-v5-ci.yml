@@ -29,10 +29,14 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install pytest
       - name: Verify V5 JavaScript syntax
         run: node --check monster-coins-pro/dip-expert-v5-brain.js
       - name: Verify Dip V5 isolation contracts
