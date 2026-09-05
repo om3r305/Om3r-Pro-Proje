@@ -1,0 +1,47 @@
+name: Brian Dip V5 Isolation CI
+
+on:
+  pull_request:
+    branches:
+      - brian-2026
+    paths:
+      - "monster-coins-pro/dip*"
+      - "monster-coins-pro/sw.js"
+      - "tests/test_brian2026_dip_isolated_v5.py"
+      - ".github/workflows/brian-dip-v5-ci.yml"
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - "monster-coins-pro/dip*"
+      - "monster-coins-pro/sw.js"
+      - "tests/test_brian2026_dip_isolated_v5.py"
+      - ".github/workflows/brian-dip-v5-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-dip-v5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify V5 JavaScript syntax
+        run: node --check monster-coins-pro/dip-expert-v5-brain.js
+      - name: Verify Dip V5 isolation contracts
+        run: python -m pytest -q tests/test_brian2026_dip_isolated_v5.py
+      - name: Verify main dashboard has no V5 import
+        run: '! grep -q "dip-expert-v5-brain" monster-coins-pro/index.html'
+      - name: Verify V5 targets only dedicated Dip backend
+        run: >-
+          grep -q "API.includes('/brian-dip-trader')" monster-coins-pro/dip-expert-v5-brain.js &&
+          ! grep -q "brian-control-center" monster-coins-pro/dip-expert-v5-brain.js
+      - name: Verify clean patch formatting
+        run: git diff --check HEAD^
