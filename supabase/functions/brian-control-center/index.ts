@@ -17,9 +17,20 @@ const EVIDENCE_CLASS = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const AUTH_ID = "control-v3";
 const ALPHA_COLLECTORS = [
   "brian-alpha-decision-compiler-v2",
-  "brian-missed-opportunity-auditor-v2",
+  "brian-missed-opportunity-auditor-v3",
   "brian-official-macro-eye",
 ];
+const CLOUD_COLLECTORS = [
+  { id: "brian-universe-collector", label: "Piyasa Evreni", cadenceSeconds: 900 },
+  { id: "brian-live-shadow", label: "Phase 3.7 Shadow", cadenceSeconds: 300 },
+  { id: "brian-sensor-mesh", label: "Sensör Ağı", cadenceSeconds: 600 },
+  { id: "brian-derivatives-eye", label: "Türev Piyasa Gözü", cadenceSeconds: 300 },
+  { id: "brian-intrabar-eye", label: "Intrabar Gözü", cadenceSeconds: 120 },
+  { id: "brian-alpha-decision-compiler-v2", label: "ALPHA Karar Motoru", cadenceSeconds: 60 },
+  { id: "brian-missed-opportunity-auditor-v3", label: "Sonuç Denetçisi", cadenceSeconds: 300 },
+  { id: "brian-official-macro-eye", label: "Resmî Makro Gözü", cadenceSeconds: 600 },
+  { id: "brian-fx-eye", label: "Döviz Gözü", cadenceSeconds: 3600 },
+] as const;
 const ALLOWED_ORIGIN = /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
 const ALLOWED_EXACT = new Set([
   "https://monster-coins-pro-seven.vercel.app",
@@ -52,6 +63,17 @@ type ReportRow = {
   telegram_error: string | null;
 };
 
+type CollectorRun = {
+  collector_id: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  degraded_sources: unknown;
+  error_class: string | null;
+  error_message: string | null;
+  metadata: unknown;
+};
+
 function corsHeaders(origin?: string | null): Record<string, string> {
   const allowed = origin && (ALLOWED_EXACT.has(origin) || ALLOWED_ORIGIN.test(origin))
     ? origin
@@ -79,6 +101,10 @@ function constantTimeEqual(left: string, right: string): boolean {
   let diff = 0;
   for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
   return diff === 0;
+}
+function ageSeconds(value: unknown, now = Date.now()): number | null {
+  const ts = typeof value === "string" ? Date.parse(value) : NaN;
+  return Number.isFinite(ts) ? Math.max(0, Math.round((now - ts) / 1000)) : null;
 }
 async function authHashes(): Promise<{ dashboard: string; cron: string }> {
   const result = await supabase.from("brian_dashboard_auth")
@@ -185,7 +211,7 @@ async function loadAlphaV2Status() {
       .order("observed_at", { ascending: false }).limit(80),
     supabase.from("brian_collector_runs")
       .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
-      .in("collector_id", ALPHA_COLLECTORS).order("started_at", { ascending: false }).limit(30),
+      .in("collector_id", ALPHA_COLLECTORS).order("started_at", { ascending: false }).limit(40),
   ]);
 
   const named = { decisions, positions, comparisons, outcomes, costs, collectors };
@@ -195,8 +221,8 @@ async function loadAlphaV2Status() {
   }
   const decisionRows = decisions.data ?? [];
   const lastDecisionAt = decisionRows[0]?.observed_at ? String(decisionRows[0].observed_at) : null;
-  const ageSeconds = lastDecisionAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastDecisionAt)) / 1000)) : null;
-  const online = ageSeconds != null && ageSeconds < 180;
+  const decisionAge = ageSeconds(lastDecisionAt);
+  const online = decisionAge != null && decisionAge < 180;
   const latestByCollector: Record<string, unknown> = {};
   for (const row of collectors.data ?? []) {
     const id = String(row.collector_id);
@@ -207,7 +233,7 @@ async function loadAlphaV2Status() {
     online,
     compiler_version: decisionRows[0]?.compiler_version ?? null,
     last_decision_at: lastDecisionAt,
-    decision_age_seconds: ageSeconds,
+    decision_age_seconds: decisionAge,
     cadence_seconds: 60,
     decisions: decisionRows,
     positions: positions.data ?? [],
@@ -221,8 +247,170 @@ async function loadAlphaV2Status() {
   };
 }
 
+async function loadDipSummary() {
+  const lastEvent = await supabase.from("brian_dip_session_events")
+    .select("session_id,event_kind,requested_at,starting_equity,config")
+    .order("requested_at", { ascending: false }).order("event_id", { ascending: false }).limit(1).maybeSingle();
+  if (lastEvent.error) throw lastEvent.error;
+  if (!lastEvent.data) return {
+    status: "IDLE", session_id: null, started_at: null, latest_snapshot_at: null, heartbeat_at: null,
+    browser_engine_required: true, cloud_runner_enabled: false, shadow_only: true, live_execution: false,
+  };
+  const sessionId = String(lastEvent.data.session_id);
+  const [start, snapshot, lease] = await Promise.all([
+    supabase.from("brian_dip_session_events")
+      .select("requested_at,starting_equity,trade_notional,config")
+      .eq("session_id", sessionId).eq("event_kind", "START").order("requested_at", { ascending: true }).limit(1).maybeSingle(),
+    supabase.from("brian_dip_snapshots")
+      .select("observed_at,cash,equity,realized_pnl,unrealized_pnl,trade_count,win_count,loss_count,state")
+      .eq("session_id", sessionId).order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("brian_dip_engine_leases")
+      .select("claimed_at,heartbeat_at,lease_generation")
+      .eq("session_id", sessionId).maybeSingle(),
+  ]);
+  for (const result of [start, snapshot, lease]) if (result.error) throw result.error;
+  const heartbeatAt = lease.data?.heartbeat_at ? String(lease.data.heartbeat_at) : null;
+  const heartbeatAge = ageSeconds(heartbeatAt);
+  const activeSession = String(lastEvent.data.event_kind) === "START";
+  return {
+    status: !activeSession ? "PAUSED" : heartbeatAge != null && heartbeatAge < 45 ? "BROWSER_ACTIVE" : "BROWSER_STOPPED",
+    session_id: sessionId,
+    started_at: start.data?.requested_at ?? null,
+    starting_equity: start.data?.starting_equity == null ? null : Number(start.data.starting_equity),
+    engine_version: (start.data?.config as Record<string, unknown> | null)?.engine_version ?? null,
+    latest_snapshot_at: snapshot.data?.observed_at ?? null,
+    heartbeat_at: heartbeatAt,
+    heartbeat_age_seconds: heartbeatAge,
+    snapshot: snapshot.data ?? null,
+    browser_engine_required: true,
+    cloud_runner_enabled: false,
+    shadow_only: true,
+    live_execution: false,
+  };
+}
+
+async function loadLearningStatus() {
+  const latest = await supabase.from("brian_sensor_reliability_shadow_snapshots")
+    .select("window_start,window_end,generated_at")
+    .order("window_end", { ascending: false }).order("generated_at", { ascending: false }).limit(1).maybeSingle();
+  if (latest.error) throw latest.error;
+  const windowEnd = latest.data?.window_end ? String(latest.data.window_end) : null;
+  const [snapshotRows, featureRows, calibrationRows] = await Promise.all([
+    windowEnd
+      ? supabase.from("brian_sensor_reliability_shadow_snapshots")
+        .select("snapshot_id,window_start,window_end,generated_at,independent_group,sensor_family,sensor_horizon,outcome_horizon_seconds,sample_count,hit_rate,bayesian_hit_rate_beta10_10,avg_signed_bps,median_signed_bps,avg_cost_adjusted_signed_bps,avg_abs_market_move_bps")
+        .eq("window_end", windowEnd).order("outcome_horizon_seconds", { ascending: true }).order("sample_count", { ascending: false }).limit(100)
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from("brian_alpha_reliability_shadow_features")
+      .select("decision_observed_at,captured_at,source_observation_count,matched_source_observation_count,feature_covered_source_count")
+      .order("decision_observed_at", { ascending: false }).limit(240),
+    supabase.from("brian_sensor_reliability_prospective_calibration")
+      .select("resolved_at,independent_group,sensor_horizon,outcome_horizon_seconds,prior_sample_count,prior_bayesian_hit_rate_beta10_10,prior_median_signed_bps,realized_sensor_signed_bps,realized_hit")
+      .order("resolved_at", { ascending: false }).limit(500),
+  ]);
+  for (const [name, result] of Object.entries({ snapshotRows, featureRows, calibrationRows })) {
+    if (result.error) throw new Error(`${name}:${result.error.message}`);
+  }
+  const features = featureRows.data ?? [];
+  const sourceCount = features.reduce((sum, row) => sum + Number(row.source_observation_count ?? 0), 0);
+  const matchedCount = features.reduce((sum, row) => sum + Number(row.matched_source_observation_count ?? 0), 0);
+  const coveredCount = features.reduce((sum, row) => sum + Number(row.feature_covered_source_count ?? 0), 0);
+  const calibrations = calibrationRows.data ?? [];
+  const horizonCounts: Record<string, number> = { "300": 0, "900": 0, "3600": 0 };
+  for (const row of calibrations) {
+    const key = String(row.outcome_horizon_seconds);
+    horizonCounts[key] = (horizonCounts[key] ?? 0) + 1;
+  }
+  return {
+    mode: "MEASUREMENT_ONLY",
+    alpha_weight_mutation_enabled: false,
+    reliability_snapshot: {
+      window_start: latest.data?.window_start ?? null,
+      window_end: windowEnd,
+      generated_at: latest.data?.generated_at ?? null,
+      age_seconds: ageSeconds(latest.data?.generated_at),
+      rows: snapshotRows.data ?? [],
+    },
+    feature_freeze: {
+      latest_decision_at: features[0]?.decision_observed_at ?? null,
+      latest_captured_at: features[0]?.captured_at ?? null,
+      sampled_decisions: features.length,
+      source_count: sourceCount,
+      matched_count: matchedCount,
+      covered_count: coveredCount,
+      source_match_pct: sourceCount > 0 ? 100 * matchedCount / sourceCount : null,
+      feature_coverage_pct: matchedCount > 0 ? 100 * coveredCount / matchedCount : null,
+    },
+    calibration: {
+      latest_resolved_at: calibrations[0]?.resolved_at ?? null,
+      latest_age_seconds: ageSeconds(calibrations[0]?.resolved_at),
+      sampled_rows: calibrations.length,
+      horizon_counts: horizonCounts,
+      rows: calibrations.slice(0, 120),
+    },
+  };
+}
+
+async function loadCloudHealth() {
+  const runs = await supabase.from("brian_collector_runs")
+    .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
+    .in("collector_id", CLOUD_COLLECTORS.map((item) => item.id)).order("started_at", { ascending: false }).limit(160);
+  if (runs.error) throw runs.error;
+  const latest = new Map<string, CollectorRun>();
+  for (const row of (runs.data ?? []) as CollectorRun[]) if (!latest.has(row.collector_id)) latest.set(row.collector_id, row);
+  const now = Date.now();
+  const components = CLOUD_COLLECTORS.map((item) => {
+    const row = latest.get(item.id);
+    const runAge = ageSeconds(row?.started_at, now);
+    const fresh = runAge != null && runAge <= item.cadenceSeconds * 3 + 90;
+    const successish = row?.status === "SUCCESS" || row?.status === "DEGRADED";
+    return {
+      id: item.id,
+      label: item.label,
+      cadence_seconds: item.cadenceSeconds,
+      state: !row ? "NO_DATA" : fresh && successish ? row.status : fresh ? "ERROR" : "STALE",
+      last_status: row?.status ?? null,
+      last_started_at: row?.started_at ?? null,
+      last_finished_at: row?.finished_at ?? null,
+      age_seconds: runAge,
+      error_class: row?.error_class ?? null,
+      error_message: row?.error_message ?? null,
+      degraded_sources: row?.degraded_sources ?? [],
+    };
+  });
+  const healthy = components.filter((row) => row.state === "SUCCESS" || row.state === "DEGRADED").length;
+  return {
+    mode: "SERVER_SIDE_CRON",
+    browser_independent: true,
+    continues_when_page_closed: true,
+    healthy_components: healthy,
+    total_components: components.length,
+    overall: healthy === components.length ? "ONLINE" : healthy >= Math.ceil(components.length * 0.7) ? "DEGRADED" : "ERROR",
+    components,
+  };
+}
+
+async function loadSystemStatus() {
+  const [cloud, learning, dip] = await Promise.all([
+    loadCloudHealth(),
+    loadLearningStatus(),
+    loadDipSummary(),
+  ]);
+  return {
+    background: cloud,
+    learning,
+    dip,
+    architecture: {
+      main_alpha_browser_independent: true,
+      main_shadow_session_is_tracking_window: true,
+      dip_browser_independent: false,
+      dip_note: "DIP V4/V5 motoru halen tarayıcı streamlerine bağlıdır; MAIN/ALPHA cloud motorundan ayrıdır.",
+    },
+  };
+}
+
 async function dashboardStatus() {
-  const [session, nativeEngine, profitEngine, alphaV2] = await Promise.all([
+  const [session, nativeEngine, profitEngine, alphaV2, system] = await Promise.all([
     latestSession(),
     latestEngineTick("NATIVE"),
     latestEngineTick("PROFIT"),
@@ -237,11 +425,17 @@ async function dashboardStatus() {
       errors: [String(error instanceof Error ? error.message : error)],
       shadow_only: true, live_execution: false,
     })),
+    loadSystemStatus().catch((error) => ({
+      background: { mode: "SERVER_SIDE_CRON", browser_independent: true, continues_when_page_closed: true, overall: "DEGRADED", healthy_components: 0, total_components: CLOUD_COLLECTORS.length, components: [], error: String(error instanceof Error ? error.message : error) },
+      learning: null,
+      dip: null,
+      architecture: { main_alpha_browser_independent: true, main_shadow_session_is_tracking_window: true, dip_browser_independent: false },
+    })),
   ]);
   const now = Date.now();
   const engineLastAt = [nativeEngine?.observed_at, profitEngine?.observed_at].filter(Boolean).sort().at(-1) as string | undefined;
   const base = {
-    schema_version: "brian.control-center.status.v2",
+    schema_version: "brian.control-center.status.v3",
     generated_at: new Date().toISOString(),
     source_experiment_id: SOURCE_EXPERIMENT_ID,
     engine: {
@@ -249,8 +443,11 @@ async function dashboardStatus() {
       last_tick_at: engineLastAt ?? null,
       tick_age_seconds: engineLastAt ? Math.max(0, Math.round((now - Date.parse(engineLastAt)) / 1000)) : null,
       cadence_seconds: 300,
+      browser_independent: true,
+      continues_when_page_closed: true,
     },
     alpha_v2: alphaV2,
+    system,
     telegram: { configured: Boolean((Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "").trim() && (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").trim()) },
     shadow_only: true,
     live_execution: false,
@@ -272,6 +469,8 @@ async function dashboardStatus() {
       starting_equity: startingEquity,
       policy_scope: session.start.policy_scope,
       source_experiment_id: session.start.source_experiment_id,
+      tracking_only: true,
+      background_engine_independent: true,
     },
     policies: {
       NATIVE: { ...derivePolicySnapshot(nativeTicks, startingEquity), decisions: topDecisionDiagnostics(nativeTicks) },
@@ -292,14 +491,14 @@ async function startSession(body: Record<string, unknown>) {
     p_policy_scope: policyScope, p_source_experiment_id: SOURCE_EXPERIMENT_ID,
   });
   if (result.error) throw result.error;
-  return { status: "STARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, shadow_only: true, live_execution: false };
+  return { status: "STARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
 }
 async function pauseSession() {
   const session = await latestSession();
-  if (!session || !session.active) return { status: "ALREADY_PAUSED", shadow_only: true, live_execution: false };
+  if (!session || !session.active) return { status: "ALREADY_PAUSED", tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
   const result = await supabase.rpc("brian_dashboard_pause_session", { p_event_id: `evt-${crypto.randomUUID()}`, p_session_id: session.start.session_id });
   if (result.error) throw result.error;
-  return { status: "PAUSED", session_id: session.start.session_id, shadow_only: true, live_execution: false };
+  return { status: "PAUSED", session_id: session.start.session_id, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
 }
 async function restartSession(body: Record<string, unknown>) {
   const startingEquity = Number(body.starting_equity ?? 1000), policyScope = String(body.policy_scope ?? "BOTH").toUpperCase();
@@ -312,7 +511,7 @@ async function restartSession(body: Record<string, unknown>) {
     p_source_experiment_id: SOURCE_EXPERIMENT_ID,
   });
   if (result.error) throw result.error;
-  return { status: "RESTARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, shadow_only: true, live_execution: false };
+  return { status: "RESTARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
 }
 async function telegramSend(text: string): Promise<{ attempted: boolean; sent: boolean; error: string | null }> {
   const token = (Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "").trim(), chatId = (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").trim();
