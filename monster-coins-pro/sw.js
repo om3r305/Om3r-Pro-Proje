@@ -1,7 +1,7 @@
-const CACHE='monster-coins-pro-shell-v5';
+const CACHE='monster-coins-pro-shell-v6';
 const ASSETS=[
-  '/','/app.css','/app.js','/manifest.webmanifest','/brand.svg','/logo.svg',
-  '/dip.html','/dip.css','/dip.js',
+  '/','/dashboard.css','/dashboard.js','/manifest.webmanifest','/brand.svg','/logo.svg',
+  '/app.css','/dip.html','/dip.css','/dip.js',
   '/dip-expert-v2.js','/dip-expert-v3.js',
   '/dip-expert-v4-core.js','/dip-expert-v4-market.js','/dip-expert-v4-risk.js',
   '/dip-expert-v4-engine.js','/dip-expert-v4-streams.js','/dip-expert-v4-session.js',
@@ -23,13 +23,8 @@ self.addEventListener('fetch',event=>{
 self.addEventListener('message',event=>{
   if(event.data?.type!=='NOTIFY') return;
   const {title,body,tag}=event.data;
-  event.waitUntil(self.registration.showNotification(title||'Monster Coins Pro',{
-    body:body||'',
-    icon:'/logo.svg',
-    badge:'/logo.svg',
-    tag:tag||'monster-coins-pro',
-    renotify:true,
-    data:{url:'/'}
+  event.waitUntil(self.registration.showNotification(title||'Brian Market OS',{
+    body:body||'',icon:'/logo.svg',badge:'/logo.svg',tag:tag||'brian-market-os',renotify:true,data:{url:'/'}
   }));
 });
 self.addEventListener('notificationclick',event=>{
