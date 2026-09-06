@@ -38,7 +38,6 @@ const KLINE_LIMIT = 32;
 const AGG_TRADE_LIMIT = 200;
 const MIN_INTERVAL_SECONDS = 50;
 const LEASE_SECONDS = 55;
-const PRIOR_LOOKUP_BATCH = 40;
 const MIN_SUPPORT_GROUPS = 2;
 const MIN_CONSENSUS_SCORE = 0.18;
 const OVEREXTENSION_SIGMA = 3.5;
@@ -168,20 +167,12 @@ Deno.serve(async (req: Request) => {
     const consensusEyeIds = new Map<string, string>();
     for (const market of usable) consensusEyeIds.set(`crypto:${market.candidate.symbol}`, await sha256(`intrabar-consensus|crypto:${market.candidate.symbol}`));
     const allEyeIds = [...signalRows.map((x) => x.eyeId), ...consensusEyeIds.values()];
-    const priorRows: PriorTick[] = [];
-    for (let i = 0; i < allEyeIds.length; i += PRIOR_LOOKUP_BATCH) {
-      const chunk = allEyeIds.slice(i, i + PRIOR_LOOKUP_BATCH);
-      const priorResp = await supabase.from("brian_micro_book_ticks")
-        .select("eye_id,starting_equity,equity_after,peak_equity_after,max_drawdown_pct_after,target_direction,observed_mid_price,observed_at")
-        .in("eye_id", chunk)
-        .order("observed_at", { ascending: false })
-        .limit(1000);
-      if (priorResp.error) throw priorResp.error;
-      priorRows.push(...((priorResp.data ?? []) as PriorTick[]));
-    }
+    const priorResp = allEyeIds.length
+      ? await supabase.rpc("brian_latest_micro_book_ticks", { p_eye_ids: allEyeIds })
+      : { data: [], error: null };
+    if (priorResp.error) throw priorResp.error;
     const latestByEye = new Map<string, PriorTick>();
-    priorRows.sort((a, b) => Date.parse(String(b.observed_at ?? 0)) - Date.parse(String(a.observed_at ?? 0)));
-    for (const row of priorRows) if (!latestByEye.has(row.eye_id)) latestByEye.set(row.eye_id, row);
+    for (const row of (priorResp.data ?? []) as PriorTick[]) latestByEye.set(row.eye_id, row);
 
     const observations: Observation[] = []; const microTicks: Record<string, unknown>[] = [];
     for (const row of signalRows) {
@@ -219,7 +210,7 @@ Deno.serve(async (req: Request) => {
     if (microTicks.length) { const ins = await supabase.from("brian_micro_book_ticks").insert(microTicks); if (ins.error) throw ins.error; }
 
     const status = degradedSources.length ? "DEGRADED" : "SUCCESS"; const stored = observations.length + events.length + microTicks.length;
-    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS, prior_lookup_batch: PRIOR_LOOKUP_BATCH });
+    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS });
       return jsonResponse({ status, experiment_id: EXPERIMENT_ID, observed_at: observedAt, scanned_symbols: usable.length, signal_observations: observations.length, reaction_events: events.length, actionable_shadow: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_vetoes: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, shadow_only: true, live_execution: false });
     });
     // Contended: another invocation already owns this collector's lease. No collector work has

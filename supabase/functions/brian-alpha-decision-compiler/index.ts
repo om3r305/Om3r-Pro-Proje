@@ -34,6 +34,8 @@ const L2_DEPTH_LIMIT = 100;
 const FROZEN_PHASE37_EXPERIMENT_ID = "phase37-prospective-live-20260903";
 const MACRO_CONTEXT_WINDOW_MS = 60 * 60_000;
 const MAX_MACRO_CONTEXT_EVENTS = 24;
+const ENABLE_DIP_DIRECTIONAL_EVIDENCE = false; // MAIN and DIP remain separate brains by default.
+const RADAR_MAX_AGE_MS = 30 * 60_000; // 2x the canonical 15m universe cadence.
 
 type OfficialMacroContextEvent = {
   observation_id: string;
@@ -150,41 +152,50 @@ function preliminaryIsActionable(preliminary: AlphaDecisionResult | undefined): 
 
 async function latestRadarAssets(): Promise<string[]> {
   const out = new Set<string>(CORE_ASSETS);
-  const frame = await supabase.from("brian_emergent_mover_frames")
-    .select("observed_at,report")
-    .eq("provider", "binance_public")
+  const snapshot = await supabase.from("brian_universe_snapshots")
+    .select("observed_at,candidates")
     .order("observed_at", { ascending: false }).limit(1).maybeSingle();
-  if (!frame.error && frame.data?.report && typeof frame.data.report === "object") {
-    const candidates = (frame.data.report as Record<string, unknown>).candidates;
-    if (Array.isArray(candidates)) {
-      for (const raw of candidates.slice(0, MAX_ASSETS)) {
-        if (!raw || typeof raw !== "object") continue;
-        const symbol = String((raw as Record<string, unknown>).symbol ?? "").trim().toUpperCase();
-        if (/^[A-Z0-9]+USDT$/.test(symbol)) out.add(`crypto:${symbol}`);
-      }
-    }
+  if (snapshot.error || !snapshot.data) return [...out];
+  const observedMs = Date.parse(String(snapshot.data.observed_at));
+  if (!Number.isFinite(observedMs) || Date.now() - observedMs > RADAR_MAX_AGE_MS || observedMs > Date.now() + 5_000) return [...out];
+  const envelope = snapshot.data.candidates as Record<string, unknown> | null;
+  const candidates = envelope && Array.isArray(envelope.candidates) ? envelope.candidates : [];
+  for (const raw of candidates.slice(0, MAX_ASSETS)) {
+    if (!raw || typeof raw !== "object") continue;
+    const symbol = String((raw as Record<string, unknown>).symbol ?? "").trim().toUpperCase();
+    if (/^[A-Z0-9]+USDT$/.test(symbol)) out.add(`crypto:${symbol}`);
   }
   return [...out].slice(0, MAX_ASSETS);
 }
 
 async function loadSensorEvidence(assets: string[], nowMs: number): Promise<Map<string, AlphaEvidenceRow[]>> {
   const map = new Map<string, AlphaEvidenceRow[]>();
-  const since = new Date(nowMs - 36 * 60 * 60_000).toISOString();
-  const resp = await supabase.from("brian_sensor_observations")
-    .select("observation_id,asset_id,sensor_family,horizon,independent_group,observed_at,direction,strength,confidence,reliability,available,reason")
-    .in("asset_id", assets).gte("observed_at", since).eq("available", true)
-    .neq("independent_group", "news_gdelt")
-    .order("observed_at", { ascending: false }).limit(6000);
-  if (resp.error) throw resp.error;
-  for (const r of resp.data ?? []) {
-    const asset = String(r.asset_id);
-    const rows = map.get(asset) ?? [];
-    rows.push({
-      observationId: String(r.observation_id), sourceKind: String(r.sensor_family), independentGroup: String(r.independent_group),
-      direction: Number(r.direction), strength: finite(r.strength), confidence: finite(r.confidence), reliability: finite(r.reliability),
-      observedAt: String(r.observed_at), horizon: String(r.horizon), fresh: isFresh(String(r.observed_at), String(r.horizon), nowMs), reason: String(r.reason ?? "sensor evidence"),
-    });
-    map.set(asset, rows);
+  const specs = [
+    { horizon: "MICRO_1_5M", windowMs: freshnessMs("MICRO_1_5M") },
+    { horizon: "FAST_5_30M", windowMs: freshnessMs("FAST_5_30M") },
+    { horizon: "EVENT_DRIVEN", windowMs: freshnessMs("EVENT_DRIVEN") },
+    { horizon: "DAILY", windowMs: freshnessMs("DAILY") },
+  ] as const;
+  const responses = await Promise.all(specs.map(async ({ horizon, windowMs }) => {
+    const since = new Date(nowMs - windowMs).toISOString();
+    return await supabase.from("brian_sensor_observations")
+      .select("observation_id,asset_id,sensor_family,horizon,independent_group,observed_at,direction,strength,confidence,reliability,available,reason")
+      .in("asset_id", assets).eq("horizon", horizon).gte("observed_at", since).eq("available", true)
+      .neq("independent_group", "news_gdelt")
+      .order("observed_at", { ascending: false }).limit(1500);
+  }));
+  for (const resp of responses) {
+    if (resp.error) throw resp.error;
+    for (const r of resp.data ?? []) {
+      const asset = String(r.asset_id);
+      const rows = map.get(asset) ?? [];
+      rows.push({
+        observationId: String(r.observation_id), sourceKind: String(r.sensor_family), independentGroup: String(r.independent_group),
+        direction: Number(r.direction), strength: finite(r.strength), confidence: finite(r.confidence), reliability: finite(r.reliability),
+        observedAt: String(r.observed_at), horizon: String(r.horizon), fresh: isFresh(String(r.observed_at), String(r.horizon), nowMs), reason: String(r.reason ?? "sensor evidence"),
+      });
+      map.set(asset, rows);
+    }
   }
   return map;
 }
@@ -356,7 +367,7 @@ Deno.serve(async (req: Request) => {
       let evidence = new Map<string, AlphaEvidenceRow[]>();
       try { evidence = await loadSensorEvidence(assets, evidenceNowMs); }
       catch (error) { degradedSources.push(`sensor_evidence:${errorText(error)}`); }
-      await addDipEvidence(evidence, assets, evidenceNowMs);
+      if (ENABLE_DIP_DIRECTIONAL_EVIDENCE) await addDipEvidence(evidence, assets, evidenceNowMs);
       await addFrozenPhase37Evidence(evidence, assets, evidenceNowMs);
 
       let intrabar = new Map<string, IntrabarVetoContext>();
@@ -505,6 +516,8 @@ Deno.serve(async (req: Request) => {
             ignored_observation_ids: decision.ignoredObservationIds,
             source_evidence_ids_all: decision.sourceObservationIds,
             emergent_mover_role: "attention_only",
+            radar_source: "brian_universe_snapshots",
+            dip_directional_evidence_enabled: ENABLE_DIP_DIRECTIONAL_EVIDENCE,
             gdelt_role: "discovery_only_no_direction_vote",
             frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID,
             score_is_not_expected_return_bps: true,

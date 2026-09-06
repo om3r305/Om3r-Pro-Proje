@@ -151,8 +151,11 @@ Deno.serve(async (req: Request) => {
     }
     if (observations.length) { const ins = await supabase.from("brian_sensor_observations").insert(observations); if (ins.error) throw ins.error; }
 
-    const eyeIds = observations.map((x) => x.eye_id); const priorResp = eyeIds.length ? await supabase.from("brian_micro_book_ticks").select("eye_id,starting_equity,equity_after,peak_equity_after,max_drawdown_pct_after,target_direction,observed_mid_price,observed_at").in("eye_id", eyeIds).order("observed_at", { ascending: false }).limit(500) : { data: [], error: null };
-    if (priorResp.error) throw priorResp.error; const latestByEye = new Map<string, PriorTick>(); for (const row of (priorResp.data ?? []) as PriorTick[]) if (!latestByEye.has(row.eye_id)) latestByEye.set(row.eye_id, row);
+    const eyeIds = observations.map((x) => x.eye_id);
+    const priorResp = eyeIds.length ? await supabase.rpc("brian_latest_micro_book_ticks", { p_eye_ids: eyeIds }) : { data: [], error: null };
+    if (priorResp.error) throw priorResp.error;
+    const latestByEye = new Map<string, PriorTick>();
+    for (const row of (priorResp.data ?? []) as PriorTick[]) latestByEye.set(row.eye_id, row);
 
     const marketByAsset = new Map(usable.map((x) => [`crypto:${x.candidate.symbol}`, x])); const microTicks: Record<string, unknown>[] = [];
     for (const obs of observations) {
