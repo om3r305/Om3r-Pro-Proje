@@ -9,7 +9,7 @@ function v4HandleWsMessage(m,venue){
   const sym=String(m.s||m.data?.s||'');if(!sym)return;lastWs=v4Now();
   if(m.e==='aggTrade'){v4TapePush(venue==='USDM_PERP'?v4TapePerp:v4TapeSpot,sym,m);if(venue==='SPOT')tick(sym,Number(m.p));}
   else if(m.e==='kline'&&venue==='SPOT'){v4UpdateBar(sym,m.k.i,m.k);if(sym===selected)_v4PrevDraw();}
-  else if(m.e==='bookTicker'||(m.b!=null&&m.a!=null&&!Array.isArray(m.b))){v4BookUpdate(venue==='USDM_PERP'?v4PerpBook:v4SpotBook,sym,m);if(venue==='SPOT'&&Number(m.b)>0&&Number(m.a)>0){live[sym]=(Number(m.b)+Number(m.a))/2;v4Evaluate(sym,live[sym]);}}
+  else if(m.e==='bookTicker'||(m.b!=null&&m.a!=null&&!Array.isArray(m.b))){v4BookUpdate(venue==='USDM_PERP'?v4PerpBook:v4SpotBook,sym,m);if(venue==='SPOT'&&Number(m.b)>0&&Number(m.a)>0){const mid=(Number(m.b)+Number(m.a))/2;v4Evaluate(sym,mid);}}
   else if(m.lastUpdateId!=null||m.e==='depthUpdate')v4BookUpdate(venue==='USDM_PERP'?v4PerpBook:v4SpotBook,sym,m);
   const now=v4Now();if(now-v4RenderAt>450){v4RenderAt=now;renderRadar();renderKpi();if(sym===selected)_v4PrevDraw();}
 }
