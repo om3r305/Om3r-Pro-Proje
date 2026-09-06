@@ -18,19 +18,29 @@ const AUTH_ID = "control-v3";
 const ALPHA_COLLECTORS = [
   "brian-alpha-decision-compiler-v2",
   "brian-missed-opportunity-auditor-v3",
+  // Production v3 currently preserves the historical collector_id for append-only continuity.
+  "brian-missed-opportunity-auditor-v2",
   "brian-official-macro-eye",
 ];
-const CLOUD_COLLECTORS = [
-  { id: "brian-universe-collector", label: "Piyasa Evreni", cadenceSeconds: 900 },
-  { id: "brian-live-shadow", label: "Phase 3.7 Shadow", cadenceSeconds: 300 },
-  { id: "brian-sensor-mesh", label: "Sensör Ağı", cadenceSeconds: 600 },
-  { id: "brian-derivatives-eye", label: "Türev Piyasa Gözü", cadenceSeconds: 300 },
-  { id: "brian-intrabar-eye", label: "Intrabar Gözü", cadenceSeconds: 120 },
-  { id: "brian-alpha-decision-compiler-v2", label: "ALPHA Karar Motoru", cadenceSeconds: 60 },
-  { id: "brian-missed-opportunity-auditor-v3", label: "Sonuç Denetçisi", cadenceSeconds: 300 },
-  { id: "brian-official-macro-eye", label: "Resmî Makro Gözü", cadenceSeconds: 600 },
-  { id: "brian-fx-eye", label: "Döviz Gözü", cadenceSeconds: 3600 },
-] as const;
+type CloudComponentConfig = {
+  id: string;
+  label: string;
+  cadenceSeconds: number;
+  collectorIds: readonly string[];
+};
+const CLOUD_COLLECTORS: readonly CloudComponentConfig[] = [
+  // These three services publish canonical output tables but do not write brian_collector_runs.
+  { id: "brian-universe-collector", label: "Piyasa Evreni", cadenceSeconds: 900, collectorIds: [] },
+  { id: "brian-live-shadow", label: "Phase 3.7 Shadow", cadenceSeconds: 300, collectorIds: [] },
+  { id: "brian-sensor-mesh", label: "Sensör Ağı", cadenceSeconds: 600, collectorIds: [] },
+  // Keep canonical dashboard ids while accepting the collector ids actually emitted in production.
+  { id: "brian-derivatives-eye", label: "Türev Piyasa Gözü", cadenceSeconds: 300, collectorIds: ["brian-derivatives-eye", "phase39-binance-usdm-derivatives"] },
+  { id: "brian-intrabar-eye", label: "Intrabar Gözü", cadenceSeconds: 120, collectorIds: ["brian-intrabar-eye"] },
+  { id: "brian-alpha-decision-compiler-v2", label: "ALPHA Karar Motoru", cadenceSeconds: 60, collectorIds: ["brian-alpha-decision-compiler-v2"] },
+  { id: "brian-missed-opportunity-auditor-v3", label: "Sonuç Denetçisi", cadenceSeconds: 300, collectorIds: ["brian-missed-opportunity-auditor-v3", "brian-missed-opportunity-auditor-v2"] },
+  { id: "brian-official-macro-eye", label: "Resmî Makro Gözü", cadenceSeconds: 600, collectorIds: ["brian-official-macro-eye"] },
+  { id: "brian-fx-eye", label: "Döviz Gözü", cadenceSeconds: 3600, collectorIds: ["brian-fx-eye", "phase39-ecb-fx"] },
+];
 const ALLOWED_ORIGIN = /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
 const ALLOWED_EXACT = new Set([
   "https://monster-coins-pro-seven.vercel.app",
@@ -352,15 +362,66 @@ async function loadLearningStatus() {
 }
 
 async function loadCloudHealth() {
-  const runs = await supabase.from("brian_collector_runs")
-    .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
-    .in("collector_id", CLOUD_COLLECTORS.map((item) => item.id)).order("started_at", { ascending: false }).limit(160);
-  if (runs.error) throw runs.error;
-  const latest = new Map<string, CollectorRun>();
-  for (const row of (runs.data ?? []) as CollectorRun[]) if (!latest.has(row.collector_id)) latest.set(row.collector_id, row);
+  // Dashboard health must follow the service's canonical production output, not assume that every
+  // worker writes the same collector-run id. Universe, Phase 3.7 and Sensor Mesh are output-table
+  // driven; derivatives/FX/auditor also retain historical collector ids for append-only continuity.
+  const [universe, phase37, sensor] = await Promise.all([
+    supabase.from("brian_universe_snapshots")
+      .select("observed_at").order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("brian_live_shadow_ticks")
+      .select("observed_at").eq("experiment_id", SOURCE_EXPERIMENT_ID)
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("brian_sensor_observations")
+      .select("observed_at").eq("available", true)
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
+  const latestByComponent = new Map<string, CollectorRun>();
+  const collectorErrors = new Map<string, string>();
+  await Promise.all(CLOUD_COLLECTORS.filter((item) => item.collectorIds.length > 0).map(async (item) => {
+    const result = await supabase.from("brian_collector_runs")
+      .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
+      .in("collector_id", [...item.collectorIds])
+      .order("started_at", { ascending: false }).limit(1).maybeSingle();
+    if (result.error) collectorErrors.set(item.id, result.error.message);
+    else if (result.data) latestByComponent.set(item.id, result.data as CollectorRun);
+  }));
+
+  type TimestampProbe = {
+    data: { observed_at?: string | null } | null;
+    error: { message: string } | null;
+  };
+  const outputProbes = new Map<string, TimestampProbe>([
+    ["brian-universe-collector", universe as TimestampProbe],
+    ["brian-live-shadow", phase37 as TimestampProbe],
+    ["brian-sensor-mesh", sensor as TimestampProbe],
+  ]);
   const now = Date.now();
   const components = CLOUD_COLLECTORS.map((item) => {
-    const row = latest.get(item.id);
+    const probe = outputProbes.get(item.id);
+    if (probe) {
+      const observedAt = probe.data?.observed_at ? String(probe.data.observed_at) : null;
+      const runAge = ageSeconds(observedAt, now);
+      const fresh = runAge != null && runAge <= item.cadenceSeconds * 3 + 90;
+      return {
+        id: item.id,
+        label: item.label,
+        cadence_seconds: item.cadenceSeconds,
+        source_kind: "OUTPUT_DATA",
+        source_id: item.id,
+        state: probe.error ? "ERROR" : !observedAt ? "NO_DATA" : fresh ? "SUCCESS" : "STALE",
+        last_status: probe.error ? "ERROR" : observedAt ? "SUCCESS" : null,
+        last_started_at: observedAt,
+        last_finished_at: observedAt,
+        age_seconds: runAge,
+        error_class: probe.error ? "HEALTH_PROBE_ERROR" : null,
+        error_message: probe.error?.message ?? null,
+        degraded_sources: [],
+      };
+    }
+
+    const row = latestByComponent.get(item.id);
+    const queryError = collectorErrors.get(item.id) ?? null;
     const runAge = ageSeconds(row?.started_at, now);
     const fresh = runAge != null && runAge <= item.cadenceSeconds * 3 + 90;
     const successish = row?.status === "SUCCESS" || row?.status === "DEGRADED";
@@ -368,24 +429,29 @@ async function loadCloudHealth() {
       id: item.id,
       label: item.label,
       cadence_seconds: item.cadenceSeconds,
-      state: !row ? "NO_DATA" : fresh && successish ? row.status : fresh ? "ERROR" : "STALE",
+      source_kind: "COLLECTOR_RUN",
+      source_id: row?.collector_id ?? null,
+      state: queryError ? "ERROR" : !row ? "NO_DATA" : fresh && successish ? row.status : fresh ? "ERROR" : "STALE",
       last_status: row?.status ?? null,
       last_started_at: row?.started_at ?? null,
       last_finished_at: row?.finished_at ?? null,
       age_seconds: runAge,
-      error_class: row?.error_class ?? null,
-      error_message: row?.error_message ?? null,
+      error_class: queryError ? "HEALTH_PROBE_ERROR" : row?.error_class ?? null,
+      error_message: queryError ?? row?.error_message ?? null,
       degraded_sources: row?.degraded_sources ?? [],
     };
   });
   const healthy = components.filter((row) => row.state === "SUCCESS" || row.state === "DEGRADED").length;
+  const anyDegraded = components.some((row) => row.state === "DEGRADED");
   return {
     mode: "SERVER_SIDE_CRON",
     browser_independent: true,
     continues_when_page_closed: true,
     healthy_components: healthy,
     total_components: components.length,
-    overall: healthy === components.length ? "ONLINE" : healthy >= Math.ceil(components.length * 0.7) ? "DEGRADED" : "ERROR",
+    overall: healthy === components.length && !anyDegraded
+      ? "ONLINE"
+      : healthy >= Math.ceil(components.length * 0.7) ? "DEGRADED" : "ERROR",
     components,
   };
 }
