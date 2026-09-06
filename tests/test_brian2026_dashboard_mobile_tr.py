@@ -81,7 +81,7 @@ def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
 
 def test_service_worker_caches_new_control_center_shell():
     sw = text(SW)
-    assert "monster-coins-pro-shell-v8" in sw
+    assert "monster-coins-pro-shell-v9" in sw
     assert "'/dashboard.css'" in sw
     assert "'/dashboard.js'" in sw
     assert "'/dip-expert-v4-runtime-guard.js'" in sw
