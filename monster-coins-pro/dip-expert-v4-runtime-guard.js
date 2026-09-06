@@ -130,3 +130,97 @@ setInterval(()=>{
     $('feedState').textContent='LIVE · SYNC';$('feedState').className='amber';
   }
 },5000);
+
+/* BRIAN_DIP_LIVE_V6 — production recovery + V5 reasoner/executor bridge.
+   SHADOW/PAPER ONLY. Does not add any live order endpoint and does not mutate MAIN/Phase 3.7. */
+let v6LastHealthyUniverse = [];
+
+function v6UniqueSymbols(items){
+  const out=[];
+  for(const s of items||[]){if(typeof s==='string'&&s.endsWith('USDT')&&s!=='BTCUSDT'&&!out.includes(s))out.push(s);}
+  return out;
+}
+function v6RememberHealthyUniverse(){
+  const ready=v6UniqueSymbols(v4Universe).filter(v4RuntimeSymbolReady);
+  if(ready.length>=V4_RUNTIME_MIN_READY_MARKETS)v6LastHealthyUniverse=ready.slice(0,V4_UNIVERSE_SIZE);
+}
+function v6RecoverUniverse(){
+  const open=Object.keys(states).filter(s=>states[s]?.pos);
+  const configured=Array.isArray(session?.config?.symbols)?session.config.symbols:[];
+  const runtimeReady=Object.keys(states).filter(s=>s!=='BTCUSDT'&&v4RuntimeSymbolReady(s));
+  const currentReady=v6UniqueSymbols(v4Universe).filter(v4RuntimeSymbolReady);
+  const rememberedReady=v6UniqueSymbols(v6LastHealthyUniverse).filter(v4RuntimeSymbolReady);
+  const next=v6UniqueSymbols([...open,...currentReady,...rememberedReady,...configured,...runtimeReady]).slice(0,V4_UNIVERSE_SIZE);
+  if(next.length<V4_RUNTIME_MIN_READY_MARKETS)return false;
+  v4Universe=next;v4UniverseUpdatedAt=v4Now();v4Universe.forEach(v4Ensure);v6LastHealthyUniverse=[...next];
+  if(!selected||!v4Universe.includes(selected))selected=v4Universe[0]||'ETHUSDT';
+  if($('radarStatus'))$('radarStatus').textContent=running?'BRIAN V5 LIVE':`DATA ${next.length}/${V4_UNIVERSE_SIZE}`;
+  try{renderRadar();}catch{}
+  return true;
+}
+
+const _v6PriorLoadHistory=v4LoadHistory;
+v4LoadHistory=async function(){
+  const before=v6UniqueSymbols(v4Universe);
+  if(before.length>=V4_RUNTIME_MIN_READY_MARKETS)v6LastHealthyUniverse=[...before];
+  try{
+    const result=await _v6PriorLoadHistory();
+    if(!v4Universe.length)v6RecoverUniverse();
+    v6RememberHealthyUniverse();
+    return result;
+  }catch(e){
+    if(before.length){v4Universe=[...before];v4UniverseUpdatedAt=v4Now();}
+    v6RecoverUniverse();
+    throw e;
+  }finally{
+    if(!v4Universe.length)v6RecoverUniverse();
+    try{renderRadar();}catch{}
+  }
+};
+historyLoad=v4LoadHistory;
+
+// The V5 layer is loaded after this guard. Install the bridge on the next task so
+// it sees V5 globals and can extend only the reasoner entry path.
+setTimeout(()=>{
+  if(typeof v5ReasonerEntry!=='function'||typeof v5ControllerDecision!=='function')return;
+  v5ReasonerEntry=function(st,ctx,p,d){
+    if(!st||!ctx||!d||!['BUY','SELL'].includes(d.action))return false;
+    if(d.hardDrift||d.ood||(d.vetoReasons||[]).length)return false;
+    const cost=Math.max(0,Number(d.costBps||0)),net=Number(d.netEdgeBps||0);
+    const setup=String(d.setup||'');
+    const confFloor=['PULLBACK_CONTINUATION','TREND_EXHAUSTION'].includes(setup)?.62:.64;
+    if(Number(d.confidence||0)<confFloor||Number(d.agreement||0)<.56)return false;
+    if(!(net>Math.max(3,cost*.45))||Number(ctx.edgeRatio||0)<V4_COST_EDGE_MULT)return false;
+
+    if(d.action==='BUY'){
+      const allowed=['LIQUIDITY_SWEEP_REVERSAL','RANGE_REJECTION','PULLBACK_CONTINUATION','BREAKOUT_RETEST_CONTINUATION','DIP_RECLAIM'];
+      if(!allowed.includes(setup))return false;
+      const flowOk=Number(ctx.flow?.ofi||0)>=.03&&Number(ctx.bk?.pressure||0)>=1.01;
+      const trendFloor=['LIQUIDITY_SWEEP_REVERSAL','RANGE_REJECTION','DIP_RECLAIM'].includes(setup)?-.28:-.12;
+      if(!flowOk||Number(ctx.btcLongRisk||0)<=-.42||Number(ctx.htfLong||0)<=trendFloor)return false;
+      return v4Open(st,ctx,'LONG',`V5_${setup}`);
+    }
+
+    if(!v4FuturesSymbols.has(st.symbol))return false;
+    const pctx=v4Context(st.symbol,'USDM_PERP');if(!pctx)return false;
+    const pd=v5ControllerDecision(st.symbol,pctx,pctx.bk.mid||Number(p));
+    v5DecisionBySymbol[st.symbol]=pd;st.v4.brainV5=v5SlimDecision(pd);
+    if(pd.action!=='SELL'||pd.hardDrift||pd.ood||(pd.vetoReasons||[]).length)return false;
+    const psetup=String(pd.setup||setup),allowed=['TREND_EXHAUSTION','DOWNTREND_BREAK','FAILED_BREAK_REVERSAL'];
+    if(!allowed.includes(psetup))return false;
+    const pcost=Math.max(0,Number(pd.costBps||0)),pnet=Number(pd.netEdgeBps||0);
+    if(Number(pd.confidence||0)<.62||Number(pd.agreement||0)<.56||!(pnet>Math.max(3,pcost*.45)))return false;
+    if(Number(pctx.edgeRatio||0)<V4_COST_EDGE_MULT)return false;
+    const flowOk=Number(pctx.flow?.ofi||0)<=-.03&&Number(pctx.bk?.pressure||1)<=.99;
+    const htfOk=Number(pctx.htfShort||0)>-.08||psetup==='FAILED_BREAK_REVERSAL';
+    const fundingOk=Number(pctx.fundingRate||0)>-0.0005;
+    if(!flowOk||!htfOk||!fundingOk)return false;
+    return v4Open(st,pctx,'SHORT',`V5_${psetup}`);
+  };
+},0);
+
+setInterval(()=>{
+  if(!session||session.status!=='RUNNING')return;
+  if(v4Universe.length>=V4_RUNTIME_MIN_READY_MARKETS){v6RememberHealthyUniverse();return;}
+  v6RecoverUniverse();
+},3000);

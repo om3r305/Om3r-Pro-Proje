@@ -61,8 +61,41 @@ function renderSession(data){const s=data.session;const running=s?.status==='RUN
   $('sessionMeta').innerHTML=`Başlangıç ${dateTime(s.started_at)}${s.ended_at?` · Duraklatma ${dateTime(s.ended_at)}`:''}<br><b>Not:</b> Bu yalnız takip penceresidir; duraklatmak MAIN/ALPHA cloud motorunu kapatmaz.`;
   if(s.policy_scope!=='BOTH'&&$('policyView'))$('policyView').value=s.policy_scope;
 }
-function currentPolicy(){const v=$('policyView')?.value||'PROFIT';return v==='NATIVE'?'NATIVE':'PROFIT';}
-function renderOverview(data){const s=data.session;const snap=s?data.policies?.[currentPolicy()]||null:null;
+function currentPolicy(){const v=$('policyView')?.value||'ALPHA';return v==='NATIVE'?'NATIVE':v==='PROFIT'?'PROFIT':'ALPHA';}
+function setOverviewLabels(alphaMode){
+  const labels=['kpiEquity','kpiPnl','kpiPositions','kpiWin','kpiActions','kpiCost'];
+  const alpha=['ALPHA Durumu','Yön Dağılımı','Açık Shadow Yön','Outcome Pozitif','ALPHA Aksiyon','Ort. Maliyet'];
+  const legacy=['Shadow Bakiye','Oturum K/Z','Açık Pozisyon','Başarı Oranı','Shadow Aksiyon','İşlem Maliyeti'];
+  labels.forEach((id,i)=>{const el=$(id)?.previousElementSibling;if(el)el.textContent=(alphaMode?alpha:legacy)[i];});
+  const chart=$('equityChart')?.closest('.cc-card');if(chart){const title=chart.querySelector('.cc-card-title'),sub=chart.querySelector('.cc-card-sub');if(title)title.textContent=alphaMode?'ALPHA Karar Aktivitesi':'Shadow Equity';if(sub)sub.textContent=alphaMode?'Gerçek ALPHA directional-shadow state ve son karar akışı · direction-only/no notional':'Seçili takip modunun sanal bakiye eğrisi';}
+  const pos=$('positionList')?.closest('.cc-card');if(pos){const sub=pos.querySelector('.cc-card-sub');if(sub)sub.textContent=alphaMode?'ALPHA position book · LONG/SHORT yön state':'Seçili takip modunun mevcut shadow pozisyonları';}
+  const trades=$('tradeList')?.closest('.cc-card');if(trades){const sub=trades.querySelector('.cc-card-sub');if(sub)sub.textContent=alphaMode?'Son OPEN_LONG / OPEN_SHORT ALPHA kararları':'Telefon için yatay tablo yerine okunabilir kart akışı';}
+}
+function renderAlphaActivity(decisions,active){
+  const root=$('equityChart');if(!root)return;const rows=(decisions||[]).slice(0,24).reverse();
+  if(!rows.length){root.innerHTML='<div class="cc-chart-empty">ALPHA karar akışı bekleniyor.</div>';return;}
+  const vals=rows.map(x=>Math.max(0,Number(x.evidence_score||0))),max=Math.max(.01,...vals),w=900,h=280,pad=18;
+  const pts=vals.map((v,i)=>`${pad+(w-2*pad)*(vals.length===1?0:i/(vals.length-1))},${h-pad-(h-2*pad)*(v/max)}`).join(' ');
+  root.innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="ALPHA karar aktivitesi">${[.25,.5,.75].map(k=>`<line class="cc-gridline" x1="${pad}" x2="${w-pad}" y1="${h*k}" y2="${h*k}"/>`).join('')}<polyline class="cc-line" points="${pts}"/></svg><div class="cc-card-sub" style="padding-top:8px">${active.length} açık yön · ${rows.filter(d=>d.action==='OPEN_LONG'||d.action==='OPEN_SHORT').length} açma kararı / son ${rows.length}</div>`;
+}
+function renderAlphaOverview(data){
+  setOverviewLabels(true);const a=data.alpha_v2||{},ds=a.decisions||[],ps=(a.positions||[]).filter(p=>Number(p.position)!==0),os=a.outcomes||[];
+  const opens=ds.filter(d=>d.action==='OPEN_LONG'||d.action==='OPEN_SHORT'),longs=ps.filter(p=>Number(p.position)>0).length,shorts=ps.filter(p=>Number(p.position)<0).length;
+  const resolved=os.filter(o=>Number.isFinite(Number(o.direction_adjusted_return))),positive=resolved.filter(o=>Number(o.direction_adjusted_return)>0).length,hit=resolved.length?100*positive/resolved.length:0;
+  const costs=ds.map(d=>Number(d.estimated_round_trip_cost_bps)).filter(Number.isFinite),avgCost=costs.length?costs.reduce((s,x)=>s+x,0)/costs.length:null;
+  $('kpiEquity').textContent=a.online?'ALPHA LIVE':statusTr(a.status||'STALE');$('kpiEquity').className=`cc-kpi-value ${a.online?'ok':'warn'}`;$('kpiEquityMeta').textContent=`Son karar ${age(a.decision_age_seconds)} önce · ${a.compiler_version||'compiler'}`;
+  $('kpiPnl').textContent=`${longs} LONG / ${shorts} SHORT`;$('kpiPnl').className='cc-kpi-value';$('kpiPnlMeta').textContent='Direction-only shadow state · gerçek emir yok';
+  $('kpiPositions').textContent=String(ps.length);$('kpiPositionsMeta').textContent=ps.slice(0,8).map(p=>sym(p.asset_id)).join(' · ')||'Açık yön yok';
+  $('kpiWin').textContent=resolved.length?`${hit.toFixed(1)}%`:'—';$('kpiWinMeta').textContent=`${positive} pozitif / ${resolved.length} resolved prospective outcome`;
+  $('kpiActions').textContent=String(opens.length);$('kpiActionsMeta').textContent=`OPEN_LONG/SHORT · son ${ds.length} ALPHA kararı`;
+  $('kpiCost').textContent=avgCost==null?'—':`${avgCost.toFixed(1)} bps`;$('kpiCostMeta').textContent='Son kararların ortalama round-trip cost tahmini';
+  renderAlphaActivity(ds,ps);
+  $('positionList').innerHTML=ps.slice(0,16).map(p=>{const side=Number(p.position)>0?'LONG':'SHORT',entry=Number(p.entry_price),last=Number(p.last_reference_price),move=entry>0&&last>0?((last/entry-1)*10000*(Number(p.position)>0?1:-1)):null;return`<div class="cc-row"><div class="cc-row-main"><div class="cc-row-title">${esc(sym(p.asset_id))} · ${side}</div><div class="cc-row-meta">Giriş ${num(p.entry_price,8)} · son ${num(p.last_reference_price,8)} · ${clock(p.last_action_at)}</div></div><div class="cc-row-side ${move==null?'':move>=0?'ok':'bad'}">${move==null?'—':bps(move)}</div></div>`}).join('')||'<div class="cc-row">ALPHA açık yön bekliyor.</div>';
+  $('tradeList').innerHTML=opens.slice(0,18).map(d=>`<div class="cc-row"><div class="cc-row-main"><div class="cc-row-title">${esc(sym(d.asset_id))} · <span class="cc-action ${actionClass(d.action)}">${esc(actionTr(d.action))}</span></div><div class="cc-row-meta">${clock(d.observed_at)} · fiyat ${num(d.observed_reference_price,8)} · skor ${num(d.evidence_score,4)}</div></div><div class="cc-row-side">${d.estimated_round_trip_cost_bps==null?'—':num(d.estimated_round_trip_cost_bps,1)+' bps'}</div></div>`).join('')||'<div class="cc-row">Son ALPHA penceresinde OPEN aksiyonu yok.</div>';
+  renderReports(data.reports||[]);
+}
+
+function renderOverview(data){if(currentPolicy()==='ALPHA')return renderAlphaOverview(data);setOverviewLabels(false);const s=data.session;const snap=s?data.policies?.[currentPolicy()]||null:null;
   if(!snap){['kpiEquity','kpiPnl','kpiPositions','kpiWin','kpiActions','kpiCost'].forEach(id=>$(id).textContent='—');$('kpiEquityMeta').textContent='Takip oturumu başlatılmadı';$('kpiPnlMeta').textContent='—';$('kpiPositionsMeta').textContent='—';$('kpiWinMeta').textContent='—';$('kpiActionsMeta').textContent='—';$('kpiCostMeta').textContent='—';renderEquity([]);renderPositionList([]);renderTradeList([]);renderReports([]);return;}
   $('kpiEquity').textContent=money(snap.current_equity);$('kpiEquityMeta').textContent=`Başlangıç ${money(snap.starting_equity)} · ${snap.last_tick_at?clock(snap.last_tick_at):'tick bekleniyor'}`;
   $('kpiPnl').textContent=signedMoney(snap.session_pnl);$('kpiPnl').className=`cc-kpi-value ${Number(snap.session_pnl)>=0?'ok':'bad'}`;$('kpiPnlMeta').textContent=`Getiri ${pct(snap.session_return_pct)} · brüt ${signedMoney(snap.gross_pnl)}`;
