@@ -20,6 +20,8 @@ jobs:
           fetch-depth: 0
       - name: Apply deterministic patch
         run: python .github/brian_stabilization_patch.py
+      - name: Install focused test dependency
+        run: python -m pip install pytest
       - name: Verify focused stabilization tests
         run: |
           python -m pytest -q tests/test_brian2026_production_stabilization.py
