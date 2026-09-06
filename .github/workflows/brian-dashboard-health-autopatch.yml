@@ -21,6 +21,9 @@ jobs:
           ref: fix/brian-dashboard-health-20260906
           fetch-depth: 0
 
+      - name: Install focused test dependency
+        run: python -m pip install pytest
+
       - name: Apply exact dashboard health patch
         run: python .github/brian_dashboard_health_patch.py
 
