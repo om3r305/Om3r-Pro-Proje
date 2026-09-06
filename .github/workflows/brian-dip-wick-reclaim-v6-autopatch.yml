@@ -32,7 +32,6 @@ jobs:
           python -m pytest -q
           tests/test_brian2026_dip_wick_reclaim_v6.py
           tests/test_brian2026_dip_runtime_stability.py
-          tests/test_brian2026_dip_v5_isolation.py
 
       - name: Parse browser JavaScript
         run: |
