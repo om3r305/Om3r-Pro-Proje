@@ -45,7 +45,8 @@ def test_dashboard_explains_server_background_semantics_instead_of_browser_magic
 def test_control_center_is_connected_to_current_auditor_and_learning_chain():
     src = text(CONTROL)
     assert '"brian-missed-opportunity-auditor-v3"' in src
-    assert '"brian-missed-opportunity-auditor-v2"' not in src
+    # v3 production keeps the v2 collector_id in append-only run telemetry, so health accepts both.
+    assert '["brian-missed-opportunity-auditor-v3", "brian-missed-opportunity-auditor-v2"]' in src
     assert 'brian_sensor_reliability_shadow_snapshots' in src
     assert 'brian_alpha_reliability_shadow_features' in src
     assert 'brian_sensor_reliability_prospective_calibration' in src
@@ -54,6 +55,17 @@ def test_control_center_is_connected_to_current_auditor_and_learning_chain():
     assert 'main_alpha_browser_independent: true' in src
     assert 'dip_browser_independent: false' in src
     assert 'update public.brian_sensor_observations' not in src.lower()
+
+
+def test_control_center_health_uses_canonical_outputs_and_production_collector_aliases():
+    src = text(CONTROL)
+    for table in ["brian_universe_snapshots", "brian_live_shadow_ticks", "brian_sensor_observations"]:
+        assert table in src
+    assert '"phase39-binance-usdm-derivatives"' in src
+    assert '"phase39-ecb-fx"' in src
+    assert 'source_kind: "OUTPUT_DATA"' in src
+    assert 'source_kind: "COLLECTOR_RUN"' in src
+    assert 'healthy === components.length && !anyDegraded' in src
 
 
 def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
