@@ -44,8 +44,10 @@ async function begin(b:Record<string,unknown>,restart=false){
   let {starting,trade,config}=settings(b),t=String(b.engine_token??"").trim();if(t.length<20||t.length>200)throw Error("INVALID_ENGINE_TOKEN");
   let id=`dip-${new Date().toISOString().replace(/[-:.TZ]/g,"").slice(0,14)}-${crypto.randomUUID().slice(0,8)}`,h=await sha(t),q=restart?await db.rpc("brian_dip_restart_session",{p_pause_event_id:`dip-evt-${crypto.randomUUID()}`,p_start_event_id:`dip-evt-${crypto.randomUUID()}`,p_new_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h}):await db.rpc("brian_dip_start_session",{p_event_id:`dip-evt-${crypto.randomUUID()}`,p_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h});
   if(q.error)throw q.error;
-  let l=await db.from("brian_dip_engine_leases").upsert({session_id:id,engine_token_sha256:h,lease_generation:1,claimed_at:new Date().toISOString(),heartbeat_at:new Date().toISOString()});if(l.error)throw l.error;
-  return{status:restart?"RESTARTED":"STARTED",session_id:id,starting_equity:starting,trade_notional:trade,config,shadow_only:true,live_execution:false};
+  let row=Array.isArray(q.data)?q.data[0]:q.data,activeId=String(row?.session_id??id),resumed=!restart&&activeId!==id;
+  let l=await db.from("brian_dip_engine_leases").upsert({session_id:activeId,engine_token_sha256:h,lease_generation:1,claimed_at:new Date().toISOString(),heartbeat_at:new Date().toISOString()});if(l.error)throw l.error;
+  let s=resumed?await latest():null;
+  return{status:restart?"RESTARTED":resumed?"RESUMED":"STARTED",session_id:activeId,started_at:s?.start.requested_at??row?.requested_at??new Date().toISOString(),starting_equity:resumed?Number(s?.start.starting_equity??starting):starting,trade_notional:resumed?Number(s?.start.trade_notional??trade):trade,config:resumed?(s?.start.config??config):config,shadow_only:true,live_execution:false};
 }
 async function claim(b:Record<string,unknown>){
   let s=await latest();if(!s||!s.active)throw Error("NO_ACTIVE_DIP_SESSION");if(String(b.session_id??"")!==s.start.session_id)throw Error("STALE_DIP_SESSION");
