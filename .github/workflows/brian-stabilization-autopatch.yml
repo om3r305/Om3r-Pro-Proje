@@ -19,24 +19,25 @@ jobs:
           ref: fix/brian-production-stabilization-20260906
           fetch-depth: 0
       - name: Apply deterministic patch
-        run: python .github/brian_stabilization_patch.py
+        run: |
+          cp .github/workflows/brian-ci.yml /tmp/brian-ci.yml
+          python .github/brian_stabilization_patch.py
+          cp /tmp/brian-ci.yml .github/workflows/brian-ci.yml
       - name: Install focused test dependency
         run: python -m pip install pytest
       - name: Verify focused stabilization tests
         run: |
           python -m pytest -q tests/test_brian2026_production_stabilization.py
           git diff --check
-      - name: Commit patch
+      - name: Commit source patch
         run: |
           git config user.name "Brian Stabilization Bot"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/brian-stabilization-autopatch.yml .github/brian_stabilization_patch.py
           git add supabase/functions/brian-alpha-decision-compiler/index.ts \
                   supabase/functions/brian-intrabar-eye/index.ts \
                   supabase/functions/brian-sensor-mesh/index.ts \
                   supabase/migrations/202609060001_brian_latest_micro_book_state_rpc.sql \
                   tests/test_brian2026_production_stabilization.py \
-                  tests/test_brian2026_latest_micro_state_postgres.py \
-                  .github/workflows/brian-ci.yml
+                  tests/test_brian2026_latest_micro_state_postgres.py
           git commit -m "fix(brian): stabilize production data path [stabilization-patched]"
           git push origin HEAD:fix/brian-production-stabilization-20260906
