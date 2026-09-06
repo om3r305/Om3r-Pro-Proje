@@ -21,7 +21,30 @@ restore=function(d){
 status=async function(initial=false){
   try{const d=await api('status');restore(d);if(session?.status==='RUNNING'&&!v4NeedsRestart){try{await api('engine_check',{session_id:sid,engine_token:token()});running=true}catch{running=false}}else running=false;v4UiPatch();render();if(initial)toast(v4NeedsRestart?'V3 session bulundu · V4 için Yeni Kasa ile Restart.':'Dip Expert V4 hazır.')}catch(e){engineErr(e);if(initial)toast(String(e.message||e))}
 };
+
+const V4_RESUME_API='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-dip-resume';
+async function v4ResumePausedSession(){
+  if(!session||session.status!=='PAUSED'||!sid)throw Error('Devam ettirilecek DIP session yok.');
+  const key=dashboardKey();if(!key){unlock(true);throw Error('Dashboard anahtarı gerekli.');}
+  const response=await fetch(V4_RESUME_API,{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({session_id:sid,engine_token:token()})});
+  const data=await response.json().catch(()=>({}));
+  if(response.status===401&&String(data.error||'').includes('UNAUTHORIZED_DASHBOARD')){localStorage.removeItem(KEY);unlock(true);}
+  if(!response.ok)throw Error(data.error||data.status||`HTTP ${response.status}`);
+  if(String(data.session_id||'')!==String(sid))throw Error('DIP_RESUME_SESSION_MISMATCH');
+
+  session.status='RUNNING';running=true;v4CloudFault=false;v4NeedsRestart=false;
+  try{await v4LoadHistory();}catch(e){console.warn('V4 resume history',e);}
+  try{connect();}catch(e){console.warn('V4 resume websocket',e);}
+  v4ScheduleUniverse();
+  event('INFO',null,null,{metadata:{expert_v4:true,info:'ENGINE_RESUME',same_session:true,session_id:sid}});
+  await snapshot();v4UiPatch();render();
+  toast('Aynı DIP session devam ediyor · sayaçlar ve geçmiş korunuyor.');
+}
+
 start=async function(restart=false){
+  if(!restart&&session?.status==='PAUSED'&&sid&&!v4NeedsRestart){
+    v4Booting=true;try{await v4ResumePausedSession();}catch(e){toast(String(e.message||e))}finally{v4Booting=false;render()}return;
+  }
   v4Booting=true;try{await v4LoadHistory();const p=params(),d=await api(restart?'restart':'start',p),cfg={...p.config,...(d.config||{}),symbols:[...v4Universe],engine_version:DIP_EXPERT_V4,allow_shadow_short:true,max_shadow_leverage:1};session={session_id:d.session_id,status:'RUNNING',started_at:iso(),starting_equity:d.starting_equity,trade_notional:d.trade_notional,config:cfg};sid=d.session_id;v4ClearRuntimeStates();book={start:Number(d.starting_equity),cash:Number(d.starting_equity),realized:0,trades:0,wins:0,losses:0,cfg};history=[];v4NeedsRestart=false;v4CloudFault=false;v4SessionLossLockUntil=0;v4ClosedOutcomes.splice(0);for(const k of Object.keys(v4PairGuard))delete v4PairGuard[k];for(const s of v4Universe)v4SeedState(s);running=true;v4ResetFunnel();event('ENGINE_START',null,null,{metadata:{expert_v4:true,starting_equity:d.starting_equity,universe_size:v4Universe.length,max_open:V4_MAX_OPEN,max_leverage:1,data:'native 1m+5m+15m+1h + aggTrade + bookTicker + depth5',entry:'cost gate + BTC regime + OFI + book pressure',risk:'risk sizing + heat + pair/global guards'}});await snapshot();connect();v4ScheduleUniverse();v4UiPatch();render();toast(restart?'Expert V4 temiz kasa ile başladı.':'Expert V4 başladı.')}catch(e){toast(String(e.message||e))}finally{v4Booting=false;render()}
 };
 
