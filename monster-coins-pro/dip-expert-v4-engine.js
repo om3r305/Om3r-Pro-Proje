@@ -43,9 +43,9 @@ function v4ArmLong(st,ctx,p){
   event('DIP_ARMED',st.symbol,p,{metadata:{expert_v4:true,side:'LONG',trigger_pct:trigger,drop_pct:drop,idio_z:ctx.idioZ,beta_btc:ctx.beta,atr5_pct:ctx.f5.atrPct,edge_ratio:ctx.edgeRatio}});return true;
 }
 function v4TryLong(st,ctx,p){
-  if(st.v4.phase!=='ARM_LONG')return false;if(v4Now()-Number(st.v4.armAt||0)>12*60*1000){st.v4.phase='WATCH';st.armed=false;st.v4.lastVeto='STALE_DIP_ARM';return v4Reject('STALE_DIP_ARM')}if(p<Number(st.v4.armLow||p))st.v4.armLow=p;
+  if(st.v4.phase!=='ARM_LONG')return false;if(v4Now()-Number(st.v4.armAt||0)>12*60*1000){st.v4.phase='WATCH';st.armed=false;st.dip=null;st.v4.lastVeto='STALE_DIP_ARM';return v4Reject('STALE_DIP_ARM')}if(p<Number(st.v4.armLow||p)){st.v4.armLow=p;st.dip=p;}else if(Number(st.v4.armLow)>0)st.dip=Number(st.v4.armLow);
   const rebound=v4Pct(p,Number(st.v4.armLow||p)),need=v4Clamp(ctx.f5.atrPct*.30,.12,.70),flowOk=ctx.flow.ofi>=.10&&ctx.flow.ratio>=1.15,bookOk=ctx.bk.pressure>=1.05,htfOk=ctx.htfLong>-.28,btcOk=ctx.btcLongRisk>-.38,volumeOk=ctx.f1.volRel>=.75;
-  if(rebound>ctx.f5.atrPct*1.10){st.v4.phase='WATCH';st.armed=false;st.v4.lastVeto='SKIP_CHASE';event('SKIP_CHASE',st.symbol,p,{metadata:{expert_v4:true,rebound_pct:rebound,atr5_pct:ctx.f5.atrPct}});return false;}
+  if(rebound>ctx.f5.atrPct*1.10){st.v4.phase='WATCH';st.armed=false;st.dip=null;st.v4.lastVeto='SKIP_CHASE';event('SKIP_CHASE',st.symbol,p,{metadata:{expert_v4:true,rebound_pct:rebound,atr5_pct:ctx.f5.atrPct}});return false;}
   if(rebound<need)return false;if(!btcOk){st.v4.lastVeto='BTC_RISK_LONG';return v4Reject('BTC_RISK_LONG')}if(!htfOk){st.v4.lastVeto='HTF_LONG_MISMATCH';return v4Reject('HTF_LONG_MISMATCH')}if(!flowOk){st.v4.lastVeto='NO_BUY_FLOW';return v4Reject('NO_BUY_FLOW')}if(!bookOk){st.v4.lastVeto='NO_BID_PRESSURE';return v4Reject('NO_BID_PRESSURE')}if(!volumeOk){st.v4.lastVeto='WEAK_VOLUME';return v4Reject('WEAK_VOLUME')}
   return v4Open(st,ctx,'LONG','V4_DIP_RECLAIM');
 }
@@ -71,4 +71,14 @@ function v4Evaluate(sym,p){
   if(!st.pos&&st.v4.phase!=='ARM_LONG')v4TryShort(st,ctx,mid);
 }
 
-tick=function(sym,p){p=Number(p);if(!(p>0))return;live[sym]=p;const st=v4Ensure(sym);st.last=p;v4Evaluate(sym,p);};
+tick=function(sym,p){
+  p=Number(p);if(!(p>0))return;
+  live[sym]=p;const st=v4Ensure(sym);st.last=p;
+  if(st.v4.phase==='ARM_LONG'){
+    const armLow=Number(st.v4.armLow||0);
+    if(!(armLow>0)||p<armLow)st.v4.armLow=p;
+    st.dip=Number(st.v4.armLow||p);
+  }else if(!st.pos){st.dip=null;}
+  v4Evaluate(sym,p);
+  if(st.v4.phase==='ARM_LONG'&&Number(st.v4.armLow)>0)st.dip=Number(st.v4.armLow);
+};
