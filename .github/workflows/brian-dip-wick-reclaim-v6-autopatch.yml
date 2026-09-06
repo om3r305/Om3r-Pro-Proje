@@ -1,0 +1,52 @@
+name: Brian DIP wick reclaim v6 autopatch
+
+on:
+  push:
+    branches:
+      - fix/dip-wick-reclaim-v6-20260906
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/dip-wick-reclaim-v6-20260906
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply exact DIP patch
+        run: python .github/brian_dip_wick_reclaim_v6_patch.py
+
+      - name: Install pytest
+        run: python -m pip install pytest
+
+      - name: Focused regression suite
+        run: >-
+          python -m pytest -q
+          tests/test_brian2026_dip_wick_reclaim_v6.py
+          tests/test_brian2026_dip_runtime_stability.py
+          tests/test_brian2026_dip_v5_isolation.py
+
+      - name: Parse browser JavaScript
+        run: |
+          node --check monster-coins-pro/dip-expert-v5-brain.js
+          node --check monster-coins-pro/dip-expert-v4-runtime-guard.js
+
+      - name: Commit source patch
+        run: |
+          if git diff --quiet -- monster-coins-pro tests; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add monster-coins-pro/dip-expert-v5-brain.js monster-coins-pro/sw.js tests/test_brian2026_dip_wick_reclaim_v6.py
+          git commit -m "fix(brian): detect intrabar wick reclaim patterns"
+          git push origin HEAD:fix/dip-wick-reclaim-v6-20260906
