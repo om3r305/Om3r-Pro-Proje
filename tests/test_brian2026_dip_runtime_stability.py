@@ -36,5 +36,5 @@ def test_transient_lease_fault_keeps_runtime_recoverable_but_blocks_new_entries(
 
 
 def test_pwa_cache_contains_runtime_guard_and_is_bumped():
-    assert "monster-coins-pro-shell-v8" in SW
+    assert "monster-coins-pro-shell-v9" in SW
     assert "/dip-expert-v4-runtime-guard.js" in SW
