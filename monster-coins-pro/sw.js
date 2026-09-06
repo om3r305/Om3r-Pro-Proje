@@ -1,4 +1,4 @@
-const CACHE='monster-coins-pro-shell-v7';
+const CACHE='monster-coins-pro-shell-v8';
 const ASSETS=[
   '/','/dashboard.css','/dashboard.js','/manifest.webmanifest','/brand.svg','/logo.svg',
   '/app.css','/dip.html','/dip.css','/dip.js',
