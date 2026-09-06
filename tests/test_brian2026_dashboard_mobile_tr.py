@@ -1,4 +1,6 @@
 from pathlib import Path
+import shutil
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "monster-coins-pro" / "index.html"
@@ -70,3 +72,11 @@ def test_service_worker_caches_new_control_center_shell():
     assert "monster-coins-pro-shell-v6" in sw
     assert "'/dashboard.css'" in sw
     assert "'/dashboard.js'" in sw
+
+
+def test_dashboard_javascript_parses_when_node_is_available():
+    node = shutil.which("node")
+    if node is None:
+        return
+    result = subprocess.run([node, "--check", str(JS)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
