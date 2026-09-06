@@ -40,7 +40,7 @@ def test_v5_reasoner_can_bridge_quality_long_and_short_candidates_without_bypass
 
 
 def test_pwa_shell_is_bumped_for_live_fix():
-    assert "monster-coins-pro-shell-v8" in SW
+    assert "monster-coins-pro-shell-v9" in SW
 
 
 def test_modified_javascript_parses_when_node_is_available():
