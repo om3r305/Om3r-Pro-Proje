@@ -110,12 +110,11 @@ def test_phase40_runtime_is_one_minute_partial_bar_and_public_market_only():
     assert 'place_order' not in text
 
 
-def test_intrabar_prior_lookup_is_batched_and_errors_are_serialized():
+def test_intrabar_prior_lookup_uses_exact_latest_state_rpc_and_errors_are_serialized():
     text = EDGE.read_text(encoding="utf-8")
-    assert 'const PRIOR_LOOKUP_BATCH = 40' in text
-    assert 'i += PRIOR_LOOKUP_BATCH' in text
-    assert '.in("eye_id", chunk)' in text
-    assert '.in("eye_id", allEyeIds)' not in text
+    assert 'rpc("brian_latest_micro_book_ticks"' in text
+    assert 'PRIOR_LOOKUP_BATCH' not in text
+    assert '.in("eye_id", chunk)' not in text
     assert 'function errorText(error: unknown): string' in text
     assert 'error: message' in text
 
