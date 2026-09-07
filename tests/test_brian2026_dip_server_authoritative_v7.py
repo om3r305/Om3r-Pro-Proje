@@ -32,8 +32,8 @@ def test_v8_worker_has_real_structure_single_thesis_and_safe_calibrating_size():
     assert 'SWEEP_RECLAIM' in WORKER
     assert 'FAILED_BREAK' in WORKER
     assert 'BOS_RETEST' in WORKER
-    assert 'MAX_POSITION_FRACTION_CALIBRATING=0.08' in WORKER
-    assert 'MAX_HEAT=0.20' in WORKER
+    assert 'MAX_POSITION_FRACTION_CALIBRATING=.08' in WORKER or 'MAX_POSITION_FRACTION_CALIBRATING=0.08' in WORKER
+    assert 'MAX_HEAT=.20' in WORKER or 'MAX_HEAT=0.20' in WORKER
     assert 'MIN_CAL_SAMPLES=40' in WORKER
     assert 'TARGET_BELOW_COST' in WORKER
     assert 'RR_TOO_LOW' in WORKER
