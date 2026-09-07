@@ -25,11 +25,10 @@ def test_pattern_classification_does_not_bypass_executor_gates():
     assert "return v6BaseSetup(sym,ctx,p,dir)" in BRAIN
     assert "LIQUIDITY_SWEEP_REVERSAL" in BRAIN
     assert "FAILED_BREAK_REVERSAL" in BRAIN
-    # No real execution endpoint may be introduced in the isolated browser brain.
     assert "/api/v3/order" not in BRAIN
     assert "live_execution=true" not in BRAIN
 
 
 def test_wick_candidates_are_append_only_telemetry_and_cache_refreshes():
     assert "WICK_RECLAIM_CANDIDATE" in BRAIN
-    assert "monster-coins-pro-shell-v10" in SW
+    assert "monster-coins-pro-shell-v11" in SW

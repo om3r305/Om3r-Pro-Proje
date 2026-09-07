@@ -81,10 +81,11 @@ def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
 
 def test_service_worker_caches_new_control_center_shell():
     sw = text(SW)
-    assert "monster-coins-pro-shell-v10" in sw
+    assert "monster-coins-pro-shell-v11" in sw
     assert "'/dashboard.css'" in sw
     assert "'/dashboard.js'" in sw
     assert "'/dip-expert-v4-runtime-guard.js'" in sw
+    assert "'/dip-server-authoritative-v7.js'" in sw
 
 
 def test_dashboard_javascript_parses_when_node_is_available():
