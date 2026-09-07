@@ -1,104 +1,30 @@
-/* Brian DIP V7 Focus-3 + Foresight UI.
-   SHADOW ONLY. This file is visualization/selection only; it never owns execution. */
-const V7_FOCUS_UNIVERSE=['XRPUSDT','ETHUSDT','DOGEUSDT'];
-const V7_FORESIGHT_API='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-dip-foresight';
-let v7ForesightBySymbol={};
-let v7ForesightTimer=null;
-let v7ForesightBusy=false;
+/* Brian DIP V8 · ETH-only Chart Reader UI.
+   Visualization + session config only. Execution stays server-authoritative and SHADOW ONLY. */
+const V8_FOCUS_UNIVERSE=['ETHUSDT'];
+const V8_FORESIGHT_API='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-dip-foresight';
+let v8ForesightBySymbol={},v8ForesightTimer=null,v8ForesightBusy=false,v8ServerSnapshot=null;
 
-v4DiscoverUniverse=async function(){
-  v4Universe=[...V7_FOCUS_UNIVERSE];
-  v4UniverseUpdatedAt=Date.now();
-  v4Universe.forEach(v4Ensure);
-  return v4Universe;
-};
+v4DiscoverUniverse=async function(){v4Universe=[...V8_FOCUS_UNIVERSE];v4UniverseUpdatedAt=Date.now();v4Universe.forEach(v4Ensure);return v4Universe;};
+const _v8Params=params;
+params=function(){const p=_v8Params();p.config={...(p.config||{}),symbols:['ETHUSDT'],auto_universe:false,universe_size:6,engine_version:'brian-dip-chart-reader-v8',server_authoritative:true,browser_execution:false,chart_reader_version:'v8',measurement:'target-before-invalidation-v8'};return p;};
+const _v8Restore=restore;
+restore=function(d){_v8Restore(d);v8ServerSnapshot=d?.snapshot||null;v4Universe=['ETHUSDT'];selected='ETHUSDT';const c=session?.config;if(c){c.symbols=['ETHUSDT'];c.auto_universe=false;c.universe_size=1;}if(states.ETHUSDT&&!states.ETHUSDT.v4)states.ETHUSDT.v4={phase:'WATCH',lastVeto:'V8 THESIS'};};
 
-async function v7FetchForesight(){
-  if(v7ForesightBusy||document.visibilityState==='hidden')return;
-  const key=dashboardKey();if(!key)return;
-  v7ForesightBusy=true;
-  try{
-    const r=await fetch(V7_FORESIGHT_API,{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({session_id:sid||null})});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok)throw Error(d.error||d.status||`HTTP ${r.status}`);
-    v7ForesightBySymbol=d.forecasts||{};
-    for(const sym of V7_FOCUS_UNIVERSE){
-      const f=v7ForesightBySymbol[sym];
-      if(f){const st=v4Ensure(sym);st.v4.foresight=f;}
-    }
-    renderForesightBar();draw();
-  }catch(e){
-    const el=$('v7ForesightStatus');if(el){el.textContent='FORECAST WAIT';el.className='v7ForesightStatus wait';}
-  }finally{v7ForesightBusy=false;}
-}
+const _v8PrevNote=note;
+note=function(e){const m=e?.metadata||{};if(m.server_v8){if(e.event_kind==='BUY')return `V8 ALIM · ${m.setup||''} · target ${price(m.target)} · iptal ${price(m.stop)} · R:R ${Number(m.rr||0).toFixed(2)}`;if(e.event_kind==='SHORT_OPEN')return `V8 SHORT · ${m.setup||''} · target ${price(m.target)} · iptal ${price(m.stop)} · R:R ${Number(m.rr||0).toFixed(2)}`;if(e.event_kind==='SELL'||e.event_kind==='SHORT_CLOSE')return `V8 ${m.exit_reason||'EXIT'} · thesis ${String(m.thesis_id||'').slice(0,8)}`;}return _v8PrevNote(e);};
 
-function v7Foresight(sym=selected){return states?.[sym]?.v4?.foresight||v7ForesightBySymbol?.[sym]||null;}
-function v7DirText(f){return f?.direction==='UP'?'YUKARI':f?.direction==='DOWN'?'AŞAĞI':'YATAY';}
-function v7ForesightStrength(f){
-  const x=Number(f?.confidence||0)*100;
-  return x>=75?'YÜKSEK':x>=58?'ORTA':'DÜŞÜK';
-}
-function renderForesightBar(){
-  const bar=$('v7ForesightBar');if(!bar)return;
-  const f=v7Foresight();
-  if(!f){bar.innerHTML='<div><b>BRIAN İLERİ GÖRÜŞ</b><span>İlk server tahmini bekleniyor…</span></div><span id="v7ForesightStatus" class="v7ForesightStatus wait">WAIT</span>';return;}
-  const conf=Math.round(Number(f.confidence||0)*100),acc=f.accuracy==null?'—':`${Math.round(Number(f.accuracy)*100)}%`,n=Number(f.samples||0);
-  const dir=v7DirText(f),strength=v7ForesightStrength(f),cls=f.direction==='UP'?'up':f.direction==='DOWN'?'down':'flat';
-  bar.innerHTML=`<div class="v7ForesightMain"><b>BRIAN İLERİ GÖRÜŞ · ${v4Esc(selected.replace('USDT',''))}</b><span class="${cls}">${dir}</span><span>Güven <strong>${conf}% · ${strength}</strong></span><span>İsabet <strong>${acc}${n?` (${n})`:''}</strong></span><span>Ufuk <strong>${Number(f.horizon_min||8)} dk</strong></span></div><div class="v7ForesightLevels"><span>Muhtemel tepe <b>${price(f.peak)}</b></span><span>Muhtemel dip <b>${price(f.trough)}</b></span><small>Tahmin alanı; garanti fiyat değildir.</small></div>`;
-}
+async function v8FetchForesight(){if(v8ForesightBusy||document.visibilityState==='hidden')return;const key=dashboardKey();if(!key)return;v8ForesightBusy=true;try{const r=await fetch(V8_FORESIGHT_API,{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({session_id:sid||null})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||d.status||`HTTP ${r.status}`);v8ForesightBySymbol=d.forecasts||{};renderV8ThesisBar();draw();renderRadar();}catch(e){const x=$('v7ForesightStatus');if(x){x.textContent='THESIS WAIT';x.className='v7ForesightStatus wait';}}finally{v8ForesightBusy=false;}}
+function v8Foresight(){return v8ForesightBySymbol.ETHUSDT||null;}
+function v8DirText(f){return f?.direction==='UP'?'YUKARI':f?.direction==='DOWN'?'AŞAĞI':'WAIT';}
+function renderV8ThesisBar(){const bar=$('v7ForesightBar');if(!bar)return;const f=v8Foresight();if(!f){bar.innerHTML='<div><b>BRIAN V8 · ETH CHART THESIS</b><span>Gerçek structure / thesis bekleniyor…</span></div><span id="v7ForesightStatus" class="v7ForesightStatus wait">WAIT</span>';return;}const raw=f.raw_conviction==null?'—':`${Math.round(Number(f.raw_conviction)*100)}/100`,cal=f.calibrated_probability==null?`CALIBRATING · n=${Number(f.calibration_samples||f.samples||0)}`:`${Math.round(Number(f.calibrated_probability)*100)}% · n=${Number(f.calibration_samples||f.samples||0)}`,dir=v8DirText(f),cls=f.direction==='UP'?'up':f.direction==='DOWN'?'down':'flat',veto=Array.isArray(f.veto)&&f.veto.length?f.veto.join(' · '):'YOK';bar.innerHTML=`<div class="v7ForesightMain"><b>BRIAN V8 · ETH CHART THESIS</b><span class="${cls}">${dir}</span><span>Setup <strong>${v4Esc(String(f.setup||'NONE'))}</strong></span><span>Rejim <strong>${v4Esc(String(f.regime||'—'))}</strong></span><span>Ham görüş <strong>${raw}</strong></span><span>Kalibrasyon <strong>${v4Esc(cal)}</strong></span></div><div class="v7ForesightLevels"><span>Entry <b>${price(f.entry_low)} – ${price(f.entry_high)}</b></span><span>Hedef <b>${price(f.target)}</b></span><span>İptal <b>${price(f.invalidation)}</b></span><span>R:R <b>${Number(f.rr||0).toFixed(2)}</b></span><small>Veto: ${v4Esc(veto)}</small></div>`;}
+function v8Line(ctx,y,L,R,w,label,value,color,dash=[5,4],right=false){value=Number(value);if(!(value>0))return;const yy=y(value);if(!Number.isFinite(yy))return;ctx.save();ctx.setLineDash(dash);ctx.strokeStyle=color;ctx.lineWidth=1.15;ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.setLineDash([]);ctx.font='700 9px system-ui';const t=`${label} ${price(value)}`,tw=ctx.measureText(t).width,x=right?Math.max(L+4,w-R-tw-10):L+6,ty=Math.max(14,Math.min(yy-4,ctx.canvas.height/(devicePixelRatio||1)-28));ctx.fillStyle='rgba(4,9,16,.91)';ctx.fillRect(x-3,ty-10,tw+7,14);ctx.fillStyle=color;ctx.fillText(t,x,ty);ctx.restore();}
+function v8PivotValue(obj,side){const x=obj?.[side];return x&&Number(x.p)>0?Number(x.p):null;}
+draw=function(){const cv=$('candleCanvas'),box=$('chartWrap');if(!cv||!box)return;const ctx=cv.getContext('2d'),dpr=devicePixelRatio||1,w=Math.max(320,box.clientWidth),h=Math.max(280,box.clientHeight);cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#080e17';ctx.fillRect(0,0,w,h);const a=(candles.ETHUSDT||[]).slice(-100);if(!a.length)return;const f=v8Foresight(),lp=Number(live.ETHUSDT||a.at(-1)?.c||0),st=states.ETHUSDT||{},dipInfo=typeof v7LatestDip==='function'?v7LatestDip('ETHUSDT'):null,S=f?.structure||{},s1=S.s1||S['1m']||{},s5=S.s5||S['5m']||{};const levels=[];for(const z of [dipInfo?.price,f?.entry_low,f?.entry_high,f?.target,f?.invalidation,f?.structural_invalidation,v8PivotValue(s1,'lastHigh'),v8PivotValue(s1,'lastLow'),v8PivotValue(s5,'lastHigh'),v8PivotValue(s5,'lastLow')])if(Number(z)>0)levels.push(Number(z));const vals=a.flatMap(c=>[Number(c.l),Number(c.h)]).filter(Number.isFinite);let lo=Math.min(...vals,...levels),hi=Math.max(...vals,...levels),pad=(hi-lo)*.075||1;lo-=pad;hi+=pad;const L=12,R=82,T=17,B=28,plotW=w-L-R,plotH=h-T-B,xw=plotW/a.length,y=v=>T+(hi-v)/(hi-lo)*plotH;ctx.font='9px system-ui';for(let i=0;i<=5;i++){const yy=T+plotH*i/5,v=hi-(hi-lo)*i/5;ctx.strokeStyle='#182235';ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.fillStyle='#728096';ctx.fillText(price(v),w-R+8,yy+3);}a.forEach((c,i)=>{const x=L+xw*i+xw/2,up=Number(c.c)>=Number(c.o),col=up?'#0ecb81':'#f6465d';ctx.strokeStyle=col;ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y(Number(c.h)));ctx.lineTo(x,y(Number(c.l)));ctx.stroke();const top=y(Math.max(Number(c.o),Number(c.c))),bot=y(Math.min(Number(c.o),Number(c.c)));ctx.fillRect(x-Math.max(1,xw*.27),top,Math.max(2,xw*.54),Math.max(1,bot-top));});if(Number(f?.entry_low)>0&&Number(f?.entry_high)>0){const y1=y(Number(f.entry_high)),y2=y(Number(f.entry_low));ctx.fillStyle='rgba(74,142,255,.08)';ctx.fillRect(L,Math.min(y1,y2),plotW,Math.abs(y2-y1));v8Line(ctx,y,L,R,w,'ENTRY LOW',f.entry_low,'#72a7ff',[2,3]);v8Line(ctx,y,L,R,w,'ENTRY HIGH',f.entry_high,'#72a7ff',[2,3]);}if(Number(f?.target)>0)v8Line(ctx,y,L,R,w,'HEDEF',f.target,'#22d69a',[6,4],true);if(Number(f?.invalidation)>0)v8Line(ctx,y,L,R,w,'İPTAL',f.invalidation,'#ff6379',[6,4],true);if(Number(f?.structural_invalidation)>0&&Math.abs(Number(f.structural_invalidation)-Number(f.invalidation||0))>1e-9)v8Line(ctx,y,L,R,w,'HTF İPTAL',f.structural_invalidation,'#d34f69',[2,5],true);if(dipInfo?.price>0)v8Line(ctx,y,L,R,w,dipInfo.active?'AKTİF DİP':'SON DİP',dipInfo.price,'#f0b90b',[4,4]);const h1=v8PivotValue(s1,'lastHigh'),l1=v8PivotValue(s1,'lastLow'),h5=v8PivotValue(s5,'lastHigh'),l5=v8PivotValue(s5,'lastLow');if(h1)v8Line(ctx,y,L,R,w,`1m ${s1.lastHigh?.label||'H'}`,h1,'#8da2c4',[1,5]);if(l1)v8Line(ctx,y,L,R,w,`1m ${s1.lastLow?.label||'L'}`,l1,'#8da2c4',[1,5]);if(h5)v8Line(ctx,y,L,R,w,`5m ${s5.lastHigh?.label||'H'}`,h5,'#a783ff',[3,6]);if(l5)v8Line(ctx,y,L,R,w,`5m ${s5.lastLow?.label||'L'}`,l5,'#a783ff',[3,6]);if(lp>0){const yy=Math.max(T+9,Math.min(h-B-9,y(lp))),up=Number(a.at(-1)?.c)>=Number(a.at(-1)?.o),col=up?'#0ecb81':'#f6465d';ctx.setLineDash([3,3]);ctx.strokeStyle=col;ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.globalAlpha=1;ctx.setLineDash([]);ctx.fillStyle=col;ctx.fillRect(w-R+3,yy-10,R-6,20);ctx.fillStyle='#fff';ctx.font='700 9px system-ui';ctx.fillText(price(lp),w-R+8,yy+3);}ctx.fillStyle='#a7b5ca';ctx.font='700 10px system-ui';ctx.fillText(`1m ${s1.trend||'—'} · BOS ${s1.bos||'—'} · CHOCH ${s1.choch||'—'} · SWEEP ${s1.sweep||'—'}  |  5m ${s5.trend||'—'}`,L+4,T-5);$('chartSymbol').textContent='ETHUSDT';$('lastPrice').textContent=price(lp);$('chartSub').textContent='Binance Spot · gerçek 1m mum · V8 1m/5m/15m/1h/4h structure · sahte gelecek mum yok';renderV8ThesisBar();};
 
-function v7DrawLabel(ctx,x,y,text,color){
-  ctx.save();ctx.font='700 9px system-ui';const tw=ctx.measureText(text).width;
-  ctx.fillStyle='rgba(4,9,16,.90)';ctx.fillRect(x-3,y-10,tw+7,14);ctx.fillStyle=color;ctx.fillText(text,x,y);ctx.restore();
-}
+renderRadar=function(){const host=$('coinRadar');if(!host)return;const f=v8Foresight(),px=Number(live.ETHUSDT||states.ETHUSDT?.last||0),pos=states.ETHUSDT?.pos,state=pos?(String(pos.side)==='SHORT'?'SHORT':'LONG'):(f?.thesis_state==='CONFIRMED'?'THESIS READY':'WAIT'),klass=pos?(String(pos.side)==='SHORT'?'skip':'long'):(f?.direction==='UP'?'long':f?.direction==='DOWN'?'skip':'');const veto=Array.isArray(f?.veto)&&f.veto.length?f.veto.join(' · '):'—',raw=f?.raw_conviction==null?'—':Math.round(Number(f.raw_conviction)*100),cal=f?.calibrated_probability==null?`CALIBRATING n=${Number(f?.calibration_samples||0)}`:`${Math.round(Number(f.calibrated_probability)*100)}%`;host.innerHTML=`<div class="coinCard selected" data-s="ETHUSDT"><div><div class="coinTop"><span class="coinSymbol">ETH</span><span class="coinState ${klass}">${state}</span></div><div class="coinMeta">${v4Esc(String(f?.setup||'STRUCTURE WAIT'))} · ${v4Esc(String(f?.regime||'—'))}<br>Raw ${raw}/100 · ${v4Esc(cal)} · R:R ${Number(f?.rr||0).toFixed(2)} · cost ${Number(f?.cost_bps||0).toFixed(1)}bps<br>${v4Esc(veto)}</div></div><div class="coinRight"><div class="coinPrice">${price(px)}</div></div></div>`;if($('radarStatus'))$('radarStatus').textContent=running?'V8 ETH LIVE':'V8 WAIT';};
+renderKpi=function(){const z=v8ServerSnapshot,m=z||{};$('kpiEquity').textContent=cash(m.equity??book.cash);$('kpiPnl').textContent=pnl(m.realized_pnl??book.realized);const open=states.ETHUSDT?.pos?1:0;$('kpiOpen').textContent=String(open);const tr=Number((m.trade_count??book.trades)??0),wi=Number((m.win_count??book.wins)??0);$('kpiWin').textContent=tr?`${Math.round(wi/tr*100)}%`:'—';$('kpiTrades').textContent=String(tr);$('kpiEngine').textContent=running?'BRIAN V8 ETH':'V8 IDLE';$('kpiEngine').className=`value ${running?'pos':'amber'}`;$('kpiEngineMeta').textContent='ETH ONLY · thesis + structure · server 24/7';$('kpiOpenMeta').textContent='max 1 · calibrating size ≤8% · SHADOW ONLY';};
 
-const _v7ForesightBaseDraw=draw;
-draw=function(){
-  const cv=$('candleCanvas'),box=$('chartWrap');if(!cv||!box)return;
-  const ctx=cv.getContext('2d'),dpr=devicePixelRatio||1,w=Math.max(320,box.clientWidth),h=Math.max(280,box.clientHeight);
-  cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#080e17';ctx.fillRect(0,0,w,h);
-  const f=v7Foresight(),future=Array.isArray(f?.candles)?f.candles.slice(0,10):[],a=(candles[selected]||[]).slice(-88);if(!a.length)return;
-  const st=states[selected]||{},q=st.pos||null,dipInfo=typeof v7LatestDip==='function'?v7LatestDip(selected):null;
-  const values=a.flatMap(c=>[Number(c.l),Number(c.h)]).filter(Number.isFinite),lp=Number(live[selected]||a.at(-1)?.c||0),levels=[];
-  if(dipInfo?.price>0&&(!lp||Math.abs(dipInfo.price/lp-1)<=.12))levels.push(dipInfo.price);
-  if(q)for(const v of [q.entry,q.stop,q.target])if(Number(v)>0)levels.push(Number(v));
-  for(const c of future)for(const v of [c.l,c.h])if(Number(v)>0)levels.push(Number(v));
-  for(const v of [f?.peak,f?.trough])if(Number(v)>0)levels.push(Number(v));
-  let lo=Math.min(...values,...levels),hi=Math.max(...values,...levels),pad=(hi-lo)*.075||1;lo-=pad;hi+=pad;
-  const L=12,R=82,T=12,B=28,totalSlots=a.length+Math.max(4,future.length),plotW=w-L-R,plotH=h-T-B,xw=plotW/totalSlots,y=v=>T+(hi-v)/(hi-lo)*plotH;
-  ctx.lineWidth=1;ctx.font='9px system-ui';
-  for(let i=0;i<=5;i++){const yy=T+plotH*i/5,v=hi-(hi-lo)*i/5;ctx.strokeStyle='#182235';ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.fillStyle='#728096';ctx.fillText(price(v),w-R+8,yy+3);}
-  a.forEach((c,i)=>{const x=L+xw*i+xw/2,up=Number(c.c)>=Number(c.o),col=up?'#0ecb81':'#f6465d';ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y(Number(c.h)));ctx.lineTo(x,y(Number(c.l)));ctx.stroke();const top=y(Math.max(Number(c.o),Number(c.c))),bot=y(Math.min(Number(c.o),Number(c.c)));ctx.fillRect(x-Math.max(1,xw*.27),top,Math.max(2,xw*.54),Math.max(1,bot-top));});
-  const futureStart=L+xw*a.length;
-  if(future.length){
-    ctx.fillStyle='rgba(86,122,255,.045)';ctx.fillRect(futureStart,T,Math.max(0,w-R-futureStart),plotH);
-    ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(128,155,255,.55)';ctx.beginPath();ctx.moveTo(futureStart,T);ctx.lineTo(futureStart,h-B);ctx.stroke();ctx.setLineDash([]);v7DrawLabel(ctx,futureStart+6,T+14,'BRAIN TAHMİN ALANI','#8aa6ff');
-    future.forEach((c,j)=>{const i=a.length+j,x=L+xw*i+xw/2,up=Number(c.c)>=Number(c.o),col=up?'#55dca8':'#ff788c';ctx.globalAlpha=.52;ctx.strokeStyle=col;ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y(Number(c.h)));ctx.lineTo(x,y(Number(c.l)));ctx.stroke();const top=y(Math.max(Number(c.o),Number(c.c))),bot=y(Math.min(Number(c.o),Number(c.c)));ctx.fillRect(x-Math.max(1,xw*.22),top,Math.max(2,xw*.44),Math.max(1,bot-top));ctx.globalAlpha=1;});
-    if(Number(f?.peak)>0){ctx.setLineDash([2,4]);ctx.strokeStyle='#55dca8';ctx.beginPath();ctx.moveTo(futureStart,y(f.peak));ctx.lineTo(w-R,y(f.peak));ctx.stroke();ctx.setLineDash([]);v7DrawLabel(ctx,futureStart+8,y(f.peak)-4,`TAHMİN TEPE ${price(f.peak)}`,'#55dca8');}
-    if(Number(f?.trough)>0){ctx.setLineDash([2,4]);ctx.strokeStyle='#ff788c';ctx.beginPath();ctx.moveTo(futureStart,y(f.trough));ctx.lineTo(w-R,y(f.trough));ctx.stroke();ctx.setLineDash([]);v7DrawLabel(ctx,futureStart+8,y(f.trough)-4,`TAHMİN DİP ${price(f.trough)}`,'#ff788c');}
-  }
-  if(dipInfo?.price>0&&typeof v7ChartLevel==='function')v7ChartLevel(ctx,y,L,R,w,dipInfo.active?'AKTİF DİP':'SON DİP',dipInfo.price,'#f0b90b',[4,4],'left');
-  if(q&&typeof v7ChartLevel==='function'){const side=String(q.side||'LONG').toUpperCase();v7ChartLevel(ctx,y,L,R,w,side==='SHORT'?'SHORT GİRİŞ':'ALIM GİRİŞ',q.entry,side==='SHORT'?'#f6465d':'#0ecb81',[2,2],'left');v7ChartLevel(ctx,y,L,R,w,'TP',q.target,'#2af0a3',[6,4],'right');v7ChartLevel(ctx,y,L,R,w,'SL',q.stop,'#ff6b7a',[6,4],'right');}
-  if(lp>0){const yy=Math.max(T+9,Math.min(h-B-9,y(lp))),up=Number(a.at(-1)?.c)>=Number(a.at(-1)?.o),col=up?'#0ecb81':'#f6465d';ctx.setLineDash([3,3]);ctx.strokeStyle=col;ctx.globalAlpha=.65;ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(w-R,yy);ctx.stroke();ctx.globalAlpha=1;ctx.setLineDash([]);ctx.fillStyle=col;ctx.fillRect(w-R+3,yy-10,R-6,20);ctx.fillStyle='#fff';ctx.font='600 9px system-ui';ctx.fillText(price(lp),w-R+8,yy+3);}
-  $('chartSymbol').textContent=selected;$('lastPrice').textContent=price(lp);$('chartSub').textContent=`Binance Spot · 1m · Focus 3 · gerçek mum + Brian tahmin alanı`;
-  renderForesightBar();
-};
-
-const _v7ForesightUiPatch=v4UiPatch;
-v4UiPatch=function(){
-  _v7ForesightUiPatch();
-  const p=document.querySelector('.symbolPicker .pickerTitle');if(p)p.innerHTML='<b>Brian Focus Lab · 3 Coin</b><span>XRP · ETH · DOGE — grafik okuma ve ileri görüş gelişimi</span>';
-  const buttons=$('symbolButtons');if(buttons)buttons.innerHTML=V7_FOCUS_UNIVERSE.map(s=>`<button class="symbolToggle active" data-symbol="${s}">${s.replace('USDT','')}</button>`).join('');
-  const expert=document.querySelector('.expertModeCard small');if(expert)expert.textContent='Focus 3: XRP · ETH · DOGE · multi-timeframe grafik uzmanı · foresight telemetry · SHADOW ONLY';
-};
-
-function v7InstallForesightUi(){
-  if(!$('v7ForesightBar')){const panel=$('chartPanel'),head=panel?.querySelector('.chartHead');if(panel&&head){const d=document.createElement('div');d.id='v7ForesightBar';d.className='v7ForesightBar';head.insertAdjacentElement('afterend',d);}}
-  if(!document.getElementById('v7-foresight-style')){const s=document.createElement('style');s.id='v7-foresight-style';s.textContent=`
-  .v7ForesightBar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:0 12px 9px;padding:9px 11px;border:1px solid rgba(92,130,255,.24);background:linear-gradient(90deg,rgba(63,87,180,.10),rgba(16,24,39,.55));border-radius:10px;font-size:11px;color:#9baac0}.v7ForesightMain,.v7ForesightLevels{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.v7ForesightMain b{color:#dfe8ff}.v7ForesightMain .up{color:#28d99b}.v7ForesightMain .down{color:#ff647b}.v7ForesightMain .flat{color:#f0b90b}.v7ForesightLevels b{color:#e8eefb}.v7ForesightLevels small{color:#66758c}.v7ForesightStatus.wait{color:#f0b90b}@media(max-width:760px){.v7ForesightBar{align-items:flex-start;flex-direction:column}.v7ForesightMain,.v7ForesightLevels{gap:7px 11px}}
-  `;document.head.appendChild(s);}
-  v4UiPatch();renderForesightBar();
-}
-
-addEventListener('load',()=>{v7InstallForesightUi();v4Universe=[...V7_FOCUS_UNIVERSE];if(!V7_FOCUS_UNIVERSE.includes(selected))selected='XRPUSDT';setTimeout(()=>{v4LoadHistory().then(()=>{connect();render();v7FetchForesight();}).catch(()=>{});},250);if(v7ForesightTimer)clearInterval(v7ForesightTimer);v7ForesightTimer=setInterval(v7FetchForesight,15000);});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')v7FetchForesight();});
+const _v8UiPatch=v4UiPatch;
+v4UiPatch=function(){_v8UiPatch();const h=document.querySelector('.desktopTitle h1');if(h)h.textContent='Brian Dip V8 · ETH Chart Reader';const mb=document.querySelector('.mobileBrand b');if(mb)mb.textContent='Brian Dip V8 · ETH';const sub=document.querySelector('.desktopTitle .sub');if(sub)sub.textContent='ETHUSDT ONLY · native 1m/5m/15m/1h/4h structure · single Thesis · SHADOW ONLY';const banner=document.querySelector('.dipBanner>div:first-child');if(banner)banner.innerHTML='<strong>BRIAN DIP V8 · ETH ONLY · SHADOW ONLY</strong> · Sahte gelecek mum yok. Confirmed swing → BOS/CHOCH/sweep/failed-break → tek Thesis → target/invalidation → cost/R:R → server shadow execution.';const p=document.querySelector('.symbolPicker .pickerTitle');if(p)p.innerHTML='<b>V8 Test Lab · Tek Coin</b><span>Yalnız ETHUSDT — tek odak, temiz ölçüm</span>';const buttons=$('symbolButtons');if(buttons)buttons.innerHTML='<button class="symbolToggle active" data-symbol="ETHUSDT">ETH</button>';const expert=document.querySelector('.expertModeCard');if(expert){const badge=expert.querySelector('.badge');if(badge)badge.textContent='V8 · SINGLE THESIS CHART READER';const b=expert.querySelector('b');if(b)b.textContent='Structure → location → trigger → flow confirmation';const s=expert.querySelector('small');if(s)s.textContent='ETH only · max 1 shadow position · calibrating size ≤8% · target-before-invalidation measurement';}if($('startBtn'))$('startBtn').textContent='▶ Brian V8 ETH Cloud Başlat';if($('restartBtn'))$('restartBtn').textContent='↻ V8 ETH Temiz Session Restart';const rule=document.querySelector('.dipRuleLine');if(rule)rule.innerHTML='V8: <b>confirmed 3/3 pivots</b> → HH/HL/LH/LL + BOS/CHOCH → Sweep/Failed Break/BOS Retest → <b>tek Thesis</b> → gerçek hedef/iptal → venue cost ≥2.5× + R:R → zombie thesis lock → SHADOW ONLY.';const title=document.querySelector('#watchlist .title');if(title)title.textContent='ETH Radar · V8 Thesis';const note=document.querySelector('#watchlist .note');if(note)note.textContent='Tek truth source: grafik, radar, log ve execution aynı Thesis';const logic=document.querySelector('.logicSteps');if(logic)logic.innerHTML='<div><b>1</b><span>Native 4h→1h→15m→5m→1m confirmed swing haritasını çıkarır.</span></div><div><b>2</b><span>HH/HL/LH/LL, BOS, CHOCH, sweep ve failed-break seviyelerini gerçek fiyatla çizer.</span></div><div><b>3</b><span>Sadece SWEEP_RECLAIM / FAILED_BREAK / teyitli BOS_RETEST için Thesis kurar.</span></div><div><b>4</b><span>Hedef ve stop ATR yüzdesinden değil, market structure seviyesinden gelir.</span></div><div><b>5</b><span>Ölen aynı thesis_id yeni 5m kapanışı + yeni structure gelmeden tekrar açılamaz.</span></div><div><b>6</b><span>Kalibrasyon n&lt;40 iken büyük pozisyon yasak; max %8 shadow size.</span></div>';};
+function v8Install(){if(!$('v7ForesightBar')){const panel=$('chartPanel'),head=panel?.querySelector('.chartHead');if(panel&&head){const d=document.createElement('div');d.id='v7ForesightBar';d.className='v7ForesightBar';head.insertAdjacentElement('afterend',d);}}if(!document.getElementById('v8-thesis-style')){const s=document.createElement('style');s.id='v8-thesis-style';s.textContent='.v7ForesightBar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:0 12px 9px;padding:9px 11px;border:1px solid rgba(92,130,255,.24);background:linear-gradient(90deg,rgba(63,87,180,.10),rgba(16,24,39,.55));border-radius:10px;font-size:11px;color:#9baac0}.v7ForesightMain,.v7ForesightLevels{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.v7ForesightMain b{color:#dfe8ff}.v7ForesightMain .up{color:#28d99b}.v7ForesightMain .down{color:#ff647b}.v7ForesightMain .flat{color:#f0b90b}.v7ForesightLevels b{color:#e8eefb}.v7ForesightLevels small{color:#7f8da3}@media(max-width:760px){.v7ForesightBar{align-items:flex-start;flex-direction:column}.v7ForesightMain,.v7ForesightLevels{gap:7px 10px}}';document.head.appendChild(s);}v4Universe=['ETHUSDT'];selected='ETHUSDT';v4Ensure('ETHUSDT');v4UiPatch();renderV8ThesisBar();}
+addEventListener('load',()=>{v8Install();setTimeout(()=>{v4Universe=['ETHUSDT'];selected='ETHUSDT';v4LoadHistory().then(()=>{connect();render();v8FetchForesight();}).catch(()=>{});},350);if(v8ForesightTimer)clearInterval(v8ForesightTimer);v8ForesightTimer=setInterval(v8FetchForesight,10000);});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')v8FetchForesight();});
