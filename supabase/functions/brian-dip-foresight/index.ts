@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { requireCronAuth } from "../_shared/cron_auth.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -23,7 +22,8 @@ function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for
 async function auth(req:Request){
   const dashboard=(req.headers.get("x-brian-dashboard-key")??"").trim();
   if(dashboard){const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256,created_at").order("created_at",{ascending:false}).limit(1).maybeSingle();if(q.error||!q.data||!same(await shaHex(dashboard),String(q.data.dashboard_key_sha256)))throw Error("UNAUTHORIZED_DASHBOARD");return;}
-  await requireCronAuth(req,db);
+  const cron=(req.headers.get("x-brian-cron-key")??"").trim();if(!cron)throw Error("UNAUTHORIZED_CRON");
+  const q=await db.from("brian_dashboard_auth").select("cron_key_sha256").eq("auth_id","control-v3").single();if(q.error||!q.data||!same(await shaHex(cron),String(q.data.cron_key_sha256??"")))throw Error("UNAUTHORIZED_CRON");
 }
 async function latestSession(){const q=await db.from("brian_dip_session_events").select("session_id,event_kind,requested_at").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();if(q.error)throw q.error;if(!q.data||q.data.event_kind!=="START")return null;return String(q.data.session_id);}
 async function latestState(sessionId:string){const q=await db.from("brian_dip_snapshots").select("observed_at,state").eq("session_id",sessionId).order("observed_at",{ascending:false}).limit(1).maybeSingle();if(q.error)throw q.error;return q.data?.state&&typeof q.data.state==="object"?q.data.state as J:{};}
