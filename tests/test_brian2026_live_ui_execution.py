@@ -38,7 +38,7 @@ def test_v5_reasoner_remains_as_browser_reference_but_v7_disables_browser_execut
 
 
 def test_pwa_shell_is_bumped_for_server_authoritative_fix():
-    assert "monster-coins-pro-shell-v11" in SW
+    assert "monster-coins-pro-shell-v12" in SW
     assert "/dip-server-authoritative-v7.js" in SW
 
 
