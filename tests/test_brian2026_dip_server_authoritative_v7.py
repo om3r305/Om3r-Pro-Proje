@@ -5,6 +5,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 WORKER = (ROOT / "supabase" / "functions" / "brian-dip-shadow-worker" / "index.ts").read_text(encoding="utf-8")
 MIGRATION = (ROOT / "supabase" / "migrations" / "202609070071_brian_dip_server_authoritative_v7.sql").read_text(encoding="utf-8")
+HANDOFF_MIGRATION = (ROOT / "supabase" / "migrations" / "202609070073_brian_dip_v7_handoff_lease_fence.sql").read_text(encoding="utf-8")
 UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read_text(encoding="utf-8")
 HTML = (ROOT / "monster-coins-pro" / "dip.html").read_text(encoding="utf-8")
 
@@ -51,10 +52,24 @@ def test_server_takes_append_only_ownership_and_fences_old_browser_writes():
     assert "/functions/v1/brian-dip-shadow-worker" in MIGRATION
 
 
+def test_v7_handoff_cannot_be_kept_alive_by_legacy_browser_heartbeat():
+    assert 'brian_v7_neuter_browser_engine_heartbeat' in HANDOFF_MIGRATION
+    assert "server_authoritative" in HANDOFF_MIGRATION
+    assert "monster-coins-pro-dip-v4" in HANDOFF_MIGRATION
+    assert "now() - interval '2 minutes'" in HANDOFF_MIGRATION
+    assert 'brian_dip_v7_browser_heartbeat_fence' in HANDOFF_MIGRATION
+    assert 'before insert or update of heartbeat_at, claimed_by' in HANDOFF_MIGRATION.lower()
+
+
 def test_browser_is_view_only_and_server_handoff_loads_after_v5():
     assert 'v4Evaluate = function(){ return; }' in UI
     assert 'snapshot = async function(){ return; }' in UI
     assert "api('engine_check'" not in UI
+    assert "const _v7Api = api" in UI
+    assert "action==='engine_check'||action==='claim_engine'" in UI
+    assert "SERVER_AUTHORITATIVE_VIEW_ONLY" in UI
+    assert "server_authoritative:true" in UI
+    assert "browser_execution:false" in UI
     assert "browser_view_only:true" in UI
     assert HTML.index('/dip-expert-v5-brain.js') < HTML.index('/dip-server-authoritative-v7.js')
 
