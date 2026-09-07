@@ -42,6 +42,6 @@ def test_v7_browser_is_view_only_after_all_v4_v5_wrappers():
 
 
 def test_pwa_cache_contains_runtime_guard_server_handoff_and_is_bumped():
-    assert "monster-coins-pro-shell-v11" in SW
+    assert "monster-coins-pro-shell-v12" in SW
     assert "/dip-expert-v4-runtime-guard.js" in SW
     assert "/dip-server-authoritative-v7.js" in SW

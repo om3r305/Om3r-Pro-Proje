@@ -31,4 +31,4 @@ def test_pattern_classification_does_not_bypass_executor_gates():
 
 def test_wick_candidates_are_append_only_telemetry_and_cache_refreshes():
     assert "WICK_RECLAIM_CANDIDATE" in BRAIN
-    assert "monster-coins-pro-shell-v11" in SW
+    assert "monster-coins-pro-shell-v12" in SW

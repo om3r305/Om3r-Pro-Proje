@@ -6,6 +6,22 @@
 const BRIAN_DIP_SERVER_AUTHORITATIVE_V7 = true;
 let v7ServerRuntime = null;
 
+// Older V4/V5 files install 7-second engine_check/claim_engine timers before this V7 overlay loads.
+// Intercept those lease-only actions so a view-only browser can never keep refreshing the legacy
+// engine lease and block the server-authoritative takeover. All real session/status controls still
+// go to brian-dip-trader normally.
+const _v7Api = api;
+api = async function(action,body={}){
+  if(action==='engine_check'||action==='claim_engine'){
+    return {status:'SERVER_AUTHORITATIVE_VIEW_ONLY',browser_execution:false,shadow_only:true,live_execution:false};
+  }
+  return _v7Api(action,body);
+};
+v4EnsureEngineLease = async function(){
+  running = Boolean(session?.status === 'RUNNING');
+  return running;
+};
+
 // Disable every browser execution path after all V4/V5 wrappers have loaded.
 v4Evaluate = function(){ return; };
 snapshot = async function(){ return; };
@@ -56,7 +72,11 @@ start = async function(restart=false){
   v4Booting=true;
   try{
     await v4LoadHistory();
-    const p=params(), d=await api(restart?'restart':'start',p);
+    const p=params();
+    // Persist the V7 ownership contract in the append-only session START config. The worker can
+    // distinguish V7 cloud sessions from legacy browser-owned V4/V5 sessions without guessing.
+    p.config={...p.config,symbols:[...v4Universe],server_authoritative:true,sizing_policy:'BRAIN_CONFIDENCE_V7',browser_execution:false};
+    const d=await api(restart?'restart':'start',p);
     if(!restart&&d.status==='RESUMED'){
       await status(false);
       connect();
@@ -64,7 +84,7 @@ start = async function(restart=false){
       toast('Aynı V7 cloud session devam ediyor.');
       return;
     }
-    const cfg={...p.config,...(d.config||{}),symbols:[...v4Universe],engine_version:DIP_EXPERT_V4,allow_shadow_short:true,max_shadow_leverage:1,server_authoritative:true,sizing_policy:'BRAIN_CONFIDENCE_V7'};
+    const cfg={...p.config,...(d.config||{}),symbols:[...v4Universe],engine_version:DIP_EXPERT_V4,allow_shadow_short:true,max_shadow_leverage:1,server_authoritative:true,sizing_policy:'BRAIN_CONFIDENCE_V7',browser_execution:false};
     session={session_id:d.session_id,status:'RUNNING',started_at:d.started_at||iso(),starting_equity:d.starting_equity,trade_notional:d.trade_notional,config:cfg};
     sid=d.session_id;
     v4ClearRuntimeStates();
