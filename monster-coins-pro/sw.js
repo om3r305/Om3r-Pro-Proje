@@ -1,6 +1,6 @@
 const CACHE='monster-coins-pro-shell-v11';
 const ASSETS=[
-  '/','/dashboard.css','/dashboard.js','/manifest.webmanifest','/brand.svg','/logo.svg',
+  '/','/dashboard.css','/dashboard.js','/dip-cloud-status-v7.js','/manifest.webmanifest','/brand.svg','/logo.svg',
   '/app.css','/dip.html','/dip.css','/dip.js',
   '/dip-expert-v2.js','/dip-expert-v3.js',
   '/dip-expert-v4-core.js','/dip-expert-v4-market.js','/dip-expert-v4-risk.js',
