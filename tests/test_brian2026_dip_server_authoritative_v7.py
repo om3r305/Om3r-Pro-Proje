@@ -13,14 +13,21 @@ THESIS_UI = (ROOT / "monster-coins-pro" / "dip-foresight-v7.js").read_text(encod
 HTML = (ROOT / "monster-coins-pro" / "dip.html").read_text(encoding="utf-8")
 
 
+# V8.1 split the worker into pure, behavior-tested modules. Keep these wiring checks,
+# while actual state transitions, costs and outcomes run in the Deno/Postgres suites.
+SHARED = (ROOT / 'supabase/functions/_shared/dip_v8.ts').read_text()
+MARKET = (ROOT / 'supabase/functions/_shared/dip_v8_market.ts').read_text()
+WORKER += ''.join(p.read_text() for p in (ROOT / 'supabase/functions/brian-dip-shadow-worker').glob('*.ts') if not p.name.endswith('.test.ts')) + SHARED + MARKET
+FORESIGHT += (ROOT / 'supabase/functions/brian-dip-foresight/resolver.ts').read_text() + SHARED
+
 def test_v8_worker_is_cron_authorized_leased_eth_only_and_shadow_only():
     assert 'requireCronAuth' in WORKER
     assert 'withCollectorLease' in WORKER
     assert 'brian-dip-shadow-worker-v8' in WORKER
     assert 'brian-dip-chart-reader-v8' in WORKER
-    assert 'const SYMBOL="ETHUSDT"' in WORKER
-    assert 'live_execution:false' in WORKER
-    assert 'shadow_only:true' in WORKER
+    assert 'const SYMBOL = "ETHUSDT"' in WORKER
+    assert 'live_execution: false' in WORKER
+    assert 'shadow_only: true' in WORKER
     assert '/api/v3/order' not in WORKER
     assert '/fapi/v1/order' not in WORKER
 
@@ -28,13 +35,13 @@ def test_v8_worker_is_cron_authorized_leased_eth_only_and_shadow_only():
 def test_v8_worker_has_real_structure_single_thesis_and_safe_calibrating_size():
     for token in ['classifyPivots', 'HH', 'HL', 'LH', 'LL', 'bos', 'choch', 'sweep', 'failedBreak', 'equalHigh', 'equalLow']:
         assert token in WORKER
-    assert 'interval=4h' in WORKER
+    assert '"4h"' in MARKET
     assert 'SWEEP_RECLAIM' in WORKER
     assert 'FAILED_BREAK' in WORKER
     assert 'BOS_RETEST' in WORKER
-    assert 'MAX_POSITION_FRACTION_CALIBRATING=.08' in WORKER or 'MAX_POSITION_FRACTION_CALIBRATING=0.08' in WORKER
-    assert 'MAX_HEAT=.20' in WORKER or 'MAX_HEAT=0.20' in WORKER
-    assert 'MIN_CAL_SAMPLES=40' in WORKER
+    assert 'MAX_POSITION_FRACTION_CALIBRATING = 0.08' in SHARED
+    assert 'MAX_HEAT = 0.20' in SHARED
+    assert 'MIN_CAL_SAMPLES = 40' in WORKER
     assert 'TARGET_BELOW_COST' in WORKER
     assert 'RR_TOO_LOW' in WORKER
     assert 'actual_fraction' in WORKER
@@ -42,22 +49,22 @@ def test_v8_worker_has_real_structure_single_thesis_and_safe_calibrating_size():
 
 def test_v8_zombie_thesis_is_locked_until_new_structure_and_new_closed_5m():
     assert 'THESIS_LOCKED_NO_NEW_STRUCTURE' in WORKER
-    assert 'rt.locks[p.thesis_id]' in WORKER
+    assert 'rt.lastLock' in WORKER
     assert 'last5m_t' in WORKER
     assert 'combinedFp' in WORKER
-    assert 'STRUCTURE_INVALIDATION' in WORKER
-    assert 'THESIS_EXPIRED' in WORKER
-    assert 'TARGET_HIT' in WORKER
+    assert 'INVALIDATION_FIRST' in WORKER
+    assert 'EXPIRED_NO_BARRIER' in WORKER
+    assert 'TARGET_FIRST' in WORKER
 
 
 def test_v8_measurement_is_target_before_invalidation_and_has_no_sine_wave():
     assert 'target-before-invalidation-v8' in FORESIGHT
     assert 'TARGET_FIRST' in FORESIGHT
     assert 'INVALIDATION_FIRST' in FORESIGHT
-    assert 'AMBIGUOUS_SAME_BAR_INVALIDATION_FIRST' in FORESIGHT
+    assert 'AMBIGUOUS' in FORESIGHT
     assert 'EXPIRED_NO_BARRIER' in FORESIGHT
     assert 'Math.sin' not in FORESIGHT
-    assert 'path:[]' in FORESIGHT
+    assert 'Math.sin' not in THESIS_UI
     assert 'MIN_CAL_SAMPLES' not in FORESIGHT or 'calibration_samples' in FORESIGHT
 
 

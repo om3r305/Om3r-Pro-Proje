@@ -1,0 +1,52 @@
+name: Brian DIP V8 Integrity
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - "supabase/functions/_shared/dip_v8*"
+      - "supabase/functions/brian-dip-*/**"
+      - "supabase/migrations/*dip_v8*.sql"
+      - "monster-coins-pro/dip*"
+      - "tests/*dip*v8*"
+      - ".github/workflows/brian-dip-v8-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v8-behavior:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.1.4"
+      - name: Type-check V8 entrypoints and shared contracts
+        run: deno check supabase/functions/brian-dip-shadow-worker/index.ts supabase/functions/brian-dip-foresight/index.ts supabase/functions/brian-dip-trader/index.ts
+      - name: V8 deterministic behavior and hard SHADOW tests
+        run: deno test --allow-read supabase/functions/_shared/dip_v8.test.ts supabase/functions/brian-dip-shadow-worker/worker.test.ts
+      - name: Browser script syntax
+        run: node --check monster-coins-pro/dip-foresight-v7.js
+      - name: Patch formatting
+        run: git diff --check
+  v8-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v8_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest psycopg2-binary
+      - name: Real transaction, concurrency, lease, pause and rollback tests
+        env:
+          BRIAN_V8_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/v8_test
+        run: python -m pytest -q tests/test_brian_dip_v8_postgres.py
