@@ -1,657 +1,143 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  buildHourlyReport,
-  derivePolicySnapshot,
-  formatTelegramReport,
-  type HourlyReportPayload,
-  type ShadowTick,
-} from "./logic.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-const SOURCE_EXPERIMENT_ID = "phase37-prospective-live-20260903";
-const EVIDENCE_CLASS = "PROSPECTIVE_DEVELOPMENT_SHADOW";
-const AUTH_ID = "control-v3";
-const ALPHA_COLLECTORS = [
-  "brian-alpha-decision-compiler-v2",
-  "brian-missed-opportunity-auditor-v3",
-  // Production v3 currently preserves the historical collector_id for append-only continuity.
-  "brian-missed-opportunity-auditor-v2",
-  "brian-official-macro-eye",
-];
-type CloudComponentConfig = {
-  id: string;
-  label: string;
-  cadenceSeconds: number;
-  collectorIds: readonly string[];
-};
-const CLOUD_COLLECTORS: readonly CloudComponentConfig[] = [
-  // These three services publish canonical output tables but do not write brian_collector_runs.
-  { id: "brian-universe-collector", label: "Piyasa Evreni", cadenceSeconds: 900, collectorIds: [] },
-  { id: "brian-live-shadow", label: "Phase 3.7 Shadow", cadenceSeconds: 300, collectorIds: [] },
-  { id: "brian-sensor-mesh", label: "Sensör Ağı", cadenceSeconds: 600, collectorIds: [] },
-  // Keep canonical dashboard ids while accepting the collector ids actually emitted in production.
-  { id: "brian-derivatives-eye", label: "Türev Piyasa Gözü", cadenceSeconds: 300, collectorIds: ["brian-derivatives-eye", "phase39-binance-usdm-derivatives"] },
-  { id: "brian-intrabar-eye", label: "Intrabar Gözü", cadenceSeconds: 120, collectorIds: ["brian-intrabar-eye"] },
-  { id: "brian-alpha-decision-compiler-v2", label: "ALPHA Karar Motoru", cadenceSeconds: 60, collectorIds: ["brian-alpha-decision-compiler-v2"] },
-  { id: "brian-missed-opportunity-auditor-v3", label: "Sonuç Denetçisi", cadenceSeconds: 300, collectorIds: ["brian-missed-opportunity-auditor-v3", "brian-missed-opportunity-auditor-v2"] },
-  { id: "brian-official-macro-eye", label: "Resmî Makro Gözü", cadenceSeconds: 600, collectorIds: ["brian-official-macro-eye"] },
-  { id: "brian-fx-eye", label: "Döviz Gözü", cadenceSeconds: 3600, collectorIds: ["brian-fx-eye", "phase39-ecb-fx"] },
-];
-const ALLOWED_ORIGIN = /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
-const ALLOWED_EXACT = new Set([
-  "https://monster-coins-pro-seven.vercel.app",
-  "https://monster-coins-pro-oemer-yildirim.vercel.app",
-  "https://monster-coins-pro-git-brian-2026-oemer-yildirim.vercel.app",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-]);
+const URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
+const CORE = `${URL}/functions/v1/brian-control-center-core`;
 
-type SessionEvent = {
-  event_id: string;
-  session_id: string;
-  event_kind: "START" | "PAUSE";
-  requested_at: string;
-  starting_equity: number | string | null;
-  policy_scope: "BOTH" | "NATIVE" | "PROFIT" | null;
-  source_experiment_id: string;
-};
-type SessionState = { start: SessionEvent; last_event: SessionEvent; active: boolean; ended_at: string | null };
-type ReportRow = {
-  report_id: string;
-  session_id: string;
-  policy_kind: "NATIVE" | "PROFIT";
-  window_start: string;
-  window_end: string;
-  generated_at: string;
-  payload: HourlyReportPayload;
-  telegram_attempted: boolean;
-  telegram_sent: boolean;
-  telegram_error: string | null;
-};
-
-type CollectorRun = {
-  collector_id: string;
-  status: string;
-  started_at: string;
-  finished_at: string | null;
-  degraded_sources: unknown;
-  error_class: string | null;
-  error_message: string | null;
-  metadata: unknown;
-};
-
-function corsHeaders(origin?: string | null): Record<string, string> {
-  const allowed = origin && (ALLOWED_EXACT.has(origin) || ALLOWED_ORIGIN.test(origin))
-    ? origin
-    : "https://monster-coins-pro-oemer-yildirim.vercel.app";
-  return {
-    "access-control-allow-origin": allowed,
-    "access-control-allow-headers": "content-type,x-brian-dashboard-key,x-brian-cron-key",
-    "access-control-allow-methods": "POST,OPTIONS",
-    "vary": "Origin",
-  };
+function finite(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
-function jsonResponse(body: unknown, status = 200, origin?: string | null): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...corsHeaders(origin) },
-  });
-}
-async function sha256Hex(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-function constantTimeEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  return diff === 0;
-}
-function ageSeconds(value: unknown, now = Date.now()): number | null {
-  const ts = typeof value === "string" ? Date.parse(value) : NaN;
-  return Number.isFinite(ts) ? Math.max(0, Math.round((now - ts) / 1000)) : null;
-}
-async function authHashes(): Promise<{ dashboard: string; cron: string }> {
-  const result = await supabase.from("brian_dashboard_auth")
-    .select("dashboard_key_sha256,cron_key_sha256")
-    .eq("auth_id", AUTH_ID)
-    .single();
-  if (result.error || !result.data) throw new Error(`dashboard auth unavailable: ${result.error?.message ?? "missing row"}`);
-  return { dashboard: String(result.data.dashboard_key_sha256), cron: String(result.data.cron_key_sha256) };
-}
-async function requireDashboardAuth(req: Request) {
-  const supplied = (req.headers.get("x-brian-dashboard-key") ?? "").trim();
-  if (!supplied) throw new Error("UNAUTHORIZED_DASHBOARD");
-  const expected = (await authHashes()).dashboard;
-  if (!constantTimeEqual(await sha256Hex(supplied), expected)) throw new Error("UNAUTHORIZED_DASHBOARD");
-}
-async function requireCronAuth(req: Request) {
-  const supplied = (req.headers.get("x-brian-cron-key") ?? "").trim();
-  if (!supplied) throw new Error("UNAUTHORIZED_CRON");
-  const expected = (await authHashes()).cron;
-  if (!constantTimeEqual(await sha256Hex(supplied), expected)) throw new Error("UNAUTHORIZED_CRON");
+function ageSeconds(v: string | null): number | null {
+  if (!v) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? Math.max(0, Math.round((Date.now() - t) / 1000)) : null;
 }
 
-async function latestSession(): Promise<SessionState | null> {
-  const latest = await supabase.from("brian_dashboard_session_events")
-    .select("event_id,session_id,event_kind,requested_at,starting_equity,policy_scope,source_experiment_id")
-    .order("requested_at", { ascending: false }).order("event_id", { ascending: false }).limit(1).maybeSingle();
-  if (latest.error) throw latest.error;
-  if (!latest.data) return null;
-  const last = latest.data as SessionEvent;
-  const startResult = await supabase.from("brian_dashboard_session_events")
-    .select("event_id,session_id,event_kind,requested_at,starting_equity,policy_scope,source_experiment_id")
-    .eq("session_id", last.session_id).eq("event_kind", "START").order("requested_at", { ascending: true }).limit(1).single();
-  if (startResult.error || !startResult.data) throw new Error(`session start missing for ${last.session_id}`);
-  return {
-    start: startResult.data as SessionEvent,
-    last_event: last,
-    active: last.event_kind === "START",
-    ended_at: last.event_kind === "PAUSE" ? last.requested_at : null,
-  };
-}
-async function loadTicks(experimentId: string, policy: "NATIVE" | "PROFIT", startAt: string, endAt: string | null): Promise<ShadowTick[]> {
-  const pageSize = 1000, out: ShadowTick[] = [];
-  for (let from = 0;; from += pageSize) {
-    let query = supabase.from("brian_live_shadow_ticks")
-      .select("observed_at,equity_after_costs,period_pnl,trading_cost,max_drawdown_pct_after,target_weights,drifted_weights,observed_mid_prices,observed_spread_bps,diagnostics")
-      .eq("experiment_id", experimentId).eq("policy_kind", policy).gte("observed_at", startAt)
-      .order("observed_at", { ascending: true }).range(from, from + pageSize - 1);
-    if (endAt) query = query.lte("observed_at", endAt);
-    const result = await query;
-    if (result.error) throw result.error;
-    const page = (result.data ?? []) as ShadowTick[];
-    out.push(...page);
-    if (page.length < pageSize) break;
-  }
-  return out;
-}
-async function latestEngineTick(policy: "NATIVE" | "PROFIT") {
-  const result = await supabase.from("brian_live_shadow_ticks")
-    .select("observed_at,equity_after_costs,target_weights,diagnostics")
-    .eq("experiment_id", SOURCE_EXPERIMENT_ID).eq("policy_kind", policy)
-    .order("observed_at", { ascending: false }).limit(1).maybeSingle();
-  if (result.error) throw result.error;
-  return result.data;
-}
-function topDecisionDiagnostics(ticks: ShadowTick[]) {
-  return ticks.slice(-12).reverse().map((tick) => {
-    const diagnostics = (tick.diagnostics ?? {}) as Record<string, unknown>;
-    const model = (diagnostics.model ?? {}) as Record<string, Record<string, unknown>>;
-    const ranked = Object.entries(model).map(([symbol, data]) => ({
-      symbol,
-      raw_edge: Number(data.raw_edge ?? 0),
-      selection_score: data.selection_score == null ? null : Number(data.selection_score),
-      prediction: Number(data.prediction ?? 0),
-      uncertainty: Number(data.uncertainty ?? 0),
-      selected_weight: Number(data.selected_weight ?? 0),
-    })).sort((a, b) => Math.abs(b.raw_edge) - Math.abs(a.raw_edge));
-    return { observed_at: tick.observed_at, active: Boolean(diagnostics.active), target_weights: tick.target_weights, top_candidates: ranked.slice(0, 3) };
-  });
-}
-async function loadReports(sessionId: string): Promise<ReportRow[]> {
-  const result = await supabase.from("brian_dashboard_hourly_reports")
-    .select("report_id,session_id,policy_kind,window_start,window_end,generated_at,payload,telegram_attempted,telegram_sent,telegram_error")
-    .eq("session_id", sessionId).order("window_end", { ascending: false }).limit(24);
-  if (result.error) throw result.error;
-  return (result.data ?? []) as ReportRow[];
-}
+async function v8DipSummary() {
+  const runtimeQ = await db.from("brian_dip_v8_runtime")
+    .select("session_id,state_version,updated_at,runtime,snapshot,shadow_only,live_execution")
+    .order("updated_at", { ascending: false }).limit(1).maybeSingle();
+  if (runtimeQ.error) throw runtimeQ.error;
+  if (!runtimeQ.data) return null;
 
-async function loadAlphaV2Status() {
-  const [decisions, positions, comparisons, outcomes, costs, collectors] = await Promise.all([
-    supabase.from("brian_alpha_decisions")
-      .select("decision_id,compiler_version,observed_at,asset_id,observed_reference_price,action,direction,evidence_score,independent_group_count,support_groups,conflict_groups,source_cost_quote_id,estimated_round_trip_cost_bps,veto_reason,reason,metadata")
-      .order("observed_at", { ascending: false }).limit(80),
-    supabase.from("brian_alpha_shadow_position_book")
-      .select("asset_id,position,entry_price,entry_ts,last_action_at,last_event_type,last_decision_id,last_reference_price,last_flip_realized_gross_bps,shadow_only,live_execution")
-      .order("last_action_at", { ascending: false }).limit(50),
-    supabase.from("brian_alpha_phase37_comparisons")
-      .select("decision_id,asset_id,observed_at,alpha_action,alpha_position_intent,phase37_policy_kind,phase37_observed_at,phase37_age_seconds,phase37_target_weight,phase37_direction,relationship,metadata")
-      .order("observed_at", { ascending: false }).limit(160),
-    supabase.from("brian_alpha_decision_outcomes")
-      .select("outcome_id,decision_id,asset_id,horizon_seconds,observed_at,resolved_at,reference_price,resolved_price,gross_return,direction_adjusted_return,mfe,mae,classification,metadata")
-      .order("resolved_at", { ascending: false }).limit(100),
-    supabase.from("brian_dynamic_cost_quotes")
-      .select("quote_id,asset_id,observed_at,side,requested_notional_usd,fill_ratio,fillable,estimated_round_trip_cost_bps,quality,reason,metadata")
-      .order("observed_at", { ascending: false }).limit(80),
-    supabase.from("brian_collector_runs")
-      .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
-      .in("collector_id", ALPHA_COLLECTORS).order("started_at", { ascending: false }).limit(40),
+  const sid = String(runtimeQ.data.session_id);
+  const [startQ, lastQ] = await Promise.all([
+    db.from("brian_dip_session_events")
+      .select("event_id,requested_at,starting_equity,trade_notional,config")
+      .eq("session_id", sid).eq("event_kind", "START")
+      .order("requested_at", { ascending: true }).order("event_id", { ascending: true })
+      .limit(1).maybeSingle(),
+    db.from("brian_dip_session_events")
+      .select("event_id,event_kind,requested_at")
+      .eq("session_id", sid)
+      .order("requested_at", { ascending: false }).order("event_id", { ascending: false })
+      .limit(1).maybeSingle(),
   ]);
+  if (startQ.error) throw startQ.error;
+  if (lastQ.error) throw lastQ.error;
+  if (!startQ.data) return null;
 
-  const named = { decisions, positions, comparisons, outcomes, costs, collectors };
-  const errors: string[] = [];
-  for (const [name, result] of Object.entries(named)) {
-    if (result.error) errors.push(`${name}:${result.error.message}`);
-  }
-  const decisionRows = decisions.data ?? [];
-  const lastDecisionAt = decisionRows[0]?.observed_at ? String(decisionRows[0].observed_at) : null;
-  const decisionAge = ageSeconds(lastDecisionAt);
-  const online = decisionAge != null && decisionAge < 180;
-  const latestByCollector: Record<string, unknown> = {};
-  for (const row of collectors.data ?? []) {
-    const id = String(row.collector_id);
-    if (!(id in latestByCollector)) latestByCollector[id] = row;
-  }
-  return {
-    status: errors.length ? "DEGRADED" : online ? "ONLINE" : "STALE",
-    online,
-    compiler_version: decisionRows[0]?.compiler_version ?? null,
-    last_decision_at: lastDecisionAt,
-    decision_age_seconds: decisionAge,
-    cadence_seconds: 60,
-    decisions: decisionRows,
-    positions: positions.data ?? [],
-    phase37_comparisons: comparisons.data ?? [],
-    outcomes: outcomes.data ?? [],
-    costs: costs.data ?? [],
-    collectors: latestByCollector,
-    errors,
-    shadow_only: true,
-    live_execution: false,
+  const runtime = (runtimeQ.data.runtime ?? {}) as Record<string, unknown>;
+  const storedSnapshot = runtimeQ.data.snapshot as Record<string, unknown> | null;
+  const updatedAt = String(runtimeQ.data.updated_at);
+  const heartbeatAge = ageSeconds(updatedAt);
+  const active = String(lastQ.data?.event_kind ?? "PAUSE") === "START";
+  const config = (startQ.data.config ?? {}) as Record<string, unknown>;
+  const cash = finite(runtime.cash) ?? finite(startQ.data.starting_equity) ?? 0;
+  const position = runtime.pos as Record<string, unknown> | null;
+  const mark = finite(position?.market_price) ?? finite(position?.entry);
+  const qty = finite(position?.qty) ?? 0;
+  const syntheticEquity = position && mark != null ? cash + qty * mark : cash;
+  const snapshot = storedSnapshot ?? {
+    session_id: sid,
+    observed_at: updatedAt,
+    cash,
+    equity: syntheticEquity,
+    realized_pnl: finite(runtime.realized) ?? 0,
+    unrealized_pnl: syntheticEquity - (finite(runtime.start) ?? cash) - (finite(runtime.realized) ?? 0),
+    trade_count: finite(runtime.trades) ?? 0,
+    win_count: finite(runtime.wins) ?? 0,
+    loss_count: finite(runtime.losses) ?? 0,
   };
-}
 
-async function loadDipSummary() {
-  const lastEvent = await supabase.from("brian_dip_session_events")
-    .select("session_id,event_kind,requested_at,starting_equity,config")
-    .order("requested_at", { ascending: false }).order("event_id", { ascending: false }).limit(1).maybeSingle();
-  if (lastEvent.error) throw lastEvent.error;
-  if (!lastEvent.data) return {
-    status: "IDLE", session_id: null, started_at: null, latest_snapshot_at: null, heartbeat_at: null,
-    browser_engine_required: true, cloud_runner_enabled: false, shadow_only: true, live_execution: false,
-  };
-  const sessionId = String(lastEvent.data.session_id);
-  const [start, snapshot, lease] = await Promise.all([
-    supabase.from("brian_dip_session_events")
-      .select("requested_at,starting_equity,trade_notional,config")
-      .eq("session_id", sessionId).eq("event_kind", "START").order("requested_at", { ascending: true }).limit(1).maybeSingle(),
-    supabase.from("brian_dip_snapshots")
-      .select("observed_at,cash,equity,realized_pnl,unrealized_pnl,trade_count,win_count,loss_count,state")
-      .eq("session_id", sessionId).order("observed_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("brian_dip_engine_leases")
-      .select("claimed_at,heartbeat_at,lease_generation")
-      .eq("session_id", sessionId).maybeSingle(),
-  ]);
-  for (const result of [start, snapshot, lease]) if (result.error) throw result.error;
-  const heartbeatAt = lease.data?.heartbeat_at ? String(lease.data.heartbeat_at) : null;
-  const heartbeatAge = ageSeconds(heartbeatAt);
-  const activeSession = String(lastEvent.data.event_kind) === "START";
   return {
-    status: !activeSession ? "PAUSED" : heartbeatAge != null && heartbeatAge < 45 ? "BROWSER_ACTIVE" : "BROWSER_STOPPED",
-    session_id: sessionId,
-    started_at: start.data?.requested_at ?? null,
-    starting_equity: start.data?.starting_equity == null ? null : Number(start.data.starting_equity),
-    engine_version: (start.data?.config as Record<string, unknown> | null)?.engine_version ?? null,
-    latest_snapshot_at: snapshot.data?.observed_at ?? null,
-    heartbeat_at: heartbeatAt,
+    status: !active ? "PAUSED" : heartbeatAge != null && heartbeatAge <= 420 ? "BROWSER_ACTIVE" : "BROWSER_STOPPED",
+    session_id: sid,
+    started_at: startQ.data.requested_at ?? null,
+    starting_equity: finite(startQ.data.starting_equity),
+    engine_version: String(config.engine_version ?? "brian-dip-chart-reader-v8"),
+    latest_snapshot_at: String((snapshot as Record<string, unknown>)?.observed_at ?? updatedAt),
+    heartbeat_at: updatedAt,
     heartbeat_age_seconds: heartbeatAge,
-    snapshot: snapshot.data ?? null,
-    browser_engine_required: true,
-    cloud_runner_enabled: false,
-    shadow_only: true,
-    live_execution: false,
+    snapshot,
+    state_version: Number(runtimeQ.data.state_version ?? 0),
+    server_authoritative: config.server_authoritative === true,
+    browser_engine_required: false,
+    cloud_runner_enabled: true,
+    execution_mode: config.execution_mode ?? "SHADOW_PAPER",
+    policy_version: config.policy_version ?? null,
+    symbol: "ETHUSDT",
+    shadow_only: runtimeQ.data.shadow_only !== false,
+    live_execution: runtimeQ.data.live_execution === true,
   };
-}
-
-async function loadLearningStatus() {
-  const latest = await supabase.from("brian_sensor_reliability_shadow_snapshots")
-    .select("window_start,window_end,generated_at")
-    .order("window_end", { ascending: false }).order("generated_at", { ascending: false }).limit(1).maybeSingle();
-  if (latest.error) throw latest.error;
-  const windowEnd = latest.data?.window_end ? String(latest.data.window_end) : null;
-  const [snapshotRows, featureRows, calibrationRows] = await Promise.all([
-    windowEnd
-      ? supabase.from("brian_sensor_reliability_shadow_snapshots")
-        .select("snapshot_id,window_start,window_end,generated_at,independent_group,sensor_family,sensor_horizon,outcome_horizon_seconds,sample_count,hit_rate,bayesian_hit_rate_beta10_10,avg_signed_bps,median_signed_bps,avg_cost_adjusted_signed_bps,avg_abs_market_move_bps")
-        .eq("window_end", windowEnd).order("outcome_horizon_seconds", { ascending: true }).order("sample_count", { ascending: false }).limit(100)
-      : Promise.resolve({ data: [], error: null }),
-    supabase.from("brian_alpha_reliability_shadow_features")
-      .select("decision_observed_at,captured_at,source_observation_count,matched_source_observation_count,feature_covered_source_count")
-      .order("decision_observed_at", { ascending: false }).limit(240),
-    supabase.from("brian_sensor_reliability_prospective_calibration")
-      .select("resolved_at,independent_group,sensor_horizon,outcome_horizon_seconds,prior_sample_count,prior_bayesian_hit_rate_beta10_10,prior_median_signed_bps,realized_sensor_signed_bps,realized_hit")
-      .order("resolved_at", { ascending: false }).limit(500),
-  ]);
-  for (const [name, result] of Object.entries({ snapshotRows, featureRows, calibrationRows })) {
-    if (result.error) throw new Error(`${name}:${result.error.message}`);
-  }
-  const features = featureRows.data ?? [];
-  const sourceCount = features.reduce((sum, row) => sum + Number(row.source_observation_count ?? 0), 0);
-  const matchedCount = features.reduce((sum, row) => sum + Number(row.matched_source_observation_count ?? 0), 0);
-  const coveredCount = features.reduce((sum, row) => sum + Number(row.feature_covered_source_count ?? 0), 0);
-  const calibrations = calibrationRows.data ?? [];
-  const horizonCounts: Record<string, number> = { "300": 0, "900": 0, "3600": 0 };
-  for (const row of calibrations) {
-    const key = String(row.outcome_horizon_seconds);
-    horizonCounts[key] = (horizonCounts[key] ?? 0) + 1;
-  }
-  return {
-    mode: "MEASUREMENT_ONLY",
-    alpha_weight_mutation_enabled: false,
-    reliability_snapshot: {
-      window_start: latest.data?.window_start ?? null,
-      window_end: windowEnd,
-      generated_at: latest.data?.generated_at ?? null,
-      age_seconds: ageSeconds(latest.data?.generated_at),
-      rows: snapshotRows.data ?? [],
-    },
-    feature_freeze: {
-      latest_decision_at: features[0]?.decision_observed_at ?? null,
-      latest_captured_at: features[0]?.captured_at ?? null,
-      sampled_decisions: features.length,
-      source_count: sourceCount,
-      matched_count: matchedCount,
-      covered_count: coveredCount,
-      source_match_pct: sourceCount > 0 ? 100 * matchedCount / sourceCount : null,
-      feature_coverage_pct: matchedCount > 0 ? 100 * coveredCount / matchedCount : null,
-    },
-    calibration: {
-      latest_resolved_at: calibrations[0]?.resolved_at ?? null,
-      latest_age_seconds: ageSeconds(calibrations[0]?.resolved_at),
-      sampled_rows: calibrations.length,
-      horizon_counts: horizonCounts,
-      rows: calibrations.slice(0, 120),
-    },
-  };
-}
-
-async function loadCloudHealth() {
-  // Dashboard health must follow the service's canonical production output, not assume that every
-  // worker writes the same collector-run id. Universe, Phase 3.7 and Sensor Mesh are output-table
-  // driven; derivatives/FX/auditor also retain historical collector ids for append-only continuity.
-  const [universe, phase37, sensor] = await Promise.all([
-    supabase.from("brian_universe_snapshots")
-      .select("observed_at").order("observed_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("brian_live_shadow_ticks")
-      .select("observed_at").eq("experiment_id", SOURCE_EXPERIMENT_ID)
-      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("brian_sensor_observations")
-      .select("observed_at").eq("available", true)
-      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
-  ]);
-
-  const latestByComponent = new Map<string, CollectorRun>();
-  const collectorErrors = new Map<string, string>();
-  await Promise.all(CLOUD_COLLECTORS.filter((item) => item.collectorIds.length > 0).map(async (item) => {
-    const result = await supabase.from("brian_collector_runs")
-      .select("collector_id,status,started_at,finished_at,degraded_sources,error_class,error_message,metadata")
-      .in("collector_id", [...item.collectorIds])
-      .order("started_at", { ascending: false }).limit(1).maybeSingle();
-    if (result.error) collectorErrors.set(item.id, result.error.message);
-    else if (result.data) latestByComponent.set(item.id, result.data as CollectorRun);
-  }));
-
-  type TimestampProbe = {
-    data: { observed_at?: string | null } | null;
-    error: { message: string } | null;
-  };
-  const outputProbes = new Map<string, TimestampProbe>([
-    ["brian-universe-collector", universe as TimestampProbe],
-    ["brian-live-shadow", phase37 as TimestampProbe],
-    ["brian-sensor-mesh", sensor as TimestampProbe],
-  ]);
-  const now = Date.now();
-  const components = CLOUD_COLLECTORS.map((item) => {
-    const probe = outputProbes.get(item.id);
-    if (probe) {
-      const observedAt = probe.data?.observed_at ? String(probe.data.observed_at) : null;
-      const runAge = ageSeconds(observedAt, now);
-      const fresh = runAge != null && runAge <= item.cadenceSeconds * 3 + 90;
-      return {
-        id: item.id,
-        label: item.label,
-        cadence_seconds: item.cadenceSeconds,
-        source_kind: "OUTPUT_DATA",
-        source_id: item.id,
-        state: probe.error ? "ERROR" : !observedAt ? "NO_DATA" : fresh ? "SUCCESS" : "STALE",
-        last_status: probe.error ? "ERROR" : observedAt ? "SUCCESS" : null,
-        last_started_at: observedAt,
-        last_finished_at: observedAt,
-        age_seconds: runAge,
-        error_class: probe.error ? "HEALTH_PROBE_ERROR" : null,
-        error_message: probe.error?.message ?? null,
-        degraded_sources: [],
-      };
-    }
-
-    const row = latestByComponent.get(item.id);
-    const queryError = collectorErrors.get(item.id) ?? null;
-    const runAge = ageSeconds(row?.started_at, now);
-    const fresh = runAge != null && runAge <= item.cadenceSeconds * 3 + 90;
-    const successish = row?.status === "SUCCESS" || row?.status === "DEGRADED";
-    return {
-      id: item.id,
-      label: item.label,
-      cadence_seconds: item.cadenceSeconds,
-      source_kind: "COLLECTOR_RUN",
-      source_id: row?.collector_id ?? null,
-      state: queryError ? "ERROR" : !row ? "NO_DATA" : fresh && successish ? row.status : fresh ? "ERROR" : "STALE",
-      last_status: row?.status ?? null,
-      last_started_at: row?.started_at ?? null,
-      last_finished_at: row?.finished_at ?? null,
-      age_seconds: runAge,
-      error_class: queryError ? "HEALTH_PROBE_ERROR" : row?.error_class ?? null,
-      error_message: queryError ?? row?.error_message ?? null,
-      degraded_sources: row?.degraded_sources ?? [],
-    };
-  });
-  const healthy = components.filter((row) => row.state === "SUCCESS" || row.state === "DEGRADED").length;
-  const anyDegraded = components.some((row) => row.state === "DEGRADED");
-  return {
-    mode: "SERVER_SIDE_CRON",
-    browser_independent: true,
-    continues_when_page_closed: true,
-    healthy_components: healthy,
-    total_components: components.length,
-    overall: healthy === components.length && !anyDegraded
-      ? "ONLINE"
-      : healthy >= Math.ceil(components.length * 0.7) ? "DEGRADED" : "ERROR",
-    components,
-  };
-}
-
-async function loadSystemStatus() {
-  const [cloud, learning, dip] = await Promise.all([
-    loadCloudHealth(),
-    loadLearningStatus(),
-    loadDipSummary(),
-  ]);
-  return {
-    background: cloud,
-    learning,
-    dip,
-    architecture: {
-      main_alpha_browser_independent: true,
-      main_shadow_session_is_tracking_window: true,
-      dip_browser_independent: false,
-      dip_note: "DIP V4/V5 motoru halen tarayıcı streamlerine bağlıdır; MAIN/ALPHA cloud motorundan ayrıdır.",
-    },
-  };
-}
-
-async function dashboardStatus() {
-  const [session, nativeEngine, profitEngine, alphaV2, system] = await Promise.all([
-    latestSession(),
-    latestEngineTick("NATIVE"),
-    latestEngineTick("PROFIT"),
-    loadAlphaV2Status().catch((error) => ({
-      status: "DEGRADED",
-      online: false,
-      compiler_version: null,
-      last_decision_at: null,
-      decision_age_seconds: null,
-      cadence_seconds: 60,
-      decisions: [], positions: [], phase37_comparisons: [], outcomes: [], costs: [], collectors: {},
-      errors: [String(error instanceof Error ? error.message : error)],
-      shadow_only: true, live_execution: false,
-    })),
-    loadSystemStatus().catch((error) => ({
-      background: { mode: "SERVER_SIDE_CRON", browser_independent: true, continues_when_page_closed: true, overall: "DEGRADED", healthy_components: 0, total_components: CLOUD_COLLECTORS.length, components: [], error: String(error instanceof Error ? error.message : error) },
-      learning: null,
-      dip: null,
-      architecture: { main_alpha_browser_independent: true, main_shadow_session_is_tracking_window: true, dip_browser_independent: false },
-    })),
-  ]);
-  const now = Date.now();
-  const engineLastAt = [nativeEngine?.observed_at, profitEngine?.observed_at].filter(Boolean).sort().at(-1) as string | undefined;
-  const base = {
-    schema_version: "brian.control-center.status.v3",
-    generated_at: new Date().toISOString(),
-    source_experiment_id: SOURCE_EXPERIMENT_ID,
-    engine: {
-      online: Boolean(engineLastAt) && now - Date.parse(engineLastAt!) < 12 * 60_000,
-      last_tick_at: engineLastAt ?? null,
-      tick_age_seconds: engineLastAt ? Math.max(0, Math.round((now - Date.parse(engineLastAt)) / 1000)) : null,
-      cadence_seconds: 300,
-      browser_independent: true,
-      continues_when_page_closed: true,
-    },
-    alpha_v2: alphaV2,
-    system,
-    telegram: { configured: Boolean((Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "").trim() && (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").trim()) },
-    shadow_only: true,
-    live_execution: false,
-  };
-  if (!session) return { ...base, session: null, policies: null, reports: [] };
-  const startingEquity = Number(session.start.starting_equity ?? 500), endAt = session.ended_at;
-  const [nativeTicks, profitTicks, reports] = await Promise.all([
-    loadTicks(session.start.source_experiment_id, "NATIVE", session.start.requested_at, endAt),
-    loadTicks(session.start.source_experiment_id, "PROFIT", session.start.requested_at, endAt),
-    loadReports(session.start.session_id),
-  ]);
-  return {
-    ...base,
-    session: {
-      session_id: session.start.session_id,
-      status: session.active ? "RUNNING" : "PAUSED",
-      started_at: session.start.requested_at,
-      ended_at: session.ended_at,
-      starting_equity: startingEquity,
-      policy_scope: session.start.policy_scope,
-      source_experiment_id: session.start.source_experiment_id,
-      tracking_only: true,
-      background_engine_independent: true,
-    },
-    policies: {
-      NATIVE: { ...derivePolicySnapshot(nativeTicks, startingEquity), decisions: topDecisionDiagnostics(nativeTicks) },
-      PROFIT: { ...derivePolicySnapshot(profitTicks, startingEquity), decisions: topDecisionDiagnostics(profitTicks) },
-    },
-    reports,
-  };
-}
-
-async function startSession(body: Record<string, unknown>) {
-  const startingEquity = Number(body.starting_equity ?? 1000), policyScope = String(body.policy_scope ?? "BOTH").toUpperCase();
-  if (!Number.isFinite(startingEquity) || startingEquity <= 0 || startingEquity > 1_000_000) throw new Error("STARTING_EQUITY_OUT_OF_RANGE");
-  if (!["BOTH", "NATIVE", "PROFIT"].includes(policyScope)) throw new Error("INVALID_POLICY_SCOPE");
-  const sessionId = `mcp-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${crypto.randomUUID().slice(0, 8)}`;
-  const eventId = `evt-${crypto.randomUUID()}`;
-  const result = await supabase.rpc("brian_dashboard_start_session", {
-    p_event_id: eventId, p_session_id: sessionId, p_starting_equity: startingEquity,
-    p_policy_scope: policyScope, p_source_experiment_id: SOURCE_EXPERIMENT_ID,
-  });
-  if (result.error) throw result.error;
-  return { status: "STARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
-}
-async function pauseSession() {
-  const session = await latestSession();
-  if (!session || !session.active) return { status: "ALREADY_PAUSED", tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
-  const result = await supabase.rpc("brian_dashboard_pause_session", { p_event_id: `evt-${crypto.randomUUID()}`, p_session_id: session.start.session_id });
-  if (result.error) throw result.error;
-  return { status: "PAUSED", session_id: session.start.session_id, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
-}
-async function restartSession(body: Record<string, unknown>) {
-  const startingEquity = Number(body.starting_equity ?? 1000), policyScope = String(body.policy_scope ?? "BOTH").toUpperCase();
-  if (!Number.isFinite(startingEquity) || startingEquity <= 0 || startingEquity > 1_000_000) throw new Error("STARTING_EQUITY_OUT_OF_RANGE");
-  if (!["BOTH", "NATIVE", "PROFIT"].includes(policyScope)) throw new Error("INVALID_POLICY_SCOPE");
-  const sessionId = `mcp-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${crypto.randomUUID().slice(0, 8)}`;
-  const result = await supabase.rpc("brian_dashboard_restart_session", {
-    p_pause_event_id: `evt-${crypto.randomUUID()}`, p_start_event_id: `evt-${crypto.randomUUID()}`,
-    p_new_session_id: sessionId, p_starting_equity: startingEquity, p_policy_scope: policyScope,
-    p_source_experiment_id: SOURCE_EXPERIMENT_ID,
-  });
-  if (result.error) throw result.error;
-  return { status: "RESTARTED", session_id: sessionId, starting_equity: startingEquity, policy_scope: policyScope, tracking_only: true, background_engine_independent: true, shadow_only: true, live_execution: false };
-}
-async function telegramSend(text: string): Promise<{ attempted: boolean; sent: boolean; error: string | null }> {
-  const token = (Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "").trim(), chatId = (Deno.env.get("TELEGRAM_CHAT_ID") ?? "").trim();
-  if (!token || !chatId) return { attempted: false, sent: false, error: "telegram secrets not configured" };
-  try {
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }), signal: AbortSignal.timeout(8000),
-    });
-    if (!response.ok) return { attempted: true, sent: false, error: `Telegram HTTP ${response.status}` };
-    return { attempted: true, sent: true, error: null };
-  } catch (error) {
-    return { attempted: true, sent: false, error: String(error instanceof Error ? error.message : error) };
-  }
-}
-async function persistReport(session: SessionState, policy: "NATIVE" | "PROFIT", windowStart: string, windowEnd: string, allTicks: ShadowTick[]): Promise<{ inserted: boolean; report: HourlyReportPayload; telegram: { attempted: boolean; sent: boolean; error: string | null } }> {
-  const startingEquity = Number(session.start.starting_equity ?? 500);
-  const report = buildHourlyReport(session.start.session_id, policy, allTicks, startingEquity, windowStart, windowEnd);
-  const reportId = await sha256Hex(`${session.start.session_id}|${policy}|${windowStart}|${windowEnd}`);
-  const existing = await supabase.from("brian_dashboard_hourly_reports").select("report_id,payload,telegram_attempted,telegram_sent,telegram_error").eq("report_id", reportId).maybeSingle();
-  if (existing.error) throw existing.error;
-  if (existing.data) return {
-    inserted: false, report: existing.data.payload as HourlyReportPayload,
-    telegram: { attempted: Boolean(existing.data.telegram_attempted), sent: Boolean(existing.data.telegram_sent), error: existing.data.telegram_error ? String(existing.data.telegram_error) : null },
-  };
-  const telegram = await telegramSend(formatTelegramReport(report));
-  const insert = await supabase.from("brian_dashboard_hourly_reports").insert({
-    report_id: reportId, session_id: session.start.session_id, policy_kind: policy, window_start: windowStart, window_end: windowEnd,
-    payload: report, telegram_attempted: telegram.attempted, telegram_sent: telegram.sent, telegram_error: telegram.error,
-    evidence_class: EVIDENCE_CLASS, shadow_only: true, live_execution: false,
-  });
-  if (insert.error) throw insert.error;
-  return { inserted: true, report, telegram };
-}
-async function generateDueHourlyReports(forceNow = false) {
-  const session = await latestSession();
-  if (!session) return { status: "NO_SESSION", reports: [] };
-  const now = new Date(), sessionStart = new Date(session.start.requested_at), effectiveEnd = session.ended_at ? new Date(session.ended_at) : now;
-  const existingReports = await loadReports(session.start.session_id), outcomes = [];
-  for (const policy of ["NATIVE", "PROFIT"] as const) {
-    if (session.start.policy_scope !== "BOTH" && session.start.policy_scope !== policy) continue;
-    const policyReports = existingReports.filter((report) => report.policy_kind === policy);
-    const lastEndMs = policyReports.length ? Math.max(...policyReports.map((report) => Date.parse(report.window_end))) : sessionStart.getTime();
-    const elapsed = effectiveEnd.getTime() - lastEndMs;
-    if (!forceNow && elapsed < 60 * 60_000) continue;
-    const windowStart = new Date(lastEndMs), windowEnd = forceNow ? effectiveEnd : new Date(Math.min(lastEndMs + 60 * 60_000, effectiveEnd.getTime()));
-    if (windowEnd.getTime() <= windowStart.getTime()) continue;
-    const ticks = await loadTicks(session.start.source_experiment_id, policy, session.start.requested_at, windowEnd.toISOString());
-    outcomes.push({ policy, ...(await persistReport(session, policy, windowStart.toISOString(), windowEnd.toISOString(), ticks)) });
-  }
-  return { status: outcomes.length ? "GENERATED" : "NOT_DUE", reports: outcomes };
 }
 
 Deno.serve(async (req: Request) => {
-  const origin = req.headers.get("origin");
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
-  if (req.method !== "POST") return jsonResponse({ status: "METHOD_NOT_ALLOWED" }, 405, origin);
+  const bodyText = req.method === "POST" ? await req.text() : "";
+  let action = "";
   try {
-    const body = await req.json().catch(() => ({})) as Record<string, unknown>;
-    const action = String(body.action ?? "status");
-    if (action === "hourly_report") {
-      await requireCronAuth(req);
-      return jsonResponse(await generateDueHourlyReports(false), 200, origin);
-    }
-    await requireDashboardAuth(req);
-    if (action === "status") return jsonResponse(await dashboardStatus(), 200, origin);
-    if (action === "start") return jsonResponse(await startSession(body), 200, origin);
-    if (action === "pause") return jsonResponse(await pauseSession(), 200, origin);
-    if (action === "restart") return jsonResponse(await restartSession(body), 200, origin);
-    if (action === "report_now") return jsonResponse(await generateDueHourlyReports(true), 200, origin);
-    return jsonResponse({ status: "UNKNOWN_ACTION", action }, 400, origin);
-  } catch (error) {
-    const message = String(error instanceof Error ? error.message : error), unauthorized = message.includes("UNAUTHORIZED_");
-    console.error("brian-control-center failed", { message, unauthorized });
-    return jsonResponse({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 500, origin);
+    action = String((JSON.parse(bodyText || "{}") as Record<string, unknown>).action ?? "status").toLowerCase();
+  } catch {
+    action = "";
   }
+
+  const headers = new Headers(req.headers);
+  headers.delete("host");
+  headers.delete("content-length");
+  const core = await fetch(CORE, {
+    method: req.method,
+    headers,
+    body: req.method === "POST" ? bodyText : undefined,
+  });
+  const coreText = await core.text();
+
+  if (!core.ok || req.method !== "POST" || action !== "status") {
+    const outHeaders = new Headers(core.headers);
+    outHeaders.delete("content-length");
+    return new Response(coreText, { status: core.status, headers: outHeaders });
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(coreText) as Record<string, unknown>;
+  } catch {
+    const outHeaders = new Headers(core.headers);
+    outHeaders.delete("content-length");
+    return new Response(coreText, { status: core.status, headers: outHeaders });
+  }
+
+  try {
+    const dip = await v8DipSummary();
+    if (dip) {
+      const system = (data.system ?? {}) as Record<string, unknown>;
+      system.dip = dip;
+      system.architecture = {
+        ...((system.architecture ?? {}) as Record<string, unknown>),
+        dip_browser_independent: true,
+        dip_server_authoritative: true,
+      };
+      data.system = system;
+    }
+  } catch (e) {
+    console.error("control-center-v8-overlay", e instanceof Error ? e.message : String(e));
+  }
+
+  const outHeaders = new Headers(core.headers);
+  outHeaders.delete("content-length");
+  outHeaders.set("content-type", "application/json; charset=utf-8");
+  outHeaders.set("cache-control", "no-store");
+  outHeaders.set("x-brian-dip-overlay", "v8-server-authoritative");
+  return new Response(JSON.stringify(data), { status: core.status, headers: outHeaders });
 });
