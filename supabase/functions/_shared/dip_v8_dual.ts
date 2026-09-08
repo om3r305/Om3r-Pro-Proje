@@ -71,7 +71,7 @@ export function chooseShadowLeverage(input:{maxAllowed:number;cal:Cal;raw:number
   const {maxAllowed,cal,raw,economicRR,targetBps,costBps,flowScore}=input;
   if(maxAllowed<2||cal.unavailable||cal.p===null||cal.samples<MIN_CAL_SAMPLES)return 1;
   const ambiguousRate=cal.ambiguous/Math.max(1,cal.samples+cal.ambiguous);
-  return cal.p>=0.68&&cal.lower>=0.55&&raw>=0.72&&economicRR>=1.8&&targetBps>=3.5*costBps&&Math.abs(flowScore)>=0.25&&ambiguousRate<=0.10?2:1;
+  return cal.p>=0.68&&cal.lower>=0.55&&raw>=0.72&&economicRR>=2.5&&targetBps>=3.5*costBps&&Math.abs(flowScore)>=0.25&&ambiguousRate<=0.10?2:1;
 }
 
 export function sizePosition(
@@ -114,7 +114,7 @@ export function evaluatePath(input:{direction:"UP"|"DOWN";target:number;stop:num
         if(p.t<previousAt||p.t<s.start||p.t>=s.end||p.id<=previousId||!(p.p>0))return result("INDETERMINATE",null,last,null,cursor);
         const h=hit(p.p); previousAt=p.t; previousId=p.id; last=p.p;
         if(h.loss)return result("INVALIDATION_FIRST",false,p.p,p.t,s.end);
-        if(h.win)return result("TARGET_FIRST",true,target,p.p? p.t:p.t,s.end);
+        if(h.win)return result("TARGET_FIRST",true,target,p.t,s.end);
       }
     }else{
       const open=hit(s.o);
