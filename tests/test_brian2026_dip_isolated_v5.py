@@ -71,11 +71,12 @@ def test_v5_multi_horizon_and_net_cost_evidence_exist():
 
 
 def test_dip_backend_remains_dedicated_shadow_store():
+    # The V8.3 control endpoint uses the V8 atomic runtime/ledger rather than the
+    # older V5 snapshot/event tables. It must still remain DIP-only and SHADOW-only.
     for table in (
         "brian_dip_session_events",
-        "brian_dip_snapshots",
-        "brian_dip_events",
-        "brian_dip_engine_leases",
+        "brian_dip_v8_runtime",
+        "brian_dip_v8_ledger",
     ):
         assert table in BACKEND
     assert 'const EVIDENCE="AGGRESSIVE_DIP_SHADOW"' in BACKEND
