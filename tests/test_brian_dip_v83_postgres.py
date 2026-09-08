@@ -25,6 +25,7 @@ def schema():
     with base.psycopg.connect(base.DSN) as conn,conn.cursor() as cur:
         cur.execute(dual)
         cur.execute(repair)
+    rows('grant usage on schema public to service_role')
 
 @pytest.fixture(autouse=True)
 def fresh(schema):
