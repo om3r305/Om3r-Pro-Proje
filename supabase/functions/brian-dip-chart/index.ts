@@ -14,7 +14,7 @@ async function fetchJson(hosts:string[],path:string,label:string){
   let last='MARKET_UNAVAILABLE';
   for(const host of hosts){
     try{
-      const r=await fetch(host+path,{method:'GET',headers:{accept:'application/json','user-agent':'Brian-DIP-V8.3-Chart/1.0'},signal:AbortSignal.timeout(5500)});
+      const r=await fetch(host+path,{method:'GET',headers:{accept:'application/json','user-agent':'Brian-DIP-V8.3-Chart/1.1'},signal:AbortSignal.timeout(5500)});
       if(!r.ok){last='HTTP_'+r.status;if([418,429].includes(r.status))throw Error('RATE_LIMIT');continue;}
       const text=await r.text();if(!text.trim()){last='EMPTY_RESPONSE';continue;}
       try{return JSON.parse(text);}catch{last='INVALID_JSON';continue;}
@@ -30,7 +30,9 @@ function normalize(raw:any[]){
 }
 Deno.serve(async(req:Request)=>{
   const o=req.headers.get('origin');if(req.method==='OPTIONS')return new Response('ok',{headers:cors(o)});if(req.method!=='GET')return out({status:'METHOD_NOT_ALLOWED'},405,o);
-  const incoming=new URL(req.url),here=Deno.env.get('SB_REGION')||'',view=incoming.searchParams.get('view')==='spot1s'?'spot1s':'perp1m';
+  const incoming=new URL(req.url),here=Deno.env.get('SB_REGION')||'';
+  const requested=incoming.searchParams.get('view');
+  const view=requested==='spot1s'?'spot1s':requested==='spot1m'?'spot1m':'perp1m';
   if(here!==REGION&&incoming.searchParams.get('forceFunctionRegion')!==REGION){
     const target=new URL(PUBLIC);target.searchParams.set('forceFunctionRegion',REGION);target.searchParams.set('view',view);target.searchParams.set('limit',incoming.searchParams.get('limit')||(view==='spot1s'?'600':'180'));
     return new Response(null,{status:307,headers:{location:target.toString(),'cache-control':'no-store',...cors(o)}});
@@ -42,9 +44,18 @@ Deno.serve(async(req:Request)=>{
       const candles=normalize(raw);
       return out({status:'OK',source:'BINANCE_SPOT',region:here||null,symbol:'ETHUSDT',interval:'1s',generated_at:new Date().toISOString(),last_price:candles.at(-1)?.c??null,candles},200,o);
     }
+    if(view==='spot1m'){
+      const limit=Math.max(30,Math.min(500,Number(incoming.searchParams.get('limit')||180)||180));
+      const raw=await fetchJson(SPOT_HOSTS,`/api/v3/klines?symbol=ETHUSDT&interval=1m&limit=${limit}`,'BINANCE_SPOT');
+      const candles=normalize(raw);
+      return out({status:'OK',source:'BINANCE_SPOT',region:here||null,symbol:'ETHUSDT',interval:'1m',generated_at:new Date().toISOString(),last_price:candles.at(-1)?.c??null,candles},200,o);
+    }
     const limit=Math.max(30,Math.min(240,Number(incoming.searchParams.get('limit')||180)||180));
     const raw=await fetchJson(FUTURES_HOSTS,`/fapi/v1/klines?symbol=ETHUSDT&interval=1m&limit=${limit}`,'BINANCE_USDM');
     const candles=normalize(raw);
     return out({status:'OK',source:'BINANCE_USDM_PERP',region:here||null,symbol:'ETHUSDT',interval:'1m',generated_at:new Date().toISOString(),last_price:candles.at(-1)?.c??null,candles},200,o);
-  }catch(e){return out({status:'FAILED',source:view==='spot1s'?'BINANCE_SPOT':'BINANCE_USDM_PERP',region:here||null,error:e instanceof Error?e.message:String(e)},502,o);}
+  }catch(e){
+    const source=view.startsWith('spot')?'BINANCE_SPOT':'BINANCE_USDM_PERP';
+    return out({status:'FAILED',source,region:here||null,error:e instanceof Error?e.message:String(e)},502,o);
+  }
 });
