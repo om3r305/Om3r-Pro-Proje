@@ -14,6 +14,52 @@ import {
 } from "../_shared/dip_v8.ts";
 import type { Market } from "../_shared/dip_v8_market.ts";
 import { structure } from "./structure.ts";
+
+export const DECISION_REVISION = "dip-v8-micro-reclaim-20260908.1";
+export const MICRO_RECLAIM_OFI_MIN = .25;
+
+export function microReclaimReady(
+  s1: Struct,
+  s5: Struct,
+  ofi: number,
+  px: number,
+): boolean {
+  const high = s1.lastHigh, low = s1.lastLow;
+  if (!high || !low || !(high.p > low.p)) return false;
+  const span = high.p - low.p;
+  return s1.trend === "UP" &&
+    s5.trend === "UP" &&
+    high.label === "HH" &&
+    low.label === "HL" &&
+    ofi >= MICRO_RECLAIM_OFI_MIN &&
+    px > low.p &&
+    px >= low.p + Math.max(span * .35, s1.atr * .25);
+}
+
+export function selectEconomicTarget(
+  direction: "UP" | "DOWN" | "WAIT",
+  entry: number,
+  costBps: number,
+  structs: Struct[],
+): number | null {
+  if (direction === "WAIT" || !(entry > 0)) return null;
+  const kind = direction === "UP" ? "H" : "L";
+  const candidates: number[] = [];
+  for (const s of structs) {
+    const equal = direction === "UP" ? s.equalHigh : s.equalLow;
+    if (equal) candidates.push(equal);
+    for (const p of s.pivots) if (p.kind === kind) candidates.push(p.p);
+  }
+  const levels = [...new Set(candidates)]
+    .filter((x) => Number.isFinite(x) && x > 0 &&
+      (direction === "UP" ? x > entry : x < entry))
+    .sort((a, b) => direction === "UP" ? a - b : b - a);
+  if (!levels.length) return null;
+  const hurdle = 2.5 * costBps;
+  return levels.find((x) => Math.abs(x - entry) / entry * 10000 >= hurdle) ??
+    levels[0];
+}
+
 export async function candidate(
   m: Market,
   sessionId: string,
@@ -65,33 +111,33 @@ export async function candidate(
       trigger = s5;
     }
   }
+  // Earlier long continuation: confirmed 1m HH/HL inside a 5m uptrend plus
+  // aggressive positive flow. This creates a candidate only; all normal risk,
+  // cost, R:R, calibration and sizing gates still apply below.
+  if (!trigger && !rt.pos && microReclaimReady(s1, s5, m.flow.ofi, px)) {
+    setup = "MICRO_RECLAIM";
+    direction = "UP";
+    trigger = s1;
+  }
   const triggerPivot = trigger
     ? setup === "BOS_RETEST"
       ? (direction === "UP" ? trigger.lastHigh : trigger.lastLow)
+      : setup === "MICRO_RECLAIM"
+      ? trigger.lastLow
       : (direction === "UP" ? trigger.lastLow : trigger.lastHigh)
     : null;
   const inv = triggerPivot?.p ?? null,
-    levelCandidates = direction === "UP"
-      ? [
-        s1.equalHigh,
-        s5.equalHigh,
-        s1.lastHigh?.p,
-        s5.lastHigh?.p,
-        s15.lastHigh?.p,
-      ]
-      : [
-        s1.equalLow,
-        s5.equalLow,
-        s1.lastLow?.p,
-        s5.lastLow?.p,
-        s15.lastLow?.p,
-      ];
-  const levels = levelCandidates.filter((x): x is number =>
-    !!x && (direction === "UP" ? x > px : x < px)
-  );
-  const target = levels.length
-    ? (direction === "UP" ? Math.min(...levels) : Math.max(...levels))
-    : null;
+    fee = n(cfg.fee_bps, 10),
+    slip = n(cfg.slippage_bps, 1);
+  const entry = direction === "DOWN"
+    ? m.book.bid * (1 - slip / 10000)
+    : m.book.ask * (1 + slip / 10000);
+  const costBps = 2 * fee + 2 * slip + m.book.spreadBps;
+  // Use only levels already known at decision time. Scan recent 1m/5m/15m
+  // pivots, and prefer the nearest level that actually clears the cost hurdle.
+  // If none clears it, preserve the nearest structural level so the normal
+  // TARGET_BELOW_COST veto remains observable.
+  const target = selectEconomicTarget(direction, entry, costBps, [s1, s5, s15]);
   const signalAt = trigger
     ? m.bars[trigger.tf].at(-1)!.ct + 1
     : m.bars["1m"].at(-1)!.ct + 1;
@@ -101,12 +147,7 @@ export async function candidate(
   const occurrence = await hash(
     [sessionId, POLICY_VERSION, episode, signalAt].join("|"),
   );
-  const cal = await getCalibration(setup, direction, regime),
-    fee = n(cfg.fee_bps, 10),
-    slip = n(cfg.slippage_bps, 1);
-  const entry = direction === "DOWN"
-    ? m.book.bid * (1 - slip / 10000)
-    : m.book.ask * (1 + slip / 10000);
+  const cal = await getCalibration(setup, direction, regime);
   const geometry = !!(target && inv &&
     (direction === "UP"
       ? inv < entry && entry < target
@@ -114,8 +155,7 @@ export async function candidate(
   const reward = target ? Math.abs(target - entry) : 0,
     risk = inv ? Math.abs(entry - inv) : 0,
     rr = geometry && risk ? reward / risk : 0;
-  const costBps = 2 * fee + 2 * slip + m.book.spreadBps,
-    targetBps = reward / entry * 10000;
+  const targetBps = reward / entry * 10000;
   const veto: string[] = [];
   if (direction === "WAIT") veto.push("NO_SIGNAL");
   else {
@@ -150,6 +190,8 @@ export async function candidate(
       ? .16
       : setup === "FAILED_BREAK"
       ? .14
+      : setup === "MICRO_RECLAIM"
+      ? .12
       : setup === "BOS_RETEST"
       ? .10
       : 0);
@@ -187,7 +229,9 @@ export async function candidate(
     target_price: target,
     structural_invalidation_price: direction === "DOWN"
       ? s5.lastHigh?.p
-      : s5.lastLow?.p,
+      : direction === "UP"
+      ? s5.lastLow?.p
+      : null,
     rr,
     target_distance_bps: targetBps,
     cost_bps: costBps,
@@ -206,6 +250,7 @@ export async function candidate(
       book_pressure: m.book.pressure,
       spread_bps: m.book.spreadBps,
     },
+    decision_revision: DECISION_REVISION,
     policy_version: POLICY_VERSION,
     engine_version: ENGINE_VERSION,
   };
@@ -234,6 +279,7 @@ export async function candidate(
         signal_at: thesis.signal_at,
         data_available_at: thesis.data_available_at,
         structure_fingerprint: combinedFp,
+        decision_revision: DECISION_REVISION,
         raw_conviction: raw,
         calibration: cal,
         veto,
