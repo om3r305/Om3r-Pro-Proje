@@ -8,6 +8,7 @@ CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
 SW = ROOT / "monster-coins-pro" / "sw.js"
 CONTROL = ROOT / "supabase" / "functions" / "brian-control-center" / "index.ts"
+CONTROL_CORE = ROOT / "supabase" / "functions" / "brian-control-center-core" / "index.ts"
 
 
 def text(path: Path) -> str:
@@ -42,30 +43,30 @@ def test_dashboard_explains_server_background_semantics_instead_of_browser_magic
     assert "DIP taraması durur; MAIN / ALPHA ise durmaz" in js
 
 
-def test_control_center_is_connected_to_current_auditor_and_learning_chain():
+def test_control_center_wraps_pinned_core_and_adds_v8_server_authoritative_dip():
     src = text(CONTROL)
-    assert '"brian-missed-opportunity-auditor-v3"' in src
-    # v3 production keeps the v2 collector_id in append-only run telemetry, so health accepts both.
-    assert '["brian-missed-opportunity-auditor-v3", "brian-missed-opportunity-auditor-v2"]' in src
-    assert 'brian_sensor_reliability_shadow_snapshots' in src
-    assert 'brian_alpha_reliability_shadow_features' in src
-    assert 'brian_sensor_reliability_prospective_calibration' in src
-    assert 'schema_version: "brian.control-center.status.v3"' in src
-    assert 'continues_when_page_closed: true' in src
-    assert 'main_alpha_browser_independent: true' in src
-    assert 'dip_browser_independent: false' in src
+    core = text(CONTROL_CORE)
+    assert 'brian-control-center-core' in src
+    assert 'v8DipSummary' in src
+    assert 'brian_dip_session_events' in src
+    assert 'brian_dip_v8_runtime' in src
+    assert 'brian_dip_v8_ledger' not in src  # status overlay is read-only runtime/session summary
+    assert 'dip_browser_independent: true' in src
+    assert 'dip_server_authoritative: true' in src
+    assert 'raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/' in core
+    assert '/supabase/functions/brian-control-center/index.ts' in core
     assert 'update public.brian_sensor_observations' not in src.lower()
 
 
-def test_control_center_health_uses_canonical_outputs_and_production_collector_aliases():
+def test_control_center_status_overlay_preserves_core_response_and_fail_safe_boundary():
     src = text(CONTROL)
-    for table in ["brian_universe_snapshots", "brian_live_shadow_ticks", "brian_sensor_observations"]:
-        assert table in src
-    assert '"phase39-binance-usdm-derivatives"' in src
-    assert '"phase39-ecb-fx"' in src
-    assert 'source_kind: "OUTPUT_DATA"' in src
-    assert 'source_kind: "COLLECTOR_RUN"' in src
-    assert 'healthy === components.length && !anyDegraded' in src
+    assert 'action !== "status"' in src
+    assert 'return new Response(coreText' in src
+    assert 'system.dip = dip' in src
+    assert 'x-brian-dip-overlay' in src
+    assert 'cache-control' in src
+    assert 'no-store' in src
+    assert 'console.error("control-center-v8-overlay"' in src
 
 
 def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
@@ -73,8 +74,8 @@ def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
     src = text(CONTROL)
     for action in ["status", "start", "restart", "pause", "report_now"]:
         assert f"api('{action}'" in js
-    assert 'shadow_only: true' in src
-    assert 'live_execution: false' in src
+    assert 'shadow_only: runtimeQ.data.shadow_only !== false' in src
+    assert 'live_execution: runtimeQ.data.live_execution === true' in src
     assert "tr-TR" in js
     assert "Europe/Berlin" in js
 
