@@ -5,10 +5,30 @@ const V8_FORESIGHT_API='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/br
 let v8ForesightBySymbol={},v8ForesightTimer=null,v8ForesightBusy=false,v8ServerSnapshot=null;
 
 v4DiscoverUniverse=async function(){v4Universe=[...V8_FOCUS_UNIVERSE];v4UniverseUpdatedAt=Date.now();v4Universe.forEach(v4Ensure);return v4Universe;};
+// V8 chart history has its own ETH-only readiness contract; the V4 scanner required 3 markets.
+let v8HistoryPending=null;
+v4LoadHistory=function(){
+  if(v8HistoryPending)return v8HistoryPending;
+  v8HistoryPending=(async()=>{
+    const overlay=$('chartOverlay');overlay?.classList.add('show');
+    try{
+      v4Universe=['ETHUSDT'];selected='ETHUSDT';v4Ensure('ETHUSDT');
+      const frames=['1m','5m','15m','1h','4h'];
+      const series=await Promise.all(frames.map(async tf=>{
+        const raw=await v4Spot(`/api/v3/klines?symbol=ETHUSDT&interval=${tf}&limit=180`);
+        if(!Array.isArray(raw)||raw.length<50)throw Error('ETH '+tf+' verisi yetersiz');
+        return raw.map(x=>({t:Number(x[0]),o:Number(x[1]),h:Number(x[2]),l:Number(x[3]),c:Number(x[4]),v:Number(x[5]),closed:Number(x[6])<Date.now()}));
+      }));
+      v4Bars.ETHUSDT=Object.fromEntries(frames.map((tf,i)=>[tf,series[i]]));
+      candles.ETHUSDT=series[0];live.ETHUSDT=series[0].at(-1).c;draw();return true;
+    }finally{overlay?.classList.remove('show');}
+  })().finally(()=>{v8HistoryPending=null;});return v8HistoryPending;
+};
+historyLoad=v4LoadHistory;
 const _v8Params=params;
 params=function(){const p=_v8Params();p.config={...(p.config||{}),symbols:['ETHUSDT'],auto_universe:false,universe_size:1,engine_version:'brian-dip-chart-reader-v8',policy_version:'dip-v8-integrity-20260908.1',shadow_only:true,live_execution:false,allow_shadow_short:false,max_shadow_leverage:1,execution_mode:'SHADOW_PAPER',sizing_policy:'V8_RISK_CAPPED',server_authoritative:true,browser_execution:false,chart_reader_version:'v8',measurement:'target-before-invalidation-v8.1'};return p;};
 const _v8Restore=restore;
-restore=function(d){_v8Restore(d);v8ServerSnapshot=d?.snapshot||null;v4Universe=['ETHUSDT'];selected='ETHUSDT';const c=session?.config;if(c){c.symbols=['ETHUSDT'];c.auto_universe=false;c.universe_size=1;}if(states.ETHUSDT&&!states.ETHUSDT.v4)states.ETHUSDT.v4={phase:'WATCH',lastVeto:'V8 THESIS'};};
+restore=function(d){const previousSid=sid;_v8Restore(d);if(previousSid!==sid)v8ForesightBySymbol={};v8ServerSnapshot=d?.snapshot||null;v4Universe=['ETHUSDT'];selected='ETHUSDT';const c=session?.config;if(c){c.symbols=['ETHUSDT'];c.auto_universe=false;c.universe_size=1;}if(states.ETHUSDT&&!states.ETHUSDT.v4)states.ETHUSDT.v4={phase:'WATCH',lastVeto:'V8 THESIS'};};
 
 // A fresh server response owns session and accounting; legacy start wrappers cannot rewrite V8 config.
 start=async function(restart=false){
