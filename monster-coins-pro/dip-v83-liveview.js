@@ -3,6 +3,7 @@
 (function(){
   const baseRenderThesis=renderThesis;
   const baseRender=render;
+  const baseRenderHealth=renderHealth;
 
   const safeText=(v)=>{
     if(v==null)return '';
@@ -20,6 +21,7 @@
   const livePx=v=>typeof px==='function'?px(v):Number(v||0).toFixed(2);
   const livePnl=v=>{const n=Number(v||0);return `${n>=0?'+':''}$${n.toFixed(3)}`;};
   const ma=(arr,n,i)=>{if(i+1<n)return null;let s=0;for(let k=i-n+1;k<=i;k++)s+=arr[k].c;return s/n;};
+  const ageSec=v=>{const t=Date.parse(v||'');return Number.isFinite(t)?Math.max(0,Math.round((Date.now()-t)/1000)):null;};
 
   toast=function(text,kind='ok'){
     const el=$('toast');if(!el)return;
@@ -67,11 +69,17 @@
     $('kpiPnl').textContent=pnl(real);$('kpiPnl').className=`value ${real>0?'pos':real<0?'neg':''}`;
     $('kpiOpen').textContent=pos?String(pos.side||'AÇIK').toUpperCase():'—';$('kpiOpen').className=`value ${pos?.side==='SHORT'?'neg':pos?'pos':''}`;
     $('kpiWin').textContent=closed?`${(wins/closed*100).toFixed(1)}%`:'—';$('kpiTrades').textContent=String(trades);
-    $('kpiEngine').textContent=workerFresh()?'BRIAN V8.3 DUAL':model.session?.status==='PAUSED'?'V8.3 PAUSED':'V8.3 WAIT';$('kpiEngine').className=`value ${workerFresh()?'pos':'amber'}`;
+    $('kpiEngine').textContent=workerFresh()?'BRIAN V8.3 DUAL':model.session?.status==='PAUSED'&&pos?'V8.3 EXIT ONLY':model.session?.status==='PAUSED'?'V8.3 PAUSED':'V8.3 WAIT';$('kpiEngine').className=`value ${workerFresh()?'pos':'amber'}`;
     $('kpiEquityMeta').textContent=`Toplam hesap değeri · serbest nakit ${money(cash)} · başlangıç ${money(start)}`;
     $('kpiPnlMeta').textContent=`Realized ${pnl(real)} · açık ${pnl(unreal)}`;
     $('kpiOpenMeta').textContent=pos?`${num(pos.leverage,1)}x · notional ${money(pos.notional)} · margin ${money(pos.margin??pos.notional/num(pos.leverage,1))}`:'Pozisyon yok';
     $('kpiWinMeta').textContent=`${wins} win / ${losses} loss`;$('kpiTradesMeta').textContent='kapalı round trips';$('kpiEngineMeta').textContent='Motor: USD-M PERP · 60 sn karar';
+  };
+
+  renderHealth=function(){
+    baseRenderHealth();
+    const pos=position(),sr=runtime(),hb=ageSec(sr?.generated_at||model?.snapshot?.observed_at),exitLive=Boolean(model.session?.status==='PAUSED'&&pos&&sr?.status==='OK'&&hb!=null&&hb<150);
+    if(exitLive){$('feedState').textContent='EXIT TRACKING';$('feedState').className='good';$('feedMeta').textContent=`USD-M pozisyon takibi · worker ${hb} sn`;$('cloudState').textContent='EXIT ONLY';$('cloudState').className='good';$('topStatus').textContent='V8.3 EXIT TRACKING';$('topStatus').className='pill good';}
   };
 
   renderChart=function(){
@@ -92,9 +100,20 @@
     ctx.fillStyle='#6f8197';ctx.font='10px system-ui';for(let i=0;i<5;i++){const idx=Math.min(a.length-1,Math.round((a.length-1)*i/4)),x=L+xw*idx+xw/2,d=new Date(a[idx].t);ctx.fillText(d.toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit',second:'2-digit'}),Math.max(L,Math.min(w-R-45,x-22)),h-10);}
     const badge=$('chartSource');if(badge)badge.textContent='BINANCE SPOT · 1s';
     const title=document.querySelector('.chartHead .title');if(title)title.textContent='ETHUSDT · Binance Spot · 1s';
-    const note=document.querySelector('.chartHead .note');if(note)note.textContent='Görsel grafik Binance ETHUSDT Spot 1s ile aynı kaynak/interval. Brian karar motoru ayrı olarak USD-M Perpetual 1m kullanır.';
+    const note=document.querySelector('.chartHead .note');if(note)note.textContent='Binance ETHUSDT Spot 1s ile aynı görsel kaynak. Brian karar motoru: USD-M Perpetual 1m.';
     $('lastPrice').textContent=livePx(last);
   };
 
-  render=function(){baseRender();const pos=position();if(pos&&$('pauseBtn')){$('pauseBtn').disabled=true;$('pauseBtn').title='Açık pozisyon varken pause yeni exit takibini riske atmasın diye kapalı.';}};
+  render=function(){
+    baseRender();
+    const pos=position();
+    if(pos){for(const id of ['startBtn','restartBtn','pauseBtn']){const b=$(id);if(b){b.disabled=true;b.title='Açık pozisyon kapanana kadar session kontrolü kilitli.';}}}
+  };
+
+  window.addEventListener('load',()=>setInterval(()=>{
+    const bar=$('freshnessBar');if(!bar)return;
+    const sr=runtime(),marketAge=Math.max(0,Math.round((Date.now()-(model.chartAt||Date.now()))/1000)),workerAge=ageSec(sr?.generated_at||model?.snapshot?.observed_at),thesisAge=ageSec(thesis()?.generated_at||thesis()?.decision_time||sr?.generated_at);
+    bar.textContent=`Grafik Spot 1s ${marketAge} sn · Thesis ${thesisAge==null?'—':thesisAge+' sn'} · Worker ${workerAge==null?'—':workerAge+' sn'} · Motor karar 60 sn`;
+    bar.style.color=workerAge!=null&&workerAge>135?'#ff6379':'#8ea1b8';
+  },500));
 })();
