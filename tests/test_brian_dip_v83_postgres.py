@@ -18,8 +18,13 @@ def schema():
     assert parse_dsn(base.DSN).get('dbname')=='v8_test', 'Only disposable CI database permitted'
     rows('drop schema if exists public cascade; create schema public; drop schema if exists cron cascade')
     base.schema.__wrapped__()
-    rows((base.ROOT/'supabase/migrations/20260908175500_brian_dip_v82_dual_direction_shadow.sql').read_text())
-    rows(next((base.ROOT/'supabase/migrations').glob('*_brian_dip_v83_repair.sql')).read_text())
+    # Execute migration files without an empty parameter tuple. psycopg2 treats
+    # literal percent signs inside SQL as interpolation markers when args=().
+    dual=(base.ROOT/'supabase/migrations/20260908175500_brian_dip_v82_dual_direction_shadow.sql').read_text()
+    repair=next((base.ROOT/'supabase/migrations').glob('*_brian_dip_v83_repair.sql')).read_text()
+    with base.psycopg.connect(base.DSN) as conn,conn.cursor() as cur:
+        cur.execute(dual)
+        cur.execute(repair)
 
 @pytest.fixture(autouse=True)
 def fresh(schema):
