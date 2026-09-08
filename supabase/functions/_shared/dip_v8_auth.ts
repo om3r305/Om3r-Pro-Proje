@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
 import { hash, same } from "./dip_v8.ts";
 export async function requireCronAuth(
   db: SupabaseClient,

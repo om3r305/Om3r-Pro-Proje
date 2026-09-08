@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
 import {
   calibrate,
   closeLong,
@@ -265,7 +265,7 @@ export async function runWorker(
   }
   if (decision) {
     rt.lastOccurrence = c.occurrence;
-    decision.evidence = { ...(decision.evidence as J), veto: c.thesis.veto };
+    decision.evidence = { ...decision.evidence, veto: c.thesis.veto as string[] };
   }
   if ((c.thesis.veto as string[]).some((x) => x !== "CALIBRATING")) {
     c.thesis.thesis_state = "WAIT";

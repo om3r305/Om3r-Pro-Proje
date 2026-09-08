@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { POLICY_VERSION } from "../_shared/dip_v8.ts";
 import { requireCronAuth, withCollectorLease } from "../_shared/dip_v8_auth.ts";
 import { runWorker } from "./worker.ts";

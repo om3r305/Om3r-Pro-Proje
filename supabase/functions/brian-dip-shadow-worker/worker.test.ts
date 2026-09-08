@@ -6,7 +6,7 @@ import {
   POLICY_VERSION,
   type Runtime,
 } from "../_shared/dip_v8.ts";
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
 const cfg = {
   engine_version: ENGINE_VERSION,
   policy_version: POLICY_VERSION,

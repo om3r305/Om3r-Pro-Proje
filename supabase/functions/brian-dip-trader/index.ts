@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import {
   ENGINE_VERSION,
   METRIC_VERSION,
@@ -10,7 +10,7 @@ const URL = Deno.env.get("SUPABASE_URL")!,
 const db = createClient(URL, KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-const EVIDENCE = "AGGRESSIVE_DIP_SHADOW";
+const EVIDENCE="AGGRESSIVE_DIP_SHADOW";
 const ORIGIN =
   /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
 const EXACT = new Set([
@@ -246,8 +246,8 @@ function settings(b: Record<string, unknown>) {
     browser_execution: false,
     allow_shadow_short: false,
     max_shadow_leverage: 1,
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
     execution_mode: mode,
     sizing_policy: "V8_RISK_CAPPED",
   };
@@ -261,8 +261,8 @@ async function status() {
       generated_at: new Date().toISOString(),
       evidence_class: EVIDENCE,
       policy_version: POLICY_VERSION,
-      shadow_only: true,
-      live_execution: false,
+      shadow_only:true,
+      live_execution:false,
     };
   if (!s) {
     return {
@@ -374,8 +374,8 @@ async function begin(b: Record<string, unknown>, restart = false) {
       : starting,
     trade_notional: resumed ? Number(s?.start.trade_notional ?? trade) : trade,
     config: resumed ? (s?.start.config ?? config) : config,
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
   };
 }
 async function claim(b: Record<string, unknown>) {
@@ -402,8 +402,8 @@ async function claim(b: Record<string, unknown>) {
     session_id: s.start.session_id,
     lease_generation: Number(row?.lease_generation || 1),
     heartbeat_at: row?.heartbeat_at ?? new Date().toISOString(),
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
   };
 }
 async function pause() {
@@ -411,8 +411,8 @@ async function pause() {
   if (!s || !s.active) {
     return {
       status: "ALREADY_PAUSED",
-      shadow_only: true,
-      live_execution: false,
+      shadow_only:true,
+      live_execution:false,
     };
   }
   let q = await db.rpc("brian_dip_pause_session", {
@@ -423,8 +423,8 @@ async function pause() {
   return {
     status: "PAUSED",
     session_id: s.start.session_id,
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
   };
 }
 function optional(b: Record<string, unknown>, k: string) {
@@ -459,8 +459,8 @@ async function event(b: Record<string, unknown>) {
     equity_after: optional(b, "equity_after"),
     metadata: object(b.metadata ?? {}, "METADATA", 35000),
     evidence_class: EVIDENCE,
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
   };
   let q = await db.from("brian_dip_events").insert(row);
   if (q.error) throw q.error;
@@ -488,8 +488,8 @@ async function snapshot(b: Record<string, unknown>) {
     loss_count: Math.max(0, Math.trunc(num(b.loss_count ?? 0, "LOSS_COUNT"))),
     state: object(b.state ?? {}, "STATE", 400000),
     evidence_class: EVIDENCE,
-    shadow_only: true,
-    live_execution: false,
+    shadow_only:true,
+    live_execution:false,
   };
   let q = await db.from("brian_dip_snapshots").insert(row);
   if (q.error) throw q.error;
@@ -519,8 +519,8 @@ Deno.serve(async (req: Request) => {
           status: "ENGINE_OK",
           session_id: s.start.session_id,
           lease_generation: Number(l?.lease_generation || 1),
-          shadow_only: true,
-          live_execution: false,
+          shadow_only:true,
+          live_execution:false,
         },
         200,
         o,
@@ -538,8 +538,8 @@ Deno.serve(async (req: Request) => {
         status: u ? "UNAUTHORIZED" : "FAILED_CLOSED",
         error: m,
         evidence_class: EVIDENCE,
-        shadow_only: true,
-        live_execution: false,
+        shadow_only:true,
+        live_execution:false,
       },
       u ? 401 : 400,
       o,
