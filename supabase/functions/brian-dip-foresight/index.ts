@@ -1,34 +1,73 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const SUPABASE_URL=Deno.env.get("SUPABASE_URL")!;
-const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const SYMBOL="ETHUSDT";
-const METRIC="target-before-invalidation-v8";
-const RESOLVER="brian-dip-thesis-resolver-v8";
-const EVIDENCE="AGGRESSIVE_DIP_FORESIGHT_SHADOW";
-const MAX_HORIZON_MIN=90;
-const ORIGIN=/^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
-const EXACT=new Set(["https://monster-coins-pro-seven.vercel.app","https://monster-coins-pro-oemer-yildirim.vercel.app","http://localhost:3000","http://127.0.0.1:3000"]);
-type J=Record<string,unknown>;
-type Bar={t:number,o:number,h:number,l:number,c:number};
-function n(v:unknown,d=0){const x=Number(v);return Number.isFinite(x)?x:d}
-function mean(xs:number[]){return xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:0}
-function cors(o:string|null){const a=o&&(EXACT.has(o)||ORIGIN.test(o))?o:"https://monster-coins-pro-oemer-yildirim.vercel.app";return{"access-control-allow-origin":a,"access-control-allow-headers":"content-type,x-brian-dashboard-key,x-brian-cron-key,authorization,apikey","access-control-allow-methods":"POST,OPTIONS","vary":"Origin"}}
-function out(x:unknown,status=200,o:string|null=null){return new Response(JSON.stringify(x),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...cors(o)}})}
-async function shaHex(s:string){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0}
-async function auth(req:Request){const dashboard=(req.headers.get("x-brian-dashboard-key")??"").trim();if(dashboard){const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256,created_at").order("created_at",{ascending:false}).limit(1).maybeSingle();if(q.error||!q.data||!same(await shaHex(dashboard),String(q.data.dashboard_key_sha256)))throw Error("UNAUTHORIZED_DASHBOARD");return}const cron=(req.headers.get("x-brian-cron-key")??"").trim();if(!cron)throw Error("UNAUTHORIZED_CRON");const q=await db.from("brian_dashboard_auth").select("cron_key_sha256").eq("auth_id","control-v3").single();if(q.error||!q.data||!same(await shaHex(cron),String(q.data.cron_key_sha256??"")))throw Error("UNAUTHORIZED_CRON")}
-async function activeSession(){const q=await db.from("brian_dip_session_events").select("session_id,event_kind,requested_at,config").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();if(q.error)throw q.error;if(!q.data||q.data.event_kind!=="START")return null;return q.data}
-async function klines(startMs:number,limit=1000):Promise<Bar[]>{let last:unknown;for(const host of ["https://api.binance.com","https://api1.binance.com","https://api3.binance.com"]){try{const r=await fetch(`${host}/api/v3/klines?symbol=${SYMBOL}&interval=1m&startTime=${startMs}&limit=${limit}`,{headers:{accept:"application/json"},signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error(`HTTP_${r.status}`);const a=await r.json();return(Array.isArray(a)?a:[]).map((x:unknown)=>Array.isArray(x)?{t:n(x[0]),o:n(x[1]),h:n(x[2]),l:n(x[3]),c:n(x[4])}:null).filter((x:Bar|null):x is Bar=>!!x&&x.c>0)}catch(e){last=e}}throw Error(`BINANCE:${String(last)}`)}
-async function latestPrice(){const r=await klines(Date.now()-5*60_000,10);return r.at(-1)?.c||0}
-
-async function resolveDue(){const q=await db.from("brian_dip_foresight").select("id,created_at,due_at,direction,target_price,invalidation_price,entry_price,predicted_close").eq("symbol",SYMBOL).eq("metric_version",METRIC).is("resolved_at",null).order("created_at",{ascending:true}).limit(80);if(q.error)throw q.error;let resolved=0;for(const row of q.data??[]){const created=Date.parse(String(row.created_at)),due=Date.parse(String(row.due_at)),target=n(row.target_price),inv=n(row.invalidation_price),dir=String(row.direction);if(!created||!target||!inv||!(dir==="UP"||dir==="DOWN"))continue;const start=Math.floor(created/60_000+1)*60_000;const end=Math.min(Date.now(),due);if(end<start)continue;const bs=await klines(start,Math.min(1000,Math.ceil((end-start)/60_000)+3));let reason:string|null=null,actual=0,hit=false,resolvedAt:string|null=null;for(const b of bs){if(b.t>end)break;const targetHit=dir==="UP"?b.h>=target:b.l<=target;const invHit=dir==="UP"?b.l<=inv:b.h>=inv;if(targetHit&&invHit){reason="AMBIGUOUS_SAME_BAR_INVALIDATION_FIRST";hit=false;actual=inv;resolvedAt=new Date(b.t+59_999).toISOString();break}if(invHit){reason="INVALIDATION_FIRST";hit=false;actual=inv;resolvedAt=new Date(b.t+59_999).toISOString();break}if(targetHit){reason="TARGET_FIRST";hit=true;actual=target;resolvedAt=new Date(b.t+59_999).toISOString();break}}
-if(!reason&&Date.now()>=due){const last=bs.filter(b=>b.t<=end).at(-1);reason="EXPIRED_NO_BARRIER";hit=false;actual=last?.c||n(row.entry_price);resolvedAt=new Date(due).toISOString()}
-if(!reason||!resolvedAt)continue;const pred=n(row.predicted_close,n(row.entry_price)),absErr=pred?Math.abs(actual/pred-1)*100:null;const u=await db.from("brian_dip_foresight").update({resolved_at:resolvedAt,actual_price:actual,hit,abs_error_pct:absErr,resolver_version:RESOLVER,resolution_reason:reason}).eq("id",row.id);if(u.error)throw u.error;resolved++}return resolved}
-
-async function latestThesis(sessionId:string){const q=await db.from("brian_dip_theses").select("*").eq("session_id",sessionId).eq("symbol",SYMBOL).order("generated_at",{ascending:false}).limit(1).maybeSingle();if(q.error)throw q.error;return q.data||null}
-async function persist(sessionId:string,t:J){const state=String(t.thesis_state||"WAIT"),dir=String(t.direction||"WAIT"),target=n(t.target_price),inv=n(t.invalidation_price),thesisId=String(t.thesis_id||"");if(state!=="CONFIRMED"||!thesisId||!(dir==="UP"||dir==="DOWN")||!target||!inv)return false;const exists=await db.from("brian_dip_foresight").select("id").eq("session_id",sessionId).eq("thesis_id",thesisId).eq("metric_version",METRIC).limit(1).maybeSingle();if(exists.error)throw exists.error;if(exists.data)return false;const px=(n(t.entry_low)+n(t.entry_high))/2||await latestPrice();const created=new Date(),due=new Date(created.getTime()+MAX_HORIZON_MIN*60_000);const raw=n(t.raw_conviction,.5);const peak=dir==="UP"?target:Math.max(px,inv),trough=dir==="UP"?Math.min(px,inv):target,predClose=target;const row={id:`foresight-v8-${crypto.randomUUID()}`,session_id:sessionId,symbol:SYMBOL,created_at:created.toISOString(),due_at:due.toISOString(),entry_price:px,direction:dir,confidence:raw,horizon_min:MAX_HORIZON_MIN,predicted_peak:peak,predicted_trough:trough,predicted_close:predClose,path:[],thesis_id:thesisId,setup:t.setup,regime:t.regime,venue:t.venue,target_price:target,invalidation_price:inv,structural_invalidation_price:t.structural_invalidation_price,raw_conviction:t.raw_conviction,calibrated_probability:t.calibrated_probability,calibration_samples:t.calibration_samples,resolver_version:RESOLVER,metric_version:METRIC,resolution_reason:null,structure_fingerprint:(t.structure as J)?.fingerprint||null,evidence_class:EVIDENCE,shadow_only:true,live_execution:false};const ins=await db.from("brian_dip_foresight").insert(row);if(ins.error)throw ins.error;return true}
-async function stats(t:J){const setup=String(t.setup||""),dir=String(t.direction||""),venue=String(t.venue||"");if(!setup||!(dir==="UP"||dir==="DOWN"))return{samples:0,accuracy:null};const q=await db.from("brian_dip_foresight").select("hit,abs_error_pct").eq("metric_version",METRIC).eq("setup",setup).eq("direction",dir).eq("venue",venue).not("resolved_at","is",null).order("resolved_at",{ascending:false}).limit(300);if(q.error)throw q.error;const rows=q.data??[],hits=rows.filter(x=>x.hit===true).length;return{samples:rows.length,accuracy:rows.length?hits/rows.length:null,avg_error_pct:rows.length?mean(rows.map(x=>n(x.abs_error_pct))):null}}
-
-Deno.serve(async(req:Request)=>{const o=req.headers.get("origin");if(req.method==="OPTIONS")return new Response("ok",{headers:cors(o)});if(req.method!=="POST")return out({status:"METHOD_NOT_ALLOWED"},405,o);try{await auth(req);const s=await activeSession();const resolved=await resolveDue();if(!s)return out({status:"NO_ACTIVE_SESSION",forecasts:{},focus:[SYMBOL],resolved,shadow_only:true,live_execution:false},200,o);const cfg=(s.config||{}) as J;if(String(cfg.engine_version||"")!=="brian-dip-chart-reader-v8")return out({status:"WAIT_V8_CLEAN_RESTART",forecasts:{},focus:[SYMBOL],resolved,shadow_only:true,live_execution:false},200,o);const sid=String(s.session_id),t=await latestThesis(sid);if(!t)return out({status:"WAIT_STRUCTURE",session_id:sid,forecasts:{},focus:[SYMBOL],resolved,shadow_only:true,live_execution:false},200,o);await persist(sid,t as J);const st=await stats(t as J);const f={symbol:SYMBOL,thesis_id:t.thesis_id,generated_at:t.generated_at,direction:t.direction,setup:t.setup,regime:t.regime,thesis_state:t.thesis_state,raw_conviction:t.raw_conviction,calibrated_probability:t.calibrated_probability,calibration_samples:t.calibration_samples,confidence:t.raw_conviction,accuracy:st.accuracy,samples:st.samples,entry_low:t.entry_low,entry_high:t.entry_high,target:t.target_price,invalidation:t.invalidation_price,structural_invalidation:t.structural_invalidation_price,peak:String(t.direction)==="UP"?t.target_price:t.invalidation_price,trough:String(t.direction)==="UP"?t.invalidation_price:t.target_price,rr:t.rr,cost_bps:t.cost_bps,target_distance_bps:t.target_distance_bps,why:t.why,veto:t.veto,structure:t.structure,flow:t.flow,horizon_min:MAX_HORIZON_MIN,metric_version:METRIC,candles:[]};return out({status:"OK",session_id:sid,focus:[SYMBOL],resolved,forecasts:{[SYMBOL]:f},meaning:{raw_conviction:"mevcut yapısal kanıt gücü; başarı olasılığı değildir",calibrated_probability:"n>=40 target-before-invalidation sonucu sonrası gerçek hit oranı",accuracy:"V8 target-before-invalidation bucket isabeti"},shadow_only:true,live_execution:false},200,o)}catch(e){const m=e instanceof Error?e.message:String(e),u=m.includes("UNAUTHORIZED");console.error("brian-dip-foresight-v8",m);return out({status:u?"UNAUTHORIZED":"FAILED_CLOSED",error:m,shadow_only:true,live_execution:false},u?401:500,o)}});
+import {
+  authorizeReaderOrCron,
+  withCollectorLease,
+} from "../_shared/dip_v8_auth.ts";
+import { POLICY_VERSION } from "../_shared/dip_v8.ts";
+import { readForesight, resolvePending } from "./resolver.ts";
+const db = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
+const EXACT = new Set([
+  "https://monster-coins-pro-seven.vercel.app",
+  "https://monster-coins-pro-oemer-yildirim.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]);
+const ORIGIN =
+  /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
+function headers(origin: string | null) {
+  return {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    "access-control-allow-origin":
+      origin && (EXACT.has(origin) || ORIGIN.test(origin))
+        ? origin
+        : "https://monster-coins-pro-oemer-yildirim.vercel.app",
+    "access-control-allow-headers":
+      "content-type,x-brian-dashboard-key,x-brian-cron-key,authorization,apikey",
+    "access-control-allow-methods": "POST,OPTIONS",
+    "vary": "Origin",
+  };
+}
+Deno.serve(async (req: Request) => {
+  const h = headers(req.headers.get("origin"));
+  if (req.method === "OPTIONS") return new Response("ok", { headers: h });
+  if (req.method !== "POST") {
+    return new Response("method", { status: 405, headers: h });
+  }
+  try {
+    const mode = await authorizeReaderOrCron(db, req);
+    // Dashboard requests never persist decisions or resolve outcomes.
+    if (mode === "cron") {
+      const result = await withCollectorLease(
+        db,
+        "brian-dip-foresight-v8",
+        (_owner, guard) => resolvePending(db, guard),
+      );
+      return Response.json(
+        result.contended ? { status: "WAIT_LEASE" } : result.value,
+        { headers: h },
+      );
+    }
+    const body = await req.json().catch(() => ({}));
+    return Response.json(
+      await readForesight(
+        db,
+        typeof body.session_id === "string" ? body.session_id : undefined,
+      ),
+      { headers: h },
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return Response.json({
+      status: "FAILED_CLOSED",
+      error: message,
+      policy_version: POLICY_VERSION,
+      shadow_only: true,
+      live_execution: false,
+    }, { status: message.includes("UNAUTHORIZED") ? 401 : 500, headers: h });
+  }
+});
