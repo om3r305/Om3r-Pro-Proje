@@ -8,9 +8,13 @@ BACKEND = (ROOT / "supabase" / "functions" / "brian-dip-trader" / "index.ts").re
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
 
 
-def test_v5_is_wired_only_to_dip_page():
-    assert '<script src="/dip-expert-v5-brain.js" defer></script>' in DIP
+def test_v5_is_archived_and_not_wired_to_live_dashboards():
+    # V8.3 owns /dip now. V5 may remain cached as an archived asset, but it must
+    # not be executed by either the live DIP page or the main dashboard.
+    assert "/dip-expert-v5-brain.js" not in DIP
     assert "/dip-expert-v5-brain.js" not in MAIN
+    assert "/dip-v83.js" in DIP
+    assert "/dip-v83-liveview.js" in DIP
     assert "/dip-expert-v5-brain.js" in SW
 
 
