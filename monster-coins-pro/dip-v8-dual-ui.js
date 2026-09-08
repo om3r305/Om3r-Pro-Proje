@@ -31,7 +31,7 @@ const _v83Note=note;
 note=function(e){const m=e?.metadata||{},lev=Number(m.leverage||1);if(m.server_v8&&(e.event_kind==='BUY'||e.event_kind==='SHORT_OPEN')){const side=e.event_kind==='SHORT_OPEN'?'SHORT':'LONG';return `V8.3 ${side} · ${m.setup||''} · ${lev}x · margin $${Number(m.margin||0).toFixed(2)} · notional $${Number(e.notional||m.notional||0).toFixed(2)} · econ R ${Number(m.economic_rr??m.rr??0).toFixed(2)} · max risk $${Number(m.worst_loss||0).toFixed(2)}`;}if(m.server_v8&&(e.event_kind==='SELL'||e.event_kind==='SHORT_CLOSE'))return `V8.3 ${e.event_kind==='SHORT_CLOSE'?'SHORT CLOSE':'LONG CLOSE'} · ${lev}x · ${m.exit_reason||'EXIT'}`;return _v83Note(e);};
 
 const _v83UiPatch=v4UiPatch;
-v4UiPatch=function(){_v83UiPatch();const h=document.querySelector('.desktopTitle h1');if(h)h.textContent='Brian V8.3 · Dual Direction Lab';const mb=document.querySelector('.mobileBrand b');if(mb)mb.textContent='Brian V8.3 Dual';const sub=document.querySelector('.desktopTitle .sub');if(sub)sub.textContent='ETH USD-M PERP · LONG + SHORT · 1-minute server decisions · risk-budgeted · SHADOW ONLY';const banner=document.querySelector('.dipBanner>div:first-child');if(banner)banner.innerHTML='<strong>BRIAN V8.3 · ROOTFIX · LONG + SHORT</strong> · 1 dk karar · USD-M perpetual truth source · early reversal + direction referee · maliyet sonrası ekonomik R:R · kasa risk bütçeli · SHADOW ONLY.';const badge=document.querySelector('.expertModeCard .badge');if(badge)badge.textContent='V8.3 DUAL · 1M · USD-M PERP';const expert=document.querySelector('.expertModeCard');if(expert){const b=expert.querySelector('b');if(b)b.textContent='Early reversal + direction referee + fast/slow order flow';const s=expert.querySelector('small');if(s)s.textContent='Kullanılabilir kasa gerçek üst sınırdır; boyut sinyal + stop + maliyet ile seçilir. İşlem başı worst-case risk ≤ %0.5. 2x yalnız güçlü kalibre edge.';}if($('startBtn'))$('startBtn').textContent='▶ Brian V8.3 Dual Başlat';if($('restartBtn'))$('restartBtn').textContent='↻ V8.3 Temiz Test Session';const rule=document.querySelector('.dipRuleLine');if(rule)rule.innerHTML='V8.3: <b>1 dk</b> → early reversal + confirmed structure → direction referee → fast/slow futures flow → gerçek fee/slippage/spread/funding → <b>economic R:R</b> → trade-notional üst sınırı + <b>≤%0.5 hesap riski</b>. 2x yalnız ≥40 kalibre sonuç ve çok güçlü edge.';const title=document.querySelector('#dipLog .title');if(title)title.textContent='V8.3 LONG / SHORT Açılış-Kapanış Log';const lognote=document.querySelector('#dipLog .note');if(lognote)lognote.textContent='Yalnız server shadow pozisyon olayları · USD-M PERP truth source';const radarTitle=document.querySelector('#watchlist .title');if(radarTitle)radarTitle.textContent='ETH Dual Radar · V8.3';const logic=document.querySelector('.logicSteps');if(logic)logic.innerHTML='<div><b>1</b><span>1m/5m/15m/1h/4h yapıyı yalnız kapanmış mumlarla okur; gelecek mum kullanmaz.</span></div><div><b>2</b><span>Confirmed pivot beklerken ayrıca provisional EARLY_REVERSAL ile hızlı dönüşü takip eder.</span></div><div><b>3</b><span>Direction referee karşı yöndeki güçlü BOS/trendi veto eder; tek sweep büyük resmi ezemez.</span></div><div><b>4</b><span>USD-M perpetual fast + slow aggTrade flow, order book ve funding aynı kararda birleşir.</span></div><div><b>5</b><span>R:R artık fee/slippage/spread/funding sonrası ekonomik R:R; sahte 25R göstermez.</span></div><div><b>6</b><span>Kullanılabilir kasa üst sınır; boyut risk bütçeli. 2x gross exposure edge-gated, risk bütçesi büyümez.</span></div>';if($('cloudMeta'))$('cloudMeta').textContent=`${V83_REV} · karar 1 dk · USD-M PERP · SHADOW ONLY`;};
+v4UiPatch=function(){_v83UiPatch();const h=document.querySelector('.desktopTitle h1');if(h)h.textContent='Brian V8.3 · Dual Direction Lab';const mb=document.querySelector('.mobileBrand b');if(mb)mb.textContent='Brian V8.3 Dual';const sub=document.querySelector('.desktopTitle .sub');if(sub)sub.textContent='ETH USD-M PERP · LONG + SHORT · 1-minute server decisions · risk-budgeted · SHADOW ONLY';const banner=document.querySelector('.dipBanner>div:first-child');if(banner)banner.innerHTML='<strong>BRIAN V8.3 · ROOTFIX · LONG + SHORT</strong> · 1 dk karar · USD-M perpetual truth source · early reversal + direction referee · maliyet sonrası ekonomik R:R · kasa risk bütçeli · SHADOW ONLY.';const badge=document.querySelector('.expertModeCard .badge');if(badge)badge.textContent='V8.3 DUAL · 1M · USD-M PERP';const expert=document.querySelector('.expertModeCard');if(expert){const b=expert.querySelector('b');if(b)b.textContent='Early reversal + direction referee + fast/slow order flow';const s=expert.querySelector('small');if(s)s.textContent='Kullanılabilir kasa gerçek üst sınırdır; boyut sinyal + stop + maliyet ile seçilir. İşlem başı worst-case risk ≤ %0.5. 2x yalnız güçlü kalibre edge.';}if($('startBtn'))$('startBtn').textContent='▶ Brian V8.3 Dual Başlat';if($('restartBtn'))$('restartBtn').textContent='↻ V8.3 Temiz Test Session';const rule=document.querySelector('.dipRuleLine');if(rule)rule.innerHTML='V8.3: <b>1 dk</b> → early reversal + confirmed structure → direction referee → fast/slow futures flow → gerçek fee/slippage/spread/funding → <b>economic R:R</b> → trade-notional üst sınırı + <b>≤%0.5 hesap riski</b>. 2x yalnız ≥40 kalibre sonuç ve çok güçlü edge.';const title=document.querySelector('#dipLog .title');if(title)title.textContent='V8.3 LONG / SHORT Açılış-Kapanış Log';const lognote=document.querySelector('#dipLog .note');if(lognote)lognote.textContent='Yalnız server shadow pozisyon olayları · USD-M PERP truth source';const radarTitle=document.querySelector('#watchlist .title');if(radarTitle)radarTitle.textContent='ETH Dual Radar · V8.3';const logic=document.querySelector('.logicSteps');if(logic)logic.innerHTML='<div><b>1</b><span>1m/5m/15m/1h/4h yapıyı yalnız kapanmış mumlarla okur; gelecek mum kullanmaz.</span></div><div><b>2</b><span>Confirmed pivot beklerken ayrıca provisional EARLY_REVERSAL ile hızlı dönüşü takip eder.</span></div><div><b>3</b><span>Direction referee karşı yöndeki güçlü BOS/trendi veto eder; tek sweep büyük resmi ezemez.</span></div><div><b>4</b><span>USD-M perpetual fast + slow aggTrade flow, order book ve funding aynı kararda birleşir.</span></div><div><b>5</b><span>R:R artık fee/slippage/spread/funding sonrası ekonomik R:R; sahte 25R göstermez.</span></div><div><b>6</b><span>Kullanılabilir kasa üst sınır; boyut risk bütçeli. 2x gross exposure edge-gated, risk bütçesi büyümez.</span></div>';if($('cloudMeta'))$('cloudMeta').textContent=`${V83_REV} · karar 1 dk · USD-M PERP · SHADOW ONLY`;if($('sourceBadge'))$('sourceBadge').textContent='BINANCE USD-M';if($('chartSub'))$('chartSub').textContent='Binance USD-M Perpetual · gerçek 1m mum · V8.3 server truth-source ile aynı venue';};
 
 const _v83RenderKpi=renderKpi;
 renderKpi=function(){_v83RenderKpi();const realized=Number(v8ServerSnapshot?.realized_pnl??book.realized??0),p=$('kpiPnl');if(p){p.textContent=pnl(realized);p.className=`value ${realized>0?'pos':realized<0?'neg':''}`;}if($('kpiEngine')){$('kpiEngine').textContent=running?'BRIAN V8.3 DUAL':'V8.3 IDLE';$('kpiEngine').className=`value ${running?'pos':'amber'}`;}const sr=v8ServerSnapshot?.state?.serverRuntime;if($('kpiEngineMeta'))$('kpiEngineMeta').textContent=`USD-M PERP · ${Number(sr?.decision_cadence_seconds||60)} sn karar · ${sr?.worker_version||V83_REV}`;if($('kpiOpenMeta'))$('kpiOpenMeta').textContent='max 1 · risk ≤%0.5/trade · 1x base / edge-gated 2x · SHADOW';};
@@ -43,3 +43,63 @@ const _v83RenderLog=renderLog;
 renderLog=function(){_v83RenderLog();const host=$('eventRows');if(host&&/V7 session|henüz Dip/i.test(host.textContent||''))host.innerHTML='<tr class="v7EmptyRow"><td colspan="8">Bu V8.3 session’da henüz LONG / SHORT açılış-kapanış olayı yok.</td></tr>';};
 
 addEventListener('load',()=>{try{v4UiPatch();render();}catch(e){console.warn('v83-dual-ui',e);}});
+
+// V8.3 feed root-fix: chart and UI use the exact USD-M venue and never remain falsely STALE
+// just because a browser/VPN blocks Binance WebSocket. Server execution remains authoritative.
+let v83FeedBusy=false,v83BarsAt=0,v83WsAttempt=0,v83FeedTimer=null;
+const V83_WS=[
+  'wss://fstream.binance.com/stream?streams=ethusdt@aggTrade/ethusdt@kline_1m',
+  'wss://fstream.binance.com/ws/ethusdt@aggTrade'
+];
+function v83FeedUi(mode,ok=true){
+  if($('feedState')){$('feedState').textContent=mode;$('feedState').className=ok?'pos':'amber';}
+  if($('feedMeta'))$('feedMeta').textContent=ok?(mode==='LIVE'?'USD-M WebSocket · canlı':'USD-M REST fallback · canlı'):'USD-M yeniden bağlanıyor';
+  if($('onlineText'))$('onlineText').textContent=ok?`BINANCE USD-M ${mode}`:'BINANCE USD-M CONNECTING';
+  if($('marketTextSide'))$('marketTextSide').textContent=ok?`Binance USD-M Perp · ${mode}`:'Binance USD-M bağlanıyor…';
+  try{const d=$('marketDotSide');if(d)d.classList.toggle('off',!ok);const p=$('onlinePill')?.querySelector('.dot');if(p)p.classList.toggle('off',!ok);}catch{}
+}
+function v83ApplyBars(rows){
+  if(!Array.isArray(rows)||!rows.length)return;
+  const now=Date.now(),a=rows.map(x=>({t:Number(x[0]),o:Number(x[1]),h:Number(x[2]),l:Number(x[3]),c:Number(x[4]),v:Number(x[5]),closed:Number(x[6])<=now}));
+  candles.ETHUSDT=a.slice(-180);live.ETHUSDT=Number(a.at(-1)?.c||live.ETHUSDT||0);states.ETHUSDT.last=live.ETHUSDT;
+  if(typeof v4Bars!=='undefined'){v4Bars.ETHUSDT=v4Bars.ETHUSDT||{'1m':[],'5m':[],'15m':[],'1h':[]};v4Bars.ETHUSDT['1m']=candles.ETHUSDT;}
+}
+klines=async function(sym){
+  if(sym!=='ETHUSDT')return;
+  const rows=await v4Spot('/fapi/v1/klines?symbol=ETHUSDT&interval=1m&limit=180');v83ApplyBars(rows);return rows;
+};
+historyLoad=async function(){
+  try{$('chartOverlay')?.classList.add('show');await klines('ETHUSDT');}finally{$('chartOverlay')?.classList.remove('show');draw();renderRadar();renderKpi();}
+};
+async function v83RestFeed(forceBars=false){
+  if(v83FeedBusy)return;v83FeedBusy=true;
+  try{
+    const t=await v4Spot('/fapi/v1/ticker/price?symbol=ETHUSDT'),p=Number(t?.price);
+    if(p>0){live.ETHUSDT=p;states.ETHUSDT.last=p;lastWs=Date.now();}
+    if(forceBars||Date.now()-v83BarsAt>5000){const rows=await v4Spot('/fapi/v1/klines?symbol=ETHUSDT&interval=1m&limit=180');v83ApplyBars(rows);v83BarsAt=Date.now();}
+    v83FeedUi('REST LIVE',true);draw();renderRadar();renderKpi();
+  }catch(e){v83FeedUi('RETRY',false);console.warn('v83 USD-M REST feed',e);}
+  finally{v83FeedBusy=false;}
+}
+connect=function(){
+  try{ws?.close()}catch{}
+  const url=V83_WS[v83WsAttempt%V83_WS.length];v83WsAttempt++;
+  try{ws=new WebSocket(url)}catch{setTimeout(()=>connect(),1200);return;}
+  ws.onopen=()=>{v83FeedUi('LIVE',true);};
+  ws.onmessage=e=>{
+    lastWs=Date.now();let m;try{const q=JSON.parse(e.data);m=q?.data||q}catch{return}
+    if(m.e==='aggTrade'){const p=Number(m.p);if(p>0){live.ETHUSDT=p;states.ETHUSDT.last=p;}draw();renderRadar();renderKpi();}
+    else if(m.e==='kline'){const k=m.k,x={t:Number(k.t),o:Number(k.o),h:Number(k.h),l:Number(k.l),c:Number(k.c),v:Number(k.v),closed:Boolean(k.x)},a=candles.ETHUSDT||(candles.ETHUSDT=[]),i=a.findIndex(z=>z.t===x.t);i>=0?a[i]=x:a.push(x);if(a.length>180)a.splice(0,a.length-180);live.ETHUSDT=x.c;states.ETHUSDT.last=x.c;if(typeof v4Bars!=='undefined'){v4Bars.ETHUSDT=v4Bars.ETHUSDT||{'1m':[],'5m':[],'15m':[],'1h':[]};v4Bars.ETHUSDT['1m']=a;}draw();}
+  };
+  ws.onclose=()=>{v83FeedUi('RETRY',false);setTimeout(()=>connect(),1200);};
+  ws.onerror=()=>{try{ws.close()}catch{}};
+};
+function v83StartFeedGuard(){
+  clearInterval(v83FeedTimer);v83FeedTimer=setInterval(()=>{if(Date.now()-Number(lastWs||0)>4000)v83RestFeed(false);},2000);
+  historyLoad().catch(()=>v83RestFeed(true));connect();setTimeout(()=>{if(Date.now()-Number(lastWs||0)>3500)v83RestFeed(true);},3600);
+}
+const _v83StartFeed=start;
+start=async function(restart=false){const r=await _v83StartFeed(restart);setTimeout(()=>{v83StartFeedGuard();status(false).catch(()=>{});},100);return r;};
+const _v83UiPatchFeed=v4UiPatch;
+v4UiPatch=function(){_v83UiPatchFeed();if($('sourceBadge'))$('sourceBadge').textContent='BINANCE USD-M';if($('chartSub'))$('chartSub').textContent='Binance USD-M Perpetual · gerçek 1m mum · server ile aynı truth-source';};
+addEventListener('load',()=>{try{v83StartFeedGuard();v4UiPatch();render();}catch(e){console.warn('v83 feed guard',e);}});
