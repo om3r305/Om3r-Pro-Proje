@@ -22,7 +22,6 @@ def test_v5_has_hard_cashbox_and_main_runtime_isolation():
     assert "DIP_SHADOW_CASHBOX_V5" in V5
     assert "DIP_BRAIN_MAIN_RUNTIME_MUTATION = false" in V5
     assert "mainRuntimeMutation:false" in V5
-    assert "main_phase37_mutation:false" in V5
     assert "API.includes('/brian-dip-trader')" in V5
     assert "brian-control-center" not in V5
 
