@@ -47,13 +47,14 @@ function settings(b:Record<string,unknown>){
     engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,measurement:METRIC_VERSION,
     shadow_only:true,live_execution:false,server_authoritative:true,browser_execution:false,
     allow_shadow_short:true,max_shadow_leverage:2,execution_mode:mode,
-    sizing_policy:"V8_DUAL_RISK_CAPPED",leverage_policy:"1X_BASE__2X_ONLY_AFTER_40_CALIBRATED_EDGE",chart_reader_version:"v8.2-dual",
+    sizing_policy:"V83_RISK_BUDGETED_USABLE_CAPITAL",leverage_policy:"1X_BASE__2X_ONLY_AFTER_40_CALIBRATED_EDGE",chart_reader_version:"v8.3-dual",
+    decision_cadence_seconds:60,market_source:"BINANCE_USDM_PERP",max_account_risk_fraction:.005,
   };
   validateSession(config);return{starting,trade,config};
 }
 
 async function status(){
-  const s=await latest(),base={schema_version:"brian.dip.status.v8.2",generated_at:new Date().toISOString(),evidence_class:EVIDENCE,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false,dual_direction:true};
+  const s=await latest(),base={schema_version:"brian.dip.status.v8.3",generated_at:new Date().toISOString(),evidence_class:EVIDENCE,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false,dual_direction:true,rootfix_version:"dip-v8.3-rootfix-20260908.3"};
   if(!s)return{...base,session:null,snapshot:null,events:[],engine_lease:null};
   const isDual=s.start.config?.policy_version===POLICY_VERSION;
   if(!isDual)return{...base,status:"WAIT_V8_DUAL_CLEAN_RESTART",session:{session_id:s.start.session_id,status:s.active?"RUNNING":"PAUSED",started_at:s.start.requested_at,ended_at:s.ended_at,starting_equity:Number(s.start.starting_equity),trade_notional:Number(s.start.trade_notional),config:s.start.config??{}},snapshot:null,events:[],engine_lease:null};
@@ -68,9 +69,9 @@ async function status(){
 
 async function begin(b:Record<string,unknown>,restart=false){
   const{starting,trade,config}=settings(b);const previous=await latest();
-  if(!restart&&previous?.active&&previous.start.config?.policy_version===POLICY_VERSION)return{status:"RESUMED",session_id:previous.start.session_id,started_at:previous.start.requested_at,starting_equity:Number(previous.start.starting_equity),trade_notional:Number(previous.start.trade_notional),config:previous.start.config,shadow_only:true,live_execution:false};
+  if(!restart&&previous?.active&&previous.start.config?.policy_version===POLICY_VERSION&&previous.start.config?.chart_reader_version==="v8.3-dual")return{status:"RESUMED",session_id:previous.start.session_id,started_at:previous.start.requested_at,starting_equity:Number(previous.start.starting_equity),trade_notional:Number(previous.start.trade_notional),config:previous.start.config,shadow_only:true,live_execution:false};
   const token=String(b.engine_token??"").trim();if(token.length<20||token.length>200)throw Error("INVALID_ENGINE_TOKEN");
-  const id=`dip-dual-${new Date().toISOString().replace(/[-:.TZ]/g,"").slice(0,14)}-${crypto.randomUUID().slice(0,8)}`,h=await sha(token);
+  const id=`dip-v83-${new Date().toISOString().replace(/[-:.TZ]/g,"").slice(0,14)}-${crypto.randomUUID().slice(0,8)}`,h=await sha(token);
   const q=restart||previous?.active
     ?await db.rpc("brian_dip_restart_session",{p_pause_event_id:`dip-evt-${crypto.randomUUID()}`,p_start_event_id:`dip-evt-${crypto.randomUUID()}`,p_new_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h})
     :await db.rpc("brian_dip_start_session",{p_event_id:`dip-evt-${crypto.randomUUID()}`,p_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h});
