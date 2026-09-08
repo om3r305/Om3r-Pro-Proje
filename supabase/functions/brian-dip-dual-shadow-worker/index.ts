@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { POLICY_VERSION } from "../_shared/dip_v8_dual.ts";
-import { requireCronAuth, withCollectorLease } from "../_shared/dip_v8_auth.ts";
+import { requireCronAuth, withCollectorLease } from "./auth.ts";
 import { runWorker } from "./worker.ts";
 const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
 Deno.serve(async(req:Request)=>{
