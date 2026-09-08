@@ -1,14 +1,13 @@
-// Brian DIP V8.2 dual-direction SHADOW contracts. No live exchange execution.
+// Brian DIP V8.3 dual-direction SHADOW contracts. No live exchange execution.
 export const SYMBOL = "ETHUSDT";
 export const ENGINE_VERSION = "brian-dip-chart-reader-v8-dual";
 export const POLICY_VERSION = "dip-v8-dual-20260908.2";
 export const METRIC_VERSION = "target-before-invalidation-v8.2";
-export const RESOLVER_VERSION = "dip-v8-path-20260908.2";
+export const RESOLVER_VERSION = "dip-v8-path-20260908.3";
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MIN_CAL_SAMPLES = 40;
-export const MAX_POSITION_FRACTION_CALIBRATING = 0.08;
-export const MAX_MARGIN_FRACTION = 0.20;
 export const MAX_SHADOW_LEVERAGE = 2;
+export const ACCOUNT_RISK_FRACTION = 0.005;
 export type J = Record<string, unknown>;
 export type Bar = { t:number; ct:number; o:number; h:number; l:number; c:number; v:number };
 export type Pivot = { i:number; t:number; p:number; kind:"H"|"L"; label?:string };
@@ -68,31 +67,36 @@ export function calibrate(rows:{hit:boolean|null}[],unavailable=false):Cal {
   return {samples,hits,p:samples>=MIN_CAL_SAMPLES?p:null,lower:samples?Math.max(0,centre-width):0,upper:samples?Math.min(1,centre+width):1,ambiguous:rows.length-clean.length,unavailable};
 }
 
-export function chooseShadowLeverage(input:{maxAllowed:number;cal:Cal;raw:number;rr:number;targetBps:number;costBps:number;ofi:number}):1|2 {
-  const {maxAllowed,cal,raw,rr,targetBps,costBps,ofi}=input;
+export function chooseShadowLeverage(input:{maxAllowed:number;cal:Cal;raw:number;economicRR:number;targetBps:number;costBps:number;flowScore:number}):1|2 {
+  const {maxAllowed,cal,raw,economicRR,targetBps,costBps,flowScore}=input;
   if(maxAllowed<2||cal.unavailable||cal.p===null||cal.samples<MIN_CAL_SAMPLES)return 1;
   const ambiguousRate=cal.ambiguous/Math.max(1,cal.samples+cal.ambiguous);
-  return cal.p>=0.68&&cal.lower>=0.55&&raw>=0.72&&rr>=2.5&&targetBps>=3.5*costBps&&Math.abs(ofi)>=0.25&&ambiguousRate<=0.10?2:1;
+  return cal.p>=0.68&&cal.lower>=0.55&&raw>=0.72&&economicRR>=1.8&&targetBps>=3.5*costBps&&Math.abs(flowScore)>=0.25&&ambiguousRate<=0.10?2:1;
 }
 
 export function sizePosition(
-  cash:number,direction:"UP"|"DOWN",entry:number,stop:number,cal:Cal,
-  feeBps:number,slippageBps:number,rules:Rules,leverage:1|2,
+  cash:number,tradeNotional:number,direction:"UP"|"DOWN",entry:number,stop:number,cal:Cal,
+  feeBps:number,slippageBps:number,spreadBps:number,rules:Rules,leverage:1|2,raw:number,
 ) {
   const validStop=direction==="UP"?entry>stop:stop>entry;
-  if(!(cash>0&&entry>0&&stop>0&&validStop)||cal.unavailable)return null;
-  const marginCap=cal.p===null?MAX_POSITION_FRACTION_CALIBRATING:MAX_MARGIN_FRACTION;
+  if(!(cash>0&&tradeNotional>0&&entry>0&&stop>0&&validStop)||cal.unavailable)return null;
+  const maxMargin=Math.min(cash,tradeNotional);
+  const alloc=cal.p===null
+    ? (raw>=.78?1:raw>=.70?.75:raw>=.64?.55:.35)
+    : clip(.55+Math.max(0,cal.p-.55)*2.2,.55,1);
   const riskMove=Math.abs(entry-stop);
-  const lossPerUnit=riskMove+entry*(feeBps*2+slippageBps*2)/10000;
-  const maxGrossFraction=marginCap*leverage;
-  const byMargin=cash*maxGrossFraction/entry;
-  const byRisk=cash*0.005/lossPerUnit;
+  const roundTripBps=feeBps*2+slippageBps*2+spreadBps;
+  const lossPerUnit=riskMove+entry*roundTripBps/10000;
+  const riskBudget=cash*ACCOUNT_RISK_FRACTION;
+  const byRisk=riskBudget/lossPerUnit;
+  const byExposure=maxMargin*leverage*alloc/entry;
   const byCash=cash/(entry/leverage+entry*feeBps/10000);
-  const budgetQty=Math.min(byMargin,byRisk,byCash,rules.maxQty);
+  const budgetQty=Math.min(byRisk,byExposure,byCash,rules.maxQty);
   const qty=Math.floor((budgetQty+Number.EPSILON)/rules.stepSize)*rules.stepSize;
   const notional=qty*entry,margin=notional/leverage,fees_open=notional*feeBps/10000;
-  if(!Number.isFinite(qty)||qty<rules.minQty||notional<rules.minNotional||margin+fees_open>cash+1e-8||margin>cash*marginCap+1e-8)return null;
-  return {qty,notional,margin,leverage,actual_fraction:margin/cash,gross_fraction:notional/cash,fees_open};
+  const worstLoss=qty*lossPerUnit;
+  if(!Number.isFinite(qty)||qty<rules.minQty||notional<rules.minNotional||margin+fees_open>cash+1e-8||margin>maxMargin+1e-8||worstLoss>riskBudget+1e-8)return null;
+  return {qty,notional,margin,leverage,actual_fraction:margin/cash,gross_fraction:notional/cash,fees_open,worst_loss:worstLoss,risk_fraction:worstLoss/cash,allocation:alloc};
 }
 
 // Windows are [start,end). Sealed evidence only.
@@ -110,7 +114,7 @@ export function evaluatePath(input:{direction:"UP"|"DOWN";target:number;stop:num
         if(p.t<previousAt||p.t<s.start||p.t>=s.end||p.id<=previousId||!(p.p>0))return result("INDETERMINATE",null,last,null,cursor);
         const h=hit(p.p); previousAt=p.t; previousId=p.id; last=p.p;
         if(h.loss)return result("INVALIDATION_FIRST",false,p.p,p.t,s.end);
-        if(h.win)return result("TARGET_FIRST",true,target,p.t,s.end);
+        if(h.win)return result("TARGET_FIRST",true,target,p.p? p.t:p.t,s.end);
       }
     }else{
       const open=hit(s.o);
@@ -146,6 +150,6 @@ export function closePosition(rt:Runtime,resolution:Resolution,fingerprint:strin
     position_id:p.position_id,occurrence_id:p.thesis_id,episode_id:p.episode_id,
     price:exit,entry_price:p.entry,exit_price:exit,quantity:p.qty,notional:p.notional,
     fees:p.fees_open+feeClose,realized_pnl:net,cash_after:rt.cash,equity_after:rt.cash,
-    metadata:{server_v8:true,side:p.side,exit_reason:resolution.reason==="AMBIGUOUS"?"AMBIGUOUS_CONSERVATIVE_STOP":resolution.reason,thesis_id:p.thesis_id,setup:p.setup,venue:p.venue,policy_version:p.policy_version,resolution,execution_model:"dual_shadow_perp_barrier_v1",fee_bps:p.fee_bps,slippage_bps:p.slippage_bps,leverage:p.leverage,margin:p.margin}
+    metadata:{server_v8:true,side:p.side,exit_reason:resolution.reason==="AMBIGUOUS"?"AMBIGUOUS_CONSERVATIVE_STOP":resolution.reason,thesis_id:p.thesis_id,setup:p.setup,venue:p.venue,policy_version:p.policy_version,resolution,execution_model:"dual_shadow_perp_barrier_v83",fee_bps:p.fee_bps,slippage_bps:p.slippage_bps,leverage:p.leverage,margin:p.margin}
   };
 }
