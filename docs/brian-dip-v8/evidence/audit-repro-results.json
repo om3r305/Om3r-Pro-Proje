@@ -1,0 +1,181 @@
+{
+  "source_commit": "0c1b1e88e758a71e7cf9732300b77f8f6e2f597d",
+  "offline": true,
+  "results": [
+    {
+      "name": "legacy_ui_undefined_function_and_focus_override",
+      "verified": true,
+      "evidence": {
+        "error": "v7Foresight is not defined",
+        "universe_after_restore": [
+          "XRPUSDT",
+          "ETHUSDT",
+          "DOGEUSDT"
+        ]
+      }
+    },
+    {
+      "name": "runtime_read_error_silently_resets_state",
+      "verified": true,
+      "evidence": {
+        "expected_existing_cash": 700,
+        "returned_cash": 1000,
+        "returned_position": null
+      }
+    },
+    {
+      "name": "same_cycle_expiry_reopens_locked_thesis",
+      "verified": true,
+      "evidence": {
+        "events": [
+          "SELL",
+          "BUY"
+        ],
+        "exit_reason": "THESIS_EXPIRED",
+        "same_thesis_reopened": true
+      }
+    },
+    {
+      "name": "long_entry_accepts_stop_above_fill",
+      "verified": true,
+      "evidence": {
+        "entry": 100.02000100000001,
+        "stop": 100.5,
+        "target": 103,
+        "rr": 6
+      }
+    },
+    {
+      "name": "worker_ignores_intrabar_target",
+      "verified": true,
+      "evidence": {
+        "bar_high": 104,
+        "position_target": 103,
+        "current_mid": 100,
+        "position_still_open": true
+      }
+    },
+    {
+      "name": "forty_losses_still_enable_calibrated_entry",
+      "verified": true,
+      "evidence": {
+        "samples": 40,
+        "hit_rate": 0,
+        "notional": 50,
+        "cash": 1000
+      }
+    },
+    {
+      "name": "minimum_notional_breaks_eight_percent_cap",
+      "verified": true,
+      "evidence": {
+        "cash": 50,
+        "notional": 10,
+        "actual_fraction": 0.2,
+        "stated_cap": 0.08
+      }
+    },
+    {
+      "name": "sweep_enters_despite_opposing_flow",
+      "verified": true,
+      "evidence": {
+        "ofi": -1,
+        "raw_conviction": 0.61,
+        "position": "LONG"
+      }
+    },
+    {
+      "name": "same_thesis_persistence_freezes_calibration_and_entry",
+      "verified": true,
+      "evidence": {
+        "persisted_rows": 1,
+        "persisted_probability": null,
+        "worker_probability": 1,
+        "persisted_entry_low": 99.88,
+        "worker_entry_low": 99.97999999999999
+      }
+    },
+    {
+      "name": "event_survives_snapshot_failure_and_duplicates_on_retry",
+      "verified": true,
+      "evidence": {
+        "buy_events": 2,
+        "committed_snapshots": 1,
+        "unique_event_ids": true
+      }
+    },
+    {
+      "name": "short_uses_spot_data_and_ignores_disabled_short_setting",
+      "verified": true,
+      "evidence": {
+        "allow_shadow_short": false,
+        "opened_side": "SHORT",
+        "labeled_venue": "PERP",
+        "all_market_routes": [
+          "/api/v3/klines?symbol=ETHUSDT&interval=1m&limit=240",
+          "/api/v3/klines?symbol=ETHUSDT&interval=5m&limit=240",
+          "/api/v3/klines?symbol=ETHUSDT&interval=15m&limit=240",
+          "/api/v3/klines?symbol=ETHUSDT&interval=1h&limit=240",
+          "/api/v3/klines?symbol=ETHUSDT&interval=4h&limit=180",
+          "/api/v3/depth?symbol=ETHUSDT&limit=20",
+          "/api/v3/aggTrades?symbol=ETHUSDT&limit=150"
+        ]
+      }
+    },
+    {
+      "name": "resolver_skips_first_prediction_minute",
+      "verified": true,
+      "evidence": {
+        "created_at": "2026-09-07T12:00:00.000Z",
+        "target_hit_in_first_20_seconds": true,
+        "scan_requests": 0,
+        "resolved": 0
+      }
+    },
+    {
+      "name": "resolver_can_record_future_resolved_at_from_open_candle",
+      "verified": true,
+      "evidence": {
+        "now": "2026-09-07T12:00:20.000Z",
+        "resolved_at": "2026-09-07T12:00:59.999Z",
+        "reason": "TARGET_FIRST"
+      }
+    },
+    {
+      "name": "resolver_includes_bar_remainder_after_deadline",
+      "verified": true,
+      "evidence": {
+        "due_at": "2026-09-07T12:00:20.000Z",
+        "resolved_at": "2026-09-07T12:00:59.999Z",
+        "hit": true,
+        "note": "OHLC alone cannot establish whether the touch occurred before the 20-second cutoff"
+      }
+    },
+    {
+      "name": "parallel_forecast_persist_duplicates_same_thesis",
+      "verified": true,
+      "evidence": {
+        "rows": 2,
+        "session": "audit-session",
+        "thesis_id": "same-thesis",
+        "note": "Schema has only random id primary key; no unique session/thesis/metric constraint"
+      }
+    },
+    {
+      "name": "positive_worker_rejects_v7_session",
+      "verified": true,
+      "evidence": {
+        "status": "WAIT_V8_CLEAN_RESTART",
+        "market_requests": 0
+      }
+    },
+    {
+      "name": "positive_pivot_confirmation_and_open_bar_exclusion",
+      "verified": true,
+      "evidence": {
+        "pivot_waits_for_three_right_bars": true,
+        "forming_bar_does_not_change_fingerprint": true
+      }
+    }
+  ]
+}
