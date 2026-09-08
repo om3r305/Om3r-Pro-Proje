@@ -16,11 +16,13 @@ params=function(){
   return p;
 };
 
+function v83SetText(el,value){if(el&&el.textContent!==String(value))el.textContent=String(value);}
+function v83SetClass(el,value){if(el&&el.className!==value)el.className=value;}
 function v83SetFeedUi(mode,meta,ok=true){
-  if($('feedState')){$('feedState').textContent=mode;$('feedState').className=ok?'pos':'amber';}
-  if($('feedMeta'))$('feedMeta').textContent=meta||'';
-  if($('onlineText'))$('onlineText').textContent=ok?`USD-M ${mode}`:'USD-M SERVER BEKLENİYOR';
-  if($('marketTextSide'))$('marketTextSide').textContent=ok?`Binance USD-M · ${mode}`:'USD-M server heartbeat bekleniyor…';
+  const feed=$('feedState');v83SetText(feed,mode);v83SetClass(feed,ok?'pos':'amber');
+  v83SetText($('feedMeta'),meta||'');
+  v83SetText($('onlineText'),ok?`USD-M ${mode}`:'USD-M SERVER BEKLENİYOR');
+  v83SetText($('marketTextSide'),ok?`Binance USD-M · ${mode}`:'USD-M server heartbeat bekleniyor…');
   try{const d=$('marketDotSide');if(d)d.classList.toggle('off',!ok);const p=$('onlinePill')?.querySelector('.dot');if(p)p.classList.toggle('off',!ok);}catch{}
 }
 
@@ -122,11 +124,7 @@ connect=function(){
 const _v83Start=start;
 start=async function(restart=false){const r=await _v83Start(restart);setTimeout(()=>{status(false).catch(()=>{});connect();},150);return r;};
 
-// V8.3 is server-authoritative. Legacy dip.js still owns a 2.5s browser-WebSocket
-// health timer that writes LIVE/STALE directly into #feedState. Keep the old runtime
-// intact, but immediately restore the authoritative server state whenever that legacy
-// timer touches the feed UI. This prevents false STALE flicker without hiding a real
-// server heartbeat failure.
+// V8.3 is server-authoritative. Reassert periodically, without observing our own DOM writes.
 function v83ReassertFeedAuthority(){
   if(!v83ServerSnapshot)return;
   const sr=v83ServerSnapshot?.state?.serverRuntime||null;
@@ -144,19 +142,7 @@ function v83ReassertFeedAuthority(){
 }
 
 addEventListener('load',()=>{
-  try{
-    const feed=$('feedState');
-    if(feed){
-      let scheduled=false;
-      const obs=new MutationObserver(()=>{
-        if(scheduled)return;
-        scheduled=true;
-        queueMicrotask(()=>{scheduled=false;v83ReassertFeedAuthority();});
-      });
-      obs.observe(feed,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['class']});
-    }
-    setInterval(v83ReassertFeedAuthority,1000);
-  }catch(e){console.warn('v83-feed-authority',e);}
+  try{setInterval(v83ReassertFeedAuthority,750);}catch(e){console.warn('v83-feed-authority',e);}
 });
 
 addEventListener('load',()=>{try{v4UiPatch();render();connect();setTimeout(()=>status(false).catch(()=>{}),300);}catch(e){console.warn('v83 server-primary ui',e);}});
