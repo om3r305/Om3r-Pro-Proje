@@ -16,14 +16,20 @@ function ageSeconds(v: string | null): number | null {
 }
 
 async function v8DipSummary() {
-  const runtimeQ = await db.from("brian_dip_v8_runtime")
-    .select("session_id,state_version,updated_at,runtime,snapshot,shadow_only,live_execution")
-    .order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  if (runtimeQ.error) throw runtimeQ.error;
-  if (!runtimeQ.data) return null;
+  // Session events are the control-plane truth. The monotonic restart migration
+  // guarantees the newest START is strictly newer than the PAUSE it supersedes.
+  const latestEventQ = await db.from("brian_dip_session_events")
+    .select("event_id,session_id,event_kind,requested_at")
+    .order("requested_at", { ascending: false }).order("event_id", { ascending: false })
+    .limit(1).maybeSingle();
+  if (latestEventQ.error) throw latestEventQ.error;
+  if (!latestEventQ.data) return null;
+  const sid = String(latestEventQ.data.session_id);
 
-  const sid = String(runtimeQ.data.session_id);
-  const [startQ, lastQ] = await Promise.all([
+  const [runtimeQ, startQ, lastQ] = await Promise.all([
+    db.from("brian_dip_v8_runtime")
+      .select("session_id,state_version,updated_at,runtime,snapshot,shadow_only,live_execution")
+      .eq("session_id", sid).maybeSingle(),
     db.from("brian_dip_session_events")
       .select("event_id,requested_at,starting_equity,trade_notional,config")
       .eq("session_id", sid).eq("event_kind", "START")
@@ -35,9 +41,10 @@ async function v8DipSummary() {
       .order("requested_at", { ascending: false }).order("event_id", { ascending: false })
       .limit(1).maybeSingle(),
   ]);
+  if (runtimeQ.error) throw runtimeQ.error;
   if (startQ.error) throw startQ.error;
   if (lastQ.error) throw lastQ.error;
-  if (!startQ.data) return null;
+  if (!runtimeQ.data || !startQ.data) return null;
 
   const runtime = (runtimeQ.data.runtime ?? {}) as Record<string, unknown>;
   const storedSnapshot = runtimeQ.data.snapshot as Record<string, unknown> | null;
@@ -63,6 +70,8 @@ async function v8DipSummary() {
   };
 
   return {
+    // Legacy frontend recognizes BROWSER_ACTIVE as its green running state.
+    // The authoritative flags below tell the UI that execution is actually cloud/server-side.
     status: !active ? "PAUSED" : heartbeatAge != null && heartbeatAge <= 420 ? "BROWSER_ACTIVE" : "BROWSER_STOPPED",
     session_id: sid,
     started_at: startQ.data.requested_at ?? null,
