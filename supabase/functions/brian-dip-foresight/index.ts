@@ -1,73 +1,18 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
-import {
-  authorizeReaderOrCron,
-  withCollectorLease,
-} from "../_shared/dip_v8_auth.ts";
-import { POLICY_VERSION } from "../_shared/dip_v8.ts";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.116.0";
+import { hash, POLICY_VERSION, same } from "../_shared/dip_v8_dual.ts";
 import { readForesight, resolvePending } from "./resolver.ts";
-const db = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  { auth: { persistSession: false, autoRefreshToken: false } },
-);
-const EXACT = new Set([
-  "https://monster-coins-pro-seven.vercel.app",
-  "https://monster-coins-pro-oemer-yildirim.vercel.app",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-]);
-const ORIGIN =
-  /^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
-function headers(origin: string | null) {
-  return {
-    "content-type": "application/json",
-    "cache-control": "no-store",
-    "access-control-allow-origin":
-      origin && (EXACT.has(origin) || ORIGIN.test(origin))
-        ? origin
-        : "https://monster-coins-pro-oemer-yildirim.vercel.app",
-    "access-control-allow-headers":
-      "content-type,x-brian-dashboard-key,x-brian-cron-key,authorization,apikey",
-    "access-control-allow-methods": "POST,OPTIONS",
-    "vary": "Origin",
-  };
-}
-Deno.serve(async (req: Request) => {
-  const h = headers(req.headers.get("origin"));
-  if (req.method === "OPTIONS") return new Response("ok", { headers: h });
-  if (req.method !== "POST") {
-    return new Response("method", { status: 405, headers: h });
-  }
-  try {
-    const mode = await authorizeReaderOrCron(db, req);
-    // Dashboard requests never persist decisions or resolve outcomes.
-    if (mode === "cron") {
-      const result = await withCollectorLease(
-        db,
-        "brian-dip-foresight-v8",
-        (_owner, guard) => resolvePending(db, guard),
-      );
-      return Response.json(
-        result.contended ? { status: "WAIT_LEASE" } : result.value,
-        { headers: h },
-      );
-    }
-    const body = await req.json().catch(() => ({}));
-    return Response.json(
-      await readForesight(
-        db,
-        typeof body.session_id === "string" ? body.session_id : undefined,
-      ),
-      { headers: h },
-    );
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return Response.json({
-      status: "FAILED_CLOSED",
-      error: message,
-      policy_version: POLICY_VERSION,
-      shadow_only: true,
-      live_execution: false,
-    }, { status: message.includes("UNAUTHORIZED") ? 401 : 500, headers: h });
-  }
+
+const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
+const EXACT=new Set(["https://monster-coins-pro-seven.vercel.app","https://monster-coins-pro-oemer-yildirim.vercel.app","http://localhost:3000","http://127.0.0.1:3000"]);
+const ORIGIN=/^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim\.vercel\.app$/i;
+function headers(origin:string|null){return{"content-type":"application/json","cache-control":"no-store","access-control-allow-origin":origin&&(EXACT.has(origin)||ORIGIN.test(origin))?origin:"https://monster-coins-pro-seven.vercel.app","access-control-allow-headers":"content-type,x-brian-dashboard-key,x-brian-cron-key,authorization,apikey","access-control-allow-methods":"POST,OPTIONS","vary":"Origin"};}
+async function requireCronAuth(db:SupabaseClient,req:Request){const supplied=(req.headers.get("x-brian-cron-key")||"").trim();if(!supplied)throw Error("UNAUTHORIZED_CRON");const q=await db.from("brian_dashboard_auth").select("cron_key_sha256").eq("auth_id","control-v3").single();if(q.error||!q.data)throw Error("CRON_AUTH_UNAVAILABLE");if(!same(await hash(supplied),String(q.data.cron_key_sha256||"")))throw Error("UNAUTHORIZED_CRON");}
+async function authorize(req:Request):Promise<"reader"|"cron">{const key=(req.headers.get("x-brian-dashboard-key")||"").trim();if(!key){await requireCronAuth(db,req);return"cron";}const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256").order("created_at",{ascending:false}).limit(1).maybeSingle();if(q.error||!q.data||!same(await hash(key),String(q.data.dashboard_key_sha256||"")))throw Error("UNAUTHORIZED_DASHBOARD");return"reader";}
+async function withLease<T>(work:(guard:()=>void)=>Promise<T>){const owner=crypto.randomUUID(),a=await db.rpc("brian_acquire_collector_lease",{p_collector_id:"brian-dip-foresight-v82",p_owner_token:owner,p_lease_seconds:55});if(a.error)throw Error("LEASE_READ_FAILED:"+a.error.message);if(a.data!==true)return{contended:true};let lost=false,done=false;const timer=setInterval(async()=>{try{const r=await db.rpc("brian_renew_collector_lease",{p_collector_id:"brian-dip-foresight-v82",p_owner_token:owner,p_lease_seconds:55});if(r.error||r.data!==true)lost=true;}catch{lost=true;}if(lost||done)clearInterval(timer);},18000);try{return{contended:false,value:await work(()=>{if(lost)throw Error("V82_FORESIGHT_LEASE_LOST");})};}finally{done=true;clearInterval(timer);await db.rpc("brian_release_collector_lease",{p_collector_id:"brian-dip-foresight-v82",p_owner_token:owner});}}
+
+Deno.serve(async(req:Request)=>{
+  const h=headers(req.headers.get("origin"));if(req.method==="OPTIONS")return new Response("ok",{headers:h});if(req.method!=="POST")return new Response("method",{status:405,headers:h});
+  try{const mode=await authorize(req);if(mode==="cron"){const r=await withLease(guard=>resolvePending(db,guard));return Response.json(r.contended?{status:"WAIT_LEASE",policy_version:POLICY_VERSION}:r.value,{headers:h});}const body=await req.json().catch(()=>({}));return Response.json(await readForesight(db,typeof body.session_id==="string"?body.session_id:undefined),{headers:h});}
+  catch(e){const message=e instanceof Error?e.message:String(e);return Response.json({status:"FAILED_CLOSED",error:message,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:h});}
 });
