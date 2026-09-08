@@ -72,11 +72,13 @@ async function begin(b:Record<string,unknown>,restart=false){
   if(!restart&&previous?.active&&previous.start.config?.policy_version===POLICY_VERSION&&previous.start.config?.chart_reader_version==="v8.3-dual")return{status:"RESUMED",session_id:previous.start.session_id,started_at:previous.start.requested_at,starting_equity:Number(previous.start.starting_equity),trade_notional:Number(previous.start.trade_notional),config:previous.start.config,shadow_only:true,live_execution:false};
   const token=String(b.engine_token??"").trim();if(token.length<20||token.length>200)throw Error("INVALID_ENGINE_TOKEN");
   const id=`dip-v83-${new Date().toISOString().replace(/[-:.TZ]/g,"").slice(0,14)}-${crypto.randomUUID().slice(0,8)}`,h=await sha(token);
+  const resumed=!restart&&!!previous&&!previous.active;
   const q=restart||previous?.active
     ?await db.rpc("brian_dip_restart_session",{p_pause_event_id:`dip-evt-${crypto.randomUUID()}`,p_start_event_id:`dip-evt-${crypto.randomUUID()}`,p_new_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h})
     :await db.rpc("brian_dip_start_session",{p_event_id:`dip-evt-${crypto.randomUUID()}`,p_session_id:id,p_starting_equity:starting,p_trade_notional:trade,p_config:config,p_engine_token_sha256:h});
   if(q.error)throw q.error;const row=Array.isArray(q.data)?q.data.at(-1):q.data;
-  return{status:restart||previous?.active?"RESTARTED":"STARTED",session_id:String(row?.session_id??id),started_at:row?.requested_at??new Date().toISOString(),starting_equity:starting,trade_notional:trade,config,shadow_only:true,live_execution:false,dual_direction:true};
+  const rowConfig=(row?.config??config) as Record<string,unknown>;
+  return{status:restart||previous?.active?"RESTARTED":resumed?"RESUMED":"STARTED",session_id:String(row?.session_id??id),started_at:resumed&&previous?previous.start.requested_at:(row?.requested_at??new Date().toISOString()),starting_equity:Number(row?.starting_equity??starting),trade_notional:Number(row?.trade_notional??trade),config:rowConfig,shadow_only:true,live_execution:false,dual_direction:true};
 }
 async function pause(){const s=await latest();if(!s||!s.active)return{status:"ALREADY_PAUSED",shadow_only:true,live_execution:false};const q=await db.rpc("brian_dip_pause_session",{p_event_id:`dip-evt-${crypto.randomUUID()}`,p_session_id:s.start.session_id});if(q.error)throw q.error;return{status:"PAUSED",session_id:s.start.session_id,shadow_only:true,live_execution:false};}
 
