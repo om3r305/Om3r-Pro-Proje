@@ -122,4 +122,41 @@ connect=function(){
 const _v83Start=start;
 start=async function(restart=false){const r=await _v83Start(restart);setTimeout(()=>{status(false).catch(()=>{});connect();},150);return r;};
 
+// V8.3 is server-authoritative. Legacy dip.js still owns a 2.5s browser-WebSocket
+// health timer that writes LIVE/STALE directly into #feedState. Keep the old runtime
+// intact, but immediately restore the authoritative server state whenever that legacy
+// timer touches the feed UI. This prevents false STALE flicker without hiding a real
+// server heartbeat failure.
+function v83ReassertFeedAuthority(){
+  if(!v83ServerSnapshot)return;
+  const sr=v83ServerSnapshot?.state?.serverRuntime||null;
+  const generated=Date.parse(sr?.generated_at||v83ServerSnapshot?.observed_at||0);
+  const age=generated?Date.now()-generated:Infinity;
+  const healthy=Boolean(session?.status==='RUNNING'&&sr?.authoritative===true&&sr?.market_source==='BINANCE_USDM_PERP'&&!sr?.market_error&&age<150000);
+  if(healthy){
+    v83ServerFresh=true;
+    const sec=Math.max(0,Math.round(age/1000));
+    v83SetFeedUi(v83BrowserWsOk?'LIVE + SERVER':'SERVER LIVE',`USD-M worker · ${sec} sn · karar ${Number(sr?.decision_cadence_seconds||60)} sn`,true);
+  }else if(session?.status==='RUNNING'){
+    v83ServerFresh=false;
+    v83SetFeedUi('SERVER WAIT',sr?.market_error?`market: ${String(sr.market_error).slice(0,60)}`:'authoritative heartbeat bekleniyor',false);
+  }
+}
+
+addEventListener('load',()=>{
+  try{
+    const feed=$('feedState');
+    if(feed){
+      let scheduled=false;
+      const obs=new MutationObserver(()=>{
+        if(scheduled)return;
+        scheduled=true;
+        queueMicrotask(()=>{scheduled=false;v83ReassertFeedAuthority();});
+      });
+      obs.observe(feed,{childList:true,characterData:true,subtree:true,attributes:true,attributeFilter:['class']});
+    }
+    setInterval(v83ReassertFeedAuthority,1000);
+  }catch(e){console.warn('v83-feed-authority',e);}
+});
+
 addEventListener('load',()=>{try{v4UiPatch();render();connect();setTimeout(()=>status(false).catch(()=>{}),300);}catch(e){console.warn('v83 server-primary ui',e);}});
