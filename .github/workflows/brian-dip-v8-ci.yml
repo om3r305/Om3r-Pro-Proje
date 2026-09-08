@@ -22,11 +22,14 @@ jobs:
         with:
           deno-version: "2.1.4"
       - name: Type-check V8 entrypoints and shared contracts
-        run: deno check supabase/functions/brian-dip-shadow-worker/index.ts supabase/functions/brian-dip-foresight/index.ts supabase/functions/brian-dip-trader/index.ts
+        run: deno check supabase/functions/brian-dip-dual-shadow-worker/index.ts supabase/functions/brian-dip-shadow-worker/index.ts supabase/functions/brian-dip-foresight/index.ts supabase/functions/brian-dip-trader/index.ts
       - name: V8 deterministic behavior and hard SHADOW tests
-        run: deno test --allow-read supabase/functions/_shared/dip_v8.test.ts supabase/functions/brian-dip-shadow-worker/worker.test.ts
+        run: deno test --allow-read supabase/functions/_shared/dip_v8.test.ts supabase/functions/brian-dip-shadow-worker/worker.test.ts supabase/functions/brian-dip-dual-shadow-worker/decision.test.ts
       - name: Browser script syntax
-        run: node --check monster-coins-pro/dip-foresight-v7.js
+        run: |
+          node --check monster-coins-pro/dip-foresight-v7.js
+          node --check monster-coins-pro/dip-v83.js
+          node --check monster-coins-pro/dip-v83-liveview.js
       - name: Patch formatting
         run: git diff --check
   v8-postgres:
@@ -49,4 +52,6 @@ jobs:
       - name: Real transaction, concurrency, lease, pause and rollback tests
         env:
           BRIAN_V8_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/v8_test
-        run: python -m pytest -q tests/test_brian_dip_v8_postgres.py
+        run: |
+          python -m pytest -q tests/test_brian_dip_v8_postgres.py
+          python -m pytest -q tests/test_brian_dip_v83_postgres.py

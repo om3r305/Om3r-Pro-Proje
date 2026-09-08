@@ -13,8 +13,10 @@ def test_dip_resume_preserves_session_and_runtime_snapshot():
     assert "d.status==='RESUMED'" in ui
     assert "await status(false)" in ui
     assert "DIP_RESUME_FAILED_CLOSED" in ui
-    assert 'resumed=!restart&&activeId!==id' in edge
-    assert 'status:restart?"RESTARTED":resumed?"RESUMED":"STARTED"' in edge
+    assert 'const resumed=!restart&&!!previous&&!previous.active' in edge
+    assert 'status:restart||previous?.active?"RESTARTED":resumed?"RESUMED":"STARTED"' in edge
+    assert 'started_at:resumed&&previous?previous.start.requested_at' in edge
+    assert 'starting_equity:Number(row?.starting_equity??starting)' in edge
     assert "history=[]" in ui  # fresh Start/Restart still gets a clean current-session view
 
 

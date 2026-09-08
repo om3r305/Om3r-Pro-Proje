@@ -3,7 +3,7 @@ export const SYMBOL = "ETHUSDT";
 export const ENGINE_VERSION = "brian-dip-chart-reader-v8-dual";
 export const POLICY_VERSION = "dip-v8-dual-20260908.2";
 export const METRIC_VERSION = "target-before-invalidation-v8.2";
-export const RESOLVER_VERSION = "dip-v8-path-20260908.3";
+export const RESOLVER_VERSION = "dip-v8-path-20260908.5";
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MIN_CAL_SAMPLES = 40;
 export const MAX_SHADOW_LEVERAGE = 2;
@@ -27,7 +27,9 @@ export type Position = {
   opened_at:string; due_at:string; fees_open:number; fee_bps:number; slippage_bps:number; spread_bps:number;
   venue:"SHADOW_PERP"; policy_version:string; checked_until:number; market_price:number;
   leverage:1|2; margin:number; actual_fraction:number; gross_fraction:number;
+  funding_accrued?:number; funding_settlements?:FundingSettlement[];
 };
+export type FundingSettlement = { fundingTime:number; fundingRate:number; markPrice:number; cashflow:number };
 export type Runtime = {
   start:number; cash:number; realized:number; trades:number; wins:number; losses:number;
   pos:Position|null;
@@ -80,7 +82,10 @@ export function sizePosition(
 ) {
   const validStop=direction==="UP"?entry>stop:stop>entry;
   if(!(cash>0&&tradeNotional>0&&entry>0&&stop>0&&validStop)||cal.unavailable)return null;
-  const maxMargin=Math.min(cash,tradeNotional);
+  const cold=cal.p===null||cal.samples<MIN_CAL_SAMPLES;
+  if(cold&&leverage!==1)return null;
+  const maxNotional=Math.min(tradeNotional,cash*(cold ? 0.08 : 0.20));
+  const maxMargin=Math.min(cash,maxNotional/leverage);
   const alloc=cal.p===null
     ? (raw>=.78?1:raw>=.70?.75:raw>=.64?.55:.35)
     : clip(.55+Math.max(0,cal.p-.55)*2.2,.55,1);
@@ -89,7 +94,7 @@ export function sizePosition(
   const lossPerUnit=riskMove+entry*roundTripBps/10000;
   const riskBudget=cash*ACCOUNT_RISK_FRACTION;
   const byRisk=riskBudget/lossPerUnit;
-  const byExposure=maxMargin*leverage*alloc/entry;
+  const byExposure=maxNotional/entry;
   const byCash=cash/(entry/leverage+entry*feeBps/10000);
   const budgetQty=Math.min(byRisk,byExposure,byCash,rules.maxQty);
   const qty=Math.floor((budgetQty+Number.EPSILON)/rules.stepSize)*rules.stepSize;
@@ -139,8 +144,10 @@ export function closePosition(rt:Runtime,resolution:Resolution,fingerprint:strin
   const exit=resolution.price*(p.side==="LONG"?1-friction:1+friction);
   const feeClose=exit*p.qty*p.fee_bps/10000;
   const gross=(p.side==="LONG"?exit-p.entry:p.entry-exit)*p.qty;
-  const net=gross-p.fees_open-feeClose;
-  rt.cash+=p.margin+gross-feeClose;
+  const funding=p.funding_accrued??0;
+  if(!Number.isFinite(funding))throw Error("INVALID_FUNDING");
+  const net=gross-p.fees_open-feeClose+funding;
+  rt.cash+=p.margin+gross-feeClose+funding;
   rt.realized+=net; rt.trades++;
   if(net>0)rt.wins++; else if(net<0)rt.losses++;
   rt.lastLock={episode_id:p.episode_id,fingerprint,last5m_t:last5m,reason:resolution.reason};
@@ -149,7 +156,7 @@ export function closePosition(rt:Runtime,resolution:Resolution,fingerprint:strin
     event_kind:p.side==="LONG"?"SELL":"SHORT_CLOSE",
     position_id:p.position_id,occurrence_id:p.thesis_id,episode_id:p.episode_id,
     price:exit,entry_price:p.entry,exit_price:exit,quantity:p.qty,notional:p.notional,
-    fees:p.fees_open+feeClose,realized_pnl:net,cash_after:rt.cash,equity_after:rt.cash,
-    metadata:{server_v8:true,side:p.side,exit_reason:resolution.reason==="AMBIGUOUS"?"AMBIGUOUS_CONSERVATIVE_STOP":resolution.reason,thesis_id:p.thesis_id,setup:p.setup,venue:p.venue,policy_version:p.policy_version,resolution,execution_model:"dual_shadow_perp_barrier_v83",fee_bps:p.fee_bps,slippage_bps:p.slippage_bps,leverage:p.leverage,margin:p.margin}
+    fees:p.fees_open+feeClose,funding_cashflow:funding,realized_pnl:net,cash_after:rt.cash,equity_after:rt.cash,
+    metadata:{server_v8:true,side:p.side,funding_cashflow:funding,funding_settlements:p.funding_settlements??[],funding_model:"SETTLED_RATE_MARK_PRICE",exit_reason:resolution.reason==="AMBIGUOUS"?"AMBIGUOUS_CONSERVATIVE_STOP":resolution.reason,thesis_id:p.thesis_id,setup:p.setup,venue:p.venue,policy_version:p.policy_version,resolution,execution_model:"dual_shadow_perp_barrier_v83",fee_bps:p.fee_bps,slippage_bps:p.slippage_bps,leverage:p.leverage,margin:p.margin}
   };
 }
