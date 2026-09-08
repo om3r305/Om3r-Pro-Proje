@@ -84,7 +84,7 @@ export function sizePosition(
   if(!(cash>0&&tradeNotional>0&&entry>0&&stop>0&&validStop)||cal.unavailable)return null;
   const cold=cal.p===null||cal.samples<MIN_CAL_SAMPLES;
   if(cold&&leverage!==1)return null;
-  const maxNotional=Math.min(tradeNotional,cash*(cold?.08:.20));
+  const maxNotional=Math.min(tradeNotional,cash*(cold ? 0.08 : 0.20));
   const maxMargin=Math.min(cash,maxNotional/leverage);
   const alloc=cal.p===null
     ? (raw>=.78?1:raw>=.70?.75:raw>=.64?.55:.35)
