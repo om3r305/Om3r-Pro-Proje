@@ -42,3 +42,12 @@ Head: c924c42cb9125ba82187b107d6e86a5563a5bed7. 12 yeni yerel davranış testi v
 Seçili hedefin pivot/equal-pair teyit zamanı ve kapalı mum temas/süpürülme/kapanışla aşılma geçmişi eklendi. Candidate yalnız gözlem alanlarıyla kopyalanır; hedef, veto, kimlik, boyut ve giriş uygunluğu korunur. Büyük/hatalı gözlem verisi mevcut kararı engellemez; boyut sınırı mevcut SQL zarfını korur. Yeni tablo veya migration yok.
 Durum: review-ready; henüz merge/deploy edilmedi. Önceki 'gözlem katmanını yaz' adımı tamamlandı; yeniden yazma.
 Sıradaki tek paket: PR #81 başının değişmediğini doğrula, merge ve mevcut worker'a yeni level_observation.ts bağımlılığıyla yayınla; ETHUSDT SHADOW sözleşmesini ve gözlem alanlarının kayda geldiğini kontrol et. Mevcut session/kasa/cron korunmalı; bu tanısal katman için yeni session veya karar revizyonu gerekmiyor. Ardından gerçek adaylarda hedef statüsü/veto ilişkisini ölç. Politika eşiklerini veya eski seviyelerin geçerliliğini bu yayınla değiştirme.
+
+
+## Yayın tamamlandı — 2026-09-09 15:02 UTC doğrulaması
+PR #81 merge: 5b31cd76222ab74b487102e629f5a38ae45435c3. DIP arayüz commit: 7887a4a7104724e3cccba9a1994f16fa34aebdfc.
+Worker observation katmanı Supabase sürüm 12 olarak yayınlandı. Vercel production deployment dpl_EKyBmHX5PLYUzRYgdFiqRx4RXSVi READY; monster-coins-pro-seven.vercel.app alias bağlı. /dip ve /dip-v83-observation-ui.js HTTP 200; panel ve yeni script yayında.
+Arayüz: Türkçe bekleme nedenleri, hedef mesafesi ve modellenen maliyet, bağımsız kalibrasyon örneği ve seçili hedef geçmişi. Açık pozisyon planı ile aday gözlemi ayrılır; ham puan başarı olasılığı sayılmaz. Önceki tur node render kontrolü WAIT/yüzdeler/hedef geçmişi/escaping/açık pozisyon ayrımını geçti. Bu kontrolde kullanıcı anahtarıyla tam tarayıcı oturumu açılmadı.
+Canlı doğrulama: aynı session dip-v83-20260909063856-c6a03008; state_version 503, güncel heartbeat, status OK, cash 500, trades 0, açık pozisyon yok; SHADOW true/live false. 57 karar kaydında gözlem ve dolu seviye geçmişi var. Runtime'da NO_SIGNAL anında levels=[] olması normaldir; geçmiş karar kayıtlarında veri teyit edildi.
+Control Center statik dosyaları önceki canlı içerikle korundu; sw.js repo ile farklı olduğundan önceki canlı içerik yayın paketinde özellikle korundu. Session/kasa/cron/DB şeması değiştirilmedi.
+Önceki 'merge/deploy et' adımı tamamlandı. Sıradaki iş: yeni gözlemli benzersiz episode'larda hedef geçmişi ve veto ilişkisini ölçmek; aynı yayını veya eski testleri tekrar yapma. Kullanıcı artık canlı DIP ekranında test edebilir.
