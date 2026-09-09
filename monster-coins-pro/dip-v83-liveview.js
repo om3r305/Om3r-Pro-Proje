@@ -110,9 +110,9 @@
 
   renderChart=function(){
     const cv=$('candleCanvas'),box=$('chartWrap');if(!cv||!box)return;
-    const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=Math.max(620,box.clientWidth),h=Math.max(560,box.clientHeight);
+    const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=Math.max(240,box.clientWidth),h=Math.max(280,box.clientHeight);
     cv.width=w*dpr;cv.height=h*dpr;cv.style.width=w+'px';cv.style.height=h+'px';ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);ctx.fillStyle='#07101a';ctx.fillRect(0,0,w,h);
-    const raw=model.chart?.candles||[],a=raw.slice(-70).map(c=>({t:num(c.t),o:num(c.o),h:num(c.h),l:num(c.l),c:num(c.c),v:num(c.v)}));
+    const raw=model.chart?.candles||[],a=raw.slice(-(w<650?45:70)).map(c=>({t:num(c.t),o:num(c.o),h:num(c.h),l:num(c.l),c:num(c.c),v:num(c.v)}));
     if(!a.length){ctx.fillStyle='#91a2b8';ctx.font='14px system-ui';ctx.fillText(model.chartError||'Binance USD-M Perp 1m bekleniyor…',20,35);return;}
     const t=thesis()||{},S=t.structure||{},s1=S.s1||{},s5=S.s5||{},pos=position();
     const entry=Number(pos?.entry||0),target=Number(pos?.target||0),stop=Number(pos?.stop||0),h1=pvt(s1,'lastHigh'),l1=pvt(s1,'lastLow'),h5=pvt(s5,'lastHigh'),l5=pvt(s5,'lastLow');
