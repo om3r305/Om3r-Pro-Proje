@@ -43,7 +43,7 @@
     return d;
   };
 
-  // Görsel grafik, kullanıcının Binance ekranıyla aynı Spot ETHUSDT 1m mum kaynağını kullanır.
+  // REST seeds USD-M candle history; the public stream updates the display.
   // Brian karar/pozisyon motoru server tarafında USD-M Perpetual olarak kalır.
   loadChart=async function(){
     if(chartBusy||document.hidden)return;chartBusy=true;
@@ -59,7 +59,7 @@
 
   renderThesis=function(){
     const host=$('thesisBox'),pos=position(),t=thesis();
-    if(!pos){baseRenderThesis();return;}
+    if(!pos){baseRenderThesis();if(t?.direction==='WAIT'){const entry=host.querySelector('.thesis-levels > span');if(entry)entry.textContent='Giriş planı yok · sinyal bekleniyor';}return;}
     const side=String(pos.side||'').toUpperCase(),dc=side==='LONG'?'up':'down';
     const engineCurrent=Number(model?.snapshot?.state?.symbols?.ETHUSDT?.price||pos.market_price||0);
     const visualCurrent=Number(model?.chart?.last_price||0);
@@ -134,7 +134,7 @@
     ctx.fillStyle='#6f8197';ctx.font='10px system-ui';for(let i=0;i<5;i++){const idx=Math.min(a.length-1,Math.round((a.length-1)*i/4)),x=L+xw*idx+xw/2,d=new Date(a[idx].t);ctx.fillText(d.toLocaleTimeString('de-DE',{timeZone:'Europe/Berlin',hour:'2-digit',minute:'2-digit'}),Math.max(L,Math.min(w-R-36,x-18)),h-10);}
     const badge=$('chartSource');if(badge)badge.textContent='BINANCE USD-M PERP · 1m';
     const title=document.querySelector('.chartHead .title');if(title)title.textContent='ETHUSDT · Binance USD-M Perp · 1m';
-    const note=document.querySelector('.chartHead .note');if(note)note.textContent='Eski Brian görünümü: gerçek 1m mum + 1m/5m yapı + BUY/SELL + aktif Entry/TP/Stop. Motor: USD-M Perpetual.';
+    const note=document.querySelector('.chartHead .note');if(note)note.textContent='Son işlem fiyatı · USD-M Perpetual · 1 dakika mumları';
     $('lastPrice').textContent=livePx(last);
   };
 
@@ -157,8 +157,4 @@
     const pos=position();if(pos){for(const id of ['startBtn','restartBtn']){const b=$(id);if(b){b.disabled=true;b.title='Açık pozisyon kapanana kadar session kontrolü kilitli.';}}}
   };
 
-  window.addEventListener('load',()=>setInterval(()=>{
-    const bar=$('freshnessBar');if(!bar)return;const sr=runtime(),marketAge=Math.max(0,Math.round((Date.now()-(model.chartAt||Date.now()))/1000)),workerAge=ageSec(sr?.generated_at||model?.snapshot?.observed_at),thesisAge=ageSec(thesis()?.generated_at||thesis()?.decision_time||sr?.generated_at);
-    bar.textContent=`Grafik PERP 1m ${marketAge} sn · Thesis ${thesisAge==null?'—':thesisAge+' sn'} · Worker ${workerAge==null?'—':workerAge+' sn'} · Motor karar 60 sn`;bar.style.color=workerAge!=null&&workerAge>135?'#ff6379':'#8ea1b8';
-  },500));
 })();
