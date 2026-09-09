@@ -24,7 +24,7 @@ jobs:
       - name: Type-check V8 entrypoints and shared contracts
         run: deno check supabase/functions/brian-dip-dual-shadow-worker/index.ts supabase/functions/brian-dip-shadow-worker/index.ts supabase/functions/brian-dip-foresight/index.ts supabase/functions/brian-dip-trader/index.ts
       - name: V8 deterministic behavior and hard SHADOW tests
-        run: deno test --allow-read supabase/functions/_shared/dip_v8.test.ts supabase/functions/brian-dip-shadow-worker/worker.test.ts supabase/functions/brian-dip-dual-shadow-worker/decision.test.ts
+        run: deno test --allow-read supabase/functions/_shared/dip_v8.test.ts supabase/functions/brian-dip-shadow-worker/worker.test.ts supabase/functions/brian-dip-dual-shadow-worker/decision.test.ts supabase/functions/brian-dip-dual-shadow-worker/level_observation.test.ts
       - name: Browser script syntax
         run: |
           node --check monster-coins-pro/dip-foresight-v7.js
@@ -55,3 +55,4 @@ jobs:
         run: |
           python -m pytest -q tests/test_brian_dip_v8_postgres.py
           python -m pytest -q tests/test_brian_dip_v83_postgres.py
+
