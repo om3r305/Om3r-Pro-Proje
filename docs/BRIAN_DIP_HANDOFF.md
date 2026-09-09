@@ -23,3 +23,8 @@ Aktif session başka oturumda açılmış: dip-v83-20260909063856-c6a03008 (06:3
 Bu onarım paketini tekrar yazma / eski f59d5bc sürümündeki CI hatalarını tekrar düzeltme: sonraki PR head bunları çözmüş.
 Bir sonraki iş, kullanıcı istediğinde yeni revizyondaki benzersiz episode/forecast sonuçlarını ve veto dağılımını dar kapsamlı ölçmek. Meta-labeling, akış uzmanlığı ve %70 başarı henüz kanıtlanmış özellikler değildir. Önce temiz prospektif kanıt; yeni coin/indikatör veya agresif boyut ekleme.
 Her paket sonunda bu dosyada commit, test, gerçek yayın ve sonraki tek adımı güncelle. Geçici scratch checkout'u canlı sürüm sanma.
+
+
+## İlk ölçüm tamamlandı — 2026-09-09 09:56 UTC
+64 aday / 42 benzersiz episode; 0 ekonomik olarak uygun giriş. Ortanca hedef 5.855 bps, modellenen maliyet 22.942 bps. Resolver zaman kontrollerinde bu örneklemde ihlal yok. Ayrıntı: [ilk ölçüm](BRIAN_DIP_MEASUREMENT_20260909.md).
+Sıradaki tek iş: structure.ts hedef seviyelerinin süpürülme/kırılma yaşam döngüsünü karar anı verisiyle replay testinde sınamak; doğrudan eşik gevşetmek veya meta-labeling eklemek değil. Üretim bu ölçüm sırasında değiştirilmedi.
