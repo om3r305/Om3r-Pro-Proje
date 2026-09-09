@@ -34,3 +34,11 @@ Sıradaki tek iş: structure.ts hedef seviyelerinin süpürülme/kırılma yaşa
 8 sentetik test mevcut kod üzerinde geçti: dokunulmamış, fitille aşılmış ve kapanışla aşılmış eski pivotların LONG/SHORT hedef seçiminde ayrılmadığı yeniden üretildi. Pivot teyit zamanı ve karar-anı prefix kontrolleri de geçti. Canlı performansa etkisi ve equal-level çiftleri henüz sınanmadı.
 Kanıt: [seviye replay raporu](BRIAN_DIP_LEVEL_REPLAY_20260909.md); test: tests/replay/dip_v83_level_lifecycle.test.ts.
 Sıradaki tek paket: işlem kararını değiştirmeyen, teyit sonrası seviye yaşam döngüsü gözlem alanları ve equal-level nedensellik testleri. Önceki replay'i baştan yazma; eski seviyeleri toptan silme, uzak hedefe atlama veya risk eşiğini gevşetme. Bu tur üretime müdahale edilmedi.
+
+
+## Gözlem katmanı hazır — PR #81
+https://github.com/om3r305/Om3r-Pro-Proje/pull/81
+Head: c924c42cb9125ba82187b107d6e86a5563a5bed7. 12 yeni yerel davranış testi ve decision.ts type-check başarılı; PR üzerindeki sekiz CI kontrolünün tamamı başarılı (V8 behavior ve gerçek PostgreSQL dahil).
+Seçili hedefin pivot/equal-pair teyit zamanı ve kapalı mum temas/süpürülme/kapanışla aşılma geçmişi eklendi. Candidate yalnız gözlem alanlarıyla kopyalanır; hedef, veto, kimlik, boyut ve giriş uygunluğu korunur. Büyük/hatalı gözlem verisi mevcut kararı engellemez; boyut sınırı mevcut SQL zarfını korur. Yeni tablo veya migration yok.
+Durum: review-ready; henüz merge/deploy edilmedi. Önceki 'gözlem katmanını yaz' adımı tamamlandı; yeniden yazma.
+Sıradaki tek paket: PR #81 başının değişmediğini doğrula, merge ve mevcut worker'a yeni level_observation.ts bağımlılığıyla yayınla; ETHUSDT SHADOW sözleşmesini ve gözlem alanlarının kayda geldiğini kontrol et. Mevcut session/kasa/cron korunmalı; bu tanısal katman için yeni session veya karar revizyonu gerekmiyor. Ardından gerçek adaylarda hedef statüsü/veto ilişkisini ölç. Politika eşiklerini veya eski seviyelerin geçerliliğini bu yayınla değiştirme.
