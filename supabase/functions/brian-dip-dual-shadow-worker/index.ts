@@ -28,6 +28,6 @@ Deno.serve(async(req:Request)=>{
   try{
     await requireCronAuth(db,req);
     const lease=await withCollectorLease(db,"brian-dip-dual-shadow-worker-v82",async(owner,assertOwned)=>runWorker(await workerDb(),owner,assertOwned));
-    return Response.json(lease.contended?{status:"WAIT_LEASE",worker_version:"dip-v8.3-integrity-20260908.5"}:lease.value,{headers:{"cache-control":"no-store"}});
-  }catch(e){const message=e instanceof Error?e.message:String(e);console.error("dip-v83-dual",message);return Response.json({status:"FAILED_CLOSED",error:message,worker_version:"dip-v8.3-integrity-20260908.5",policy_version:POLICY_VERSION,shadow_only:true,live_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});}
+    return Response.json(lease.contended?{status:"WAIT_LEASE",worker_version:"dip-v8.3-execution-20260909.1"}:lease.value,{headers:{"cache-control":"no-store"}});
+  }catch(e){const message=e instanceof Error?e.message:String(e);console.error("dip-v83-dual",message);return Response.json({status:"FAILED_CLOSED",error:message,worker_version:"dip-v8.3-execution-20260909.1",policy_version:POLICY_VERSION,shadow_only:true,live_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});}
 });

@@ -84,7 +84,7 @@
     $('kpiEquityMeta').textContent=`Toplam hesap değeri · serbest nakit ${money(cash)} · başlangıç ${money(start)}`;
     $('kpiPnlMeta').textContent=`Realized ${pnl(real)} · açık ${pnl(unreal)}`;
     $('kpiOpenMeta').textContent=pos?`Kasa ${money(pos.margin??0)} · notional ${money(pos.notional)} · ${num(pos.leverage,1)}x`:'Pozisyon yok';
-    $('kpiWinMeta').textContent=`${wins} win / ${losses} loss`;$('kpiTradesMeta').textContent='kapalı round trips';$('kpiEngineMeta').textContent='Motor: USD-M PERP · 60 sn karar';
+    $('kpiWinMeta').textContent=`${wins} win / ${losses} loss`;$('kpiTradesMeta').textContent='kapalı round trips';$('kpiEngineMeta').textContent=`Motor: USD-M PERP · ${Number(runtime()?.decision_cadence_seconds)||15} sn karar`;
   };
 
   renderHealth=function(){
