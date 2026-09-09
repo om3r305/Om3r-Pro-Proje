@@ -28,3 +28,9 @@ Her paket sonunda bu dosyada commit, test, gerçek yayın ve sonraki tek adımı
 ## İlk ölçüm tamamlandı — 2026-09-09 09:56 UTC
 64 aday / 42 benzersiz episode; 0 ekonomik olarak uygun giriş. Ortanca hedef 5.855 bps, modellenen maliyet 22.942 bps. Resolver zaman kontrollerinde bu örneklemde ihlal yok. Ayrıntı: [ilk ölçüm](BRIAN_DIP_MEASUREMENT_20260909.md).
 Sıradaki tek iş: structure.ts hedef seviyelerinin süpürülme/kırılma yaşam döngüsünü karar anı verisiyle replay testinde sınamak; doğrudan eşik gevşetmek veya meta-labeling eklemek değil. Üretim bu ölçüm sırasında değiştirilmedi.
+
+
+## Seviye replay tamamlandı — 2026-09-09
+8 sentetik test mevcut kod üzerinde geçti: dokunulmamış, fitille aşılmış ve kapanışla aşılmış eski pivotların LONG/SHORT hedef seçiminde ayrılmadığı yeniden üretildi. Pivot teyit zamanı ve karar-anı prefix kontrolleri de geçti. Canlı performansa etkisi ve equal-level çiftleri henüz sınanmadı.
+Kanıt: [seviye replay raporu](BRIAN_DIP_LEVEL_REPLAY_20260909.md); test: tests/replay/dip_v83_level_lifecycle.test.ts.
+Sıradaki tek paket: işlem kararını değiştirmeyen, teyit sonrası seviye yaşam döngüsü gözlem alanları ve equal-level nedensellik testleri. Önceki replay'i baştan yazma; eski seviyeleri toptan silme, uzak hedefe atlama veya risk eşiğini gevşetme. Bu tur üretime müdahale edilmedi.
