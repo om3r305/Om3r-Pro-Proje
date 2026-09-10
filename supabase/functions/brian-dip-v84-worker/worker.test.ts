@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { assertReleaseSealed, runWorker } from "./worker.ts";
+import { assertReleaseSealed } from "./worker.ts";
 import { closePosition } from "./execution.ts";
 import type { Runtime } from "../_shared/dip_v84_contract.ts";
 
-Deno.test("unsealed GitHub release fails closed before database or market execution",async()=>{
-  const db=new Proxy({} as Record<string,unknown>,{get(){throw Error("DB_MUST_NOT_BE_TOUCHED_BEFORE_SOURCE_SEAL");}});
-  await assert.rejects(()=>assertReleaseSealed(db as any),/V84_RELEASE_NOT_SEALED_IN_SOURCE/);
-  await assert.rejects(()=>runWorker(db as any,{owner:"x",generation:1,assertOwned:()=>{}},(async()=>{throw Error("MARKET_MUST_NOT_BE_TOUCHED");}) as typeof fetch),/V84_RELEASE_NOT_SEALED_IN_SOURCE/);
+Deno.test("sealed source still fails closed on release-registry mismatch",async()=>{
+  const chain:any={
+    select:()=>chain,eq:()=>chain,maybeSingle:async()=>({error:null,data:{status:"SEALED",logic_hash:"wrong",strategy_manifest_hash:"wrong",calibration_family_id:"wrong",db_contract_version:"wrong"}}),
+  };
+  const db:any={from:()=>chain};
+  await assert.rejects(()=>assertReleaseSealed(db),/V84_RELEASE_REGISTRY_MISMATCH/);
 });
 
 Deno.test("ordered trade trigger cannot replace the frozen stop barrier",()=>{

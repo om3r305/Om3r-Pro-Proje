@@ -24,7 +24,7 @@ import { getMarket, positionFunding, pricePath } from "./market.ts";
 type Lease={owner:string;generation:number;assertOwned:()=>void};
 
 export async function assertReleaseSealed(db:SupabaseClient):Promise<void>{
-  if(LOGIC_HASH==="UNSEALED_GITHUB_ONLY")throw Error("V84_RELEASE_NOT_SEALED_IN_SOURCE");
+  if(String(LOGIC_HASH)==="UNSEALED_GITHUB_ONLY")throw Error("V84_RELEASE_NOT_SEALED_IN_SOURCE");
   const q=await db.from("brian_dip_v84_releases").select("status,logic_hash,strategy_manifest_hash,calibration_family_id,db_contract_version").eq("release_id",RELEASE_ID).maybeSingle();
   if(q.error||!q.data)throw Error("V84_RELEASE_REGISTRY_UNAVAILABLE");
   if(q.data.status!=="SEALED"||q.data.logic_hash!==LOGIC_HASH||q.data.strategy_manifest_hash!==STRATEGY_MANIFEST_HASH||q.data.calibration_family_id!==CALIBRATION_FAMILY_ID)throw Error("V84_RELEASE_REGISTRY_MISMATCH");
