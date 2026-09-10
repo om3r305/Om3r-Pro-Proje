@@ -1,5 +1,17 @@
 # Brian DIP — devam kaydı
 
+## Güncel yayın — 2026-09-10 03:29 UTC
+Bu bölüm alttaki eski tarihli yayın bilgilerinden daha yenidir.
+- PR #83 merged; merge commit 38522c35800ae5e7fd8a224b0ff89ea23e0b9a95, tested head 182113df2dd0bf87d45f6b1462fb4cc33d52377e. 28 offline davranış testi ve 9 GitHub kontrolü başarılı (v8-postgres dahil).
+- Supabase worker dip-v8.3-execution-20260909.1, function version 13. Job 30 (adı hâlâ brian-dip-shadow-worker-v83-1m) schedule '15 seconds'; resolver job 31 bir dakika. Yeniden deploy/cron değişikliği gerekmiyor.
+- Vercel production dpl_5bjd2XANi5tXgwcRxiCFDZQyy4d5 READY; https://monster-coins-pro-seven.vercel.app/dip . DIP HTML, stream/liveview/observation JS HTTP 200 ve kaynakla birebir doğrulandı.
+- Devam arasında başka yayın dpl_5cPJmDxRm9znv6JAT28Tous89FeC DIP JS dosyalarını kısaltmıştı. Test edilmiş PR83 DIP paketi yayınlandı. O yayındaki mevcut index.html, dashboard.js/css, brand/logo/manifest korundu; canlıda 404 olan sw.js ve alpha.html yeniden eklenmedi. Control Center'ın repo sürümünü körlemesine yayınlama.
+- Aynı session: dip-v83-20260909200543-0f9ec99b. 03:28 UTC state_version1565, cash499.88299717728887, açık pozisyon yok, 1 kapanış/0 win/1 loss. Reset yapılmadı. status OK, market_error/path_error null, ETHUSDT, shadow_only true, live_execution false. Son beş dakikada20cron tetiklemesi succeeded (bu tek başına tüm HTTP yanıtlarının başarı kanıtı değildir).
+- Düzeltmeler: immutable ENTRY_REEVALUATION + parent forecast; kalıcı episode/atomic/lease koruması; gerçekleşen açılış fiyatındaki sürtünmeyi tekrar kesmeyen FILL_TO_FILL_V1 ekonomik R:R; net başabaş olasılığı kapısı; mum cache; canlı quote ayrı güncelleme, canvas100ms son güncelleme garantisi, sekmede WS korunması.
+- Sınırlar: 15 saniye motor değerlendirmesi, anlık tick execution değildir. Sealed-bar çıkış ve resolver1m korunuyor. fee_bps=10 doğrulanmış gerçek hesap tarifesi olmadığı için değiştirilmedi. Uzak continuation hedefi OBSERVATION_ONLY; yakın engeli atlayarak otomatik işlem yapılmaz. Binance karşılaştırması USD-M ETHUSDT last price ve1m ile yapılmalı; Spot/mark farklıdır. Kullanıcının cihazındaki uçtan uca gecikme bu yayında ölçülmedi.
+- Sonraki araştırma: doğru ücret tarifesi, yeni decision/ledger ile veto ve kaçan fırsat karşılaştırması. İşlem açtırmak için güvenlik/risk eşiği gevşetilmedi. Performans/edge kanıtlanmış değildir.
+
+
 Son doğrulama: 2026-09-09 09:54 UTC.
 
 ## Kırmızı çizgiler
