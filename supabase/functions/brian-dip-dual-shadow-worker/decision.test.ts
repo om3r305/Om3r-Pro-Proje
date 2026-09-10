@@ -61,3 +61,26 @@ Deno.test("dual worker rejects live execution and non ETH universe",()=>{
  const cfg={engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,symbols:["ETHUSDT"],shadow_only:true,live_execution:false,browser_execution:false,server_authoritative:true,allow_shadow_short:true,max_shadow_leverage:2,execution_mode:"SHADOW_PAPER"};
  validateSession(cfg);assert.throws(()=>validateSession({...cfg,live_execution:true}),/SHADOW/);assert.throws(()=>validateSession({...cfg,symbols:["ETHUSDT","XRPUSDT"]}),/RESTART/);
 });
+
+import { entryGuard } from "./entry_guard.ts";
+import type { Bar } from "../_shared/dip_v8_dual.ts";
+function bars(values:number[]):Bar[]{return values.map((c,i)=>({t:(i+10)*60000,ct:(i+11)*60000-1,o:c,h:c+.1,l:c-.1,c,v:1}));}
+Deno.test("real 2478 reversal: friction cannot clear 2478.30 resistance and jump target",()=>{
+ const s=structure([2478.12,2478.30,2496.31],"H");
+ assert.equal(selectEconomicTarget("UP",2478.14,22.6,[s]),2478.30);
+ const rows=bars([2471.16,2473,2474,2475,2476,2476.5,2477,2478.14]);
+ const g=entryGuard("UP","EARLY_REVERSAL",2478.14,2478.387814,rows,[s],1.177,2e6);
+ assert.ok(g.veto.includes("WAIT_RETEST"));assert.ok(g.veto.includes("ENTRY_TOO_LATE"));
+});
+Deno.test("a tick over resistance cannot unlock distant target; mirrored SHORT also waits",()=>{
+ for(const sign of [1,-1]){const cv=(v:number)=>sign===1?v:200-v;
+ const s=structure([cv(100),cv(110)],sign===1?"H":"L");
+ const rows=bars([99,99.1,99.2,99.3,99.4,99.5,99.6,99.7].map(cv));
+ assert.ok(entryGuard(sign===1?"UP":"DOWN","BOS_RETEST",cv(100.1),cv(100.12),rows,[s],1,2e6).veto.includes("WAIT_RETEST"));}
+});
+Deno.test("two sealed closes followed by a holding retest can clear a crossed obstacle",()=>{
+ const s=structure([100,110],"H");const rows=bars([99,99,99,99,99,100.4,100.5,100.3]);rows[7].l=100.05;
+ assert.deepEqual(entryGuard("UP","BOS_RETEST",100.4,100.42,rows,[s],1,2e6).veto,[]);
+ rows[7].ct=3e6;
+ assert.ok(entryGuard("UP","BOS_RETEST",100.4,100.42,rows,[s],1,2e6).veto.includes("ENTRY_DATA_INCOMPLETE"));
+});
