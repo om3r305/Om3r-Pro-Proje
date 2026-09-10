@@ -1,0 +1,62 @@
+name: Brian DIP V8.4 Package 1
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - "BRIAN_DIP_V84_FINAL_SPEC.md"
+      - "supabase/functions/_shared/dip_v84*"
+      - "supabase/functions/brian-dip-v84-*/**"
+      - "supabase/migrations/*v84*.sql"
+      - ".github/workflows/brian-dip-v84-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v84-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.1.4"
+      - name: V8.3 protected-source freeze
+        shell: bash
+        run: |
+          git fetch origin brian-2026
+          changed="$(git diff --name-only origin/brian-2026...HEAD)"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(supabase/functions/_shared/dip_v8_dual\.ts|supabase/functions/brian-dip-dual-shadow-worker/|supabase/functions/brian-dip-foresight/)'; then
+            echo "V8.4 PR must not modify frozen V8.3 source artifacts"
+            exit 1
+          fi
+      - name: No exchange order route
+        shell: bash
+        run: |
+          if grep -RInE '/fapi/v[0-9]+/(order|batchOrders)|/api/v[0-9]+/order' supabase/functions/brian-dip-v84-* supabase/functions/_shared/dip_v84*; then
+            echo "Exchange order route found in V8.4"
+            exit 1
+          fi
+      - name: No live execution enablement
+        shell: bash
+        run: |
+          if grep -RInE 'live_execution["'"']?[[:space:]]*[:=][[:space:]]*true|browser_execution["'"']?[[:space:]]*[:=][[:space:]]*true' supabase/functions/brian-dip-v84-* supabase/functions/_shared/dip_v84*; then
+            echo "Live/browser execution enablement found"
+            exit 1
+          fi
+      - name: Type-check V8.4 entrypoints
+        run: deno check supabase/functions/brian-dip-v84-worker/index.ts supabase/functions/brian-dip-v84-foresight/index.ts
+      - name: V8.4 deterministic contract tests
+        run: deno test --allow-read supabase/functions/_shared/dip_v84_contract.test.ts supabase/functions/brian-dip-v84-worker/cost.test.ts supabase/functions/brian-dip-v84-worker/levels.test.ts
+      - name: Migration must remain additive against V8.3
+        shell: bash
+        run: |
+          file=supabase/migrations/20260910090000_brian_dip_v84_package1_foundation.sql
+          if grep -Ein '^[[:space:]]*(alter|drop)[[:space:]].*brian_dip_v8_|^[[:space:]]*create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.brian_dip_v82_' "$file"; then
+            echo "Migration mutates a frozen V8.3/V8.2 object"
+            exit 1
+          fi
+      - name: Patch formatting
+        run: git diff --check origin/brian-2026...HEAD
