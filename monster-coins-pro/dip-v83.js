@@ -132,4 +132,3 @@ async function init(){
   setInterval(loadChart,2000);setInterval(loadStatus,5000);setInterval(renderHealth,1000);
 }
 window.addEventListener('load',init);
-
