@@ -32,6 +32,79 @@ jobs:
             echo "V8.4 PR must not modify frozen V8.3 source artifacts"
             exit 1
           fi
+      - name: Public-repo high-confidence secret history scan
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, json, re, subprocess, sys
+
+          proc = subprocess.Popen(
+              ["git","log","--all","--no-color","--format=@@COMMIT %H","-p","--unified=0","--no-ext-diff"],
+              stdout=subprocess.PIPE, text=True, errors="replace"
+          )
+          commit = "unknown"
+          path = "unknown"
+          hits = set()
+          env_paths = set()
+
+          telegram = re.compile(r'(?<![A-Za-z0-9_])\d{8,12}:[A-Za-z0-9_-]{30,}(?![A-Za-z0-9_])')
+          github_token = re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b')
+          private_key = re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
+          jwt = re.compile(r'\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b')
+          literal_assignment = re.compile(
+              r'(?i)\b(SUPABASE_(?:SERVICE_ROLE|SECRET)_KEY|BINANCE_(?:API_)?(?:KEY|SECRET)|TELEGRAM_(?:BOT_)?TOKEN)\b\s*[=:]\s*["\']?([^"\'\s,;}{]{16,})'
+          )
+
+          def placeholder(value: str) -> bool:
+              u = value.upper()
+              return any(x in u for x in ("YOUR_","EXAMPLE","PLACEHOLDER","CHANGE_ME","REPLACE_ME","PROCESS.ENV","DENO.ENV","GETENV","${","<TOKEN>","<KEY>","<SECRET>"))
+
+          def service_role_jwt(token: str) -> bool:
+              try:
+                  middle = token.split('.')[1]
+                  middle += '=' * (-len(middle) % 4)
+                  payload = json.loads(base64.urlsafe_b64decode(middle.encode()).decode())
+                  return payload.get('role') == 'service_role'
+              except Exception:
+                  return False
+
+          assert proc.stdout is not None
+          for line in proc.stdout:
+              if line.startswith("@@COMMIT "):
+                  commit = line.split()[1].strip()
+                  continue
+              if line.startswith("+++ b/"):
+                  path = line[6:].strip()
+                  low = path.lower()
+                  name = low.rsplit('/',1)[-1]
+                  if name == '.env' or (name.startswith('.env.') and name not in ('.env.example','.env.sample','.env.template')):
+                      env_paths.add((commit[:12], path))
+                  continue
+              if not line.startswith('+') or line.startswith('+++'):
+                  continue
+              text = line[1:]
+              if telegram.search(text): hits.add((commit[:12], path, 'TELEGRAM_TOKEN_SHAPE'))
+              if github_token.search(text): hits.add((commit[:12], path, 'GITHUB_TOKEN_SHAPE'))
+              if private_key.search(text): hits.add((commit[:12], path, 'PRIVATE_KEY_HEADER'))
+              for token in jwt.findall(text):
+                  if service_role_jwt(token): hits.add((commit[:12], path, 'SUPABASE_SERVICE_ROLE_JWT'))
+              for name, value in literal_assignment.findall(text):
+                  if not placeholder(value): hits.add((commit[:12], path, 'LITERAL_'+name.upper()))
+
+          rc = proc.wait()
+          if rc != 0:
+              print('git history scan failed to read history')
+              sys.exit(1)
+          if env_paths:
+              print('Historical .env-like paths found (path metadata only; review recommended):')
+              for c,p in sorted(env_paths): print(f'  {c} {p}')
+          if hits:
+              print('HIGH-CONFIDENCE SECRET MATERIAL FOUND IN PUBLIC GIT HISTORY (values suppressed):')
+              for c,p,k in sorted(hits): print(f'  {c} {p} {k}')
+              print('Rotate/revoke the affected credential; deleting the current file is not sufficient.')
+              sys.exit(1)
+          print('No high-confidence Supabase service-role / Binance / Telegram / private-key token found in scanned git patch history.')
+          PY
       - name: No exchange or account mutation surface
         shell: bash
         run: |
