@@ -32,13 +32,36 @@ jobs:
             echo "V8.4 PR must not modify frozen V8.3 source artifacts"
             exit 1
           fi
-      - name: No exchange order route
+      - name: No exchange or account mutation surface
         shell: bash
         run: |
-          if grep -RInE '/fapi/v[0-9]+/(order|batchOrders)|/api/v[0-9]+/order' supabase/functions/brian-dip-v84-* supabase/functions/_shared/dip_v84*; then
-            echo "Exchange order route found in V8.4"
-            exit 1
-          fi
+          python3 - <<'PY'
+          import pathlib, re, sys
+          roots = [pathlib.Path('supabase/functions/_shared')]
+          roots += list(pathlib.Path('supabase/functions').glob('brian-dip-v84-*'))
+          forbidden_rest = [
+              r'/fapi/v[0-9]+/(?:order|batchorders|openorders|allopenorders|leverage|margintype|positionside/dual|multiassetsmargin|account|balance|positionrisk)',
+              r'/api/v[0-9]+/(?:order|openorders|account)',
+          ]
+          forbidden_ws = (
+              'order.place','order.modify','order.cancel','order.cancelall',
+              'account.setleverage','account.setmargintype','account.setpositionside',
+          )
+          bad = []
+          for root in roots:
+              files = root.glob('dip_v84*') if root.name == '_shared' else root.rglob('*')
+              for path in files:
+                  if not path.is_file() or path.suffix not in {'.ts','.js','.json'} or path.name.endswith('.test.ts'):
+                      continue
+                  text = path.read_text(encoding='utf-8').lower()
+                  # Collapse ordinary JS/TS string concatenation so base + "/order" cannot evade the scan.
+                  normalized = re.sub(r'[\s+"\'`]+', '', text)
+                  if any(re.search(pattern, normalized, re.I) for pattern in forbidden_rest) or any(token in normalized for token in forbidden_ws):
+                      bad.append(str(path))
+          if bad:
+              print('Forbidden exchange/account execution surface found:', *sorted(set(bad)), sep='\n')
+              sys.exit(1)
+          PY
       - name: No live execution enablement
         shell: bash
         run: |
@@ -69,14 +92,34 @@ jobs:
         run: deno check supabase/functions/brian-dip-v84-worker/index.ts supabase/functions/brian-dip-v84-foresight/index.ts
       - name: V8.4 deterministic contract tests
         run: deno test --allow-read supabase/functions/_shared/dip_v84_contract.test.ts supabase/functions/brian-dip-v84-worker/cost.test.ts supabase/functions/brian-dip-v84-worker/levels.test.ts supabase/functions/brian-dip-v84-worker/worker.test.ts
-      - name: Migration must remain additive against V8.3
+      - name: V8.4 migrations cannot mutate frozen V8.x objects
         shell: bash
         run: |
-          for file in supabase/migrations/20260910090*_brian_dip_v84_*.sql; do
-            if grep -Ein '^[[:space:]]*(alter|drop)[[:space:]].*brian_dip_v8_|^[[:space:]]*create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.brian_dip_v82_' "$file"; then
-              echo "Migration mutates a frozen V8.3/V8.2 object: $file"
-              exit 1
-            fi
-          done
+          python3 - <<'PY'
+          import pathlib, re, sys
+          files = sorted(pathlib.Path('supabase/migrations').glob('*v84*.sql'))
+          if not files:
+              print('No V8.4 migration files found')
+              sys.exit(1)
+          # V8.4 names are allowed. Any brian_dip_v8*, v82*, v83* identifier is frozen.
+          protected = re.compile(r'\b(?:public\.)?brian_dip_v8(?!4)[a-z0-9_]*\b', re.I)
+          mutation_patterns = [
+              re.compile(r'\b(?:alter|drop|truncate)\b[\s\S]{0,180}?'+protected.pattern, re.I),
+              re.compile(r'\bcreate\s+or\s+replace\s+function\s+'+protected.pattern, re.I),
+              re.compile(r'\b(?:insert\s+into|update|delete\s+from)\s+'+protected.pattern, re.I),
+              re.compile(r'\bcreate\s+trigger\b[\s\S]{0,220}?\bon\s+'+protected.pattern, re.I),
+              re.compile(r'\b(?:grant|revoke)\b[\s\S]{0,220}?\bon\b[\s\S]{0,80}?'+protected.pattern, re.I),
+          ]
+          bad = []
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+              text = re.sub(r'--[^\n]*', '', text)
+              if any(pattern.search(text) for pattern in mutation_patterns):
+                  bad.append(str(path))
+          if bad:
+              print('V8.4 migration mutates a frozen V8.x/V8.2/V8.3 object:', *bad, sep='\n')
+              sys.exit(1)
+          PY
       - name: Patch formatting
         run: git diff --check origin/brian-2026...HEAD
