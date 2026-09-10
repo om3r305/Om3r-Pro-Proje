@@ -1,6 +1,6 @@
 import { hash, type Direction, type Struct } from "../_shared/dip_v84_contract.ts";
 
-export type LevelFreshness="UNTOUCHED"|"TOUCHED"|"SWEPT"|"CLOSE_CROSSED"|"REVALIDATED";
+export type LevelFreshness="NOT_EVALUATED"|"UNTOUCHED"|"TOUCHED"|"SWEPT"|"CLOSE_CROSSED"|"REVALIDATED";
 export type StructuralLevel={
   level_id:string;
   price:number;
@@ -25,7 +25,8 @@ function normalizedPrice(price:number,tickSize:number):number{
 
 async function makeLevel(input:Omit<StructuralLevel,"level_id"|"freshness">):Promise<StructuralLevel>{
   const level_id=await hash([input.kind,input.origin,input.timeframe,input.normalized_price,...input.source_times,input.confirmed_at].join("|"));
-  return{...input,level_id,freshness:"UNTOUCHED"};
+  // Freshness requires a separate sealed path observation. Do not claim UNTOUCHED before that work ran.
+  return{...input,level_id,freshness:"NOT_EVALUATED"};
 }
 
 export async function collectStructuralLevels(structs:Struct[],tickSize:number,signalAt:number):Promise<StructuralLevel[]>{
