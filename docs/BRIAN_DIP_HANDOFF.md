@@ -1,5 +1,13 @@
 # Brian DIP — devam kaydı
 
+## 2026-09-10 08:33 UTC — PR84/85 tamamlandı
+- PR84 merge f423e540887bb0fe9da64fd3984b7daab369bf07: structural target raw midpoint kullanır; yerel geçilen pivotlarda kapanış+retest kapısı, EARLY_REVERSAL >2ATR son8 mum uzaklaşma vetosu. Bunlar konservatif başlangıç eşikleri; ileri görüş/edge kanıtı değil. Decision revision dip-v8-entry-zone-20260910.1. Eski kararlar silinmedi.
+- Kasa taslağı polling ile ezilmez. Yeni tutar 'Yeni kasayla session başlat' ile yeni session'a uygulanır; mevcut bakiyeye müdahale edilmez. Açık pozisyon kilidi korunur. Frontend dpl_FiFPwYWQQynigrscRfG7JDqbVRWN önceki turda READY; bu tur /dip ve dip-v83.js HTTP200 ile kasa düzeltmesi doğrulandı. Control Center korunur.
+- PR85 merge eac1b77975a85e84849a96c7aeaaae14718bb5f2: eski workerDb Proxy kaldırıldı; normal Supabase query builder kullanılır. PAUSE sırasında eq is not a function /500 hatasının nedeni buydu. 15 decision testi geçti; PR85 sekiz CI kontrolü başarılı. Supabase function version15 yayınlandı, worker_version dip-v8.3-entry-zone-20260910.1.
+- Canlı iki ardışık yanıt 08:32:51 ve08:33:07UTC HTTP200 PAUSED, error null. Çalışıyor iddiası değil: kullanıcı session'ı PAUSE etmiş, korunmuştur. Session dip-v83-20260910033057-becded60, son bakiye499.84524395318203, pozisyon yok. Yeni session başlatılmadı.
+- Kullanıcı yeni kasa girip yeni session başlatabilir; aynı kasayla devam için Başlat. ETHUSDT SHADOW ONLY; gerçek emir yok. Phase3.7, ana Brian hafızası ve DB temizliği kapsam dışı.
+
+
 ## Güncel yayın — 2026-09-10 03:29 UTC
 Bu bölüm alttaki eski tarihli yayın bilgilerinden daha yenidir.
 - PR #83 merged; merge commit 38522c35800ae5e7fd8a224b0ff89ea23e0b9a95, tested head 182113df2dd0bf87d45f6b1462fb4cc33d52377e. 28 offline davranış testi ve 9 GitHub kontrolü başarılı (v8-postgres dahil).
