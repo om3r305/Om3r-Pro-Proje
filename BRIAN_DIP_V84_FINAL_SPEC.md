@@ -43,13 +43,15 @@ Every authoritative V8.4 decision is bound to:
 
 Unexpected mismatch is **FAIL_CLOSED**. A new calibration family is created only by an explicit new release; no automatic fallback to old evidence.
 
+The effective migration state, worker source and release registry must agree on the same canonical deep-hashed strategy manifest before sealing. A corrective migration may repair a PREPARED/UNSEALED V8.4 row, but may never silently repair a SEALED release.
+
 ## Calibration firewall
 
 Three states are mandatory:
 
 - `UNAVAILABLE`: RPC/contract/release/family failure. Entry prohibited.
 - `COLD_NEW_FAMILY`: valid family but insufficient execution fills. 1x cold shadow policy only. `CALIBRATION_NO_EDGE` is not evaluated.
-- `WARM`: sufficient valid execution evidence. Statistical gates may be evaluated only by a later explicitly promoted release.
+- `WARM`: sufficient valid execution evidence for statistics only in Package 1. Risk promotion still remains frozen.
 
 Forecast calibration never controls cold/warm state, sizing, max-notional, `CALIBRATION_NO_EDGE`, or leverage.
 
@@ -69,17 +71,21 @@ Entry is actual simulated fill: LONG = ask + opening slippage; SHORT = bid - ope
 
 Exit rule: executable-side conversion exactly once, exit slippage exactly once, opening fee once, closing fee once, funding once. Expected funding is an entry hurdle; realized settlements are ledger P&L.
 
+Ordered aggTrade/path evidence determines which frozen barrier happened first. The observed trigger/trade price is telemetry and does not silently replace the frozen target/stop execution barrier. Path trigger price and execution barrier price are stored separately.
+
 ## Immutable occurrence identity
 
 A 15-second evaluation is not automatically a new occurrence. A new sealed candle is not automatically a new occurrence.
 
-A new occurrence is allowed only when:
+A new market episode is allowed only when:
 
-- the prior occurrence became terminal, or
-- immutable thesis identity materially changed (`setup`, `direction`, trigger identity/pivot time, L1 identity, stop identity/source, material structure fingerprint), or
+- the prior episode became terminal, or
+- material trigger identity changed (`setup`, `direction`, trigger event/pivot identity, frozen stop identity/source), or
 - a declared structural state transition creates a child occurrence (future Package 2).
 
-OFI, book pressure or direction-score movement alone cannot rewrite or mint a thesis occurrence.
+OFI, book pressure, direction-score movement, the combined all-timeframe fingerprint, or price merely moving beyond the old L1 cannot mint a replacement episode.
+
+The first persisted occurrence freezes its L1 role/id and stop plan. A later evaluation of the same episode may enter only if the original occurrence was `L1_EXECUTABLE` and the current evaluation still matches the same frozen `l1_id`, target and stop. `L1_BLOCKING` can never become executable merely because price moved and a farther level became the new nearest forward level.
 
 ## Deterministic L1
 
@@ -152,6 +158,20 @@ Each forward evaluation has immutable `evaluation_protocol_id` with:
 - predeclared exclusions and failure conditions
 
 If the fixed window ends without sufficient data: `INCONCLUSIVE`. Extending the window requires a new protocol id.
+
+## PostgreSQL integration contract
+
+Before merge/seal, CI must apply every `*v84*.sql` migration in timestamp order to a real PostgreSQL instance and prove at minimum:
+
+- PREPARED release cannot START
+- wrong manifest cannot seal
+- canonical manifest is the effective installed contract
+- valid sealed SHADOW session initializes runtime/ledger
+- state-version mismatch fails closed
+- stale lease generation fails closed
+- database one-entry-per-episode invariant rejects a second entry
+- empty valid execution family is COLD, not UNAVAILABLE/WARM
+- installed `brian_dip_v84_commit(...)` uses the canonical manifest hash
 
 ## Package order
 
