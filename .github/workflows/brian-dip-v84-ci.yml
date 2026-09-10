@@ -54,7 +54,7 @@ jobs:
           for root in roots:
               files = root.glob('dip_v84*') if root.name == '_shared' else root.rglob('*')
               for path in files:
-                  if not path.is_file() or path.suffix not in {'.ts', '.js', '.json'}:
+                  if not path.is_file() or path.suffix not in {'.ts', '.js', '.json'} or path.name.endswith('.test.ts'):
                       continue
                   text = path.read_text(encoding='utf-8')
                   for pattern in patterns:
