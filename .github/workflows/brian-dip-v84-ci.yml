@@ -1,0 +1,198 @@
+name: Brian DIP V8.4 Package 1
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - "BRIAN_DIP_V84_FINAL_SPEC.md"
+      - "supabase/functions/_shared/dip_v84*"
+      - "supabase/functions/brian-dip-v84-*/**"
+      - "supabase/migrations/*v84*.sql"
+      - ".github/workflows/brian-dip-v84-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v84-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.1.4"
+      - name: V8.3 protected-source freeze
+        shell: bash
+        run: |
+          git fetch origin brian-2026
+          changed="$(git diff --name-only origin/brian-2026...HEAD)"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(supabase/functions/_shared/dip_v8_dual\.ts|supabase/functions/brian-dip-dual-shadow-worker/|supabase/functions/brian-dip-foresight/)'; then
+            echo "V8.4 PR must not modify frozen V8.3 source artifacts"
+            exit 1
+          fi
+      - name: Public-repo high-confidence secret history scan
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, json, re, subprocess, sys
+
+          proc = subprocess.Popen(
+              ["git","log","--all","--no-color","--format=@@COMMIT %H","-p","--unified=0","--no-ext-diff"],
+              stdout=subprocess.PIPE, text=True, errors="replace"
+          )
+          commit = "unknown"
+          path = "unknown"
+          hits = set()
+          env_paths = set()
+
+          telegram = re.compile(r'(?<![A-Za-z0-9_])\d{8,12}:[A-Za-z0-9_-]{30,}(?![A-Za-z0-9_])')
+          github_token = re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b')
+          private_key = re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')
+          jwt = re.compile(r'\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b')
+          literal_assignment = re.compile(
+              r'(?i)\b(SUPABASE_(?:SERVICE_ROLE|SECRET)_KEY|BINANCE_(?:API_)?(?:KEY|SECRET)|TELEGRAM_(?:BOT_)?TOKEN)\b\s*[=:]\s*["\']?([^"\'\s,;}{]{16,})'
+          )
+
+          def placeholder(value: str) -> bool:
+              u = value.upper()
+              return any(x in u for x in ("YOUR_","EXAMPLE","PLACEHOLDER","CHANGE_ME","REPLACE_ME","PROCESS.ENV","DENO.ENV","GETENV","${","<TOKEN>","<KEY>","<SECRET>"))
+
+          def service_role_jwt(token: str) -> bool:
+              try:
+                  middle = token.split('.')[1]
+                  middle += '=' * (-len(middle) % 4)
+                  payload = json.loads(base64.urlsafe_b64decode(middle.encode()).decode())
+                  return payload.get('role') == 'service_role'
+              except Exception:
+                  return False
+
+          assert proc.stdout is not None
+          for line in proc.stdout:
+              if line.startswith("@@COMMIT "):
+                  commit = line.split()[1].strip()
+                  continue
+              if line.startswith("+++ b/"):
+                  path = line[6:].strip()
+                  low = path.lower()
+                  name = low.rsplit('/',1)[-1]
+                  if name == '.env' or (name.startswith('.env.') and name not in ('.env.example','.env.sample','.env.template')):
+                      env_paths.add((commit[:12], path))
+                  continue
+              if not line.startswith('+') or line.startswith('+++'):
+                  continue
+              text = line[1:]
+              if telegram.search(text): hits.add((commit[:12], path, 'TELEGRAM_TOKEN_SHAPE'))
+              if github_token.search(text): hits.add((commit[:12], path, 'GITHUB_TOKEN_SHAPE'))
+              if private_key.search(text): hits.add((commit[:12], path, 'PRIVATE_KEY_HEADER'))
+              for token in jwt.findall(text):
+                  if service_role_jwt(token): hits.add((commit[:12], path, 'SUPABASE_SERVICE_ROLE_JWT'))
+              for name, value in literal_assignment.findall(text):
+                  if not placeholder(value): hits.add((commit[:12], path, 'LITERAL_'+name.upper()))
+
+          rc = proc.wait()
+          if rc != 0:
+              print('git history scan failed to read history')
+              sys.exit(1)
+          if env_paths:
+              print('Historical .env-like paths found (path metadata only; review recommended):')
+              for c,p in sorted(env_paths): print(f'  {c} {p}')
+          if hits:
+              print('HIGH-CONFIDENCE SECRET MATERIAL FOUND IN PUBLIC GIT HISTORY (values suppressed):')
+              for c,p,k in sorted(hits): print(f'  {c} {p} {k}')
+              print('Rotate/revoke the affected credential; deleting the current file is not sufficient.')
+              sys.exit(1)
+          print('No high-confidence Supabase service-role / Binance / Telegram / private-key token found in scanned git patch history.')
+          PY
+      - name: No exchange or account mutation surface
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          roots = [pathlib.Path('supabase/functions/_shared')]
+          roots += list(pathlib.Path('supabase/functions').glob('brian-dip-v84-*'))
+          forbidden_rest = [
+              r'/fapi/v[0-9]+/(?:order|batchorders|openorders|allopenorders|leverage|margintype|positionside/dual|multiassetsmargin|account|balance|positionrisk)',
+              r'/api/v[0-9]+/(?:order|openorders|account)',
+          ]
+          forbidden_ws = (
+              'order.place','order.modify','order.cancel','order.cancelall',
+              'account.setleverage','account.setmargintype','account.setpositionside',
+          )
+          bad = []
+          for root in roots:
+              files = root.glob('dip_v84*') if root.name == '_shared' else root.rglob('*')
+              for path in files:
+                  if not path.is_file() or path.suffix not in {'.ts','.js','.json'} or path.name.endswith('.test.ts'):
+                      continue
+                  text = path.read_text(encoding='utf-8').lower()
+                  # Collapse ordinary JS/TS string concatenation so base + "/order" cannot evade the scan.
+                  normalized = re.sub(r'[\s+"\'`]+', '', text)
+                  if any(re.search(pattern, normalized, re.I) for pattern in forbidden_rest) or any(token in normalized for token in forbidden_ws):
+                      bad.append(str(path))
+          if bad:
+              print('Forbidden exchange/account execution surface found:', *sorted(set(bad)), sep='\n')
+              sys.exit(1)
+          PY
+      - name: No live execution enablement
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          roots = [pathlib.Path('supabase/functions/_shared')]
+          roots += list(pathlib.Path('supabase/functions').glob('brian-dip-v84-*'))
+          bad = []
+          patterns = [
+              re.compile(r'live_execution["\']?\s*[:=]\s*true', re.I),
+              re.compile(r'browser_execution["\']?\s*[:=]\s*true', re.I),
+          ]
+          for root in roots:
+              files = root.glob('dip_v84*') if root.name == '_shared' else root.rglob('*')
+              for path in files:
+                  if not path.is_file() or path.suffix not in {'.ts', '.js', '.json'} or path.name.endswith('.test.ts'):
+                      continue
+                  text = path.read_text(encoding='utf-8')
+                  for pattern in patterns:
+                      if pattern.search(text):
+                          bad.append(str(path))
+                          break
+          if bad:
+              print('Live/browser execution enablement found:', *bad, sep='\n')
+              sys.exit(1)
+          PY
+      - name: Type-check V8.4 entrypoints
+        run: deno check supabase/functions/brian-dip-v84-worker/index.ts supabase/functions/brian-dip-v84-foresight/index.ts
+      - name: V8.4 deterministic contract tests
+        run: deno test --allow-read supabase/functions/_shared/dip_v84_contract.test.ts supabase/functions/brian-dip-v84-worker/cost.test.ts supabase/functions/brian-dip-v84-worker/levels.test.ts supabase/functions/brian-dip-v84-worker/worker.test.ts
+      - name: V8.4 migrations cannot mutate frozen V8.x objects
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          files = sorted(pathlib.Path('supabase/migrations').glob('*v84*.sql'))
+          if not files:
+              print('No V8.4 migration files found')
+              sys.exit(1)
+          # V8.4 names are allowed. Any brian_dip_v8*, v82*, v83* identifier is frozen.
+          protected = re.compile(r'\b(?:public\.)?brian_dip_v8(?!4)[a-z0-9_]*\b', re.I)
+          mutation_patterns = [
+              re.compile(r'\b(?:alter|drop|truncate)\b[\s\S]{0,180}?'+protected.pattern, re.I),
+              re.compile(r'\bcreate\s+or\s+replace\s+function\s+'+protected.pattern, re.I),
+              re.compile(r'\b(?:insert\s+into|update|delete\s+from)\s+'+protected.pattern, re.I),
+              re.compile(r'\bcreate\s+trigger\b[\s\S]{0,220}?\bon\s+'+protected.pattern, re.I),
+              re.compile(r'\b(?:grant|revoke)\b[\s\S]{0,220}?\bon\b[\s\S]{0,80}?'+protected.pattern, re.I),
+          ]
+          bad = []
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+              text = re.sub(r'--[^\n]*', '', text)
+              if any(pattern.search(text) for pattern in mutation_patterns):
+                  bad.append(str(path))
+          if bad:
+              print('V8.4 migration mutates a frozen V8.x/V8.2/V8.3 object:', *bad, sep='\n')
+              sys.exit(1)
+          PY
+      - name: Patch formatting
+        run: git diff --check origin/brian-2026...HEAD

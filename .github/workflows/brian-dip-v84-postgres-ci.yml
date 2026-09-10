@@ -1,0 +1,61 @@
+name: Brian DIP V8.4 PostgreSQL Integration
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - "supabase/migrations/*v84*.sql"
+      - "supabase/tests/brian_dip_v84_postgres.sql"
+      - ".github/workflows/brian-dip-v84-postgres-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v84_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v84_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: v84_ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify PostgreSQL client
+        run: psql --version
+      - name: Create Supabase-style database roles
+        shell: bash
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF; END $$;
+          DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF; END $$;
+          DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN; END IF; END $$;
+          SQL
+      - name: Apply all V8.4 migrations in order
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=( $(find supabase/migrations -maxdepth 1 -type f -name '*v84*.sql' | sort) )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No V8.4 migrations found"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Run V8.4 PostgreSQL contract tests
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/brian_dip_v84_postgres.sql
