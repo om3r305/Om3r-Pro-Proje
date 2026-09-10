@@ -60,7 +60,6 @@ export function referenceRoundtripCostBps(cost:CostContract,currentSpreadBps:num
 // then apply exit slippage exactly once. If a future caller already has a bid/ask, it
 // must call economicsFromExecutableExit instead of this conversion path.
 export function executableExitFromBarrier(direction:Direction,barrier:number,cost:CostContract):number {
-  if(!(barrier>0)&&Number.isFinite(barrier))throw Error("V84_INVALID_EXIT_BARRIER");
   if(!(barrier>0)||!Number.isFinite(barrier))throw Error("V84_INVALID_EXIT_BARRIER");
   const friction=(cost.expectedExitSpreadBps/2+cost.expectedExitSlippageBps)/10000;
   return barrier*(direction==="UP"?1-friction:1+friction);
