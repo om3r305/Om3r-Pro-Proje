@@ -84,3 +84,12 @@ Deno.test("two sealed closes followed by a holding retest can clear a crossed ob
  rows[7].ct=3e6;
  assert.ok(entryGuard("UP","BOS_RETEST",100.4,100.42,rows,[s],1,2e6).veto.includes("ENTRY_DATA_INCOMPLETE"));
 });
+
+Deno.test("paused worker reads original START and preserves runtime without market calls",async()=>{
+ const {runWorker}=await import('./worker.ts');
+ const cfg={engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,symbols:['ETHUSDT'],shadow_only:true,live_execution:false,browser_execution:false,server_authoritative:true,allow_shadow_short:true,max_shadow_leverage:2,execution_mode:'SHADOW_PAPER'};
+ const rt=initialRuntime(750);rt.cash=749;rt.realized=-1;
+ const db={from(table:string){const filters:Record<string,string>={};const q:any={select:()=>q,eq:(k:string,v:string)=>{filters[k]=v;return q;},order:()=>q,limit:()=>q,maybeSingle:async()=>({error:null,data:table==='brian_dip_v8_runtime'?{runtime:rt,state_version:4}:filters.event_kind==='START'?{event_kind:'START',session_id:'s',starting_equity:750,trade_notional:750,config:cfg}:{event_kind:'PAUSE',session_id:'s'}})};return q;}};
+ const result=await runWorker(db as any,'owner',()=>{},(async()=>{throw Error('paused worker must not fetch market')}) as typeof fetch);
+ assert.equal(result.status,'PAUSED');assert.equal(result.session_id,'s');assert.equal(rt.cash,749);assert.equal(rt.pos,null);
+});
