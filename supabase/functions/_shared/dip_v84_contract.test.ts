@@ -22,6 +22,7 @@ Deno.test("calibration has three distinct states and cold is not no-edge",()=>{
   const warm=executionCalibration({wins:30,losses:10,episodes:40,days:20,ambiguousLosses:2});
   assert.equal(warm.state,"WARM");assert.equal(warm.samples,40);assert.ok(warm.p!==null&&warm.lower!==null&&warm.upper!==null);
   assert.equal(executionPermission(warm).leverage,1);assert.equal(executionPermission(warm).maxNotionalFraction,.08);
+  assert.equal(executionPermission(warm).reason,"WARM_STATS_RISK_PROMOTION_FROZEN");
 });
 
 Deno.test("ambiguous execution losses are counted as losses, not null samples",()=>{
@@ -34,6 +35,7 @@ Deno.test("V8.4 session contract is strict shadow-only and isolated",()=>{
   validateSession(cfg);
   assert.throws(()=>validateSession({...cfg,live_execution:true}),/SHADOW/);
   assert.throws(()=>validateSession({...cfg,max_shadow_leverage:2}),/RISK/);
+  assert.throws(()=>validateSession({...cfg,allow_shadow_short:false}),/RISK/);
   assert.throws(()=>validateSession({...cfg,calibration_family_id:"legacy"}),/RELEASE/);
   assert.throws(()=>validateSession({...cfg,logic_hash:"wrong"}),/RELEASE/);
 });
