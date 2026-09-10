@@ -49,14 +49,15 @@ jobs:
       - name: Type-check V8.4 entrypoints
         run: deno check supabase/functions/brian-dip-v84-worker/index.ts supabase/functions/brian-dip-v84-foresight/index.ts
       - name: V8.4 deterministic contract tests
-        run: deno test --allow-read supabase/functions/_shared/dip_v84_contract.test.ts supabase/functions/brian-dip-v84-worker/cost.test.ts supabase/functions/brian-dip-v84-worker/levels.test.ts
+        run: deno test --allow-read supabase/functions/_shared/dip_v84_contract.test.ts supabase/functions/brian-dip-v84-worker/cost.test.ts supabase/functions/brian-dip-v84-worker/levels.test.ts supabase/functions/brian-dip-v84-worker/worker.test.ts
       - name: Migration must remain additive against V8.3
         shell: bash
         run: |
-          file=supabase/migrations/20260910090000_brian_dip_v84_package1_foundation.sql
-          if grep -Ein '^[[:space:]]*(alter|drop)[[:space:]].*brian_dip_v8_|^[[:space:]]*create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.brian_dip_v82_' "$file"; then
-            echo "Migration mutates a frozen V8.3/V8.2 object"
-            exit 1
-          fi
+          for file in supabase/migrations/20260910090*_brian_dip_v84_*.sql; do
+            if grep -Ein '^[[:space:]]*(alter|drop)[[:space:]].*brian_dip_v8_|^[[:space:]]*create[[:space:]]+or[[:space:]]+replace[[:space:]]+function[[:space:]]+public\.brian_dip_v82_' "$file"; then
+              echo "Migration mutates a frozen V8.3/V8.2 object: $file"
+              exit 1
+            fi
+          done
       - name: Patch formatting
         run: git diff --check origin/brian-2026...HEAD
