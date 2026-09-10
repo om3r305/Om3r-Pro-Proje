@@ -112,15 +112,17 @@ function renderChart(){
   $('lastPrice').textContent=px(last);$('chartSource').textContent='SERVER USD-M';
 }
 
-function render(){renderHealth();renderThesis();renderKpis();renderLog();renderChart();const running=model.session?.status==='RUNNING';if(model.session?.starting_equity>0)$('capitalInput').value=String(model.session.starting_equity);$('startBtn').disabled=running;$('pauseBtn').disabled=!running;$('capitalInput').disabled=running;}
+let capitalDraftDirty=false,capitalSession=null;
+function render(){renderHealth();renderThesis();renderKpis();renderLog();renderChart();const running=model.session?.status==='RUNNING';if(!capitalDraftDirty&&model.session?.session_id!==capitalSession&&model.session?.starting_equity>0){$('capitalInput').value=String(model.session.starting_equity);capitalSession=model.session.session_id;}$('startBtn').disabled=running;$('pauseBtn').disabled=!running;$('capitalInput').disabled=Boolean(position());}
 
 async function start(restart=false){
-  try{const capital=num($('capitalInput').value,500);if(!(capital>=10&&capital<=1e6))throw new Error('Kasa 10–1.000.000 USDT arasında olmalı.');const config={symbols:['ETHUSDT'],interval:'1m',fee_bps:10,slippage_bps:1,execution_mode:'SHADOW_PAPER',shadow_only:true,live_execution:false,browser_execution:false,server_authoritative:true,allow_shadow_short:true,max_shadow_leverage:2,market_source:'BINANCE_USDM_PERP',decision_cadence_seconds:60};await trader(restart?'restart':'start',{starting_equity:capital,trade_notional:capital,config,engine_token:engineToken()});toast(restart?'Temiz V8.3 session açıldı.':'V8.3 session başladı.');await loadStatus();}catch(e){toast(String(e.message||e),'err');}
+  try{const capital=Number($('capitalInput').value);if(!(capital>=10&&capital<=1e6))throw new Error('Kasa 10–1.000.000 USDT arasında olmalı.');const config={symbols:['ETHUSDT'],interval:'1m',fee_bps:10,slippage_bps:1,execution_mode:'SHADOW_PAPER',shadow_only:true,live_execution:false,browser_execution:false,server_authoritative:true,allow_shadow_short:true,max_shadow_leverage:2,market_source:'BINANCE_USDM_PERP',decision_cadence_seconds:15};await trader(restart?'restart':'start',{starting_equity:capital,trade_notional:capital,config,engine_token:engineToken()});capitalDraftDirty=false;capitalSession=null;toast(restart?'Yeni kasayla V8.3 session açıldı; önceki geçmiş korundu.':'V8.3 session başladı.');await loadStatus();}catch(e){toast(String(e.message||e),'err');}
 }
 async function pause(){try{await trader('pause');toast('V8.3 session pause edildi.');await loadStatus();}catch(e){toast(String(e.message||e),'err');}}
 
 function bind(){
   $('unlockBtn').onclick=async()=>{const k=$('unlockKey').value.trim();if(!k)return;localStorage.setItem(KEY_NAME,k);$('unlockKey').value='';showLock(false);await loadStatus();await loadChart();};
+  $('capitalInput').addEventListener('input',()=>{capitalDraftDirty=true;});
   $('startBtn').onclick=()=>start(false);$('restartBtn').onclick=()=>start(true);$('pauseBtn').onclick=pause;window.addEventListener('resize',renderChart);
 }
 
