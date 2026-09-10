@@ -1,0 +1,75 @@
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+
+const RELEASE_ID="dip-v84-package1-evidence-20260910.1";
+const CORS={
+  "access-control-allow-origin":"*",
+  "access-control-allow-headers":"content-type,x-brian-dashboard-key",
+  "access-control-allow-methods":"POST,OPTIONS",
+  "cache-control":"no-store",
+  "content-type":"application/json; charset=utf-8",
+};
+const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
+
+function json(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:CORS});}
+async function sha256(s:string){const b=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)));return [...b].map(x=>x.toString(16).padStart(2,"0")).join("");}
+function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
+async function authorize(req:Request){
+  const supplied=(req.headers.get("x-brian-dashboard-key")||"").trim();
+  if(!supplied)throw new Error("UNAUTHORIZED");
+  const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256,shadow_only,live_execution").eq("auth_id","control-v3").single();
+  if(q.error||!q.data)throw new Error("AUTH_UNAVAILABLE");
+  if(q.data.shadow_only!==true||q.data.live_execution!==false)throw new Error("AUTH_SAFETY_CONTRACT");
+  if(!same(await sha256(supplied),String(q.data.dashboard_key_sha256||"")))throw new Error("UNAUTHORIZED");
+}
+
+Deno.serve(async(req:Request)=>{
+  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
+  if(req.method!=="POST")return json({error:"METHOD_NOT_ALLOWED"},405);
+  try{
+    await authorize(req);
+    const body=await req.json().catch(()=>({}));
+    if(body?.action!=="status")return json({error:"V84_VIEW_READ_ONLY"},400);
+
+    const releaseQ=await db.from("brian_dip_v84_releases").select("release_id,status,logic_hash,strategy_manifest_hash,calibration_family_id,db_contract_version,manifest,sealed_at").eq("release_id",RELEASE_ID).single();
+    if(releaseQ.error||!releaseQ.data)throw new Error("V84_RELEASE_UNAVAILABLE");
+    const rel=releaseQ.data;
+    if(rel.status!=="SEALED"||rel.manifest?.shadow_only!==true||rel.manifest?.live_execution!==false||rel.manifest?.browser_execution!==false||Number(rel.manifest?.max_shadow_leverage)!==1)throw new Error("V84_RELEASE_SAFETY_MISMATCH");
+
+    const latestQ=await db.from("brian_dip_v84_session_events").select("*").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();
+    if(latestQ.error)throw new Error("V84_SESSION_READ_FAILED");
+    const latest=latestQ.data;
+    if(!latest)return json({release:rel,session:null,snapshot:null,events:[],metrics:{decisions:0,candidate_evaluations:0},shadow_only:true,live_execution:false,browser_execution:false});
+    const sid=String(latest.session_id);
+    const startQ=await db.from("brian_dip_v84_session_events").select("*").eq("session_id",sid).eq("event_kind","START").order("requested_at",{ascending:true}).order("event_id",{ascending:true}).limit(1).single();
+    if(startQ.error||!startQ.data)throw new Error("V84_START_MISSING");
+    const start=startQ.data;
+    const rtQ=await db.from("brian_dip_v84_runtime").select("state_version,runtime,snapshot,updated_at,shadow_only,live_execution").eq("session_id",sid).single();
+    if(rtQ.error||!rtQ.data)throw new Error("V84_RUNTIME_UNAVAILABLE");
+    if(rtQ.data.shadow_only!==true||rtQ.data.live_execution!==false)throw new Error("V84_RUNTIME_SAFETY_MISMATCH");
+
+    const [ledgerQ,decisionQ,evalQ]=await Promise.all([
+      db.from("brian_dip_v84_ledger").select("transition_id,recorded_at,event_kind,payload,account_after,occurrence_id,episode_id").eq("session_id",sid).neq("event_kind","SESSION_START").order("recorded_at",{ascending:false}).limit(80),
+      db.from("brian_dip_v84_decisions").select("occurrence_id,decision_at,setup,direction,regime,target_role,target_price,invalidation_price,entry_price,evidence,resolved_at,hit").eq("session_id",sid).order("decision_at",{ascending:false}).limit(20),
+      db.from("brian_dip_v84_candidate_evaluations").select("evaluation_id,evaluated_at,first_blocking_veto,veto_stage,spread_bps,eval_offset_ms_from_seal").eq("session_id",sid).order("evaluated_at",{ascending:false}).limit(20),
+    ]);
+    if(ledgerQ.error||decisionQ.error||evalQ.error)throw new Error("V84_EVIDENCE_READ_FAILED");
+    const events=(ledgerQ.data||[]).map((r:any)=>({observed_at:r.recorded_at,transition_id:r.transition_id,event_kind:r.event_kind,occurrence_id:r.occurrence_id,episode_id:r.episode_id,...(r.payload||{})}));
+
+    return json({
+      release:rel,
+      session:{session_id:sid,status:latest.event_kind==="START"?"RUNNING":"PAUSED",started_at:start.requested_at,starting_equity:Number(start.starting_equity),trade_notional:Number(start.trade_notional),execution_mode:start.config?.execution_mode||"SHADOW_PAPER"},
+      snapshot:rtQ.data.snapshot,
+      state_version:Number(rtQ.data.state_version),
+      runtime_updated_at:rtQ.data.updated_at,
+      events,
+      decisions:decisionQ.data||[],
+      candidate_evaluations:evalQ.data||[],
+      metrics:{decisions:(decisionQ.data||[]).length,recent_candidate_evaluations:(evalQ.data||[]).length},
+      shadow_only:true,live_execution:false,browser_execution:false,max_shadow_leverage:1,risk_promotion_enabled:false,read_only_view:true,
+    });
+  }catch(e){
+    const message=e instanceof Error?e.message:String(e);
+    const status=message==="UNAUTHORIZED"?401:500;
+    return json({status:"FAILED_CLOSED",error:message,release_id:RELEASE_ID,shadow_only:true,live_execution:false,browser_execution:false},status);
+  }
+});
