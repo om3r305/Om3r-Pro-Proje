@@ -116,9 +116,12 @@ function stopForCandidate(chosen:SetupCandidate|null,direction:Direction){
 }
 
 function firstVeto(veto:string[]):{first:string|null;stage:string|null}{
-  let best:{first:string;stage:string;rank:number;index:number}|null=null;
-  veto.forEach((v,index)=>{const root=v.split(":")[0],stage=STAGE[root]??"OTHER",rank=STAGE_ORDER[stage]??STAGE_ORDER.OTHER;if(!best||rank<best.rank||(rank===best.rank&&index<best.index))best={first:v,stage,rank,index};});
-  return best?{first:best.first,stage:best.stage}:{first:null,stage:null};
+  let first:string|null=null,stage:string|null=null,bestRank=Number.POSITIVE_INFINITY;
+  for(let index=0;index<veto.length;index++){
+    const v=veto[index],root=v.split(":")[0],candidateStage=STAGE[root]??"OTHER",rank=STAGE_ORDER[candidateStage]??STAGE_ORDER.OTHER;
+    if(rank<bestRank){bestRank=rank;first=v;stage=candidateStage;}
+  }
+  return{first,stage};
 }
 
 export async function candidate(m:Market,sessionId:string,rt:Runtime,cfg:J,tradeNotional:number,at:number,cal:ExecutionCalibration):Promise<CandidateResult>{
