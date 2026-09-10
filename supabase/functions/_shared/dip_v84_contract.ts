@@ -16,7 +16,7 @@ export const COST_MODEL_VERSION = "FILL_FORWARD_V84_1" as const;
 export const MARKET_DATA_CONTRACT_VERSION = "binance-usdm-sealed-v84.1" as const;
 export const DB_CONTRACT_VERSION = "brian-dip-v84-db-1" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v84-package1-evidence-family-1" as const;
-export const STRATEGY_MANIFEST_HASH = "1b4938913e189d04d0b325727e0318b786c4c6fa4734d575f8b278a1d0696fb0" as const;
+export const STRATEGY_MANIFEST_HASH = "9a574469a3df381e56b0993d1f1525ec3a243970b92f8e867b99e07295c06f1e" as const;
 
 // This is deliberately not sealed until the GitHub implementation commit is final.
 // Any deployed worker must replace this with a real immutable source/logic hash and register it in DB.
@@ -45,7 +45,7 @@ export type Struct = {
   sweep:"BULL"|"BEAR"|null; failedBreak:"BULL"|"BEAR"|null;
   equalHigh:number|null; equalLow:number|null; fingerprint:string;
 };
-export type Rules = { minNotional:number; minQty:number; maxQty:number; stepSize:number };
+export type Rules = { minNotional:number; minQty:number; maxQty:number; stepSize:number; tickSize:number };
 export type FundingSettlement = { fundingTime:number; fundingRate:number; markPrice:number; cashflow:number };
 export type Segment = { start:number; end:number; o:number; h:number; l:number; c:number; kind:"BAR"|"TRADES"; points?:{t:number;id:number;p:number}[] };
 export type Resolution = {
@@ -180,7 +180,7 @@ export function initialRuntime(start:number):Runtime {
 }
 
 export function validateSession(config:J):void {
-  if(config.release_id!==RELEASE_ID||config.strategy_manifest_hash!==STRATEGY_MANIFEST_HASH||config.calibration_family_id!==CALIBRATION_FAMILY_ID||config.db_contract_version!==DB_CONTRACT_VERSION)throw Error("V84_RELEASE_CONTRACT_MISMATCH");
+  if(config.release_id!==RELEASE_ID||config.logic_hash!==LOGIC_HASH||config.strategy_manifest_hash!==STRATEGY_MANIFEST_HASH||config.calibration_family_id!==CALIBRATION_FAMILY_ID||config.db_contract_version!==DB_CONTRACT_VERSION)throw Error("V84_RELEASE_CONTRACT_MISMATCH");
   if(config.engine_version!==ENGINE_VERSION||config.policy_version!==POLICY_VERSION||config.decision_revision!==DECISION_REVISION||config.metric_version!==METRIC_VERSION)throw Error("V84_VERSION_CONTRACT_MISMATCH");
   if(JSON.stringify(config.symbols)!==JSON.stringify([SYMBOL]))throw Error("V84_SYMBOL_CONTRACT_MISMATCH");
   if(config.shadow_only!==true||config.live_execution!==false||config.browser_execution!==false||config.server_authoritative!==true)throw Error("V84_INVALID_SHADOW_CONTRACT");
@@ -213,8 +213,8 @@ export function executionCalibration(input:{wins:number;losses:number;episodes:n
 
 export function calibrationNoEdge(cal:ExecutionCalibration,economicRR:number):boolean|null {
   if(cal.state!=="WARM"||cal.lower===null)return null;
-  if(!(economicRR>0)&&economicRR!==0)return true;
-  return cal.lower<=1/(1+Math.max(0,economicRR));
+  if(!Number.isFinite(economicRR)||economicRR<0)return true;
+  return cal.lower<=1/(1+economicRR);
 }
 
 // Package-1 evidence release never grants risk promotion even if execution calibration reaches WARM.
