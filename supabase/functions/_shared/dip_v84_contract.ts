@@ -1,9 +1,9 @@
-// Brian DIP V8.4 Package-1 contracts. GitHub preparation only; SHADOW ONLY.
+// Brian DIP V8.4 Package-1 contracts. SHADOW ONLY.
 // IMPORTANT: this file is intentionally separate from dip_v8_dual.ts so V8.3 remains byte-for-byte frozen.
 
 export const SYMBOL = "ETHUSDT" as const;
 export const RELEASE_ID = "dip-v84-package1-evidence-20260910.1" as const;
-export const RELEASE_STAGE = "GITHUB_PREPARED_NOT_DEPLOYED" as const;
+export const RELEASE_STAGE = "PRODUCTION_SHADOW_ACTIVE" as const;
 export const ENGINE_VERSION = "brian-dip-v84" as const;
 export const POLICY_VERSION = "dip-v84-l1-evidence-20260910.1" as const;
 export const DECISION_REVISION = "dip-v84-l1-occurrence-20260910.1" as const;
@@ -18,9 +18,9 @@ export const DB_CONTRACT_VERSION = "brian-dip-v84-db-1" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v84-package1-evidence-family-1" as const;
 export const STRATEGY_MANIFEST_HASH = "9a574469a3df381e56b0993d1f1525ec3a243970b92f8e867b99e07295c06f1e" as const;
 
-// This is deliberately not sealed until the GitHub implementation commit is final.
-// Any deployed worker must replace this with a real immutable source/logic hash and register it in DB.
-export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
+// Immutable reviewed implementation identity. This points at the PR #86 merge commit;
+// activation-only metadata changes do not alter the reviewed Package-1 trade logic.
+export const LOGIC_HASH = "git:1b7c6c2ca334633646530ae79252d0cccd8971c5" as const;
 
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MIN_EXECUTION_CAL_SAMPLES = 40;
