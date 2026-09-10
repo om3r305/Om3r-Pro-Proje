@@ -17,7 +17,7 @@ import {
   unavailableCalibration,
   validateSession,
 } from "../_shared/dip_v84_contract.ts";
-import { candidate, type CandidateResult } from "./decision.ts";
+import { candidate, type CandidateResult, type DecisionRecord } from "./decision.ts";
 import { closePosition } from "./execution.ts";
 import { getMarket, positionFunding, pricePath } from "./market.ts";
 
@@ -58,6 +58,10 @@ function paperMark(pos:NonNullable<Runtime["pos"]>,market:Awaited<ReturnType<typ
   if(!market)return pos.market_price;const friction=pos.expected_exit_slippage_bps/10000;return pos.side==="LONG"?market.book.bid*(1-friction):market.book.ask*(1+friction);
 }
 function collateralValue(pos:NonNullable<Runtime["pos"]>,mark:number){const gross=(pos.side==="LONG"?mark-pos.entry:pos.entry-mark)*pos.qty,closeFee=mark*pos.qty*pos.fee_bps/10000;return pos.margin+gross-closeFee+(pos.funding_accrued??0);}
+function sameFrozenPrice(a:unknown,b:number|null,tickSize:number):boolean{
+  if(b===null)return a===null;
+  const x=Number(a);return Number.isFinite(x)&&Math.abs(x-b)<=Math.max(1e-9,tickSize/2);
+}
 
 async function recordCandidateTelemetry(db:SupabaseClient,sid:string,c:CandidateResult,at:number,market:Awaited<ReturnType<typeof getMarket>>){
   try{
@@ -83,23 +87,34 @@ export async function runWorker(db:SupabaseClient,lease:Lease,fetcher:typeof fet
   const cold=executionCalibration({wins:0,losses:0,episodes:0,days:0,ambiguousLosses:0});
   let c:CandidateResult=market?await candidate(market,sid,rt,cfg,tradeNotional,Date.now(),cold):{thesis:{veto:["DATA_UNAVAILABLE:"+marketError]},decision:null,occurrence:"",episode:"",combinedFp:"",last5m:0,direction:"WAIT",entry:0,inv:null,target:null,targetRole:"NO_FORWARD_LEVEL",l1:null,size:null,fee:Number(cfg.fee_bps||10),slip:Number(cfg.slippage_bps||1),canEnter:false,candidateEvaluations:[],firstBlockingVeto:"DATA_UNAVAILABLE:"+marketError,vetoStage:"RUNTIME"};
   if(market&&c.decision){const setup=String(c.decision.setup),direction=String(c.decision.direction),regime=String(c.decision.regime),cal=await loadExecutionCalibration(db,setup,direction,regime);c=await candidate(market,sid,rt,cfg,tradeNotional,Date.now(),cal);}
-  const at=Date.now();let decision=c.decision;
-  if(decision){const existing=await db.from("brian_dip_v84_decisions").select("occurrence_id").eq("occurrence_id",c.occurrence).maybeSingle();if(existing.error)throw Error("V84_DECISION_READ_FAILED:"+existing.error.message);if(existing.data)decision=null;}
+  const at=Date.now();let decision=c.decision,entryDecision:DecisionRecord|null=c.decision;
+  if(decision){
+    const existing=await db.from("brian_dip_v84_decisions").select("occurrence_id,episode_id,setup,direction,regime,target_role,l1_id,target_price,invalidation_price").eq("occurrence_id",c.occurrence).maybeSingle();
+    if(existing.error)throw Error("V84_DECISION_READ_FAILED:"+existing.error.message);
+    if(existing.data){
+      const frozen=existing.data as Record<string,unknown>;
+      decision=null;
+      const samePlan=frozen.episode_id===c.episode&&frozen.setup===c.decision?.setup&&frozen.direction===c.decision?.direction&&frozen.target_role==="L1_EXECUTABLE"&&frozen.l1_id===c.decision?.l1_id&&sameFrozenPrice(frozen.target_price,c.target,market?.rules.tickSize??0)&&sameFrozenPrice(frozen.invalidation_price,c.inv,market?.rules.tickSize??0);
+      if(!samePlan){entryDecision=null;c.canEnter=false;(c.thesis.veto as string[]).push("THESIS_LOCKED_NO_NEW_STRUCTURE");}
+    }
+  }
   if(c.canEnter&&await episodeEntered(db,c.episode)){c.canEnter=false;(c.thesis.veto as string[]).push("EPISODE_ALREADY_TRADED");}
   const stale=!market||Date.now()-market.book.receivedAt>15000||Date.now()-at>20000;if(stale)(c.thesis.veto as string[]).push("STALE_DATA");if(pathError)(c.thesis.veto as string[]).push("RECONCILIATION_REQUIRED:"+pathError);if(events.length)(c.thesis.veto as string[]).push("CLOSED_THIS_RUN");if(sess.event_kind!=="START")(c.thesis.veto as string[]).push("SESSION_PAUSED");
-  if(market&&c.canEnter&&decision&&!rt.pos&&!events.length&&!pathError&&!stale&&sess.event_kind==="START"&&c.target&&c.inv&&c.size){
+  if(market&&c.canEnter&&entryDecision&&!rt.pos&&!events.length&&!pathError&&!stale&&sess.event_kind==="START"&&c.target&&c.inv&&c.size){
     const s=c.size,openedAt=new Date(at).toISOString(),side=c.direction==="DOWN"?"SHORT":"LONG",stopMeta=c.thesis.stop as Record<string,unknown>;
-    rt.pos={side,position_id:`v84-${side.toLowerCase()}-${c.occurrence}`,thesis_id:c.occurrence,episode_id:c.episode,setup:decision.setup,regime:decision.regime,entry:c.entry,qty:s.qty,notional:s.notional,target:c.target,stop:c.inv,stop_source:String(stopMeta.source||"UNKNOWN"),stop_structure_id:typeof stopMeta.structure_id==="string"?stopMeta.structure_id:null,opened_at:openedAt,due_at:new Date(at+MAX_HOLD_MS).toISOString(),fees_open:s.fees_open,fee_bps:c.fee,slippage_bps:c.slip,expected_exit_spread_bps:market.book.spreadBps,expected_exit_slippage_bps:c.slip,venue:"SHADOW_PERP",policy_version:POLICY_VERSION,release_id:RELEASE_ID,calibration_family_id:CALIBRATION_FAMILY_ID,checked_until:at,market_price:c.entry,leverage:1,margin:s.margin,actual_fraction:s.actual_fraction,gross_fraction:s.gross_fraction};
+    rt.pos={side,position_id:`v84-${side.toLowerCase()}-${c.occurrence}`,thesis_id:c.occurrence,episode_id:c.episode,setup:entryDecision.setup,regime:entryDecision.regime,entry:c.entry,qty:s.qty,notional:s.notional,target:c.target,stop:c.inv,stop_source:String(stopMeta.source||"UNKNOWN"),stop_structure_id:typeof stopMeta.structure_id==="string"?stopMeta.structure_id:null,opened_at:openedAt,due_at:new Date(at+MAX_HOLD_MS).toISOString(),fees_open:s.fees_open,fee_bps:c.fee,slippage_bps:c.slip,expected_exit_spread_bps:market.book.spreadBps,expected_exit_slippage_bps:c.slip,venue:"SHADOW_PERP",policy_version:POLICY_VERSION,release_id:RELEASE_ID,calibration_family_id:CALIBRATION_FAMILY_ID,checked_until:at,market_price:c.entry,leverage:1,margin:s.margin,actual_fraction:s.actual_fraction,gross_fraction:s.gross_fraction};
     rt.cash-=s.margin+s.fees_open;const mark=paperMark(rt.pos,market),equityAfter=rt.cash+collateralValue(rt.pos,mark);
-    events.push({event_kind:side==="LONG"?"BUY":"SHORT_OPEN",position_id:rt.pos.position_id,occurrence_id:c.occurrence,episode_id:c.episode,price:c.entry,entry_price:c.entry,quantity:s.qty,notional:s.notional,fees:s.fees_open,realized_pnl:0,cash_after:rt.cash,equity_after:equityAfter,metadata:{server_v84:true,release_id:RELEASE_ID,calibration_family_id:CALIBRATION_FAMILY_ID,side,setup:decision.setup,regime:decision.regime,target:c.target,stop:c.inv,target_role:c.targetRole,economic_rr:c.thesis.economic_rr,raw_conviction:c.thesis.raw_conviction,execution_calibration:c.thesis.execution_calibration,actual_fraction:s.actual_fraction,gross_fraction:s.gross_fraction,margin:s.margin,notional:s.notional,worst_loss:s.worst_loss,risk_fraction:s.risk_fraction,leverage:1,policy_version:POLICY_VERSION,metric_version:METRIC_VERSION,market_source:market.source,fee_bps:c.fee,slippage_bps:c.slip,expected_exit_spread_bps:market.book.spreadBps}});
+    events.push({event_kind:side==="LONG"?"BUY":"SHORT_OPEN",position_id:rt.pos.position_id,occurrence_id:c.occurrence,episode_id:c.episode,price:c.entry,entry_price:c.entry,quantity:s.qty,notional:s.notional,fees:s.fees_open,realized_pnl:0,cash_after:rt.cash,equity_after:equityAfter,metadata:{server_v84:true,release_id:RELEASE_ID,calibration_family_id:CALIBRATION_FAMILY_ID,side,setup:entryDecision.setup,regime:entryDecision.regime,target:c.target,stop:c.inv,target_role:c.targetRole,economic_rr:c.thesis.economic_rr,raw_conviction:c.thesis.raw_conviction,execution_calibration:c.thesis.execution_calibration,actual_fraction:s.actual_fraction,gross_fraction:s.gross_fraction,margin:s.margin,notional:s.notional,worst_loss:s.worst_loss,risk_fraction:s.risk_fraction,leverage:1,policy_version:POLICY_VERSION,metric_version:METRIC_VERSION,market_source:market.source,fee_bps:c.fee,slippage_bps:c.slip,expected_exit_spread_bps:market.book.spreadBps}});
   }
-  if(decision)rt.lastOccurrence=c.occurrence;rt.latestThesis=c.thesis;if(market)rt.marketCursor=Math.max(rt.marketCursor,market.bars["1m"].at(-1)!.ct+1);
+  if(decision)rt.lastOccurrence=c.occurrence;
+  const frozenRuntimeThesis=!decision&&rt.latestThesis&&String(rt.latestThesis.occurrence_id??"")===c.occurrence?rt.latestThesis:c.thesis;
+  rt.latestThesis=frozenRuntimeThesis;if(market)rt.marketCursor=Math.max(rt.marketCursor,market.bars["1m"].at(-1)!.ct+1);
   const recordedAt=new Date().toISOString(),hour=recordedAt.slice(0,13);rt.lastSnapshotHour=hour;const mark=rt.pos?paperMark(rt.pos,market):0,positionValue=rt.pos?collateralValue(rt.pos,mark):0,equity=rt.cash+positionValue,unrealized=equity-rt.start-rt.realized;
-  const state={start:rt.start,cfg:{...cfg,symbols:[SYMBOL],trade_notional:tradeNotional},symbols:{[SYMBOL]:{symbol:SYMBOL,last:market?.book.mid??rt.pos?.market_price??null,price:market?.book.mid??rt.pos?.market_price??null,pos:rt.pos,armed:false,lastAction:rt.pos?rt.pos.side:"WATCH",thesis:c.thesis}},v84:rt,serverRuntime:{authoritative:true,release_id:RELEASE_ID,logic_hash:LOGIC_HASH,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,calibration_family_id:CALIBRATION_FAMILY_ID,policy_version:POLICY_VERSION,metric_version:METRIC_VERSION,generated_at:recordedAt,state_version:loaded.state_version+1,browser_executor_disabled:true,shadow_only:true,live_execution:false,dual_direction:true,max_shadow_leverage:1,risk_promotion_enabled:false,decision_cadence_seconds:15,market_source:market?.source||"BINANCE_USDM_PERP",status:pathError?"RECONCILIATION_REQUIRED":marketError?"DATA_UNAVAILABLE":"OK"}};
+  const state={start:rt.start,cfg:{...cfg,symbols:[SYMBOL],trade_notional:tradeNotional},symbols:{[SYMBOL]:{symbol:SYMBOL,last:market?.book.mid??rt.pos?.market_price??null,price:market?.book.mid??rt.pos?.market_price??null,pos:rt.pos,armed:false,lastAction:rt.pos?rt.pos.side:"WATCH",thesis:frozenRuntimeThesis}},v84:rt,serverRuntime:{authoritative:true,release_id:RELEASE_ID,logic_hash:LOGIC_HASH,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,calibration_family_id:CALIBRATION_FAMILY_ID,policy_version:POLICY_VERSION,metric_version:METRIC_VERSION,generated_at:recordedAt,state_version:loaded.state_version+1,browser_executor_disabled:true,shadow_only:true,live_execution:false,dual_direction:true,max_shadow_leverage:1,risk_promotion_enabled:false,decision_cadence_seconds:15,market_source:market?.source||"BINANCE_USDM_PERP",status:pathError?"RECONCILIATION_REQUIRED":marketError?"DATA_UNAVAILABLE":"OK"}};
   const snapshot={snapshot_id:`v84-hour-${sid}-${hour}`,session_id:sid,observed_at:recordedAt,cash:rt.cash,equity,realized_pnl:rt.realized,unrealized_pnl:unrealized,trade_count:rt.trades,win_count:rt.wins,loss_count:rt.losses,state};
   for(const e of events)e.transition_id=`v84-${String(e.event_kind).toLowerCase()}-${e.occurrence_id}`;
   const commitId=await hash([sid,loaded.state_version,rt.marketCursor,RELEASE_ID,String(c.occurrence||"none")].join("|"));lease.assertOwned();
   const committed=await db.rpc("brian_dip_v84_commit",{p_session_id:sid,p_expected_version:loaded.state_version,p_owner_id:lease.owner,p_lease_generation:lease.generation,p_commit_id:commitId,p_runtime:rt,p_snapshot:snapshot,p_decision:decision,p_events:events});if(committed.error)throw Error("V84_COMMIT_FAILED:"+committed.error.message);
   if(market)await recordCandidateTelemetry(db,sid,c,at,market);
-  return{status:pathError?"RECONCILIATION_REQUIRED":marketError?"DATA_UNAVAILABLE":"OK",market_error:marketError,session_id:sid,release_id:RELEASE_ID,state_version:loaded.state_version+1,symbol:SYMBOL,thesis:c.thesis,position:rt.pos,equity,realized:rt.realized,events:events.map(e=>e.event_kind),shadow_only:true,live_execution:false};
+  return{status:pathError?"RECONCILIATION_REQUIRED":marketError?"DATA_UNAVAILABLE":"OK",market_error:marketError,session_id:sid,release_id:RELEASE_ID,state_version:loaded.state_version+1,symbol:SYMBOL,thesis:frozenRuntimeThesis,position:rt.pos,equity,realized:rt.realized,events:events.map(e=>e.event_kind),shadow_only:true,live_execution:false};
 }
