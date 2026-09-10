@@ -42,10 +42,29 @@ jobs:
       - name: No live execution enablement
         shell: bash
         run: |
-          if grep -RInE 'live_execution["'"']?[[:space:]]*[:=][[:space:]]*true|browser_execution["'"']?[[:space:]]*[:=][[:space:]]*true' supabase/functions/brian-dip-v84-* supabase/functions/_shared/dip_v84*; then
-            echo "Live/browser execution enablement found"
-            exit 1
-          fi
+          python3 - <<'PY'
+          import pathlib, re, sys
+          roots = [pathlib.Path('supabase/functions/_shared')]
+          roots += list(pathlib.Path('supabase/functions').glob('brian-dip-v84-*'))
+          bad = []
+          patterns = [
+              re.compile(r'live_execution["\']?\s*[:=]\s*true', re.I),
+              re.compile(r'browser_execution["\']?\s*[:=]\s*true', re.I),
+          ]
+          for root in roots:
+              files = root.glob('dip_v84*') if root.name == '_shared' else root.rglob('*')
+              for path in files:
+                  if not path.is_file() or path.suffix not in {'.ts', '.js', '.json'}:
+                      continue
+                  text = path.read_text(encoding='utf-8')
+                  for pattern in patterns:
+                      if pattern.search(text):
+                          bad.append(str(path))
+                          break
+          if bad:
+              print('Live/browser execution enablement found:', *bad, sep='\n')
+              sys.exit(1)
+          PY
       - name: Type-check V8.4 entrypoints
         run: deno check supabase/functions/brian-dip-v84-worker/index.ts supabase/functions/brian-dip-v84-foresight/index.ts
       - name: V8.4 deterministic contract tests
