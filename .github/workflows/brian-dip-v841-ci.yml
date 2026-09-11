@@ -1,0 +1,59 @@
+name: Brian DIP V8.4.1 Authority
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - "docs/BRIAN_V841_AUTHORITY_SPEC.md"
+      - "supabase/functions/_shared/dip_v84_authority_contract.ts"
+      - "supabase/functions/brian-dip-v84-authority-worker/**"
+      - "supabase/functions/brian-dip-v84-view/**"
+      - "supabase/migrations/*v84_authority*.sql"
+      - "monster-coins-pro/dip*"
+      - ".github/workflows/brian-dip-v841-ci.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authority:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: "2.1.4"
+      - name: V8.3 source remains frozen
+        shell: bash
+        run: |
+          git fetch origin brian-2026
+          changed="$(git diff --name-only origin/brian-2026...HEAD)"
+          if echo "$changed" | grep -Eq '^(supabase/functions/_shared/dip_v8_dual\.ts|supabase/functions/brian-dip-dual-shadow-worker/|supabase/functions/brian-dip-foresight/)'; then
+            echo "Authority PR must not modify frozen V8.3 artifacts"
+            exit 1
+          fi
+      - name: Type-check Authority worker and view
+        run: deno check supabase/functions/brian-dip-v84-authority-worker/index.ts supabase/functions/brian-dip-v84-view/index.ts
+      - name: Authority contract tests
+        run: deno test --allow-read supabase/functions/brian-dip-v84-authority-worker/authority_policy.test.ts
+      - name: SHADOW-only source guard
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib,re,sys
+          roots=[pathlib.Path('supabase/functions/_shared/dip_v84_authority_contract.ts'),pathlib.Path('supabase/functions/brian-dip-v84-authority-worker')]
+          bad=[]
+          for root in roots:
+            files=[root] if root.is_file() else list(root.rglob('*'))
+            for p in files:
+              if not p.is_file() or p.suffix not in {'.ts','.js','.json'} or p.name.endswith('.test.ts'): continue
+              t=p.read_text(encoding='utf-8').lower()
+              if re.search(r'live_execution["\']?\s*[:=]\s*true',t) or re.search(r'browser_execution["\']?\s*[:=]\s*true',t): bad.append(str(p))
+              n=re.sub(r'[\s+"\'`]+','',t)
+              if re.search(r'/fapi/v[0-9]+/(?:order|batchorders|openorders|allopenorders|leverage|margintype|positionside/dual|multiassetsmargin|account|balance|positionrisk)',n): bad.append(str(p))
+          if bad:
+            print('Forbidden live/account mutation surface:',*sorted(set(bad)),sep='\n');sys.exit(1)
+          PY
+      - name: Patch formatting
+        run: git diff --check origin/brian-2026...HEAD

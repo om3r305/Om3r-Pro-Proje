@@ -80,7 +80,7 @@ def test_v8_migration_preserves_server_fence_and_runs_v8_crons():
     assert 'brian_reject_browser_dip_write_after_server_takeover' in V7_MIGRATION
 
 
-def test_v7_handoff_stays_as_archived_view_only_safety_fence_while_v83_owns_live_page():
+def test_v7_handoff_stays_archived_view_only_while_v841_owns_live_page():
     assert 'brian_v7_neuter_browser_engine_heartbeat' in HANDOFF_MIGRATION
     assert 'v4Evaluate = function(){ return; }' in SERVER_UI
     assert 'snapshot = async function(){ return; }' in SERVER_UI
@@ -88,7 +88,9 @@ def test_v7_handoff_stays_as_archived_view_only_safety_fence_while_v83_owns_live
     assert 'SERVER_AUTHORITATIVE_VIEW_ONLY' in SERVER_UI
     assert '/dip-expert-v5-brain.js' not in HTML
     assert '/dip-server-authoritative-v7.js' not in HTML
-    assert HTML.index('/dip-v83.js') < HTML.index('/dip-v83-liveview.js')
+    assert '/dip-v83.js' not in HTML
+    assert '/dip-v83-liveview.js' not in HTML
+    assert HTML.index('/dip-v84.js') < HTML.index('/dip-v841-control.js')
 
 
 def test_v8_ui_is_eth_only_single_thesis_and_has_no_fake_future_candles():
