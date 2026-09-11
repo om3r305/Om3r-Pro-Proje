@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#05070c">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/logo.svg">
+  <link rel="stylesheet" href="/dashboard.css">
+  <title>Brian Ocean Run</title>
+  <style>
+    body{min-height:100vh;background:#05070c;color:#f7f8fb}.oc-shell{max-width:1180px;margin:0 auto;padding:18px 16px 56px}.oc-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}.oc-brand{display:flex;align-items:center;gap:12px}.oc-brand img{width:42px;height:42px}.oc-brand b{display:block;font-size:17px}.oc-brand span{display:block;color:#8e98aa;font-size:12px;margin-top:3px}.oc-nav,.oc-controls{display:flex;gap:8px;flex-wrap:wrap}.oc-nav{justify-content:flex-end}.oc-nav a{text-decoration:none}.oc-hero{padding:22px}.oc-hero h1{font-size:clamp(28px,6vw,48px);margin:5px 0 10px}.oc-hero p{color:#a7b0c0;max-width:920px;line-height:1.55}.oc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.oc-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.oc-gap{height:14px}.oc-value{font-size:28px;font-weight:800;margin:8px 0 4px}.oc-muted{color:#8e98aa;font-size:12px;line-height:1.45}.oc-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07)}.oc-row:last-child{border-bottom:0}.oc-title{font-weight:700}.oc-meta{font-size:12px;color:#8e98aa;margin-top:5px;line-height:1.5}.oc-pill{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(255,255,255,.12);margin-left:6px}.oc-pill.ok{color:#7ff6b6}.oc-pill.warn{color:#ffd479}.oc-pill.bad{color:#ff8c9f}.oc-lock{position:fixed;inset:0;background:rgba(2,4,8,.94);display:none;align-items:center;justify-content:center;padding:20px;z-index:99}.oc-lock.show{display:flex}.oc-lock-card{width:min(420px,100%);padding:22px}.oc-lock-card input{width:100%;box-sizing:border-box;margin:14px 0 10px;padding:14px;border-radius:12px;background:#0b1019;color:#fff;border:1px solid rgba(255,255,255,.12)}.oc-controls{margin-top:16px}.oc-controls button{min-width:130px}.oc-controls .danger{border-color:rgba(255,110,130,.45);color:#ff9cae}@media(max-width:850px){.oc-grid{grid-template-columns:1fr 1fr}.oc-two{grid-template-columns:1fr}.oc-shell{padding:12px 12px 42px}.oc-top{align-items:flex-start}.oc-value{font-size:24px}}@media(max-width:480px){.oc-grid{grid-template-columns:1fr}.oc-nav{max-width:55%}.oc-nav a{font-size:12px;padding:9px 10px}.oc-controls button{flex:1;min-width:0}}
+  </style>
+</head>
+<body>
+  <div id="ocLock" class="oc-lock">
+    <article class="cc-card oc-lock-card">
+      <div class="cc-eyebrow">Brian Ocean Run</div>
+      <h2>Kontrol anahtarı gerekli</h2>
+      <p class="oc-muted">Ana dashboard ile aynı kişisel anahtar kullanılır ve yalnız bu cihazda saklanır.</p>
+      <input id="ocKey" type="password" autocomplete="current-password" placeholder="MCP-...">
+      <button id="ocUnlock" class="cc-btn primary">Kilidi Aç</button>
+    </article>
+  </div>
+
+  <main class="oc-shell">
+    <header class="oc-top">
+      <div class="oc-brand"><img src="/logo.svg" alt="Brian"><div><b>Brian Ocean Run</b><span id="ocSync">Durum alınıyor…</span></div></div>
+      <div class="oc-nav"><a class="cc-btn" href="/treasury.html">Treasury</a><a class="cc-btn" href="/evolution.html">Evolution</a><a class="cc-btn" href="/">← Kontrol Merkezi</a></div>
+    </header>
+
+    <article class="cc-card oc-hero">
+      <div class="cc-eyebrow">Layer 6 · 24–48H PROSPECTIVE SHADOW EXAM</div>
+      <h1>Ocean, Brian'ın tüm sistemi kapalı kutu değil kanıtla sınamasıdır.</h1>
+      <p>Ocean gerçek emir açmaz. Başlatmadan önce Evolution, Layer-4 expected-edge ve Treasury worker sağlık kontrolünden geçer. Çalışma tarayıcı kapansa da bulutta sürer; bitince Treasury, ALPHA, kaynak keşfi, deneyler, promotion/rejection, drift, missed opportunity ve sistem sağlığı tek raporda toplanır.</p>
+      <div class="cc-cloud-foot"><span id="ocState" class="cc-chip">◉ yükleniyor</span><span class="cc-chip">☁ browser-independent</span><span class="cc-chip">💰 $10k shadow treasury</span><span class="cc-chip">🚫 live execution yok</span><span class="cc-chip">🔒 DIP kapsam dışı</span></div>
+      <div class="oc-controls"><button id="ocPreflight" class="cc-btn">Preflight</button><button id="ocStart24" class="cc-btn primary">24 Saat Başlat</button><button id="ocStart48" class="cc-btn primary">48 Saat Başlat</button><button id="ocStop" class="cc-btn danger">Ocean Durdur</button></div>
+    </article>
+    <div class="oc-gap"></div>
+
+    <section class="oc-grid">
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Ocean Durumu</div><div id="ocRunState" class="oc-value">—</div><div id="ocRunTime" class="oc-muted">—</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Treasury Equity</div><div id="ocEquity" class="oc-value">—</div><div id="ocTreasuryMeta" class="oc-muted">—</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Son Rapor P&L</div><div id="ocReportPnl" class="oc-value">—</div><div id="ocReportAlpha" class="oc-muted">—</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Worker</div><div id="ocWorker" class="oc-value">—</div><div id="ocWorkerMeta" class="oc-muted">—</div></article>
+    </section>
+    <div class="oc-gap"></div>
+
+    <section class="oc-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Active / Recent Runs</div><div class="cc-card-sub">START/STOP komutlarından türetilen append-only session state</div></div></div><div id="ocRuns"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Preflight</div><div class="cc-card-sub">Full-stack readiness; eksik organ varsa Ocean başlamaz</div></div></div><div id="ocPreflightDetail"></div></article>
+    </section>
+    <div class="oc-gap"></div>
+
+    <section class="oc-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Ocean Report</div><div class="cc-card-sub">En son tamamlanan prospective run özeti</div></div></div><div id="ocReport"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Cloud Checkpoints</div><div class="cc-card-sub">Treasury ve collector sağlık kanıtları</div></div></div><div id="ocCheckpoints"></div></article>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/ocean.js"></script>
+</body>
+</html>
