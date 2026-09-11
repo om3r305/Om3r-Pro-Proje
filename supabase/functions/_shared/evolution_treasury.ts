@@ -41,7 +41,8 @@ const MAX_HOLD_SECONDS=6*60*60;
 function clamp(v:number,lo:number,hi:number){return Math.max(lo,Math.min(hi,v));}
 function time(v:string){const t=Date.parse(v);return Number.isFinite(t)?t:null;}
 function assertFinitePositive(v:number,label:string){if(!Number.isFinite(v)||v<=0)throw new Error(`${label} must be positive`);}
-function halfCostUsd(capitalUsd:number,roundTripCostBps:number){return capitalUsd*Math.max(0,roundTripCostBps)/20_000;}
+function halfCostRate(roundTripCostBps:number){return Math.max(0,roundTripCostBps)/20_000;}
+function halfCostUsd(capitalUsd:number,roundTripCostBps:number){return capitalUsd*halfCostRate(roundTripCostBps);}
 
 export function directionalReturnBps(position:TreasuryPosition,markPrice:number):number{
   assertFinitePositive(position.entryPrice,"entryPrice");assertFinitePositive(markPrice,"markPrice");
@@ -59,18 +60,47 @@ function opportunityQuality(o:TreasuryOpportunity){
   return edge*(.5+reliability)*(.5+.5*maturity);
 }
 export function opportunityScore(o:TreasuryOpportunity):number{return Math.max(0,o.expectedNetEdgeBps)*opportunityQuality(o);}
+function rawOpportunityIsUsable(o:TreasuryOpportunity,nowMs:number){
+  const at=time(o.observedAt);return Boolean(o.assetId)&&o.direction!==0&&Number.isFinite(o.referencePrice)&&o.referencePrice>0&&Number.isFinite(o.expectedNetEdgeBps)&&Number.isFinite(o.roundTripCostBps)&&o.roundTripCostBps>=0&&at!=null&&at<=nowMs+5_000;
+}
 function validOpportunity(o:TreasuryOpportunity,nowMs:number){
-  const at=time(o.observedAt);return Boolean(o.assetId)&&o.pitClear&&o.recommendation==="ALLOW_EDGE"&&o.direction!==0&&Number.isFinite(o.referencePrice)&&o.referencePrice>0&&Number.isFinite(o.expectedNetEdgeBps)&&o.expectedNetEdgeBps>=MIN_EDGE_BPS&&Number.isFinite(o.roundTripCostBps)&&o.roundTripCostBps>=0&&at!=null&&at<=nowMs+5_000&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;
+  const at=time(o.observedAt);return rawOpportunityIsUsable(o,nowMs)&&o.pitClear&&o.recommendation==="ALLOW_EDGE"&&o.expectedNetEdgeBps>=MIN_EDGE_BPS&&at!=null&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;
 }
 function targetCapitalUsd(o:TreasuryOpportunity,equity:number){
   const q=opportunityQuality(o);const pct=MIN_POSITION_PCT+(MAX_POSITION_PCT-MIN_POSITION_PCT)*q;return Math.max(0,equity*clamp(pct,MIN_POSITION_PCT,MAX_POSITION_PCT));
 }
+function latestRawByAsset(opportunities:TreasuryOpportunity[],nowMs:number){
+  const map=new Map<string,TreasuryOpportunity>();
+  for(const o of opportunities){
+    if(!rawOpportunityIsUsable(o,nowMs))continue;
+    const prev=map.get(o.assetId);const at=time(o.observedAt)??0,prevAt=prev?time(prev.observedAt)??0:-1;
+    if(!prev||at>prevAt)map.set(o.assetId,o);
+  }
+  return map;
+}
 function latestByAsset(opportunities:TreasuryOpportunity[],nowMs:number){
   const map=new Map<string,TreasuryOpportunity>();for(const o of opportunities){if(!validOpportunity(o,nowMs))continue;const prev=map.get(o.assetId);if(!prev||Number(time(o.observedAt))>Number(time(prev.observedAt)))map.set(o.assetId,o);}return map;
 }
-function markMap(opportunities:TreasuryOpportunity[],state:TreasuryState){const marks:Record<string,number>={};for(const o of opportunities)if(Number.isFinite(o.referencePrice)&&o.referencePrice>0){const prev=marks[o.assetId];if(prev==null||Number(time(o.observedAt))>=0)marks[o.assetId]=o.referencePrice;}for(const p of state.positions)if(!(p.assetId in marks))marks[p.assetId]=p.entryPrice;return marks;}
+function markMap(opportunities:TreasuryOpportunity[],state:TreasuryState,nowMs:number){
+  const marks:Record<string,number>={};const latestTs:Record<string,number>={};
+  for(const o of opportunities){
+    if(!rawOpportunityIsUsable(o,nowMs))continue;const at=time(o.observedAt)??-1;
+    if(latestTs[o.assetId]==null||at>latestTs[o.assetId]){latestTs[o.assetId]=at;marks[o.assetId]=o.referencePrice;}
+  }
+  for(const p of state.positions)if(!(p.assetId in marks))marks[p.assetId]=p.entryPrice;
+  return marks;
+}
 function cloneState(state:TreasuryState):TreasuryState{return{...state,positions:state.positions.map(p=>({...p}))};}
 function latestEdgeForPosition(p:TreasuryPosition,latest:Map<string,TreasuryOpportunity>){const o=latest.get(p.assetId);return o&&o.direction===p.direction?o.expectedNetEdgeBps:p.latestExpectedNetEdgeBps;}
+function isFreshRaw(o:TreasuryOpportunity|undefined,nowMs:number){const at=o?time(o.observedAt):null;return at!=null&&nowMs>=at&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;}
+function maxCapitalPreservingReserve(cashUsd:number,equityUsd:number,roundTripCostBps:number){
+  const c=halfCostRate(roundTripCostBps);const numerator=cashUsd-MIN_CASH_RESERVE_PCT*equityUsd;
+  return Math.max(0,numerator/(1+c*(1-MIN_CASH_RESERVE_PCT)));
+}
+function maxCapitalPreservingDeployment(currentDeploymentUsd:number,equityUsd:number,roundTripCostBps:number){
+  const c=halfCostRate(roundTripCostBps);const numerator=MAX_DEPLOYMENT_PCT*equityUsd-currentDeploymentUsd;
+  return Math.max(0,numerator/(1+MAX_DEPLOYMENT_PCT*c));
+}
 
 function applyExit(state:TreasuryState,p:TreasuryPosition,markPrice:number,edgeBps:number,sourceDecisionId:string,reason:TreasuryExitReason,actions:TreasuryAction[]){
   const gross=positionGrossPnlUsd(p,markPrice),exitCost=halfCostUsd(p.capitalUsd,p.roundTripCostBps);state.cashUsd+=p.capitalUsd+gross-exitCost;state.realizedPnlUsd+=gross-exitCost;state.cumulativeCostsUsd+=exitCost;state.positions=state.positions.filter(x=>x.positionId!==p.positionId);
@@ -83,34 +113,47 @@ function applyOpen(state:TreasuryState,o:TreasuryOpportunity,capitalUsd:number,p
 }
 
 export function planTreasuryCycle(input:{state:TreasuryState;opportunities:TreasuryOpportunity[];observedAt:string;positionIdFor:(o:TreasuryOpportunity)=>string;}):TreasuryCyclePlan{
-  const nowMs=time(input.observedAt);if(nowMs==null)throw new Error("invalid cycle observedAt");const state=cloneState(input.state);const actions:TreasuryAction[]=[];const blockedReasons:string[]=[];const marks=markMap(input.opportunities,state);const beforeEquity=treasuryEquityUsd(state,marks);assertFinitePositive(beforeEquity,"treasury equity");const latest=latestByAsset(input.opportunities,nowMs);
+  const nowMs=time(input.observedAt);if(nowMs==null)throw new Error("invalid cycle observedAt");const state=cloneState(input.state);const actions:TreasuryAction[]=[];const blockedReasons:string[]=[];const noReopenAssets=new Set<string>();const marks=markMap(input.opportunities,state,nowMs);const beforeEquity=treasuryEquityUsd(state,marks);assertFinitePositive(beforeEquity,"treasury equity");const latest=latestByAsset(input.opportunities,nowMs);const latestRaw=latestRawByAsset(input.opportunities,nowMs);
 
   for(const p of [...state.positions]){
-    const latestAny=input.opportunities.filter(o=>o.assetId===p.assetId&&time(o.observedAt)!=null&&Number(time(o.observedAt))<=nowMs+5_000).sort((a,b)=>Number(time(b.observedAt))-Number(time(a.observedAt)))[0];
-    const mark=latestAny?.referencePrice??marks[p.assetId]??p.entryPrice;const pnlBps=directionalReturnBps(p,mark);p.highWaterPnlBps=Math.max(p.highWaterPnlBps,pnlBps);const ageSeconds=Math.max(0,(nowMs-Number(time(p.openedAt)??nowMs))/1000);const fresh=latest.get(p.assetId);const freshSame=fresh&&fresh.direction===p.direction?fresh:null;const currentEdge=freshSame?.expectedNetEdgeBps??p.latestExpectedNetEdgeBps;p.latestExpectedNetEdgeBps=currentEdge;
+    const latestAny=latestRaw.get(p.assetId);const mark=latestAny?.referencePrice??marks[p.assetId]??p.entryPrice;const pnlBps=directionalReturnBps(p,mark);p.highWaterPnlBps=Math.max(p.highWaterPnlBps,pnlBps);const ageSeconds=Math.max(0,(nowMs-Number(time(p.openedAt)??nowMs))/1000);const fresh=latest.get(p.assetId);const freshSame=fresh&&fresh.direction===p.direction?fresh:null;const currentEdge=latestAny&&latestAny.direction===p.direction?latestAny.expectedNetEdgeBps:(freshSame?.expectedNetEdgeBps??p.latestExpectedNetEdgeBps);p.latestExpectedNetEdgeBps=currentEdge;
     let reason:TreasuryExitReason|null=null;
-    if(latestAny&&validOpportunity(latestAny,nowMs)&&latestAny.direction!==p.direction)reason="DIRECTION_FLIP";
-    else if(pnlBps<=RISK_STOP_BPS)reason="RISK_STOP";
-    else if(freshSame&&freshSame.expectedNetEdgeBps<=0)reason="EDGE_INVALIDATED";
+    if(pnlBps<=RISK_STOP_BPS)reason="RISK_STOP";
+    else if(isFreshRaw(latestAny,nowMs)&&latestAny&&latestAny.direction!==p.direction&&validOpportunity(latestAny,nowMs))reason="DIRECTION_FLIP";
+    else if(isFreshRaw(latestAny,nowMs)&&latestAny&&latestAny.direction===p.direction&&(!latestAny.pitClear||latestAny.recommendation!=="ALLOW_EDGE"||latestAny.expectedNetEdgeBps<=0))reason="EDGE_INVALIDATED";
     else if(freshSame&&pnlBps>=PROFIT_DECAY_ARM_BPS&&freshSame.expectedNetEdgeBps<Math.max(MIN_EDGE_BPS,p.entryExpectedNetEdgeBps*.25))reason="PROFIT_EDGE_DECAY";
     else if(!freshSame&&ageSeconds>EDGE_STALE_SECONDS)reason="STALE_EDGE";
     else if(ageSeconds>MAX_HOLD_SECONDS&&pnlBps<=0)reason="TIME_DECAY";
-    if(reason)applyExit(state,p,mark,currentEdge,freshSame?.sourceDecisionId??p.sourceDecisionId,reason,actions);
+    if(reason){applyExit(state,p,mark,currentEdge,latestAny?.sourceDecisionId??p.sourceDecisionId,reason,actions);if(reason!=="DIRECTION_FLIP")noReopenAssets.add(p.assetId);}
   }
 
   const candidates=[...latest.values()].sort((a,b)=>opportunityScore(b)-opportunityScore(a));
   for(const o of candidates){
-    if(state.positions.some(p=>p.assetId===o.assetId))continue;
-    const equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});const maxDeployment=equity*MAX_DEPLOYMENT_PCT;let availableDeployment=Math.max(0,maxDeployment-deploymentUsd(state));const minReserve=equity*MIN_CASH_RESERVE_PCT;let spendableCash=Math.max(0,state.cashUsd-minReserve);let desired=Math.min(targetCapitalUsd(o,equity),availableDeployment,spendableCash);
+    if(noReopenAssets.has(o.assetId)||state.positions.some(p=>p.assetId===o.assetId))continue;
+    let equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});
+    let desired=Math.min(
+      targetCapitalUsd(o,equity),
+      maxCapitalPreservingDeployment(deploymentUsd(state),equity,o.roundTripCostBps),
+      maxCapitalPreservingReserve(state.cashUsd,equity,o.roundTripCostBps),
+    );
     const minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
     if((state.positions.length>=MAX_POSITIONS||desired<minimumTicket)&&state.positions.length){
-      const weakest=[...state.positions].sort((a,b)=>latestEdgeForPosition(a,latest)-latestEdgeForPosition(b,latest))[0];const weakEdge=latestEdgeForPosition(weakest,latest);const weakScore=Math.max(0,weakEdge);if(o.expectedNetEdgeBps>=weakEdge+REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*1.25){const mark=marks[weakest.assetId]??weakest.entryPrice;applyExit(state,weakest,mark,weakEdge,o.sourceDecisionId,"OPPORTUNITY_REPLACEMENT",actions);const equity2=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});availableDeployment=Math.max(0,equity2*MAX_DEPLOYMENT_PCT-deploymentUsd(state));spendableCash=Math.max(0,state.cashUsd-equity2*MIN_CASH_RESERVE_PCT);desired=Math.min(targetCapitalUsd(o,equity2),availableDeployment,spendableCash);}
+      const weakest=[...state.positions].sort((a,b)=>latestEdgeForPosition(a,latest)-latestEdgeForPosition(b,latest))[0];const weakEdge=latestEdgeForPosition(weakest,latest);const weakOpp=latest.get(weakest.assetId);const weakScore=weakOpp?opportunityScore(weakOpp):Math.max(0,weakEdge)*.5;
+      if(o.expectedNetEdgeBps>=weakEdge+REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*1.25){
+        const mark=marks[weakest.assetId]??weakest.entryPrice;applyExit(state,weakest,mark,weakEdge,o.sourceDecisionId,"OPPORTUNITY_REPLACEMENT",actions);noReopenAssets.add(weakest.assetId);
+        equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});
+        desired=Math.min(
+          targetCapitalUsd(o,equity),
+          maxCapitalPreservingDeployment(deploymentUsd(state),equity,o.roundTripCostBps),
+          maxCapitalPreservingReserve(state.cashUsd,equity,o.roundTripCostBps),
+        );
+      }
     }
     if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),actions);
   }
 
   const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);const deploymentPct=afterEquity>0?deployed/afterEquity:0;const cashReservePct=afterEquity>0?state.cashUsd/afterEquity:0;
-  if(deploymentPct>MAX_DEPLOYMENT_PCT+1e-6)blockedReasons.push("deployment cap exceeded");if(cashReservePct<MIN_CASH_RESERVE_PCT-0.02)blockedReasons.push("cash reserve below policy after costs");
+  if(deploymentPct>MAX_DEPLOYMENT_PCT+1e-6)blockedReasons.push("deployment cap exceeded");if(cashReservePct<MIN_CASH_RESERVE_PCT-1e-6)blockedReasons.push("cash reserve below policy after costs");
   return{version:BRIAN_TREASURY_VERSION,observedAt:input.observedAt,beforeEquityUsd:beforeEquity,afterEquityUsd:afterEquity,state,actions,deploymentUsd:deployed,deploymentPct,cashReservePct,blockedReasons};
 }
 
