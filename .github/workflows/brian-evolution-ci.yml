@@ -6,6 +6,7 @@ on:
       - brian-2026
     paths:
       - 'supabase/functions/_shared/evolution_*.ts'
+      - 'supabase/functions/_shared/evolution_candidates/**'
       - 'supabase/functions/_shared/world_brain*.ts'
       - 'supabase/functions/brian-evolution-*/**'
       - 'supabase/functions/brian-world-*/**'
@@ -19,6 +20,9 @@ on:
       - 'monster-coins-pro/treasury.*'
       - 'monster-coins-pro/ocean.*'
       - 'scripts/evolution_candidate_materialize.ts'
+      - 'tests/evolution_candidates/**'
+      - 'tests/test_brian_evolution_postgres.py'
+      - 'docs/evolution_candidates/**'
       - 'docs/BRIAN_EVOLUTION_OS.md'
       - 'docs/BRIAN_EVOLUTION_LAYER_STATUS.md'
       - 'docs/BRIAN_EVOLUTION_ROLLOUT.md'
@@ -171,24 +175,85 @@ jobs:
           node --check monster-coins-pro/world.js
           node --check monster-coins-pro/treasury.js
           node --check monster-coins-pro/ocean.js
-      - name: Verify migrations do not auto-activate Evolution cron
+      - name: Verify migrations remain dormant until explicit activation
         run: |
           set -euo pipefail
-          if grep -R -nE 'perform[[:space:]]+brian_private\.schedule_' \
-            supabase/migrations/2026091115*_brian_*_schedule.sql \
-            supabase/migrations/2026091116*_brian_*_schedule.sql \
-            supabase/migrations/202609111700_brian_ocean_schedule.sql; then
-            echo 'Evolution schedule migrations must install schedulers only; activation is explicit.'
+          mapfile -t migration_files < <(find supabase/migrations -maxdepth 1 -type f \( \
+            -name '*brian_evolution*.sql' -o \
+            -name '*brian_world*.sql' -o \
+            -name '*brian_alpha_intelligence*.sql' -o \
+            -name '*brian_treasury*.sql' -o \
+            -name '*brian_ocean*.sql' \
+          \) | sort)
+          test "${#migration_files[@]}" -gt 0 || { echo 'Evolution migration set missing'; exit 1; }
+          set +e
+          matches="$(grep -nEi '^[[:space:]]*(select|perform|call)[[:space:]]+brian_private\.(schedule_[a-z0-9_]+|activate_evolution_os)[[:space:]]*\(' "${migration_files[@]}" 2>&1)"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo 'Evolution migration contains an automatic schedule/activation call:'
+            printf '%s\n' "$matches"
+            exit 1
+          elif [ "$code" -ne 1 ]; then
+            echo 'Dormant migration guard itself failed:'
+            printf '%s\n' "$matches"
             exit 1
           fi
-          grep -q 'activate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
-          grep -q 'deactivate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
-      - name: Verify no DIP files changed in Evolution PR
+          grep -Eq 'create or replace function[[:space:]]+brian_private\.activate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
+          grep -Eq 'create or replace function[[:space:]]+brian_private\.deactivate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
+      - name: Verify no DIP files or SQL control references changed in Evolution PR
         run: |
+          set -euo pipefail
           git fetch origin brian-2026
-          if git diff --name-only origin/brian-2026...HEAD | grep -E '(^|/)(dip|DIP|brian_dip|brian-dip)' ; then
+          if git diff --name-only origin/brian-2026...HEAD | grep -Eqi '(^|/)(dip|brian_dip|brian-dip)' ; then
             echo 'Evolution OS must not modify DIP paths'
             exit 1
           fi
+          mapfile -t changed_sql < <(git diff --name-only origin/brian-2026...HEAD -- 'supabase/migrations/*.sql')
+          if [ "${#changed_sql[@]}" -gt 0 ]; then
+            set +e
+            sql_matches="$(git diff --unified=0 origin/brian-2026...HEAD -- "${changed_sql[@]}" | grep '^+' | grep -Ev '^\+\+\+' | grep -Eni '\bbrian_dip\b|\bdip_[a-z0-9_]+\b|\bdip\.' 2>&1)"
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
+              echo 'Evolution SQL diff references DIP control/data identifiers:'
+              printf '%s\n' "$sql_matches"
+              exit 1
+            elif [ "$code" -ne 1 ]; then
+              echo 'DIP SQL-content guard itself failed:'
+              printf '%s\n' "$sql_matches"
+              exit 1
+            fi
+          fi
       - name: Verify patch formatting
         run: git diff --check origin/brian-2026...HEAD
+
+  evolution-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Postgres test dependencies
+        run: python -m pip install pytest psycopg2-binary
+      - name: Run Evolution Treasury and Ocean Postgres concurrency tests
+        env:
+          BRIAN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: python -m pytest -q tests/test_brian_evolution_postgres.py -v
