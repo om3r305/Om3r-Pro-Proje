@@ -9,12 +9,14 @@ SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
 
 
 def test_v5_is_archived_and_not_wired_to_live_dashboards():
-    # V8.3 owns /dip now. V5 may remain cached as an archived asset, but it must
-    # not be executed by either the live DIP page or the main dashboard.
+    # V8.4.1 Authority owns /dip now. V5 may remain cached as an archived asset,
+    # but it must not be executed by either the live DIP page or the main dashboard.
     assert "/dip-expert-v5-brain.js" not in DIP
     assert "/dip-expert-v5-brain.js" not in MAIN
-    assert "/dip-v83.js" in DIP
-    assert "/dip-v83-liveview.js" in DIP
+    assert "/dip-v84.js" in DIP
+    assert "/dip-v841-control.js" in DIP
+    assert "/dip-v83.js" not in DIP
+    assert "/dip-v83-liveview.js" not in DIP
     assert "/dip-expert-v5-brain.js" in SW
 
 
@@ -71,8 +73,8 @@ def test_v5_multi_horizon_and_net_cost_evidence_exist():
 
 
 def test_dip_backend_remains_dedicated_shadow_store():
-    # The V8.3 control endpoint uses the V8 atomic runtime/ledger rather than the
-    # older V5 snapshot/event tables. It must still remain DIP-only and SHADOW-only.
+    # The archived V8.3 control endpoint remains DIP-only and SHADOW-only even
+    # after V8.4.1 Authority takes ownership of the live /dip page.
     for table in (
         "brian_dip_session_events",
         "brian_dip_v8_runtime",
