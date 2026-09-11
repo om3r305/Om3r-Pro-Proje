@@ -1,0 +1,76 @@
+name: Brian Evolution OS CI
+
+on:
+  pull_request:
+    branches:
+      - brian-2026
+    paths:
+      - 'supabase/functions/_shared/evolution_*.ts'
+      - 'supabase/functions/_shared/world_brain*.ts'
+      - 'supabase/functions/brian-evolution-*/**'
+      - 'supabase/functions/brian-world-*/**'
+      - 'supabase/migrations/*brian_evolution*.sql'
+      - 'supabase/migrations/*brian_world*.sql'
+      - 'monster-coins-pro/evolution.*'
+      - 'docs/BRIAN_EVOLUTION_OS.md'
+      - 'config/brian-evolution-baseline-v1.json'
+      - '.github/workflows/brian-evolution-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evolution-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+      - name: Type-check Evolution shared contracts and cloud entrypoints
+        run: >-
+          deno check
+          supabase/functions/_shared/evolution_contract.ts
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/world_brain.ts
+          supabase/functions/_shared/world_brain.test.ts
+          supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-world-brain/index.ts
+          supabase/functions/brian-world-discovery-eye/index.ts
+      - name: Run Evolution behavioral tests
+        run: >-
+          deno test --allow-read
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/world_brain.test.ts
+      - name: Lint Evolution TypeScript
+        run: >-
+          deno lint
+          supabase/functions/_shared/evolution_contract.ts
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/world_brain.ts
+          supabase/functions/_shared/world_brain.test.ts
+          supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-world-brain/index.ts
+          supabase/functions/brian-world-discovery-eye/index.ts
+      - name: Verify dashboard JavaScript syntax
+        run: node --check monster-coins-pro/evolution.js
+      - name: Verify no DIP files changed in Evolution PR
+        run: |
+          git fetch origin brian-2026 --depth=1
+          if git diff --name-only origin/brian-2026...HEAD | grep -E '(^|/)(dip|DIP|brian_dip|brian-dip)' ; then
+            echo 'Evolution OS must not modify DIP paths'
+            exit 1
+          fi
+      - name: Verify patch formatting
+        run: git diff --check origin/brian-2026...HEAD
