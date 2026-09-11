@@ -15,7 +15,7 @@ import {
 import { executionCalibration, unavailableCalibration, hash, type ExecutionCalibration, type Runtime } from "../_shared/dip_v84_contract.ts";
 import { authorityCandidate } from "./authority.ts";
 import type { CandidateResult, DecisionRecord } from "../brian-dip-v84-worker/decision.ts";
-import { closePosition } from "./execution.ts";
+import { closeOnBrianReversal, closePosition } from "./execution.ts";
 import { getMarket, positionFunding, pricePath } from "../brian-dip-v84-worker/market.ts";
 
 type Lease={owner:string;generation:number;assertOwned:()=>void};
@@ -76,6 +76,8 @@ export async function runWorker(db:SupabaseClient,lease:Lease,fetcher:typeof fet
   const cold=executionCalibration({wins:0,losses:0,episodes:0,days:0,ambiguousLosses:0});
   let c:CandidateResult=market?await authorityCandidate(market,sid,rt,cfg,tradeNotional,Date.now(),cold):{thesis:{veto:["DATA_UNAVAILABLE:"+marketError],decision_authority:"BRIAN"},decision:null,occurrence:"",episode:"",combinedFp:"",last5m:0,direction:"WAIT",entry:0,inv:null,target:null,targetRole:"NO_FORWARD_LEVEL",l1:null,size:null,fee:Number(cfg.fee_bps||10),slip:Number(cfg.slippage_bps||1),canEnter:false,candidateEvaluations:[],firstBlockingVeto:"DATA_UNAVAILABLE:"+marketError,vetoStage:"RUNTIME"};
   if(market&&c.decision){const cal=await loadExecutionCalibration(db,String(c.decision.setup),String(c.decision.direction),String(c.decision.regime));c=await authorityCandidate(market,sid,rt,cfg,tradeNotional,Date.now(),cal);}
+  // Brian is also the strategic exit authority. A confident opposite chart thesis may close the open SHADOW position before frozen target/stop.
+  if(market&&rt.pos&&events.length===0&&!pathError){const reversal=closeOnBrianReversal(rt,market,Date.now(),c.thesis);if(reversal)events.push(reversal);}
   const at=Date.now();let decision=c.decision,entryDecision:DecisionRecord|null=c.decision;
   if(decision){
     const existing=await db.from("brian_dip_v84_decisions").select("occurrence_id,episode_id,setup,direction,target_price,invalidation_price").eq("occurrence_id",c.occurrence).maybeSingle();if(existing.error)throw Error("V841_DECISION_READ_FAILED:"+existing.error.message);
