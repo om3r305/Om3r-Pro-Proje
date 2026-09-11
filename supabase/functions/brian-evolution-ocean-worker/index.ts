@@ -11,6 +11,8 @@ const COLLECTOR_ID="brian-evolution-ocean-worker-v1";
 const LEASE_SECONDS=240;
 const CHECKPOINT_MIN_AGE_MS=4*60_000;
 
+type CountFilter={eq?:readonly[string,string];in?:readonly[string,readonly string[]]};
+
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
 async function sha(value:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
 function finite(value:unknown):number|null{if(value==null||value==="")return null;const n=Number(value);return Number.isFinite(n)?n:null;}
@@ -34,12 +36,16 @@ async function treasuryAtOrBefore(at:string){
   if(q.error)throw new Error(`treasury_point:${q.error.message}`);return q.data as Record<string,unknown>|null;
 }
 
-async function countRows(table:string,timeColumn:string,start:string,end:string,extra?:(query:any)=>any):Promise<number>{
-  let q:any=db.from(table).select("*",{count:"exact",head:true}).gte(timeColumn,start).lte(timeColumn,end);if(extra)q=extra(q);const result=await q;if(result.error)throw new Error(`${table}:${result.error.message}`);return Number(result.count??0);
+async function countRows(table:string,timeColumn:string,start:string,end:string,filter:CountFilter={}):Promise<number>{
+  let q=db.from(table).select("*",{count:"exact",head:true}).gte(timeColumn,start).lte(timeColumn,end);
+  if(filter.eq)q=q.eq(filter.eq[0],filter.eq[1]);
+  if(filter.in)q=q.in(filter.in[0],[...filter.in[1]]);
+  const result=await q;if(result.error)throw new Error(`${table}:${result.error.message}`);return Number(result.count??0);
 }
 
 async function uniqueCount(table:string,idColumn:string,timeColumn:string,start:string,end:string):Promise<number>{
-  const q=await db.from(table).select(idColumn).gte(timeColumn,start).lte(timeColumn,end).limit(10000);if(q.error)throw new Error(`${table}:${q.error.message}`);return new Set((q.data??[]).map((row:any)=>String(row[idColumn]))).size;
+  const q=await db.from(table).select(idColumn).gte(timeColumn,start).lte(timeColumn,end).limit(10000);if(q.error)throw new Error(`${table}:${q.error.message}`);
+  const rows=(q.data??[]) as unknown as Record<string,unknown>[];return new Set(rows.map(row=>String(row[idColumn]))).size;
 }
 
 async function latestCheckpointAge(runId:string,nowMs:number){
@@ -67,21 +73,21 @@ async function buildAndPersistReport(run:OceanRunState){
   const [startTreasuryRow,endTreasuryRow,treasuryActions,replacements,newSources,newHypotheses,newCodeCandidates,experimentResults,promotionCandidates,rejectedPromotions,driftEvents,capabilityEvents,missedOpportunities,alphaOutcomeSamples,alphaFavorableAfterCost,collectorRuns,collectorFailures,degradedRuns]=await Promise.all([
     treasuryAtOrBefore(start),treasuryAtOrBefore(end),
     countRows("brian_treasury_shadow_actions","observed_at",start,end),
-    countRows("brian_treasury_shadow_actions","observed_at",start,end,q=>q.eq("reason","OPPORTUNITY_REPLACEMENT")),
+    countRows("brian_treasury_shadow_actions","observed_at",start,end,{eq:["reason","OPPORTUNITY_REPLACEMENT"]}),
     uniqueCount("brian_world_source_candidates","source_id","discovered_at",start,end),
     uniqueCount("brian_evolution_hypothesis_snapshots","hypothesis_id","observed_at",start,end),
     uniqueCount("brian_evolution_code_candidates","candidate_id","proposed_at",start,end),
     countRows("brian_evolution_experiment_results","measured_at",start,end),
-    countRows("brian_evolution_promotion_decisions","decided_at",start,end,q=>q.eq("decision","PROMOTE_CANDIDATE")),
-    countRows("brian_evolution_promotion_decisions","decided_at",start,end,q=>q.eq("decision","REJECT")),
-    countRows("brian_evolution_drift_snapshots","observed_at",start,end,q=>q.in("severity",["MATERIAL","SEVERE"])),
-    countRows("brian_evolution_events","occurred_at",start,end,q=>q.eq("entity_type","CAPABILITY")),
+    countRows("brian_evolution_promotion_decisions","decided_at",start,end,{eq:["decision","PROMOTE_CANDIDATE"]}),
+    countRows("brian_evolution_promotion_decisions","decided_at",start,end,{eq:["decision","REJECT"]}),
+    countRows("brian_evolution_drift_snapshots","observed_at",start,end,{in:["severity",["MATERIAL","SEVERE"]]}),
+    countRows("brian_evolution_events","occurred_at",start,end,{eq:["entity_type","CAPABILITY"]}),
     countRows("brian_missed_opportunity_receipts","resolved_at",start,end),
     countRows("brian_alpha_decision_outcomes","resolved_at",start,end),
-    countRows("brian_alpha_decision_outcomes","resolved_at",start,end,q=>q.eq("classification","ACTION_FAVORABLE_AFTER_COST")),
+    countRows("brian_alpha_decision_outcomes","resolved_at",start,end,{eq:["classification","ACTION_FAVORABLE_AFTER_COST"]}),
     countRows("brian_collector_runs","started_at",start,end),
-    countRows("brian_collector_runs","started_at",start,end,q=>q.eq("status","FAILED")),
-    countRows("brian_collector_runs","started_at",start,end,q=>q.eq("status","DEGRADED")),
+    countRows("brian_collector_runs","started_at",start,end,{eq:["status","FAILED"]}),
+    countRows("brian_collector_runs","started_at",start,end,{eq:["status","DEGRADED"]}),
   ]);
   const summary=buildOceanReport({run,treasuryStart:treasuryPoint(startTreasuryRow),treasuryEnd:treasuryPoint(endTreasuryRow),treasuryActions,replacements,newSources,newHypotheses,newCodeCandidates,experimentResults,promotionCandidates,rejectedPromotions,driftEvents,capabilityEvents,missedOpportunities,alphaOutcomeSamples,alphaFavorableAfterCost,collectorRuns,collectorFailures,degradedRuns});
   const reportId=await sha(`ocean-report|${run.runId}|${run.effectiveEndAt}|${BRIAN_OCEAN_VERSION}`);
