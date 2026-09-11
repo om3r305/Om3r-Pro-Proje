@@ -65,10 +65,13 @@ Implemented:
 
 - Hypothesis Engine that converts observed capability gaps, calibration failures, negative after-cost outcomes, reliability gaps and drift into falsifiable research candidates;
 - Experiment Factory with prospective control/challenger plans and contamination declarations;
+- stable experiment identity so hourly research refreshes do not reset sample maturity;
 - deterministic replay/stress/prospective metric contracts;
 - Promotion Council with explicit leakage, sample, regime, edge, drawdown, stability and complexity gates;
 - drift snapshots and decay-oriented research signals;
 - Self-Coding Sandbox contract with a strict path allowlist, maximum file/patch budgets and mandatory provenance;
+- exact 40-character canonical parent pinning with no stale fallback;
+- parent rotation creates a fresh candidate identity while preserving old evidence;
 - cloud sandbox broker that creates code-candidate manifests and records TYPECHECK / UNIT / REPLAY / STRESS / PROSPECTIVE receipts;
 - built-in safe challenger generator for ACTION_GATE, EXPECTED_EDGE, RELIABILITY_FEEDBACK, COST_CONTROL and DRIFT hypotheses;
 - general capability-gap code generation deliberately fails closed until a specialized generator exists;
@@ -76,7 +79,7 @@ Implemented:
 - manual/human handoff remains mandatory for candidate branch materialization and any later canonical promotion;
 - Evolution Lab status/dashboard sections for hypotheses, experiments, candidates, review verdicts and cloud runs.
 
-Layer 3 exit condition is satisfied at code-contract level for supported hypothesis classes: Brian can produce an isolated candidate artifact, test/evaluate it prospectively, nominate or reject it, and preserve a complete audit trail without mutating canonical behavior. Runtime activation and real prospective evidence are still pending deployment.
+Layer 3 exit condition is satisfied at code-contract level for supported hypothesis classes. Runtime activation and real prospective evidence are still pending deployment.
 
 ## Layer 4 — ALPHA Expected Edge + Reliability Feedback
 
@@ -84,16 +87,19 @@ Status: **CHALLENGER IMPLEMENTED / PROSPECTIVE VALIDATION PENDING**
 
 Implemented so far:
 
-- expected-edge decomposition: historical prospective gross directional move − exact decision-time round-trip cost − uncertainty penalty − evidence-decay penalty;
+- expected-edge decomposition: lagged prospective gross directional move − exact decision-time round-trip cost − uncertainty penalty − evidence-decay penalty;
 - null/unknown cost fails closed and is never coerced to zero;
 - reliability feedback uses only snapshots whose `window_end` and `generated_at` are at or before the ALPHA decision timestamp;
+- reliability is now bound to the exact decision source observation + original independent group + sensor family + horizon instead of a look-alike group row;
+- compiler-collapsed `intrabar_tape` evidence resolves back to the actual raw micro sensor lineage that voted;
+- historical `avg_signed_bps` is treated correctly as already sensor-direction aligned and is not flipped a second time for SHORT decisions;
 - Bayesian/maturity shrinkage keeps measured sensor reliability bounded around the neutral 0.5 prior;
 - at least two mature independent evidence groups are required;
 - post-decision reliability or future source observations contaminate and block the challenger decision;
-- append-only `brian_alpha_expected_edge_challenger` persistence with `ALLOW_EDGE`, `DOWNGRADE_TO_WAIT`, `COST_UNAVAILABLE`, `INSUFFICIENT_LAGGED_EVIDENCE` and `CONTAMINATED_EVIDENCE` outcomes;
+- append-only `brian_alpha_expected_edge_challenger` persistence with fail-closed outcomes;
 - cloud expected-edge challenger schedule and authenticated status endpoint;
-- Experiment Runner now measures ACTION_GATE plus EXPECTED_EDGE / RELIABILITY_FEEDBACK / COST_CONTROL challengers against 15-minute prospective after-cost outcomes;
-- Promotion Council can evaluate those challenger/control result pairs without mutating canonical ALPHA.
+- Experiment Runner measures challenger/control results prospectively;
+- Promotion Council can evaluate those result pairs without mutating canonical ALPHA.
 
 Not yet promoted:
 
@@ -105,22 +111,24 @@ Layer 4 promotion requires enough clean prospective samples/regimes showing bett
 
 ## Layer 5 — $10,000 SHADOW Brian Treasury
 
-Status: **CODE COMPLETE / ROLLOUT + PROSPECTIVE VALIDATION PENDING**
+Status: **CODE COMPLETE / FINAL REGRESSION + ROLLOUT VALIDATION PENDING**
 
 Implemented:
 
 - one unified `$10,000` Brian SHADOW cash pool rather than independent per-signal fake tickets;
 - Layer-4 promotion gate: Treasury may deploy only when the latest EXPECTED_EDGE prospective experiment is `PROMOTE_CANDIDATE`;
 - a closed/revoked Layer-4 gate blocks new allocation and fail-closes any existing SHADOW allocation back to cash;
-- max 70% total deployment, minimum 30% cash reserve, max 12% per position, minimum 2.5% sizing band and max eight simultaneous positions;
-- sizing uses expected net edge, bounded reliability confidence and mature independent-group breadth;
+- no fixed `$3/$5/$10/$20` Treasury ticket size, mandatory 30% reserve, arbitrary 70% deployment ceiling or 12% per-position ceiling;
+- conviction sizing uses after-cost expected net edge, bounded reliability confidence and mature independent-group breadth;
+- ordinary evidence receives partial capital while exceptionally strong validated evidence can use effectively all available SHADOW equity after reserving point-in-time entry cost;
+- maximum eight simultaneous positions remains a book-complexity bound, not a forced diversification target;
 - entry/exit costs are charged against the Treasury ledger rather than displayed only as diagnostics;
 - exit brain supports direction flip, edge invalidation, stale edge, hard risk stop, profit-edge decay, time decay and opportunity replacement;
-- replacement logic can recycle capital from a weaker position when a materially better validated opportunity appears;
-- same-cycle re-open protection prevents a stopped/invalidated asset from immediately reopening from stale evidence;
-- latest marks are timestamp ordered and reserve/deployment formulas account for entry costs;
+- opportunity replacement is not limited to a full book: a materially superior candidate can liquidate one or more weaker positions, including at a realized loss, to fund its higher conviction target;
+- same-cycle re-open protection prevents a stopped/invalidated/replaced asset from immediately reopening from stale evidence;
+- latest marks are timestamp ordered and sizing formulas reserve exact entry cost rather than allowing negative cash;
 - append-only `brian_treasury_shadow_snapshots` and normalized `brian_treasury_shadow_actions` persistence;
-- one atomic/idempotent DB commit function writes each Treasury snapshot and its actions in a single transaction;
+- database-level advisory lock + parent compare-and-swap serialize Treasury history, reject stale forks/non-monotonic cycles and keep exact retries idempotent;
 - cloud Treasury worker, one-minute schedule preparation, authenticated Treasury status endpoint and `/treasury.html` mobile dashboard;
 - Evolution UI links directly to Treasury while keeping browser/mobile observation-only.
 
@@ -128,11 +136,12 @@ The Treasury remains SHADOW ONLY. No exchange order, credential, withdrawal or l
 
 ## Layer 6 — Ocean Run
 
-Status: **CODE COMPLETE / ROLLOUT + 24–48H PROSPECTIVE RUN PENDING**
+Status: **CODE COMPLETE / FINAL REGRESSION + ROLLOUT + 24–48H PROSPECTIVE RUN PENDING**
 
 Implemented:
 
 - append-only Ocean START/STOP command ledger with only 24h or 48h planned durations;
+- database-serialized START/STOP RPCs; direct service-role command inserts are revoked so concurrent dashboard requests cannot create parallel active exams;
 - dashboard-authenticated preflight that requires Treasury, Layer-4 expected-edge and key Evolution workers to have healthy runtime evidence before Ocean can start;
 - browser-independent `brian-evolution-ocean-worker` with cloud lease protection and five-minute schedule preparation;
 - active-run checkpoints capturing Treasury equity/cash/deployment/open positions plus recent collector health;
@@ -147,11 +156,11 @@ Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envel
 
 ## Regression checkpoint
 
-The Layer 0–6 code path has passed Deno type-checking, all 59 Evolution behavioral tests, Deno lint, dashboard JavaScript syntax checks and the dedicated no-DIP-path guard. The existing Brian 2026 and ALPHA regression suites have also passed on the same implementation line. The PR is structurally mergeable, remains draft and is not deployed.
+The integration line previously passed Evolution, Brian 2026 and ALPHA regression CI. Additional final hardening has since been added for exact reliability lineage, Treasury compare-and-swap persistence, conviction sizing/capital recycling, and atomic Ocean control. Therefore **only the next exact-head three-CI pass counts as the final regression checkpoint**; older green runs are historical evidence, not merge readiness.
 
 ## Completion state before rollout
 
-Layers 0–6 now exist at code-contract level in the draft integration branch. Remaining sequence: migration/order review -> explicit merge/deploy approval -> cloud rollout verification -> actual 24–48h Ocean observation.
+Layers 0–6 exist at code-contract level in the draft integration branch. Remaining sequence: exact-head regression -> migration/order review -> base reconciliation if required -> explicit merge/deploy approval -> cloud rollout verification -> actual 24–48h Ocean observation.
 
 ## Activation rule
 
