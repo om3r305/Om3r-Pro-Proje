@@ -66,9 +66,10 @@ const MIN_MATURE_SAMPLES = 100;
 const MIN_MATURE_GROUPS = 2;
 const GROSS_CAP_BPS = 75;
 const UNCERTAINTY_FLOOR_BPS = 1.5;
-const IMMaturity_PENALTY_BPS = 8;
+const IMMATURITY_PENALTY_BPS = 8;
 
 function finite(value: unknown): number | null {
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -246,7 +247,7 @@ export function estimateExpectedNetEdge(input: ExpectedEdgeInput): ExpectedEdgeD
   const gross = weightedMean(weighted)!;
   const dispersion = weightedMeanAbsoluteDeviation(weighted, gross);
   const avgMaturity = mature.reduce((sum, row) => sum + row.maturity, 0) / mature.length;
-  const uncertainty = UNCERTAINTY_FLOOR_BPS + 0.5 * dispersion + (1 - avgMaturity) * IMMaturity_PENALTY_BPS;
+  const uncertainty = UNCERTAINTY_FLOOR_BPS + 0.5 * dispersion + (1 - avgMaturity) * IMMATURITY_PENALTY_BPS;
   const freshness = freshnessDecayFraction(input.freshness, decisionMs);
   if (freshness.contaminated) pitClear = false;
   reasons.push(...freshness.reasons);
