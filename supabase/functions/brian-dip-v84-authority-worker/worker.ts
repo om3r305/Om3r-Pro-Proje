@@ -60,13 +60,21 @@ async function recordCandidateTelemetry(db:SupabaseClient,sid:string,c:Candidate
   }catch(e){console.error("v841 telemetry non-authoritative failure",e instanceof Error?e.message:String(e));}
 }
 
+async function latestAuthoritySession(db:SupabaseClient):Promise<{latest:any;start:any}|null>{
+  const startQ=await db.from("brian_dip_v84_session_events").select("*").eq("event_kind","START").contains("config",{release_id:RELEASE_ID}).order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();
+  if(startQ.error)throw Error("V841_START_READ_FAILED:"+startQ.error.message);if(!startQ.data)return null;
+  const q=await db.from("brian_dip_v84_session_events").select("*").eq("session_id",String(startQ.data.session_id)).order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();
+  if(q.error)throw Error("V841_SESSION_READ_FAILED:"+q.error.message);if(!q.data)throw Error("V841_SESSION_EVENT_MISSING");
+  return{latest:q.data,start:startQ.data};
+}
+
 export async function runWorker(db:SupabaseClient,lease:Lease,fetcher:typeof fetch=fetch):Promise<J>{
   await assertReleaseSealed(db);
-  const q=await db.from("brian_dip_v84_session_events").select("*").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();if(q.error)throw Error("V841_SESSION_READ_FAILED:"+q.error.message);const sess=q.data;if(!sess)return{status:"NO_ACTIVE_SESSION",release_id:RELEASE_ID,shadow_only:true,live_execution:false};
-  let startSess=sess;if(sess.event_kind!=="START"){const z=await db.from("brian_dip_v84_session_events").select("*").eq("session_id",String(sess.session_id)).eq("event_kind","START").order("requested_at",{ascending:true}).order("event_id",{ascending:true}).limit(1).maybeSingle();if(z.error)throw Error("V841_START_READ_FAILED:"+z.error.message);if(!z.data)throw Error("V841_START_MISSING");startSess=z.data;}
+  const current=await latestAuthoritySession(db);if(!current)return{status:"NO_ACTIVE_SESSION",release_id:RELEASE_ID,shadow_only:true,live_execution:false,browser_execution:false};
+  const sess=current.latest,startSess=current.start;
   const cfg=(startSess.config??{}) as J;validateSession(cfg);
   const sid=String(startSess.session_id),startingEquity=Number(startSess.starting_equity||0),tradeNotional=Math.min(Number(startSess.trade_notional||startingEquity||0),startingEquity);if(!(tradeNotional>0))throw Error("V841_INVALID_TRADE_NOTIONAL");
-  const loaded=await readRuntime(db,sid),rt=loaded.runtime;if(sess.event_kind!=="START"&&!rt.pos)return{status:"PAUSED",session_id:sid,release_id:RELEASE_ID,shadow_only:true,live_execution:false};
+  const loaded=await readRuntime(db,sid),rt=loaded.runtime;if(sess.event_kind!=="START"&&!rt.pos)return{status:"PAUSED",session_id:sid,release_id:RELEASE_ID,shadow_only:true,live_execution:false,browser_execution:false};
   const events:J[]=[];let pathError:string|null=null;
   if(rt.pos){
     const p=rt.pos,start=p.checked_until||Date.parse(p.opened_at),due=Date.parse(p.due_at);
@@ -76,7 +84,6 @@ export async function runWorker(db:SupabaseClient,lease:Lease,fetcher:typeof fet
   const cold=executionCalibration({wins:0,losses:0,episodes:0,days:0,ambiguousLosses:0});
   let c:CandidateResult=market?await authorityCandidate(market,sid,rt,cfg,tradeNotional,Date.now(),cold):{thesis:{veto:["DATA_UNAVAILABLE:"+marketError],decision_authority:"BRIAN"},decision:null,occurrence:"",episode:"",combinedFp:"",last5m:0,direction:"WAIT",entry:0,inv:null,target:null,targetRole:"NO_FORWARD_LEVEL",l1:null,size:null,fee:Number(cfg.fee_bps||10),slip:Number(cfg.slippage_bps||1),canEnter:false,candidateEvaluations:[],firstBlockingVeto:"DATA_UNAVAILABLE:"+marketError,vetoStage:"RUNTIME"};
   if(market&&c.decision){const cal=await loadExecutionCalibration(db,String(c.decision.setup),String(c.decision.direction),String(c.decision.regime));c=await authorityCandidate(market,sid,rt,cfg,tradeNotional,Date.now(),cal);}
-  // Brian is also the strategic exit authority. A confident opposite chart thesis may close the open SHADOW position before frozen target/stop.
   if(market&&rt.pos&&events.length===0&&!pathError){const reversal=closeOnBrianReversal(rt,market,Date.now(),c.thesis);if(reversal)events.push(reversal);}
   const at=Date.now();let decision=c.decision,entryDecision:DecisionRecord|null=c.decision;
   if(decision){
