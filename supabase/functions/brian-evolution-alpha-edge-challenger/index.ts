@@ -33,7 +33,7 @@ async function loadDecisions(){
   const since=new Date(Date.now()-DECISION_LOOKBACK_MS).toISOString();
   const q=await db.from("brian_alpha_decisions")
     .select("decision_id,observed_at,asset_id,action,direction,evidence_score,support_groups,source_observation_ids,estimated_round_trip_cost_bps")
-    .in("action",["OPEN_LONG","OPEN_SHORT"]).gte("observed_at",since).order("observed_at",{ascending:true}).limit(MAX_DECISIONS);
+    .in("action",["OPEN_LONG","OPEN_SHORT"]).gte("observed_at",since).order("observed_at",{ascending:false}).limit(MAX_DECISIONS);
   if(q.error)throw new Error(`decisions:${q.error.message}`);
   const rows=(q.data??[]) as DecisionRow[];
   if(!rows.length)return[];
@@ -41,7 +41,7 @@ async function loadDecisions(){
   const existing=await db.from("brian_alpha_expected_edge_challenger").select("decision_id").in("decision_id",ids).limit(MAX_DECISIONS*2);
   if(existing.error)throw new Error(`existing_edges:${existing.error.message}`);
   const seen=new Set((existing.data??[]).map(row=>String(row.decision_id)));
-  return rows.filter(row=>!seen.has(String(row.decision_id)));
+  return rows.filter(row=>!seen.has(String(row.decision_id))).sort((a,b)=>Date.parse(a.observed_at)-Date.parse(b.observed_at));
 }
 
 async function reliabilityWindowAsOf(decisionAt:string):Promise<ReliabilityWindow|null>{
@@ -102,7 +102,7 @@ async function persistDecision(decision:DecisionRow){
     recommendation:decomposition.recommendation,eligible:decomposition.eligible,mature_group_count:decomposition.matureGroupCount,
     group_contributions:decomposition.groupContributions,reliability_weights:decomposition.reliabilityWeights,pit_clear:decomposition.pitClear,
     reasons:decomposition.reasons,model_version:decomposition.version,
-    metadata:{role:"SHADOW_CHALLENGER_ONLY",canonical_mutation:false,decision_time_reliability_only:true,decision_time_cost_only:true,source_freshness_rows:freshness.length,reliability_rows:reliability.length},
+    metadata:{role:"SHADOW_CHALLENGER_ONLY",canonical_mutation:false,decision_time_reliability_only:true,decision_time_cost_only:true,source_freshness_rows:freshness.length,reliability_rows:reliability.length,newest_first_candidate_scan:true},
     evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,canonical_mutation:false,
   };
   const q=await db.from("brian_alpha_expected_edge_challenger").upsert(row,{onConflict:"decision_id",ignoreDuplicates:true});
@@ -128,8 +128,8 @@ Deno.serve(async(req:Request)=>{
       const allow=results.filter(r=>(r as {recommendation?:string}).recommendation==="ALLOW_EDGE").length;
       const downgrade=results.filter(r=>(r as {recommendation?:string}).recommendation==="DOWNGRADE_TO_WAIT").length;
       const failClosed=results.length-allow-downgrade;
-      await recordRun(startedAt,"SUCCESS",decisions.length,results.length,{allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed});
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,evaluated:decisions.length,stored:results.length,allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,results,canonical_mutation:false,direct_alpha_influence:false,shadow_only:true,live_execution:false};
+      await recordRun(startedAt,"SUCCESS",decisions.length,results.length,{allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,newest_first_candidate_scan:true});
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,evaluated:decisions.length,stored:results.length,allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,results,newest_first_candidate_scan:true,canonical_mutation:false,direct_alpha_influence:false,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await recordRun(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
