@@ -1,4 +1,4 @@
-import { planPromotionGatedTreasuryCycle } from "./evolution_treasury_gate.ts";
+import { normalizePromotionGate, planPromotionGatedTreasuryCycle } from "./evolution_treasury_gate.ts";
 import { initialTreasuryState, type TreasuryOpportunity, type TreasuryPosition } from "./evolution_treasury.ts";
 
 function opportunity(overrides: Partial<TreasuryOpportunity> = {}): TreasuryOpportunity {
@@ -41,7 +41,7 @@ Deno.test("closed Layer-4 promotion gate keeps a fresh treasury entirely in cash
     state,
     opportunities: [opportunity()],
     observedAt: "2026-09-11T13:00:00Z",
-    promotionGate: { authorized: false, reason: "no promoted EXPECTED_EDGE experiment", evidenceRef: null },
+    promotionGate: { authorized: false, reason: "no promoted EXPECTED_EDGE experiment", evidenceRef: null, decidedAt: null },
     positionIdFor: (row) => `p-${row.sourceDecisionId}`,
   });
   if (plan.actions.length !== 0 || plan.state.positions.length !== 0 || plan.deploymentUsd !== 0) throw new Error(JSON.stringify(plan));
@@ -57,22 +57,46 @@ Deno.test("closing Layer-4 promotion gate immediately flattens any existing shad
     state,
     opportunities: [opportunity({ observedAt: "2026-09-11T13:00:00Z", referencePrice: 101 })],
     observedAt: "2026-09-11T13:00:00Z",
-    promotionGate: { authorized: false, reason: "promotion revoked", evidenceRef: "promotion:old" },
+    promotionGate: { authorized: false, reason: "promotion revoked", evidenceRef: "promotion:old", decidedAt: "2026-09-11T12:59:00Z" },
     positionIdFor: () => "unused",
   });
   if (plan.state.positions.length !== 0 || plan.deploymentUsd !== 0) throw new Error(JSON.stringify(plan));
   if (plan.actions.length !== 1 || plan.actions[0].kind !== "EXIT" || plan.actions[0].reason !== "EDGE_INVALIDATED") throw new Error(JSON.stringify(plan.actions));
 });
 
-Deno.test("open promotion gate delegates to the normal opportunity allocator", () => {
+Deno.test("fresh open promotion gate delegates to the normal opportunity allocator", () => {
   const state = initialTreasuryState("2026-09-11T12:59:00Z");
   const plan = planPromotionGatedTreasuryCycle({
     state,
     opportunities: [opportunity()],
     observedAt: "2026-09-11T13:00:00Z",
-    promotionGate: { authorized: true, reason: "EXPECTED_EDGE promoted in prospective shadow", evidenceRef: "promotion:123" },
+    promotionGate: { authorized: true, reason: "EXPECTED_EDGE promoted in prospective shadow", evidenceRef: "promotion:123", decidedAt: "2026-09-11T12:30:00Z" },
     positionIdFor: (row) => `p-${row.sourceDecisionId}`,
   });
   if (plan.actions[0]?.kind !== "OPEN" || plan.state.positions.length !== 1) throw new Error(JSON.stringify(plan));
   if (!plan.promotionGate.authorized || plan.promotionGate.evidenceRef !== "promotion:123") throw new Error(JSON.stringify(plan.promotionGate));
+});
+
+Deno.test("stale promoted EXPECTED_EDGE authority expires fail-closed", () => {
+  const gate = normalizePromotionGate(
+    { authorized: true, reason: "old promotion", evidenceRef: "promotion:old", decidedAt: "2026-09-11T06:00:00Z" },
+    "2026-09-11T13:00:01Z",
+  );
+  if (gate.authorized || !gate.reason.includes("expired")) throw new Error(JSON.stringify(gate));
+});
+
+Deno.test("future-dated promotion authority is rejected", () => {
+  const gate = normalizePromotionGate(
+    { authorized: true, reason: "future promotion", evidenceRef: "promotion:future", decidedAt: "2026-09-11T13:01:00Z" },
+    "2026-09-11T13:00:00Z",
+  );
+  if (gate.authorized || !gate.reason.includes("future")) throw new Error(JSON.stringify(gate));
+});
+
+Deno.test("authorized promotion without timestamp is rejected", () => {
+  const gate = normalizePromotionGate(
+    { authorized: true, reason: "missing timestamp", evidenceRef: "promotion:missing", decidedAt: null },
+    "2026-09-11T13:00:00Z",
+  );
+  if (gate.authorized || !gate.reason.includes("no valid decision timestamp")) throw new Error(JSON.stringify(gate));
 });
