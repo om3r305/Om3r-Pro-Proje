@@ -1,6 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { ALPHA_COMPILER_VERSION } from "../_shared/alpha_decision.ts";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
+import { EVOLUTION_ALPHA_INTELLIGENCE_VERSION } from "../_shared/evolution_alpha_intelligence.ts";
 import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 import {
   buildExperimentPlan,
@@ -8,6 +10,7 @@ import {
   generateResearchHypotheses,
   type ChallengerSignal,
   type GapSignal,
+  type HypothesisCandidate,
   type OutcomeSignal,
   type ReliabilitySignal,
   type ResearchInputs,
@@ -18,6 +21,7 @@ const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const COLLECTOR_ID = "brian-evolution-researcher-v1";
 const LEASE_SECONDS = 240;
+const ACTION_GATE_CHALLENGER_VERSION = "brian-alpha-calibration-challenger-v1";
 
 function out(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -27,7 +31,17 @@ async function sha(value: string): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 const finite = (v: unknown, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+const nullableFinite = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  const parsed = Number(v);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 const avg = (values: number[]): number | null => values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+const challengerVersionFor = (kind: HypothesisCandidate["hypothesisKind"]): string => {
+  if (kind === "ACTION_GATE") return ACTION_GATE_CHALLENGER_VERSION;
+  if (kind === "EXPECTED_EDGE" || kind === "RELIABILITY_FEEDBACK" || kind === "COST_CONTROL") return EVOLUTION_ALPHA_INTELLIGENCE_VERSION;
+  return `${EVOLUTION_RESEARCH_VERSION}:${kind.toLowerCase()}`;
+};
 
 async function loadGaps(): Promise<GapSignal[]> {
   const q = await db.from("brian_evolution_latest_gaps")
@@ -51,8 +65,10 @@ async function loadChallenger(observedAt: string): Promise<ChallengerSignal | nu
   const rows = q.data ?? [];
   if (!rows.length) return null;
   const count = (name: string) => rows.filter((r) => String(r.challenger_action) === name).length;
-  const allowCosts = rows.filter((r) => String(r.challenger_action) === "ALLOW_ACTION").map((r) => finite(r.avg_support_cost_adjusted_bps));
-  const downCosts = rows.filter((r) => String(r.challenger_action) === "DOWNGRADE_TO_WAIT").map((r) => finite(r.avg_support_cost_adjusted_bps));
+  const allowCosts = rows.filter((r) => String(r.challenger_action) === "ALLOW_ACTION")
+    .map((r) => nullableFinite(r.avg_support_cost_adjusted_bps)).filter((n): n is number => n != null);
+  const downCosts = rows.filter((r) => String(r.challenger_action) === "DOWNGRADE_TO_WAIT")
+    .map((r) => nullableFinite(r.avg_support_cost_adjusted_bps)).filter((n): n is number => n != null);
   return {
     allowAction: count("ALLOW_ACTION"), downgradeToWait: count("DOWNGRADE_TO_WAIT"), keepWait: count("KEEP_WAIT"),
     allowAvgCostAdjustedBps: avg(allowCosts), downgradeAvgCostAdjustedBps: avg(downCosts), observedAt,
@@ -73,19 +89,27 @@ async function loadOutcomes(observedAt: string): Promise<OutcomeSignal[]> {
   const horizons = [...new Set(openRows.map((r) => Math.trunc(finite(r.horizon_seconds))).filter((n) => n > 0))].sort((a, b) => a - b);
   return horizons.map((horizon) => {
     const rows = openRows.filter((r) => Math.trunc(finite(r.horizon_seconds)) === horizon);
-    const directional = rows.map((r) => finite(r.direction_adjusted_return) * 10_000);
-    const afterCost = rows.map((r) => {
-      const metadata = (r.metadata ?? {}) as Record<string, unknown>;
-      return finite(r.direction_adjusted_return) * 10_000 - finite(metadata.estimated_round_trip_cost_bps);
+    const valid = rows.flatMap((row) => {
+      const directionAdjustedReturn = nullableFinite(row.direction_adjusted_return);
+      const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+      const cost = nullableFinite(metadata.estimated_round_trip_cost_bps);
+      if (directionAdjustedReturn == null || cost == null || cost < 0) return [];
+      return [{
+        grossBps: directionAdjustedReturn * 10_000,
+        afterCostBps: directionAdjustedReturn * 10_000 - cost,
+        favorable: String(row.classification) === "ACTION_FAVORABLE_AFTER_COST",
+      }];
     });
+    const directional = valid.map((r) => r.grossBps);
+    const afterCost = valid.map((r) => r.afterCostBps);
     const positive = directional.filter((n) => n > 0).length;
-    const favorable = rows.filter((r) => String(r.classification) === "ACTION_FAVORABLE_AFTER_COST").length;
+    const favorable = valid.filter((r) => r.favorable).length;
     return {
-      horizonSeconds: horizon, samples: rows.length,
-      grossPositiveRate: rows.length ? positive / rows.length : null,
+      horizonSeconds: horizon, samples: valid.length,
+      grossPositiveRate: valid.length ? positive / valid.length : null,
       avgDirectionBps: avg(directional), avgAfterCostBps: avg(afterCost),
-      favorableAfterCostRate: rows.length ? favorable / rows.length : null,
-      observedAt, evidenceRefs: [`brian_alpha_decision_outcomes:${horizon}s:${rows.length}`],
+      favorableAfterCostRate: valid.length ? favorable / valid.length : null,
+      observedAt, evidenceRefs: [`brian_alpha_decision_outcomes:${horizon}s:cost-complete:${valid.length}`],
     };
   });
 }
@@ -110,7 +134,9 @@ async function loadReliability(observedAt: string): Promise<ReliabilitySignal[]>
   const canonical = new Map<string, number[]>();
   for (const row of canonicalQ.data ?? []) {
     const group = String(row.independent_group); const bucket = canonical.get(group) ?? [];
-    bucket.push(finite(row.reliability, .5)); canonical.set(group, bucket);
+    const reliability = nullableFinite(row.reliability);
+    if (reliability != null && reliability >= 0 && reliability <= 1) bucket.push(reliability);
+    canonical.set(group, bucket);
   }
   const best = new Map<string, Record<string, unknown>>();
   for (const row of measuredQ.data ?? []) {
@@ -119,8 +145,8 @@ async function loadReliability(observedAt: string): Promise<ReliabilitySignal[]>
   }
   return [...best.entries()].map(([group, row]) => ({
     sensorFamily: group, samples: Math.trunc(finite(row.sample_count)),
-    canonicalReliability: avg(canonical.get(group) ?? []), measuredScore: finite(row.bayesian_hit_rate_beta10_10, .5),
-    avgCostAdjustedBps: finite(row.avg_cost_adjusted_signed_bps), observedAt,
+    canonicalReliability: avg(canonical.get(group) ?? []), measuredScore: nullableFinite(row.bayesian_hit_rate_beta10_10),
+    avgCostAdjustedBps: nullableFinite(row.avg_cost_adjusted_signed_bps), observedAt,
     evidenceRefs: [`brian_sensor_reliability_shadow_snapshots:${group}:${windowEnd}`],
   }));
 }
@@ -139,13 +165,14 @@ async function persistHypotheses(inputs: ResearchInputs): Promise<{ hypotheses: 
       stage: h.stage, uncertainty: h.uncertainty, metadata: { ...h.metadata, priority: h.priority, hypothesis_kind: h.hypothesisKind, research_version: EVOLUTION_RESEARCH_VERSION },
       evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false,
     });
-    const plan = buildExperimentPlan(h, "brian.alpha-decision-v2.2", `${h.hypothesisKind.toLowerCase()}-challenger-v1`);
+    const challengerVersion = challengerVersionFor(h.hypothesisKind);
+    const plan = buildExperimentPlan(h, ALPHA_COMPILER_VERSION, challengerVersion);
     experimentRows.push({
       experiment_id: plan.experimentId, hypothesis_id: plan.hypothesisId, created_at_source: plan.createdAt,
       control_version: plan.controlVersion, challenger_version: plan.challengerVersion, mode: plan.mode,
       minimum_samples: plan.minimumSamples, minimum_regimes: plan.minimumRegimes, success_metrics: plan.successMetrics,
       hard_fail_conditions: plan.hardFailConditions, contamination_rules: plan.contaminationRules, stage: plan.stage,
-      metadata: { research_version: EVOLUTION_RESEARCH_VERSION, auto_generated_plan: true }, evidence_class: EVOLUTION_EVIDENCE_CLASS,
+      metadata: { research_version: EVOLUTION_RESEARCH_VERSION, auto_generated_plan: true, stable_identity: true }, evidence_class: EVOLUTION_EVIDENCE_CLASS,
       shadow_only: true, live_execution: false, autonomous_apply_allowed: false,
     });
   }
@@ -162,7 +189,7 @@ async function persistHypotheses(inputs: ResearchInputs): Promise<{ hypotheses: 
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown):Promise<void>{
   const finishedAt=new Date().toISOString();const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_RESEARCHER_ERROR":null,error_message:error?String(error).slice(0,1200):null,evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,metadata:{research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,autonomous_apply_allowed:false}});if(q.error)console.error("research receipt",q.error.message);
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_RESEARCHER_ERROR":null,error_message:error?String(error).slice(0,1200):null,evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,metadata:{research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,stable_experiment_identity:true,control_version:ALPHA_COMPILER_VERSION}});if(q.error)console.error("research receipt",q.error.message);
 }
 
 Deno.serve(async(req:Request)=>{
@@ -175,7 +202,7 @@ Deno.serve(async(req:Request)=>{
       const inputs:ResearchInputs={gaps,challenger,outcomes,reliability,observedAt};
       const persisted=await persistHypotheses(inputs);const observed=gaps.length+(challenger?1:0)+outcomes.length+reliability.length;
       await receipt(startedAt,"SUCCESS",observed,persisted.hypotheses+persisted.experiments);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length},...persisted,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length},...persisted,stable_experiment_identity:true,control_version:ALPHA_COMPILER_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
