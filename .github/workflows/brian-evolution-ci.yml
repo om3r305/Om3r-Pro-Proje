@@ -55,6 +55,7 @@ jobs:
           supabase/functions/brian-evolution-experiment-runner/index.ts
           supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
           supabase/functions/brian-world-status/index.ts
@@ -88,6 +89,7 @@ jobs:
           supabase/functions/brian-evolution-experiment-runner/index.ts
           supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
           supabase/functions/brian-world-status/index.ts
