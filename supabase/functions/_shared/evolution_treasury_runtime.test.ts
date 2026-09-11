@@ -10,17 +10,27 @@ Deno.test("Treasury runtime evidence is actionable only with fresh edge, evaluat
   if (!result.actionable || result.reasons.length) throw new Error(JSON.stringify(result));
 });
 
-Deno.test("Treasury rejects a fresh-looking edge that was evaluated too late", () => {
+Deno.test("Treasury allows a near-three-minute evaluation created by the two-minute challenger cadence", () => {
   const result = assessTreasuryRuntimeEvidence({
     nowIso: "2026-09-11T14:00:00Z",
-    edgeObservedAt: "2026-09-11T13:57:30Z",
-    edgeEvaluatedAt: "2026-09-11T13:59:50Z",
+    edgeObservedAt: "2026-09-11T13:57:10Z",
+    edgeEvaluatedAt: "2026-09-11T13:59:55Z",
+    markObservedAt: "2026-09-11T13:59:55Z",
+  });
+  if (!result.actionable || result.reasons.length) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("Treasury rejects an edge whose challenger evaluation exceeds the bounded cadence budget", () => {
+  const result = assessTreasuryRuntimeEvidence({
+    nowIso: "2026-09-11T14:00:00Z",
+    edgeObservedAt: "2026-09-11T13:56:50Z",
+    edgeEvaluatedAt: "2026-09-11T13:59:55Z",
     markObservedAt: "2026-09-11T13:59:55Z",
   });
   if (result.actionable || !result.reasons.some((reason) => reason.includes("too late"))) throw new Error(JSON.stringify(result));
 });
 
-Deno.test("Treasury rejects stale market marks instead of fabricating exit PnL", () => {
+Deno.test("Treasury rejects stale market marks instead of treating them as fresh entry evidence", () => {
   const result = assessTreasuryRuntimeEvidence({
     nowIso: "2026-09-11T14:00:00Z",
     edgeObservedAt: "2026-09-11T13:59:00Z",
