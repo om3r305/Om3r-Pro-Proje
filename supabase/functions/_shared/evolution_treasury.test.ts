@@ -1,7 +1,7 @@
 import { initialTreasuryState, planTreasuryCycle, treasuryEquityUsd, type TreasuryOpportunity, type TreasuryPosition } from "./evolution_treasury.ts";
 
 function opp(overrides:Partial<TreasuryOpportunity>={}):TreasuryOpportunity{return{
-  assetId:"BTCUSDT",direction:1,observedAt:"2026-09-11T13:00:00Z",referencePrice:100,expectedNetEdgeBps:25,roundTripCostBps:20,
+  assetId:"BTCUSDT",direction:1,observedAt:"2026-09-11T12:59:00Z",referencePrice:100,expectedNetEdgeBps:25,roundTripCostBps:20,
   reliabilityConfidence:.6,matureGroupCount:3,pitClear:true,recommendation:"ALLOW_EDGE",sourceDecisionId:"d-1",...overrides,
 };}
 function pos(overrides:Partial<TreasuryPosition>={}):TreasuryPosition{return{
@@ -15,6 +15,7 @@ Deno.test("treasury allocates only validated positive expected edge and preserve
   const s=initialTreasuryState("2026-09-11T12:59:00Z");const p=planTreasuryCycle({state:s,opportunities:[opp()],observedAt:"2026-09-11T13:00:00Z",positionIdFor:o=>`p-${o.assetId}`});
   if(p.actions.length!==1||p.actions[0].kind!=="OPEN")throw new Error(JSON.stringify(p.actions));
   if(p.state.positions.length!==1||p.deploymentPct>.700001||p.cashReservePct<.29)throw new Error(JSON.stringify(p));
+  if(p.state.positions[0]?.openedAt!=="2026-09-11T13:00:00Z")throw new Error(`open timestamp leaked from signal time: ${p.state.positions[0]?.openedAt}`);
   if(!(p.afterEquityUsd<10000))throw new Error("entry cost should reduce equity");
 });
 
@@ -27,6 +28,7 @@ Deno.test("treasury direction flip recycles capital into the stronger opposite e
   const s=initialTreasuryState("2026-09-11T12:50:00Z");s.cashUsd=9000;s.positions=[pos()];const p=planTreasuryCycle({state:s,opportunities:[opp({direction:-1,referencePrice:101,expectedNetEdgeBps:30,sourceDecisionId:"d-short"})],observedAt:"2026-09-11T13:00:00Z",positionIdFor:o=>`new-${o.direction}`});
   if(p.actions.length<2||p.actions[0].kind!=="EXIT"||p.actions[0].reason!=="DIRECTION_FLIP"||p.actions[1].kind!=="OPEN")throw new Error(JSON.stringify(p.actions));
   if(p.state.positions[0]?.direction!==-1)throw new Error("opposite edge was not opened");
+  if(p.state.positions[0]?.openedAt!=="2026-09-11T13:00:00Z")throw new Error("flip reopen did not use execution cycle time");
 });
 
 Deno.test("treasury exits stale positions instead of holding blind",()=>{
