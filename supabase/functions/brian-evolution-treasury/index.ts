@@ -25,6 +25,7 @@ const LEASE_SECONDS = 55;
 const MIN_INTERVAL_SECONDS = 45;
 const MAX_EDGE_ROWS = 100;
 const MARK_LOOKBACK_MS = 5 * 60_000;
+const DEGRADED_MARK_LOOKBACK_MS = 60 * 60_000;
 
 type SnapshotRow = {
   snapshot_id: string;
@@ -162,6 +163,7 @@ async function loadPromotionGate(): Promise<PromotionGateState> {
   }
 
   const seenExperiments = new Set<string>();
+  let newestExpectedEdgeVerdict: { decision: string; decidedAt: string; evidenceRef: string } | null = null;
   for (const row of decisions) {
     const experimentId = String(row.experiment_id);
     if (!experimentId || seenExperiments.has(experimentId)) continue;
@@ -172,19 +174,28 @@ async function loadPromotionGate(): Promise<PromotionGateState> {
     const decision = String(row.decision);
     const decidedAt = String(row.decided_at ?? "");
     const evidenceRef = String(row.decision_id);
+    if (!newestExpectedEdgeVerdict) newestExpectedEdgeVerdict = { decision, decidedAt, evidenceRef };
+
+    // A newer EXPECTED_EDGE experiment that is still KEEP_EXPERIMENTAL must not revoke a
+    // valid promotion earned by another experiment. For each experiment only its newest
+    // verdict is considered, so a later KEEP/REJECT on the same experiment does revoke
+    // that experiment's older PROMOTE. The shared gate then expires any surviving PROMOTE
+    // after six hours unless fresh evidence renews it.
     if (decision === "PROMOTE_CANDIDATE") {
       return {
         authorized: true,
-        reason: `newest EXPECTED_EDGE prospective verdict promoted at ${decidedAt}`,
+        reason: `active EXPECTED_EDGE prospective experiment promoted at ${decidedAt}`,
         evidenceRef,
         decidedAt,
       };
     }
+  }
+  if (newestExpectedEdgeVerdict) {
     return {
       authorized: false,
-      reason: `newest EXPECTED_EDGE prospective verdict is ${decision || "UNKNOWN"}`,
-      evidenceRef,
-      decidedAt,
+      reason: `no active EXPECTED_EDGE promotion; newest verdict is ${newestExpectedEdgeVerdict.decision || "UNKNOWN"}`,
+      evidenceRef: newestExpectedEdgeVerdict.evidenceRef,
+      decidedAt: newestExpectedEdgeVerdict.decidedAt,
     };
   }
   return { authorized: false, reason: "no EXPECTED_EDGE promotion decision exists", evidenceRef: null, decidedAt: null };
@@ -196,18 +207,18 @@ function averageReliability(value: unknown): number {
   return values.length ? values.reduce((sum, row) => sum + row, 0) / values.length : 0.5;
 }
 
-async function loadFreshMarks(assetIds: string[], nowIso: string): Promise<Map<string, MarketMark>> {
+async function loadMarks(assetIds: string[], nowIso: string, lookbackMs: number): Promise<Map<string, MarketMark>> {
   const marks = new Map<string, MarketMark>();
   if (!assetIds.length) return marks;
   const nowMs = Date.parse(nowIso);
   if (!Number.isFinite(nowMs)) throw new Error("treasury_marks: invalid cycle timestamp");
-  const since = new Date(nowMs - MARK_LOOKBACK_MS).toISOString();
+  const since = new Date(nowMs - lookbackMs).toISOString();
   const future = new Date(nowMs + 5_000).toISOString();
   const q = await db.from("brian_alpha_decisions")
     .select("decision_id,asset_id,observed_at,observed_reference_price")
     .in("asset_id", assetIds).gte("observed_at", since).lte("observed_at", future)
     .not("observed_reference_price", "is", null)
-    .order("observed_at", { ascending: false }).limit(Math.max(500, assetIds.length * 40));
+    .order("observed_at", { ascending: false }).limit(Math.max(1000, assetIds.length * 120));
   if (q.error) throw new Error(`treasury_marks:${q.error.message}`);
   for (const row of q.data ?? []) {
     const assetId = String(row.asset_id);
@@ -233,10 +244,24 @@ async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<
   const assetIds = [...new Set([...edges.map((row) => String(row.asset_id)), ...state.positions.map((position) => position.assetId)].filter(Boolean))];
   if (!assetIds.length) return [];
 
-  const marks = await loadFreshMarks(assetIds, nowIso);
+  const marks = await loadMarks(assetIds, nowIso, MARK_LOOKBACK_MS);
+  const missingOpenAssets = state.positions.map((position) => position.assetId).filter((assetId) => !marks.has(assetId));
+  if (missingOpenAssets.length) {
+    const degradedMarks = await loadMarks([...new Set(missingOpenAssets)], nowIso, DEGRADED_MARK_LOOKBACK_MS);
+    for (const [assetId, mark] of degradedMarks) if (!marks.has(assetId)) marks.set(assetId, mark);
+  }
+  // Risk exits and promotion-gate liquidation must never stop just because the live mark
+  // stream has a gap. If no bounded historical mark exists, keep the cycle alive with the
+  // position's immutable entry mark. Runtime freshness will make that evidence non-actionable
+  // for new deployment, while the gate/exit logic can still fail closed instead of 500-looping.
   for (const position of state.positions) {
     if (!marks.has(position.assetId)) {
-      throw new Error(`treasury_marks: fresh current mark unavailable for open position ${position.assetId}`);
+      marks.set(position.assetId, {
+        assetId: position.assetId,
+        decisionId: `entry-fallback:${position.positionId}`,
+        observedAt: position.openedAt,
+        price: position.entryPrice,
+      });
     }
   }
 
@@ -348,6 +373,7 @@ async function commitCycle(input: {
       opportunities_observed: input.opportunities.length,
       promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
       point_in_time_execution_marks: true,
+      degraded_mark_fallback_enabled: true,
       shadow_only: true,
       live_execution: false,
       canonical_alpha_mutation: false,
@@ -429,6 +455,7 @@ Deno.serve(async (req: Request) => {
         cash_usd: plan.state.cashUsd,
         deployment_usd: plan.deploymentUsd,
         point_in_time_execution_marks: true,
+        degraded_mark_fallback_enabled: true,
       });
       return {
         status: "SUCCESS",
