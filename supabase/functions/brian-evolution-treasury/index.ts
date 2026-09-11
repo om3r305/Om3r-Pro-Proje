@@ -129,7 +129,7 @@ async function loadPromotionGate(): Promise<PromotionGateState> {
     .order("decided_at", { ascending: false }).limit(200);
   if (decisionsQ.error) throw new Error(`promotion_gate_decisions:${decisionsQ.error.message}`);
   const decisions = decisionsQ.data ?? [];
-  if (!decisions.length) return { authorized: false, reason: "no promotion decisions exist", evidenceRef: null };
+  if (!decisions.length) return { authorized: false, reason: "no promotion decisions exist", evidenceRef: null, decidedAt: null };
 
   const experimentIds = [...new Set(decisions.map((row) => String(row.experiment_id)).filter(Boolean))];
   const experimentsQ = await db.from("brian_evolution_experiments")
@@ -137,7 +137,7 @@ async function loadPromotionGate(): Promise<PromotionGateState> {
   if (experimentsQ.error) throw new Error(`promotion_gate_experiments:${experimentsQ.error.message}`);
   const experimentToHypothesis = new Map((experimentsQ.data ?? []).map((row) => [String(row.experiment_id), String(row.hypothesis_id)]));
   const hypothesisIds = [...new Set([...experimentToHypothesis.values()].filter(Boolean))];
-  if (!hypothesisIds.length) return { authorized: false, reason: "promotion decisions have no hypothesis lineage", evidenceRef: null };
+  if (!hypothesisIds.length) return { authorized: false, reason: "promotion decisions have no hypothesis lineage", evidenceRef: null, decidedAt: null };
 
   const hypothesisQ = await db.from("brian_evolution_hypothesis_snapshots")
     .select("hypothesis_id,observed_at,metadata").in("hypothesis_id", hypothesisIds)
@@ -152,27 +152,32 @@ async function loadPromotionGate(): Promise<PromotionGateState> {
   }
 
   const seenExperiments = new Set<string>();
-  let expectedEdgeFound = false;
   for (const row of decisions) {
     const experimentId = String(row.experiment_id);
     if (!experimentId || seenExperiments.has(experimentId)) continue;
     seenExperiments.add(experimentId);
     const hypothesisId = experimentToHypothesis.get(experimentId);
     if (!hypothesisId || kindByHypothesis.get(hypothesisId) !== "EXPECTED_EDGE") continue;
-    expectedEdgeFound = true;
-    if (String(row.decision) === "PROMOTE_CANDIDATE") {
+
+    const decision = String(row.decision);
+    const decidedAt = String(row.decided_at ?? "");
+    const evidenceRef = String(row.decision_id);
+    if (decision === "PROMOTE_CANDIDATE") {
       return {
         authorized: true,
-        reason: `EXPECTED_EDGE prospective challenger promoted at ${String(row.decided_at)}`,
-        evidenceRef: String(row.decision_id),
+        reason: `newest EXPECTED_EDGE prospective verdict promoted at ${decidedAt}`,
+        evidenceRef,
+        decidedAt,
       };
     }
+    return {
+      authorized: false,
+      reason: `newest EXPECTED_EDGE prospective verdict is ${decision || "UNKNOWN"}`,
+      evidenceRef,
+      decidedAt,
+    };
   }
-  return {
-    authorized: false,
-    reason: expectedEdgeFound ? "latest EXPECTED_EDGE promotion decision is not PROMOTE_CANDIDATE" : "no EXPECTED_EDGE promotion decision exists",
-    evidenceRef: null,
-  };
+  return { authorized: false, reason: "no EXPECTED_EDGE promotion decision exists", evidenceRef: null, decidedAt: null };
 }
 
 function averageReliability(value: unknown): number {
@@ -276,6 +281,7 @@ async function commitCycle(input: {
     blocked_reasons: input.plan.blockedReasons,
     metadata: {
       opportunities_observed: input.opportunities.length,
+      promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
       shadow_only: true,
       live_execution: false,
       canonical_alpha_mutation: false,
@@ -348,8 +354,9 @@ Deno.serve(async (req: Request) => {
       await recordRun(startedAt, "SUCCESS", opportunities.length, 1 + plan.actions.length, {
         cycle_id: committed.cycleId,
         snapshot_id: committed.snapshotId,
-        promotion_gate_open: promotionGate.authorized,
-        promotion_gate_ref: promotionGate.evidenceRef,
+        promotion_gate_open: plan.promotionGate.authorized,
+        promotion_gate_ref: plan.promotionGate.evidenceRef,
+        promotion_gate_decided_at: plan.promotionGate.decidedAt ?? null,
         actions: plan.actions.length,
         positions: plan.state.positions.length,
         equity_usd: plan.afterEquityUsd,
@@ -361,7 +368,7 @@ Deno.serve(async (req: Request) => {
         collector_id: COLLECTOR_ID,
         cycle_id: committed.cycleId,
         observed_at: observedAt,
-        promotion_gate: promotionGate,
+        promotion_gate: plan.promotionGate,
         opportunities: opportunities.length,
         actions: plan.actions,
         treasury: {
