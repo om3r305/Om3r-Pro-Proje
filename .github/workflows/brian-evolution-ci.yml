@@ -12,8 +12,10 @@ on:
       - 'supabase/migrations/*brian_evolution*.sql'
       - 'supabase/migrations/*brian_world*.sql'
       - 'supabase/migrations/*brian_alpha_intelligence*.sql'
+      - 'supabase/migrations/*brian_treasury*.sql'
       - 'monster-coins-pro/evolution.*'
       - 'monster-coins-pro/world.*'
+      - 'monster-coins-pro/treasury.*'
       - 'scripts/evolution_candidate_materialize.ts'
       - 'docs/BRIAN_EVOLUTION_OS.md'
       - 'docs/BRIAN_EVOLUTION_LAYER_STATUS.md'
@@ -55,6 +57,10 @@ jobs:
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_treasury.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
@@ -65,6 +71,8 @@ jobs:
           supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
           supabase/functions/brian-evolution-alpha-intelligence-status/index.ts
+          supabase/functions/brian-evolution-treasury/index.ts
+          supabase/functions/brian-evolution-treasury-status/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
@@ -81,6 +89,8 @@ jobs:
           supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/world_brain.test.ts
       - name: Lint Evolution TypeScript
         run: >-
@@ -99,6 +109,10 @@ jobs:
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_treasury.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
@@ -109,6 +123,8 @@ jobs:
           supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
           supabase/functions/brian-evolution-alpha-intelligence-status/index.ts
+          supabase/functions/brian-evolution-treasury/index.ts
+          supabase/functions/brian-evolution-treasury-status/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
@@ -119,6 +135,7 @@ jobs:
         run: |
           node --check monster-coins-pro/evolution.js
           node --check monster-coins-pro/world.js
+          node --check monster-coins-pro/treasury.js
       - name: Verify no DIP files changed in Evolution PR
         run: |
           git fetch origin brian-2026
