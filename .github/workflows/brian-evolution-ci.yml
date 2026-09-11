@@ -187,7 +187,7 @@ jobs:
           \) | sort)
           test "${#migration_files[@]}" -gt 0 || { echo 'Evolution migration set missing'; exit 1; }
           set +e
-          matches="$(grep -nEi '^[[:space:]]*(select|perform|call)[[:space:]]+brian_private\.(schedule_[a-z0-9_]+|activate_evolution_os)[[:space:]]*\(' "${migration_files[@]}" 2>&1)"
+          matches="$(grep -nEi '^[[:space:]]*(select|perform|call)[[:space:]]+(brian_private\.(schedule_[a-z0-9_]+|activate_evolution_os)|cron\.schedule)[[:space:]]*\(' "${migration_files[@]}" 2>&1)"
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then
@@ -211,8 +211,9 @@ jobs:
           fi
           mapfile -t changed_sql < <(git diff --name-only origin/brian-2026...HEAD -- 'supabase/migrations/*.sql')
           if [ "${#changed_sql[@]}" -gt 0 ]; then
+            added_sql="$(git diff --unified=0 origin/brian-2026...HEAD -- "${changed_sql[@]}" | grep '^+' | grep -Ev '^\+\+\+' || true)"
             set +e
-            sql_matches="$(git diff --unified=0 origin/brian-2026...HEAD -- "${changed_sql[@]}" | grep '^+' | grep -Ev '^\+\+\+' | grep -Eni '\bbrian_dip\b|\bdip_[a-z0-9_]+\b|\bdip\.' 2>&1)"
+            sql_matches="$(printf '%s\n' "$added_sql" | grep -Eni '\bbrian_dip\b|\bdip\.[a-z0-9_]+\b|\b(from|join|into|update|table|truncate)[[:space:]]+([a-z0-9_]+\.)?dip_[a-z0-9_]+\b|cron\.(schedule|unschedule).*dip' 2>&1)"
             code=$?
             set -e
             if [ "$code" -eq 0 ]; then
