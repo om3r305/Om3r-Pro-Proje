@@ -15,7 +15,7 @@ export interface ChallengerDecisionLabel {
   challengerAction: string;
 }
 
-export interface ActionGateMeasurement {
+export interface GateMeasurement {
   control: ExperimentMetrics;
   challenger: ExperimentMetrics;
   lineage: {
@@ -24,8 +24,11 @@ export interface ActionGateMeasurement {
     allowedDecisionIds: string[];
     sourceDecisionIds: string[];
     stabilityWindows: number;
+    allowedLabel: string;
   };
 }
+
+export type ActionGateMeasurement = GateMeasurement;
 
 function finite(value: unknown): number | null {
   const n = Number(value);
@@ -103,23 +106,33 @@ export function measureOutcomeSet(points: ProspectiveOutcomePoint[], complexityD
   };
 }
 
-export function measureActionGateExperiment(
+export function measureGateExperiment(
   outcomes: ProspectiveOutcomePoint[],
   labels: ChallengerDecisionLabel[],
-): ActionGateMeasurement {
+  allowedLabel: string,
+  complexityDelta = 1,
+): GateMeasurement {
   const labelMap = new Map(labels.map((label) => [label.decisionId, label.challengerAction]));
   const control = outcomes.filter((point) => labelMap.has(point.decisionId));
-  const allowed = control.filter((point) => labelMap.get(point.decisionId) === "ALLOW_ACTION");
+  const allowed = control.filter((point) => labelMap.get(point.decisionId) === allowedLabel);
   const stabilityWindows = new Set(control.map((point) => sixHourWindow(point.observedAt)).filter(Boolean)).size;
   return {
     control: measureOutcomeSet(control, 0),
-    challenger: measureOutcomeSet(allowed, 1),
+    challenger: measureOutcomeSet(allowed, complexityDelta),
     lineage: {
       controlSamples: control.length,
       challengerSamples: allowed.length,
       allowedDecisionIds: allowed.map((point) => point.decisionId),
       sourceDecisionIds: control.map((point) => point.decisionId),
       stabilityWindows,
+      allowedLabel,
     },
   };
+}
+
+export function measureActionGateExperiment(
+  outcomes: ProspectiveOutcomePoint[],
+  labels: ChallengerDecisionLabel[],
+): ActionGateMeasurement {
+  return measureGateExperiment(outcomes, labels, "ALLOW_ACTION", 1);
 }
