@@ -17,6 +17,7 @@ const LEASE_SECONDS=55;
 const MIN_INTERVAL_SECONDS=45;
 const DECISION_LOOKBACK_MS=6*60*60_000;
 const MAX_DECISIONS=160;
+const EDGE_HORIZON_SECONDS=900;
 
 type DecisionRow={
   decision_id:string;observed_at:string;asset_id:string;action:string;direction:number;evidence_score:number;
@@ -26,7 +27,7 @@ type ReliabilityWindow={window_end:string;generated_at:string};
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
 async function sha(value:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
-function finite(v:unknown):number|null{const n=Number(v);return Number.isFinite(n)?n:null;}
+function finite(v:unknown):number|null{if(v==null||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null;}
 function errorText(error:unknown){return error instanceof Error?`${error.name}: ${error.message}`:String(error);}
 
 async function loadDecisions(){
@@ -47,6 +48,7 @@ async function loadDecisions(){
 async function reliabilityWindowAsOf(decisionAt:string):Promise<ReliabilityWindow|null>{
   const q=await db.from("brian_sensor_reliability_shadow_snapshots")
     .select("window_end,generated_at")
+    .eq("outcome_horizon_seconds",EDGE_HORIZON_SECONDS)
     .lte("window_end",decisionAt).lte("generated_at",decisionAt)
     .order("window_end",{ascending:false}).order("generated_at",{ascending:false}).limit(1).maybeSingle();
   if(q.error)throw new Error(`reliability_window:${q.error.message}`);
@@ -59,15 +61,17 @@ async function reliabilityForDecision(decision:DecisionRow,window:ReliabilityWin
   if(!window||!groups.length)return[];
   const q=await db.from("brian_sensor_reliability_shadow_snapshots")
     .select("independent_group,outcome_horizon_seconds,sample_count,bayesian_hit_rate_beta10_10,avg_cost_adjusted_signed_bps,avg_signed_bps,window_end,generated_at")
-    .eq("window_end",window.window_end).eq("generated_at",window.generated_at).in("independent_group",groups)
+    .eq("window_end",window.window_end).eq("generated_at",window.generated_at).eq("outcome_horizon_seconds",EDGE_HORIZON_SECONDS).in("independent_group",groups)
     .order("sample_count",{ascending:false}).limit(500);
   if(q.error)throw new Error(`reliability_rows:${q.error.message}`);
-  return(q.data??[]).map(row=>({
-    group:String(row.independent_group),sampleCount:Math.max(0,Math.trunc(Number(row.sample_count??0))),
-    bayesianHitRate:Number(row.bayesian_hit_rate_beta10_10??.5),avgSignedBps:Number(row.avg_signed_bps??0),
-    avgCostAdjustedSignedBps:Number(row.avg_cost_adjusted_signed_bps??0),outcomeHorizonSeconds:Math.max(1,Math.trunc(Number(row.outcome_horizon_seconds??900))),
-    snapshotWindowEnd:String(row.window_end),snapshotGeneratedAt:String(row.generated_at),
-  })).filter(row=>Number.isFinite(row.bayesianHitRate)&&Number.isFinite(row.avgSignedBps)&&Number.isFinite(row.avgCostAdjustedSignedBps));
+  return(q.data??[]).flatMap(row=>{
+    const sampleCount=finite(row.sample_count),bayesianHitRate=finite(row.bayesian_hit_rate_beta10_10),avgSignedBps=finite(row.avg_signed_bps),avgCostAdjustedSignedBps=finite(row.avg_cost_adjusted_signed_bps);
+    if(sampleCount==null||sampleCount<0||bayesianHitRate==null||bayesianHitRate<0||bayesianHitRate>1||avgSignedBps==null||avgCostAdjustedSignedBps==null)return[];
+    return [{
+      group:String(row.independent_group),sampleCount:Math.max(0,Math.trunc(sampleCount)),bayesianHitRate,avgSignedBps,avgCostAdjustedSignedBps,
+      outcomeHorizonSeconds:EDGE_HORIZON_SECONDS,snapshotWindowEnd:String(row.window_end),snapshotGeneratedAt:String(row.generated_at),
+    } satisfies LaggedReliabilityEvidence];
+  });
 }
 
 async function freshnessForDecision(decision:DecisionRow):Promise<EvidenceFreshness[]>{
@@ -84,13 +88,15 @@ async function persistDecision(decision:DecisionRow){
   const [reliability,freshness]=await Promise.all([
     reliabilityForDecision(decision,window),freshnessForDecision(decision),
   ]);
-  const direction=Number(decision.direction)>0?1:-1;
+  const rawDirection=Number(decision.direction);
+  if(rawDirection!==1&&rawDirection!==-1)throw new Error(`invalid canonical direction for ${decision.decision_id}`);
+  const direction=rawDirection as -1|1;
   const decomposition=estimateExpectedNetEdge({
     decisionObservedAt:String(decision.observed_at),direction,evidenceScore:Number(decision.evidence_score??0),
     roundTripCostBps:finite(decision.estimated_round_trip_cost_bps),reliability,freshness,minimumNetMarginBps:2,
   });
   const evaluatedAt=new Date().toISOString();
-  const edgeId=await sha(`${EVOLUTION_ALPHA_INTELLIGENCE_VERSION}|${decision.decision_id}|${window?.window_end??"none"}|${window?.generated_at??"none"}`);
+  const edgeId=await sha(`${EVOLUTION_ALPHA_INTELLIGENCE_VERSION}|${decision.decision_id}|${window?.window_end??"none"}|${window?.generated_at??"none"}|${EDGE_HORIZON_SECONDS}`);
   const row={
     edge_id:edgeId,decision_id:String(decision.decision_id),observed_at:String(decision.observed_at),evaluated_at:evaluatedAt,
     asset_id:String(decision.asset_id),canonical_action:String(decision.action),direction,canonical_evidence_score:Number(decision.evidence_score??0),
@@ -102,7 +108,7 @@ async function persistDecision(decision:DecisionRow){
     recommendation:decomposition.recommendation,eligible:decomposition.eligible,mature_group_count:decomposition.matureGroupCount,
     group_contributions:decomposition.groupContributions,reliability_weights:decomposition.reliabilityWeights,pit_clear:decomposition.pitClear,
     reasons:decomposition.reasons,model_version:decomposition.version,
-    metadata:{role:"SHADOW_CHALLENGER_ONLY",canonical_mutation:false,decision_time_reliability_only:true,decision_time_cost_only:true,source_freshness_rows:freshness.length,reliability_rows:reliability.length,newest_first_candidate_scan:true},
+    metadata:{role:"SHADOW_CHALLENGER_ONLY",canonical_mutation:false,decision_time_reliability_only:true,decision_time_cost_only:true,source_freshness_rows:freshness.length,reliability_rows:reliability.length,newest_first_candidate_scan:true,reliability_horizon_seconds:EDGE_HORIZON_SECONDS,null_cost_fails_closed:true},
     evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,canonical_mutation:false,
   };
   const q=await db.from("brian_alpha_expected_edge_challenger").upsert(row,{onConflict:"decision_id",ignoreDuplicates:true});
@@ -112,7 +118,7 @@ async function persistDecision(decision:DecisionRow){
 
 async function recordRun(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,metadata:Record<string,unknown>={},error?:unknown){
   const finishedAt=new Date().toISOString(),runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_ALPHA_EDGE_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,metadata:{model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,canonical_mutation:false,...metadata},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_ALPHA_EDGE_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,metadata:{model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,canonical_mutation:false,reliability_horizon_seconds:EDGE_HORIZON_SECONDS,null_cost_fails_closed:true,...metadata},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
   if(q.error)console.error("alpha edge run receipt",q.error.message);
 }
 
@@ -129,7 +135,7 @@ Deno.serve(async(req:Request)=>{
       const downgrade=results.filter(r=>(r as {recommendation?:string}).recommendation==="DOWNGRADE_TO_WAIT").length;
       const failClosed=results.length-allow-downgrade;
       await recordRun(startedAt,"SUCCESS",decisions.length,results.length,{allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,newest_first_candidate_scan:true});
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,evaluated:decisions.length,stored:results.length,allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,results,newest_first_candidate_scan:true,canonical_mutation:false,direct_alpha_influence:false,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,evaluated:decisions.length,stored:results.length,allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,results,newest_first_candidate_scan:true,reliability_horizon_seconds:EDGE_HORIZON_SECONDS,null_cost_fails_closed:true,canonical_mutation:false,direct_alpha_influence:false,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await recordRun(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
