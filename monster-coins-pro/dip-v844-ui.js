@@ -6,9 +6,31 @@
   const fmt=v=>{const x=Number(v);return x>0?x.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';};
   const pct=v=>`${Math.round(n(v)*100)}%`;
   const txt=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
+  let patchQueued=false;
 
   function currentThesis(){try{return typeof thesis==='function'?thesis():null;}catch{return null;}}
   function currentRuntime(){try{return typeof serverRuntime==='function'?serverRuntime():null;}catch{return null;}}
+
+  function installStabilityGuard(){
+    document.documentElement.style.overflowAnchor='none';
+    document.body.style.overflowAnchor='none';
+    if(!el('v844StabilityStyle')){
+      const style=document.createElement('style');
+      style.id='v844StabilityStyle';
+      style.textContent=`
+        #overview,#chartPanel,#chartWrap,#thesisBox,#decisionContext,#dipLog{overflow-anchor:none!important}
+        #kpiEngineMeta{height:2.45em;overflow:hidden}
+        #markPriceText{min-height:2.45em}
+        @media(max-width:760px){
+          #overview .kpi{min-height:112px}
+          #kpiEngine{white-space:nowrap}
+          #kpiEngineMeta{height:2.65em;line-height:1.3;overflow:hidden}
+          #markPriceText{min-height:2.65em;line-height:1.3}
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
 
   function patchStatic(){
     document.title='Monster Coins Pro — Brian V8.4.4 Cycle Forecast + Harvest';
@@ -24,12 +46,13 @@
   }
 
   function patchLive(){
+    installStabilityGuard();
     patchStatic();
     const t=currentThesis(),sr=currentRuntime();
     const running=sr?.status==='OK'&&sr?.authoritative===true;
     const top=el('topStatus');if(top){txt(top,running?'V8.4.4 RUNNING':'V8.4.4 WAIT');top.className=`pill ${running?'good':'warn'}`;}
     const engine=el('kpiEngine');if(engine){txt(engine,running?'V8.4.4 CYCLE':'V8.4.4 WAIT');engine.className=`value ${running?'pos':'amber'}`;}
-    txt(el('kpiEngineMeta'),'Forecast-first · net edge gate · rebase · harvest · Binance Spot 1s');
+    txt(el('kpiEngineMeta'),'Forecast-first · rebase · harvest · Spot 1s');
     const cloud=el('cloudState');if(cloud&&running)txt(cloud,'BULUT V8.4.4');
     if(!t)return;
 
@@ -49,11 +72,24 @@
     const ctx=el('decisionContext');
     if(ctx){
       const html=`<div class="thesis-main"><b>V8.4.4 CYCLE FORECAST + HARVEST</b><span>Phase <strong>${phase}</strong></span><span>Action <strong>${action}</strong></span><span>Entry timing <strong>${timing}</strong></span><span>Primary forecast <strong>${fmt(forecast)}</strong></span><span>Forecast probability <strong>${pct(prob)}</strong></span><span>Net edge <strong>${edge.toFixed(2)} bps</strong></span><span>Stretch only <strong>${fmt(stretch)}</strong></span><span>Entry quality <strong>${pct(t.authority_entry_quality)}</strong></span><span>Range <strong>${n(scores.range_position).toFixed(2)}</strong></span><span>Momentum <strong>${n(scores.momentum_atr).toFixed(2)} ATR</strong></span><span>Rebase <strong>${rebase}</strong></span><span>Net now <strong>${currentNet.toFixed(1)} bps</strong></span><span>Peak net <strong>${peakNet.toFixed(1)} bps</strong></span><span>Sell <strong>${sellStrength}</strong></span><span>Reason <strong>${sellReason}</strong></span><span>SHORT <strong>OFF</strong></span></div>`;
-      if(ctx.dataset.v844!==html){ctx.innerHTML=html;ctx.dataset.v844=html;}
+      if(ctx.innerHTML!==html){ctx.innerHTML=html;ctx.dataset.v844=html;}
     }
     const mark=el('markPriceText');
     if(mark){txt(mark,`Brian ${action} · Cycle ${phase} · Primary ${fmt(forecast)} · net edge ${edge.toFixed(2)} bps · timing ${timing}`);}
     const summary=document.querySelector('#decisionDetails summary');txt(summary,'Brian kararı, cycle forecast, rebase ve harvest nedenleri');
+  }
+
+  function queuePatch(){
+    if(patchQueued)return;
+    patchQueued=true;
+    queueMicrotask(()=>{patchQueued=false;patchLive();});
+  }
+
+  function guardLegacyWriters(){
+    const nodes=['topStatus','kpiEngine','kpiEngineMeta','cloudState','decisionContext','markPriceText'].map(el).filter(Boolean);
+    if(!nodes.length)return;
+    const observer=new MutationObserver(queuePatch);
+    for(const node of nodes)observer.observe(node,{subtree:true,childList:true,characterData:true});
   }
 
   // Binance-style rolling low marker. It is display-only: Brian's blue/red/green
@@ -84,5 +120,9 @@
   const chartRender=typeof renderChart==='function'?renderChart:null;
   if(chartRender)renderChart=function(){chartRender();drawLiveDip();};
 
-  window.addEventListener('load',()=>{patchLive();setInterval(patchLive,120);});
+  window.addEventListener('load',()=>{
+    patchLive();
+    guardLegacyWriters();
+    setInterval(patchLive,1000);
+  });
 })();
