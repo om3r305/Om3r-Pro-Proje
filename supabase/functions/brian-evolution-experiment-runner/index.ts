@@ -29,6 +29,7 @@ type TimingFilterResult={labels:ChallengerDecisionLabel[];excluded:number;reason
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
 async function sha(value:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
 function meta(v:unknown):Record<string,unknown>{return(v??{}) as Record<string,unknown>;}
+function finite(v:unknown):number|null{if(v==null||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null;}
 function metricRow(metric:ExperimentMetrics){return{
   samples:metric.samples,regimes:metric.regimes,net_edge_bps:metric.netEdgeBps,gross_edge_bps:metric.grossEdgeBps,
   max_drawdown_pct:metric.maxDrawdownPct,favorable_after_cost_rate:metric.favorableAfterCostRate,turnover:metric.turnover,
@@ -48,7 +49,7 @@ function filterTimedLabels(input:{labels:TimedLabel[];outcomes:TimedOutcome[];ex
   const labels:ChallengerDecisionLabel[]=[];const reasons:Record<string,number>={};let excluded=0;
   for(const label of input.labels){
     const outcome=outcomeById.get(label.decisionId);
-    if(!outcome){excluded++;reasons["outcome unavailable"]=Number(reasons["outcome unavailable"]??0)+1;continue;}
+    if(!outcome){excluded++;reasons["outcome unavailable or cost incomplete"]=Number(reasons["outcome unavailable or cost incomplete"]??0)+1;continue;}
     const assessment=assessProspectiveTiming({
       experimentStartedAt:input.experimentStartedAt,
       decisionObservedAt:label.observedAt,
@@ -80,7 +81,7 @@ async function candidateExperiments(){
   const [expQ,kinds]=await Promise.all([
     db.from("brian_evolution_experiments")
       .select("experiment_id,hypothesis_id,created_at_source,control_version,challenger_version,mode,stage")
-      .eq("mode","PROSPECTIVE_SHADOW").in("stage",["EXPERIMENTAL","SHADOW_CANDIDATE"]).order("created_at_source",{ascending:false}).limit(100),
+      .eq("mode","PROSPECTIVE_SHADOW").in("stage",["EXPERIMENTAL","SHADOW_CANDIDATE"]).order("created_at_source",{ascending:true}).limit(100),
     latestHypothesisKinds(),
   ]);
   if(expQ.error)throw new Error(`experiments:${expQ.error.message}`);
@@ -105,8 +106,8 @@ async function loadOutcomes(observedAt:string,eligibleIds:Set<string>,experiment
   const outcomes:TimedOutcome[]=[];
   for(const row of q.data??[]){
     const decisionId=String(row.decision_id);if(!eligibleIds.has(decisionId))continue;
-    const directionAdjustedReturn=Number(row.direction_adjusted_return),cost=Number(meta(row.metadata).estimated_round_trip_cost_bps);
-    if(!Number.isFinite(directionAdjustedReturn)||!Number.isFinite(cost))continue;
+    const directionAdjustedReturn=finite(row.direction_adjusted_return),cost=finite(meta(row.metadata).estimated_round_trip_cost_bps);
+    if(directionAdjustedReturn==null||cost==null||cost<0)continue;
     outcomes.push({decisionId,observedAt:String(row.observed_at),directionAdjustedReturn,estimatedRoundTripCostBps:cost,classification:String(row.classification??""),resolvedAt:String(row.resolved_at)});
   }
   return outcomes;
@@ -148,8 +149,8 @@ async function persistMeasurement(experiment:Record<string,unknown>,observedAt:s
     const resultId=await sha(`evolution-result|${String(experiment.experiment_id)}|${role}|${observedAt}`);
     rows.push({
       result_id:resultId,experiment_id:String(experiment.experiment_id),measured_at:observedAt,role,...metricRow(metric),
-      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons},
-      evidence_refs:[`${evidence.source}:post-experiment`,`brian_alpha_decision_outcomes:${OUTCOME_HORIZON_SECONDS}s:post-experiment`],
+      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,null_cost_fails_closed:true},
+      evidence_refs:[`${evidence.source}:post-experiment`,`brian_alpha_decision_outcomes:${OUTCOME_HORIZON_SECONDS}s:post-experiment-cost-complete`],
       evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,
     });
   }
@@ -159,7 +160,7 @@ async function persistMeasurement(experiment:Record<string,unknown>,observedAt:s
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown){
   const finishedAt=new Date().toISOString();const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
   if(q.error)console.error("experiment-runner receipt",q.error.message);
 }
 
@@ -171,7 +172,7 @@ Deno.serve(async(req:Request)=>{
       const now=new Date().toISOString(),nowMs=Date.parse(now),experiments=await candidateExperiments();const results:unknown[]=[];let skippedRecent=0,stored=0;
       for(const experiment of experiments){if(await recentlyMeasured(String(experiment.experiment_id),nowMs)){skippedRecent++;continue;}const result=await persistMeasurement(experiment as Record<string,unknown>,now);results.push(result);stored+=2;}
       await receipt(startedAt,"SUCCESS",experiments.length,stored);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
