@@ -50,8 +50,8 @@ export const DB_CONTRACT_VERSION = "brian-dip-v84-db-2-authority" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v841-brian-authority-family-1" as const;
 export const STRATEGY_MANIFEST_HASH = "1b9bc41c4edd2f0b9896be316843bde4cd27b67793d4d3912fb3450fe47ee7f1" as const;
 
-// Filled only after the reviewed authority code commit exists. Until then deploys fail closed.
-export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
+// Reviewed behavior identity. The following seal-only commit changes this metadata, not strategy behavior.
+export const LOGIC_HASH = "git:b16ada5b40e5da2b9766946ddd83647e6c299763" as const;
 
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MAX_SHADOW_LEVERAGE:1 = 1;
