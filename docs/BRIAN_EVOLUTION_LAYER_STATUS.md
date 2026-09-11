@@ -1,107 +1,121 @@
 # Brian Evolution OS — Layer Status
 
-Status: **DRAFT / GitHub only / not deployed**
+Branch: `feat/brian-evolution-os`  
+Integration PR: #92  
+Base: `brian-2026`  
+Mode: **GITHUB DRAFT / SHADOW ONLY / NOT DEPLOYED**
 
-This file is the living implementation ledger for PR #92. It tracks what is actually implemented in code, not what is merely planned.
+## Non-negotiable boundary
 
-## Boundary
+- MAIN / ALPHA Evolution work only.
+- `/dip`, DIP runtime, DIP treasury, DIP data and DIP control-plane remain outside Evolution OS.
+- No authenticated exchange orders, withdrawals or live-money execution.
+- Browser/mobile is observation/control only; runtime workers are designed for cloud cron operation.
+- No generated candidate may autonomously modify canonical ALPHA, CI/security, credentials/auth, migrations/control-plane or protected DIP paths.
 
-- MAIN / ALPHA only.
-- `/dip` and all DIP treasury/runtime/data/control surfaces are excluded.
-- SHADOW ONLY.
-- No authenticated exchange execution, withdrawals, or live-money routes.
-- Browser/mobile is observation/control only; cloud workers are designed to continue without an open page.
-- Autonomous code candidates may not mutate DIP, CI/security, auth/secrets, migrations/control-plane, or protected production surfaces.
+## Layer 0 — Baseline + protected-scope fence
 
-## Layer 0 — Baseline & protected scope
-
-**Implemented in PR #92.**
-
-- Pre-Evolution MAIN/ALPHA baseline captured in `config/brian-evolution-baseline-v1.json`.
-- Evolution lifecycle and protected-path contract in `_shared/evolution_contract.ts`.
-- Tests block autonomous DIP, CI, auth/secrets and DB-control-plane edits.
-- Append-only/RLS Evolution ledger foundation added.
-- Code-candidate persistence enforces `autonomous_apply_allowed=false`.
-
-## Layer 1 — Evolution Core
-
-**Implemented in GitHub; not deployed.**
-
-- Capability Graph derives HEALTHY / DEGRADED / STALE / MISSING state from prospective runtime evidence.
-- Gap Detector turns missing/stale capabilities into prioritized research gaps.
-- World Explorer discovers source domains from prospective intel events.
-- Source assessment scores authority, freshness, manipulation risk, corroboration and access.
-- Discovered/VERIFYING sources cannot directly influence ALPHA.
-- Cloud `brian-evolution-orchestrator` persists capability snapshots, gaps, source assessments and Evolution Journal events.
-- `brian-evolution-status` provides authenticated read-only dashboard data.
-- `/evolution.html` provides a mobile-readable Evolution dashboard.
-- Browser-independent cron preparation exists; deploy-time Vault secrets are required before schedules activate.
-
-## Layer 2 — World Brain
-
-**Implemented as first complete World Brain slice in GitHub; not deployed.**
-
-- Broad rotating World Discovery Eye covers technology/AI, macro/rates, commodities/energy, geopolitics, corporate/product events and crypto/regulation.
-- GDELT remains discovery-only; it never casts a directional ALPHA vote.
-- World Brain creates event frames, entity observations and low-confidence co-mention/supply-chain assertions.
-- Narrative Radar recognizes AI compute, semiconductors, monetary policy, inflation, geopolitics, energy, crypto regulation, ETF flows, stablecoins, cybersecurity, product launches, earnings and token events.
-- Future Calendar only accepts explicit future timestamps; it does not invent dates.
-- Causal mechanisms are stored as research hypotheses with mandatory counter-evidence.
-- Scenario engine creates `MECHANISM_HOLDS` and `MECHANISM_BREAKS` branches.
-- Cross-asset impact candidates are conditional and have `direct_alpha_influence=false`.
-- World Brain includes initial conditional transmission maps for monetary policy, geopolitics, energy supply, AI compute, crypto regulation and product launches.
-- `brian-world-status` and `/world.html` expose narratives, future events, entity relations, causal mechanisms, scenario branches and runtime health.
-- Cloud schedules for discovery and World Brain are prepared but not active before merge/deploy.
-
-## Layer 3 — Self-Improvement Lab
-
-**Foundation and autonomous researcher implemented; sandbox code generation remains in progress.**
+Status: **CODE COMPLETE**
 
 Implemented:
 
-- Hypothesis Engine converts measured gaps, challenger disagreement, negative after-cost outcomes, frozen reliability and cost burden into falsifiable research hypotheses.
-- Experiment Factory creates prospective SHADOW experiment plans with minimum sample/regime gates.
-- Promotion Council rejects leakage/data-quality failures and requires positive prospective net edge plus control improvement before `SHADOW_CANDIDATE` nomination.
-- Drift detector measures baseline-vs-recent deterioration.
-- Code-candidate planner enforces protected-path guards and can never autonomously apply a patch.
-- Append-only experiment/result/drift/promotion/code-review persistence added.
-- `brian-evolution-researcher` reads current gaps, calibration challenger, ALPHA outcomes and reliability snapshots and creates hypothesis/experiment candidates automatically.
-- 30-minute cloud researcher schedule is prepared but not active before deployment.
+- machine-readable pre-Evolution MAIN/ALPHA baseline;
+- lifecycle contract from DISCOVERED through ARCHIVED;
+- hard path fences for DIP, CI/security, auth/secrets and DB control-plane;
+- stage-skip rejection and fail-closed behavioral tests;
+- append-only Evolution event/capability/source/hypothesis/code-candidate foundations.
 
-Still required before Layer 3 is complete:
+## Layer 1 — Capability Graph + World Explorer + Evolution Ledger
 
-- sandbox code-generation provider/adapter,
-- isolated candidate workspace/branch builder,
-- automated replay/stress/prospective result ingestion,
-- drift-driven DECAYING/RETIRED recommendations,
-- human-review handoff for promotion-ready patches.
+Status: **CODE COMPLETE / RUNTIME ROLLOUT PENDING**
 
-No code-generation worker will receive production/deploy credentials. Candidate patches must remain in isolated review branches/workspaces and pass the same protected-path, replay, stress and prospective gates before human-approved promotion.
+Implemented:
 
-## Layer 4 — ALPHA Intelligence
+- Capability Graph derived from actual collector evidence;
+- capability-gap detector;
+- public-source discovery + trust assessment with discovery != truth;
+- Evolution orchestrator and dashboard status endpoint;
+- append-only source assessments, gap snapshots and orchestrator run receipts;
+- cloud schedules using existing Brian Vault auth boundaries.
 
-**Not implemented yet.**
+No source discovered by World Explorer receives direct ALPHA influence in this layer.
 
-Target: expected gross/net edge, cost/uncertainty/decay model, bounded prospective reliability feedback, opportunity ranking and canonical promotion gates.
+## Layer 2 — World Brain
 
-## Layer 5 — Brian Treasury
+Status: **CODE COMPLETE / RUNTIME ROLLOUT PENDING**
 
-**Not implemented yet.**
+Implemented:
 
-Target: unified `$10,000` SHADOW cash pool, allocation, opportunity replacement, concentration/correlation/liquidity/risk reasoning, exits and capital recycling.
+- entity graph and typed relations;
+- narrative clusters;
+- future-event calendar that requires explicit future timestamps;
+- conditional causal mechanisms with counter-evidence slots;
+- scenario paths and cross-asset implications;
+- broad World Discovery Eye for AI/technology, macro/rates, energy/commodities, geopolitics, corporate/product and crypto/regulation domains;
+- World Intelligence status/UI surfaces;
+- append-only persistence and cloud scheduling.
+
+World Brain remains a research/context organ until prospective validation promotes a capability. It cannot directly vote BUY/SELL merely because a headline exists.
+
+## Layer 3 — Self-Improvement Lab
+
+Status: **BOUNDED LOOP CODE COMPLETE / RUNTIME EVIDENCE PENDING**
+
+Implemented:
+
+- Hypothesis Engine that converts observed capability gaps, calibration failures, negative after-cost outcomes, reliability gaps and drift into falsifiable research candidates;
+- Experiment Factory with prospective control/challenger plans and contamination declarations;
+- deterministic replay/stress/prospective metric contracts;
+- Promotion Council with explicit leakage, sample, regime, edge, drawdown, stability and complexity gates;
+- drift snapshots and decay-oriented research signals;
+- Self-Coding Sandbox contract with a strict path allowlist, maximum file/patch budgets and mandatory provenance;
+- cloud sandbox broker that creates code-candidate manifests and records TYPECHECK / UNIT / REPLAY / STRESS / PROSPECTIVE receipts;
+- built-in safe challenger generator for ACTION_GATE, EXPECTED_EDGE, RELIABILITY_FEEDBACK, COST_CONTROL and DRIFT hypotheses;
+- general capability-gap code generation deliberately fails closed until a specialized generator exists;
+- isolated `evolution-candidate/*` branch materializer with exact-parent SHA pinning, hash validation, protected-path checks, generated test execution and **no PR/merge/canonical write**;
+- manual/human handoff remains mandatory for candidate branch materialization and any later canonical promotion;
+- Evolution Lab status/dashboard sections for hypotheses, experiments, candidates, review verdicts and cloud runs.
+
+Layer 3 exit condition is satisfied at code-contract level for supported hypothesis classes: Brian can produce an isolated candidate artifact, test/evaluate it prospectively, nominate or reject it, and preserve a complete audit trail without mutating canonical behavior. Runtime activation and real prospective evidence are still pending deployment.
+
+## Layer 4 — ALPHA Expected Edge + Reliability Feedback
+
+Status: **CHALLENGER IMPLEMENTED / PROSPECTIVE VALIDATION PENDING**
+
+Implemented so far:
+
+- expected-edge decomposition: historical prospective gross directional move − exact decision-time round-trip cost − uncertainty penalty − evidence-decay penalty;
+- null/unknown cost fails closed and is never coerced to zero;
+- reliability feedback uses only snapshots whose `window_end` and `generated_at` are at or before the ALPHA decision timestamp;
+- Bayesian/maturity shrinkage keeps measured sensor reliability bounded around the neutral 0.5 prior;
+- at least two mature independent evidence groups are required;
+- post-decision reliability or future source observations contaminate and block the challenger decision;
+- append-only `brian_alpha_expected_edge_challenger` persistence with `ALLOW_EDGE`, `DOWNGRADE_TO_WAIT`, `COST_UNAVAILABLE`, `INSUFFICIENT_LAGGED_EVIDENCE` and `CONTAMINATED_EVIDENCE` outcomes;
+- cloud expected-edge challenger schedule and authenticated status endpoint;
+- Experiment Runner now measures ACTION_GATE plus EXPECTED_EDGE / RELIABILITY_FEEDBACK / COST_CONTROL challengers against 15-minute prospective after-cost outcomes;
+- Promotion Council can evaluate those challenger/control result pairs without mutating canonical ALPHA.
+
+Not yet promoted:
+
+- canonical ALPHA still uses its existing decision compiler;
+- reliability weights are challenger outputs, not canonical weights;
+- `gross_edge_bps` / `net_edge_bps` on canonical ALPHA are not being rewritten;
+- no portfolio allocation or cash sizing is introduced here.
+
+Layer 4 promotion requires enough clean prospective samples/regimes showing better after-cost edge and acceptable drawdown/stability. Until that evidence exists, this remains challenger-only.
+
+## Layer 5 — $10,000 SHADOW Brian Treasury
+
+Status: **NOT STARTED**
+
+Target remains one Brian-level shadow cash pool with capital allocation, opportunity replacement, risk budget, exit brain and capital recycling. It must consume a validated Layer 4 edge signal rather than raw ALPHA evidence score.
 
 ## Layer 6 — Ocean Run
 
-**Not implemented yet.**
+Status: **NOT STARTED**
 
-Target: 24–48 hour cloud-only SHADOW run with complete evidence on what Brian observed, learned, coded, rejected, promoted and how the Treasury performed.
-
-## CI
-
-A dedicated `Brian Evolution OS CI` workflow type-checks/lints/tests Evolution and World Brain code, validates dashboard JavaScript, rejects DIP-path changes in this PR, and checks patch formatting. Existing Brian and ALPHA CI remain active as independent regression gates.
-
-Latest checkpoint at branch head `221c91368d50089b1445c58dce43b55c228e6e68`: **Brian Evolution OS CI = success, Brian ALPHA v2 CI = success, Brian 2026 CI = success.**
+Target remains a 24–48 hour browser-independent prospective shadow run with full post-run analysis before any discussion of real execution.
 
 ## Activation rule
 
-PR #92 remains a draft until all planned layers are complete, CI is green, DIP isolation is verified, and the user explicitly authorizes merge + production rollout.
+PR #92 stays draft and unmerged while the stack is being assembled. Migrations, Edge Functions, cron schedules and dashboard additions in this branch are preparation only until an explicit rollout. Final activation requires green CI, confirmed DIP isolation, migration/deployment review and explicit user approval.
