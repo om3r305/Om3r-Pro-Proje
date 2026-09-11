@@ -50,8 +50,8 @@ export const DB_CONTRACT_VERSION = "brian-dip-v84-db-2-authority" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v843-profit-protect-family-1" as const;
 export const STRATEGY_MANIFEST_HASH = "d302c5aa4cf048e27236177674ad02bd9c825f08a2cae8b4a39b9f9b2627a25e" as const;
 
-// Sealed only after the behavior commit is fixed. Activation metadata does not alter trade logic.
-export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
+// Immutable behavior identity: last behavior/UI commit before this metadata-only seal commit.
+export const LOGIC_HASH = "git:1c3355a4b2039ae51cabdade05a4c5fc78258cdc" as const;
 
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MAX_SHADOW_LEVERAGE:1 = 1;
