@@ -18,7 +18,6 @@ const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const COLLECTOR_ID = "brian-evolution-sandbox-v1";
 const LEASE_SECONDS = 180;
-const DEFAULT_PARENT_COMMIT = "ba330f4ec4bd3d76b1fe5564d6b4e95cd41ef4f0";
 
 function out(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -56,8 +55,10 @@ function toHypothesis(row: Record<string, unknown>): HypothesisCandidate {
 }
 
 function parentCommit(): string {
-  const value = (Deno.env.get("BRIAN_EVOLUTION_PARENT_COMMIT") ?? DEFAULT_PARENT_COMMIT).trim();
-  return /^[0-9a-f]{7,64}$/i.test(value) ? value : DEFAULT_PARENT_COMMIT;
+  const value = (Deno.env.get("BRIAN_EVOLUTION_PARENT_COMMIT") ?? "").trim();
+  if (!value) throw new Error("EVOLUTION_PARENT_COMMIT_MISSING");
+  if (!/^[0-9a-f]{40}$/i.test(value)) throw new Error("EVOLUTION_PARENT_COMMIT_INVALID");
+  return value.toLowerCase();
 }
 
 async function latestHypotheses(): Promise<HypothesisCandidate[]> {
@@ -81,6 +82,7 @@ async function latestHypotheses(): Promise<HypothesisCandidate[]> {
 async function planCandidates(): Promise<{ planned: number; skippedExisting: number; candidateIds: string[] }> {
   const hypotheses = await latestHypotheses();
   if (!hypotheses.length) return { planned: 0, skippedExisting: 0, candidateIds: [] };
+  const canonicalParent = parentCommit();
   const existingQ = await db.from("brian_evolution_codegen_requests").select("hypothesis_id,candidate_id").limit(2000);
   if (existingQ.error) throw new Error(`existing_codegen:${existingQ.error.message}`);
   const existingHypotheses = new Set((existingQ.data ?? []).map((row) => String(row.hypothesis_id)));
@@ -94,7 +96,7 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
       skippedExisting++;
       continue;
     }
-    const brief = buildSandboxGenerationBrief(h, parentCommit());
+    const brief = buildSandboxGenerationBrief(h, canonicalParent);
     candidateIds.push(brief.candidateId);
     candidateRows.push({
       candidate_id: brief.candidateId,
@@ -328,7 +330,7 @@ async function recordCollectorRun(startedAt: string, status: "SUCCESS" | "FAILED
     degraded_sources: [],
     error_class: error ? "EVOLUTION_SANDBOX_ERROR" : null,
     error_message: error ? String(error).slice(0, 1200) : null,
-    metadata: { sandbox_version: EVOLUTION_SANDBOX_VERSION, canonical_mutation: false, autonomous_apply_allowed: false },
+    metadata: { sandbox_version: EVOLUTION_SANDBOX_VERSION, canonical_mutation: false, autonomous_apply_allowed: false, exact_parent_required: true },
     evidence_class: EVOLUTION_EVIDENCE_CLASS,
     shadow_only: true,
     live_execution: false,
@@ -378,6 +380,7 @@ Deno.serve(async (req: Request) => {
         collector_id: COLLECTOR_ID,
         sandbox_version: EVOLUTION_SANDBOX_VERSION,
         ...result,
+        exact_parent_required: true,
         external_generator_required: true,
         required_human_review: true,
         canonical_mutation: false,
