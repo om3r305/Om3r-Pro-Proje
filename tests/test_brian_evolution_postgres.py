@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,10 @@ def _connect():
     connection = psycopg2.connect(DATABASE_URL)
     connection.autocommit = True
     return connection
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _snapshot(snapshot_id: str, cycle_id: str, observed_at: str, previous_snapshot_id: str | None, *, equity: float = 10_000, cash: float = 10_000, deployment: float = 0, deployment_pct: float = 0):
@@ -147,8 +152,14 @@ def _ocean_start(command_id: str, run_id: str, requested_at: str):
         connection.close()
 
 
+def test_ocean_rejects_backdated_privileged_start():
+    old_time = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    with pytest.raises(psycopg2.Error, match="OCEAN_CONTROL_TIMESTAMP_SKEW"):
+        _ocean_start("backdated-command", "backdated-run", old_time)
+
+
 def test_ocean_concurrent_start_serializes_to_one_active_run_and_direct_insert_is_denied():
-    requested_at = "2026-09-12T01:00:00Z"
+    requested_at = _now_iso()
 
     def attempt(args):
         try:
@@ -175,16 +186,15 @@ def test_ocean_concurrent_start_serializes_to_one_active_run_and_direct_insert_i
                     """
                     insert into public.brian_ocean_run_commands(
                       command_id,run_id,command,requested_at,duration_hours,requested_by
-                    ) values('direct-write','direct-run','START',%s::timestamptz,24,'ci')
-                    """,
-                    (requested_at,),
+                    ) values('direct-write','direct-run','START',clock_timestamp(),24,'ci')
+                    """
                 )
             with pytest.raises(psycopg2.Error, match="OCEAN_RUN_NOT_ACTIVE"):
                 cursor.execute(
-                    "select public.brian_ocean_stop_run('wrong-stop','not-the-active-run','2026-09-12T01:01:00Z'::timestamptz,'test','ci','{}'::jsonb)"
+                    "select public.brian_ocean_stop_run('wrong-stop','not-the-active-run',clock_timestamp(),'test','ci','{}'::jsonb)"
                 )
             cursor.execute(
-                "select public.brian_ocean_stop_run('good-stop',%s,'2026-09-12T01:01:00Z'::timestamptz,'test','ci','{}'::jsonb)",
+                "select public.brian_ocean_stop_run('good-stop',%s,clock_timestamp(),'test','ci','{}'::jsonb)",
                 (active_run,),
             )
             assert cursor.fetchone()[0] == active_run
