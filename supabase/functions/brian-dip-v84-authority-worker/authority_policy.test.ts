@@ -9,7 +9,7 @@ Deno.test("V8.4.3 manifest is Brian long-only profit-protect authority",()=>{
   assertEquals(STRATEGY_MANIFEST.short_entries,false);
   assertEquals(STRATEGY_MANIFEST.entry.direction_and_quality_separate,true);
   assertEquals(STRATEGY_MANIFEST.exit.strong_sell_immediate,true);
-  assertEquals(STRATEGY_MANIFEST.exit.soft_sell_vote_decay,true);
+  assertEquals(STRATEGY_MANIFEST.exit.soft_sell_confirmation,"2_CONSECUTIVE_VOTES");
   assertEquals(STRATEGY_MANIFEST.exit.profit_protect.arm_profit_bps,25);
   assertEquals(STRATEGY_MANIFEST.exit.profit_protect.giveback_bps,7);
   assertEquals(STRATEGY_MANIFEST.risk.fixed_notional_fraction_cap,false);
