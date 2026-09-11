@@ -136,7 +136,7 @@ Implemented:
 - missing fresh marks no longer abort the entire Treasury worker: bounded historical marks keep risk/gate exits alive, while stale evidence remains non-actionable for new deployment;
 - append-only `brian_treasury_shadow_snapshots` and normalized `brian_treasury_shadow_actions` persistence;
 - database-level advisory lock + parent compare-and-swap serialize Treasury history, reject stale forks/non-monotonic cycles and keep exact retries idempotent;
-- real Postgres CI now applies the Treasury/Ocean hardening migrations and verifies stale-parent rejection, exact retry idempotence, full-conviction drawdown persistence and concurrent-child fork rejection;
+- real Postgres CI applies the Treasury/Ocean hardening migrations and verifies stale-parent rejection, exact retry idempotence, full-conviction drawdown persistence and concurrent-child fork rejection;
 - cloud Treasury worker, one-minute schedule preparation, authenticated Treasury status endpoint and `/treasury.html` mobile dashboard;
 - Evolution UI links directly to Treasury while keeping browser/mobile observation-only.
 
@@ -166,24 +166,23 @@ Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envel
 
 ## External red-team remediation checkpoint
 
-Independent reviews raised concrete issues in candidate materialization, Treasury full-conviction persistence, replacement economics, mark-gap behavior, promotion semantics, prospective latency, Ocean caller-time trust and SQL/runtime CI coverage. The confirmed findings were reproduced against the actual branch and remediated before this checkpoint.
+Independent reviews raised concrete issues in candidate materialization, Treasury full-conviction persistence, replacement economics, mark-gap behavior, promotion semantics, prospective latency, Ocean caller-time trust and SQL/runtime CI coverage. Confirmed findings were reproduced against the actual branch and remediated.
 
-Current exact code checkpoint before any documentation-only refresh was `e253ff7c824f25b7eea35089f54009cb85ca31f5` against base `fb8412e9438828b635fd3c96b50f9b06925a760e` (187 commits ahead / 0 behind). On that exact code head:
+The final runtime/code checkpoint before documentation-only alignment was `e253ff7c824f25b7eea35089f54009cb85ca31f5` and passed all required CI. Subsequent commits only aligned architecture/status/rollout documentation with those already-tested remediations. The current exact PR head must still be green before merge; PR metadata is the canonical place for the final exact-head SHA and workflow run numbers.
 
-- Brian Evolution OS CI #167: **SUCCESS**;
+Verified test coverage on the remediated code line includes:
+
 - Evolution behavioral suite: **87 passed / 0 failed**;
 - real Postgres Evolution Treasury/Ocean concurrency job: **SUCCESS**;
-- Brian ALPHA v2 CI #364: **SUCCESS**;
-- Brian 2026 CI #652: **SUCCESS**;
+- Brian ALPHA v2 CI: **SUCCESS**;
+- Brian 2026 CI: **SUCCESS**;
 - dormant-schedule guard: **SUCCESS**;
 - DIP path + SQL-control-content guard: **SUCCESS**;
 - type-check, lint, dashboard JS and patch checks: **SUCCESS**.
 
-This documentation commit itself is non-runtime, but final merge readiness still requires the workflows on the resulting exact PR head to remain green.
-
 ## Completion state before rollout
 
-Layers 0–6 exist at code-contract level in the draft integration branch. Remaining sequence: exact-head regression after this documentation refresh -> explicit merge/deploy approval -> cloud rollout with schedules dormant -> pre-activation smoke checks -> explicit activation approval -> actual 24–48h Ocean observation.
+Layers 0–6 exist at code-contract level in the draft integration branch. Remaining sequence: exact-head regression -> explicit merge/deploy approval -> cloud rollout with schedules dormant -> pre-activation smoke checks -> explicit activation approval -> actual 24–48h Ocean observation.
 
 ## Activation rule
 
