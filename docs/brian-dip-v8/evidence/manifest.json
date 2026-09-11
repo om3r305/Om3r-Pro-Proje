@@ -1,0 +1,46 @@
+{
+  "archive_date": "2026-09-07",
+  "repository": "om3r305/Om3r-Pro-Proje",
+  "source_commit": "0c1b1e88e758a71e7cf9732300b77f8f6e2f597d",
+  "purpose": "Historical defect reproduction, not fixed-behavior regression or profitability evidence",
+  "runtime": "Node.js 24",
+  "offline_fixtures": true,
+  "scenario_counts": {
+    "defect_reproductions": 15,
+    "positive_controls": 2,
+    "verified_observations": 17
+  },
+  "original_artifacts": {
+    "Brian-V8-Inceleme-2026-09-07.md": {
+      "bytes": 20236,
+      "sha256": "02564d26d60e6fec03bace7d24c861eb469159e47014b64e90cde8f397c574cf"
+    },
+    "audit-repros.cjs": {
+      "bytes": 14904,
+      "sha256": "09a797b8f4bbbe24e4df3183d80fc25f09619e560a8b7ca0109030d6845ed29b"
+    },
+    "audit-repro-results.json": {
+      "bytes": 4865,
+      "sha256": "39e782113fe3e36fd9eaf487d381bc0736ac9c102bdf07742ae6eee21790aa86"
+    }
+  },
+  "executed_source_files": {
+    "monster-coins-pro/dip-focus3-stability-v7.js": {
+      "bytes": 5625,
+      "sha256": "2c0800182dc46d1a4ca9412d119faf6b68c03630c098e3b6279e5e6dd58c2794"
+    },
+    "supabase/functions/brian-dip-shadow-worker/index.ts": {
+      "bytes": 20398,
+      "sha256": "a47a1425a8c0c8116656907c56aa7cd656f380ee64477bf8bef075bd9f8b38b0"
+    },
+    "supabase/functions/brian-dip-foresight/index.ts": {
+      "bytes": 10466,
+      "sha256": "dd2f6944e77285d18d79e7a4c87b9c5574510f81e1331fe96f7c6545deb09a48"
+    },
+    "monster-coins-pro/dip-foresight-v7.js": {
+      "bytes": 15090,
+      "sha256": "2fb2b4465f7092ac9e8ae1d51494cd29aee218758b2a7e6f7478c59b15ad0736"
+    }
+  },
+  "original_artifacts_preserved_byte_for_byte": true
+}
