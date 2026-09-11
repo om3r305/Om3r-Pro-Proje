@@ -68,54 +68,65 @@ Exit gate: an event can be traced from source -> entities -> causal mechanisms -
 - Hypothesis Engine
 - Experiment Factory
 - sandbox code artifact contract
-- automated test plan generation
+- automated bounded challenger-code generation
+- isolated candidate branch materialization
 - replay/stress/prospective challenger contracts
 - promotion council evidence bundle
 - failure memory and concept-drift retirement
 
-Exit gate: Brian can identify a measurable weakness, propose a bounded change, generate a candidate artifact, and produce an auditable accept/reject result without mutating canonical behavior.
+Exit gate: Brian can identify a measurable weakness, propose a bounded change, generate an isolated candidate artifact, test it, and produce an auditable accept/reject result without mutating canonical behavior.
 
 ### Layer 4 — ALPHA Intelligence Upgrade
 
-- prospective reliability feedback into decision weights
-- expected gross move model
-- explicit cost model
+Implemented as a challenger path pending prospective promotion:
+
+- prospective reliability feedback into bounded challenger weights
+- expected gross move estimate from lagged prospective evidence
+- exact decision-time round-trip cost
 - uncertainty/decay penalties
 - expected net edge
-- opportunity ranking
-- decision explanations based on evidence lineage
+- prospective control/challenger measurement
+- promotion council gate
 
 Canonical decision target:
 
 `expected_net_edge = expected_gross_move - estimated_round_trip_cost - uncertainty_penalty - event_decay_penalty`
 
-Evidence score alone must never be interpreted as expected return.
-
-Exit gate: every actionable ALPHA decision has an expected-edge decomposition and sufficient prospective reliability evidence.
+Evidence score alone must never be interpreted as expected return. Canonical ALPHA remains unchanged until the challenger earns promotion from clean prospective evidence.
 
 ### Layer 5 — Brian Treasury / Portfolio Brain
 
-Brian receives a real shadow treasury (planned Ocean baseline: `$10,000`). The treasury is not a fixed per-trade ticket schedule.
+Implemented in the draft branch as a `$10,000` SHADOW treasury, pending rollout and prospective validation.
 
-Brian decides:
+The treasury is not a fixed per-trade ticket schedule. It maintains one reconciled cash pool and decides:
 
 - cash reserve
 - per-asset allocation
 - concentration
 - position replacement
 - realized-loss acceptance when a superior opportunity exists
-- correlation/exposure
 - liquidity-aware sizing
 - entry/exit/re-entry
 - opportunity-cost based capital recycling
 
-A portfolio change must persist the reason and competing alternatives considered.
+Current hard policy boundaries:
+
+- maximum 70% deployment
+- minimum 30% cash reserve
+- maximum 12% per position
+- maximum eight simultaneous positions
+- no deployment unless the Layer-4 EXPECTED_EDGE prospective experiment has a current `PROMOTE_CANDIDATE` decision
+- gate closure or revocation fail-closes the SHADOW portfolio back to cash
+
+A portfolio change persists its source decision, expected edge, cost and reason. Entry and exit costs are charged to the ledger. Snapshot + actions are committed atomically and append-only.
 
 Exit gate: treasury cash + positions + realized/unrealized P&L + costs reconcile exactly and survive browser closure/restart.
 
 ### Layer 6 — Ocean Run
 
-24–48h cloud-only prospective SHADOW run with the full stack enabled.
+Implemented at code-contract level in the draft branch; actual prospective run is pending deployment and explicit start.
+
+Ocean is a 24–48h browser-independent prospective SHADOW exam. START/STOP commands are append-only. Preflight blocks start unless Treasury, Layer-4 expected edge and core Evolution workers have healthy runtime evidence. The cloud worker records periodic Treasury/system-health checkpoints and creates a final report after planned or early termination.
 
 Required post-run report:
 
@@ -130,7 +141,7 @@ Required post-run report:
 - capability changes
 - drift/retirement events
 - missed opportunities
-- ALPHA decision quality before/after Evolution candidates
+- ALPHA decision quality during the run
 - system health and degraded periods
 
 ## World Explorer policy
@@ -173,7 +184,7 @@ Every code candidate must carry:
 
 ## Dashboard target
 
-Main dashboard sections:
+Main dashboard surfaces:
 
 1. Overview
 2. Treasury / Portfolio
@@ -184,13 +195,14 @@ Main dashboard sections:
 7. Sources
 8. System Health
 9. Audit / Memory
+10. Ocean Run
 
 DIP remains a separate laboratory surface and is not part of Evolution OS control.
 
 ## Cloud independence
 
-Starting/pausing an Ocean observation session from mobile must only mutate server-side session state. Collectors, research jobs, ALPHA, portfolio accounting and Evolution workers continue in cloud infrastructure when the browser is hidden or closed.
+Starting/pausing an Ocean observation session from mobile mutates only append-only server-side Ocean command state. Collectors, research jobs, ALPHA, portfolio accounting and Evolution workers continue in cloud infrastructure when the browser is hidden or closed.
 
 ## Completion definition
 
-The draft PR is ready to merge only when all six layers are implemented, the protected-scope tests prove DIP isolation, CI is green, Ocean mode remains shadow-only, and the final diff has no unauthorized live-execution surface. Merge/deploy remains an explicit user action after final review.
+The draft PR is technically complete only when all six layers are implemented, the protected-scope tests prove DIP isolation, all regression CI is green, migrations and rollout order are reviewed, and Ocean mode remains shadow-only. Merge/deploy remains an explicit user action after final review. The actual 24–48h Ocean observation is a post-rollout prospective exam and cannot be simulated by declaring the draft complete.
