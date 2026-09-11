@@ -38,6 +38,7 @@ const MAX_POSITIONS=8;
 const MIN_EDGE_BPS=3;
 const FULL_CONVICTION_EDGE_BPS=60;
 const REPLACEMENT_EDGE_ADVANTAGE_BPS=5;
+const REPLACEMENT_SCORE_MULTIPLIER=1.25;
 const EDGE_STALE_SECONDS=20*60;
 const RISK_STOP_BPS=-150;
 const PROFIT_DECAY_ARM_BPS=50;
@@ -119,6 +120,12 @@ function maxCapitalPreservingDeployment(currentDeploymentUsd:number,equityUsd:nu
   const c=halfCostRate(roundTripCostBps);const numerator=MAX_DEPLOYMENT_PCT*equityUsd-currentDeploymentUsd;
   return Math.max(0,numerator/(1+MAX_DEPLOYMENT_PCT*c));
 }
+function availableCapitalFor(o:TreasuryOpportunity,state:TreasuryState,equity:number){
+  return Math.min(
+    maxCapitalPreservingDeployment(deploymentUsd(state),equity,o.roundTripCostBps),
+    maxCapitalPreservingReserve(state.cashUsd,equity,o.roundTripCostBps),
+  );
+}
 
 function applyExit(state:TreasuryState,p:TreasuryPosition,markPrice:number,edgeBps:number,sourceDecisionId:string,reason:TreasuryExitReason,actions:TreasuryAction[]){
   const gross=positionGrossPnlUsd(p,markPrice),exitCost=halfCostUsd(p.capitalUsd,p.roundTripCostBps);state.cashUsd+=p.capitalUsd+gross-exitCost;state.realizedPnlUsd+=gross-exitCost;state.cumulativeCostsUsd+=exitCost;state.positions=state.positions.filter(x=>x.positionId!==p.positionId);
@@ -149,24 +156,25 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
   for(const o of candidates){
     if(noReopenAssets.has(o.assetId)||state.positions.some(p=>p.assetId===o.assetId))continue;
     let equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});
-    let desired=Math.min(
-      targetCapitalUsd(o,equity),
-      maxCapitalPreservingDeployment(deploymentUsd(state),equity,o.roundTripCostBps),
-      maxCapitalPreservingReserve(state.cashUsd,equity,o.roundTripCostBps),
-    );
-    const minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
-    if((state.positions.length>=MAX_POSITIONS||desired<minimumTicket)&&state.positions.length){
-      const weakest=[...state.positions].sort((a,b)=>latestEdgeForPosition(a,latest)-latestEdgeForPosition(b,latest))[0];const weakEdge=latestEdgeForPosition(weakest,latest);const weakOpp=latest.get(weakest.assetId);const weakScore=weakOpp?opportunityScore(weakOpp):Math.max(0,weakEdge)*.5;
-      if(o.expectedNetEdgeBps>=weakEdge+REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*1.25){
-        const mark=marks[weakest.assetId]??weakest.entryPrice;applyExit(state,weakest,mark,weakEdge,o.sourceDecisionId,"OPPORTUNITY_REPLACEMENT",actions);noReopenAssets.add(weakest.assetId);
-        equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});
-        desired=Math.min(
-          targetCapitalUsd(o,equity),
-          maxCapitalPreservingDeployment(deploymentUsd(state),equity,o.roundTripCostBps),
-          maxCapitalPreservingReserve(state.cashUsd,equity,o.roundTripCostBps),
-        );
-      }
+    let target=targetCapitalUsd(o,equity);
+    let desired=Math.min(target,availableCapitalFor(o,state,equity));
+    let minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
+
+    // A stronger opportunity is allowed to recycle weaker deployed capital even when
+    // there is still some cash available. This is what lets Brian move, for example,
+    // a $6k weak position + $4k cash into one exceptional event opportunity instead of
+    // being trapped by the old allocation. Multiple weak positions may be replaced in
+    // one cycle, but only when the new candidate clearly dominates each one.
+    while(state.positions.length&&(state.positions.length>=MAX_POSITIONS||desired+minimumTicket<target)){
+      const weakest=[...state.positions].sort((a,b)=>latestEdgeForPosition(a,latest)-latestEdgeForPosition(b,latest))[0];
+      const weakEdge=latestEdgeForPosition(weakest,latest);const weakOpp=latest.get(weakest.assetId);const weakScore=weakOpp?opportunityScore(weakOpp):Math.max(0,weakEdge)*.5;
+      const dominates=o.expectedNetEdgeBps>=weakEdge+REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*REPLACEMENT_SCORE_MULTIPLIER;
+      if(!dominates)break;
+      const mark=marks[weakest.assetId]??weakest.entryPrice;
+      applyExit(state,weakest,mark,weakEdge,o.sourceDecisionId,"OPPORTUNITY_REPLACEMENT",actions);noReopenAssets.add(weakest.assetId);
+      equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});target=targetCapitalUsd(o,equity);desired=Math.min(target,availableCapitalFor(o,state,equity));minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
     }
+
     if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),input.observedAt,actions);
   }
 
