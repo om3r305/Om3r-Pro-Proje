@@ -11,6 +11,7 @@ on:
       - 'supabase/functions/brian-world-*/**'
       - 'supabase/migrations/*brian_evolution*.sql'
       - 'supabase/migrations/*brian_world*.sql'
+      - 'supabase/migrations/*brian_alpha_intelligence*.sql'
       - 'monster-coins-pro/evolution.*'
       - 'monster-coins-pro/world.*'
       - 'scripts/evolution_candidate_materialize.ts'
@@ -52,6 +53,8 @@ jobs:
           supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/evolution_codegen.ts
           supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
@@ -60,6 +63,7 @@ jobs:
           supabase/functions/brian-evolution-template-generator/index.ts
           supabase/functions/brian-evolution-experiment-runner/index.ts
           supabase/functions/brian-evolution-promotion-council/index.ts
+          supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
@@ -75,6 +79,7 @@ jobs:
           supabase/functions/_shared/evolution_sandbox.test.ts
           supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
           supabase/functions/_shared/world_brain.test.ts
       - name: Lint Evolution TypeScript
         run: >-
@@ -91,6 +96,8 @@ jobs:
           supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/evolution_codegen.ts
           supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
@@ -99,6 +106,7 @@ jobs:
           supabase/functions/brian-evolution-template-generator/index.ts
           supabase/functions/brian-evolution-experiment-runner/index.ts
           supabase/functions/brian-evolution-promotion-council/index.ts
+          supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-evolution-lab-status/index.ts
           supabase/functions/brian-world-brain/index.ts
