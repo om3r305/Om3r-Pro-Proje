@@ -54,8 +54,22 @@ async function insertRows(table: string, rows: Record<string, unknown>[]): Promi
   return stored;
 }
 
+function syntheticSuccess(collectorId: string, at: unknown): CollectorRunLike | null {
+  const observedAt = typeof at === "string" ? at : null;
+  if (!observedAt) return null;
+  return {
+    collector_id: collectorId,
+    started_at: observedAt,
+    finished_at: observedAt,
+    status: "SUCCESS",
+    observed_records: 1,
+    stored_records: 1,
+    degraded_sources: [],
+  };
+}
+
 async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[]; events: IntelEventLike[] }> {
-  const [runsQ, eventsQ] = await Promise.all([
+  const [runsQ, eventsQ, universeQ, sensorQ, shadowQ] = await Promise.all([
     db.from("brian_collector_runs")
       .select("collector_id,started_at,finished_at,status,observed_records,stored_records,degraded_sources,error_class,error_message")
       .gte("started_at", isoBefore(observedAt, RUN_LOOKBACK_MS))
@@ -66,11 +80,30 @@ async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[
       .gte("first_observed_at", isoBefore(observedAt, EVENT_LOOKBACK_MS))
       .order("first_observed_at", { ascending: false })
       .limit(1500),
+    db.from("brian_universe_snapshots")
+      .select("observed_at")
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("brian_sensor_observations")
+      .select("observed_at")
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("brian_live_shadow_ticks")
+      .select("observed_at")
+      .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (runsQ.error) throw new Error(`collector_runs:${runsQ.error.message}`);
   if (eventsQ.error) throw new Error(`intel_events:${eventsQ.error.message}`);
+  if (universeQ.error) throw new Error(`universe_snapshot:${universeQ.error.message}`);
+  if (sensorQ.error) throw new Error(`sensor_observation:${sensorQ.error.message}`);
+  if (shadowQ.error) throw new Error(`live_shadow_tick:${shadowQ.error.message}`);
+
+  const synthetic = [
+    syntheticSuccess("brian-universe-collector", universeQ.data?.observed_at),
+    syntheticSuccess("brian-sensor-mesh", sensorQ.data?.observed_at),
+    syntheticSuccess("brian-live-shadow", shadowQ.data?.observed_at),
+  ].filter((row): row is CollectorRunLike => row !== null);
+
   return {
-    runs: (runsQ.data ?? []) as CollectorRunLike[],
+    runs: [...((runsQ.data ?? []) as CollectorRunLike[]), ...synthetic],
     events: (eventsQ.data ?? []) as IntelEventLike[],
   };
 }
