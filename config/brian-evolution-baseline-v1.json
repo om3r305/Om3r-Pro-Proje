@@ -1,0 +1,69 @@
+{
+  "schema_version": "brian.evolution.baseline.v1",
+  "base_ref": "brian-2026",
+  "base_commit": "ba330f4ec4bd3d76b1fe5564d6b4e95cd41ef4f0",
+  "scope": "MAIN_ALPHA_ONLY",
+  "protected_scopes": [
+    "DIP_RUNTIME",
+    "DIP_TREASURY",
+    "DIP_DATA",
+    "DIP_CONTROL_PLANE"
+  ],
+  "canonical_alpha": {
+    "compiler_version": "brian.alpha-decision-v2.2",
+    "decision_semantics": "DIRECTION_ONLY_SHADOW_STATE",
+    "live_execution": false,
+    "shadow_only": true,
+    "expected_gross_edge_bps_is_canonical": false,
+    "expected_net_edge_bps_is_canonical": false,
+    "portfolio_allocation_is_canonical": false,
+    "browser_required": false
+  },
+  "cloud_components": [
+    "brian-universe-collector",
+    "brian-live-shadow",
+    "brian-sensor-mesh",
+    "brian-derivatives-eye",
+    "brian-intrabar-eye",
+    "brian-alpha-decision-compiler-v2",
+    "brian-missed-opportunity-auditor-v2",
+    "brian-official-macro-eye",
+    "brian-fx-eye",
+    "brian-alpha-calibration-challenger-v1"
+  ],
+  "observed_baseline": {
+    "alpha_decisions": 19677,
+    "open_long_decisions": 1694,
+    "open_short_decisions": 1780,
+    "wait_decisions": 16202,
+    "veto_decisions": 1,
+    "alpha_open_direction_states": 34,
+    "canonical_open_requested_notional_usd_min": 3,
+    "canonical_open_requested_notional_usd_max": 5,
+    "gross_edge_rows": 0,
+    "net_edge_rows": 0,
+    "challenger": {
+      "allow_action": 94,
+      "downgrade_to_wait": 1021,
+      "keep_wait": 5268,
+      "keep_veto": 1
+    }
+  },
+  "known_pre_evolution_gaps": [
+    "prospective sensor reliability is measured but is not yet the canonical ALPHA weighting loop",
+    "ALPHA evidence_score is not an expected-return estimate",
+    "gross_edge_bps and net_edge_bps are not canonical decision outputs",
+    "the MAIN ALPHA position book is direction state rather than a cash/notional portfolio ledger",
+    "there is no autonomous capability-gap discovery and World Explorer lifecycle",
+    "there is no self-coding hypothesis-to-candidate experiment loop",
+    "there is no canonical opportunity-replacement treasury engine",
+    "there is no dedicated canonical exit brain with capital recycling"
+  ],
+  "ocean_target": {
+    "starting_shadow_equity_usd": 10000,
+    "browser_is_control_surface_only": true,
+    "cloud_continues_when_browser_closed": true,
+    "authenticated_exchange_orders": false,
+    "withdrawals": false
+  }
+}
