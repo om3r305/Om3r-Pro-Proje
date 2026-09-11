@@ -48,7 +48,7 @@ export const COST_MODEL_VERSION = "FILL_FORWARD_V843_1" as const;
 export const MARKET_DATA_CONTRACT_VERSION = "binance-usdm-live-book-closed-structure-v842.1" as const;
 export const DB_CONTRACT_VERSION = "brian-dip-v84-db-2-authority" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v843-profit-protect-family-1" as const;
-export const STRATEGY_MANIFEST_HASH = "6c2ca6cba10903220240ebb0c078d14b31b68fe8edd45a623b5e0bb5bc78a194" as const;
+export const STRATEGY_MANIFEST_HASH = "d302c5aa4cf048e27236177674ad02bd9c825f08a2cae8b4a39b9f9b2627a25e" as const;
 
 // Sealed only after the behavior commit is fixed. Activation metadata does not alter trade logic.
 export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
@@ -61,7 +61,6 @@ export const MIN_ENTRY_QUALITY = 0.34;
 export const PROFIT_PROTECT_ARM_BPS = 25;
 export const PROFIT_PROTECT_GIVEBACK_BPS = 7;
 export const PROFIT_PROTECT_MOMENTUM_ATR_CEILING = 0.8;
-export const SELL_SIGNAL_LATCH_MS = 30_000;
 
 export const STRATEGY_MANIFEST = Object.freeze({
   browser_execution:false,
@@ -73,8 +72,7 @@ export const STRATEGY_MANIFEST = Object.freeze({
   exit:{
     hard_stop:"STRUCTURAL_INVALIDATION",
     profit_protect:{arm_profit_bps:PROFIT_PROTECT_ARM_BPS,giveback_bps:PROFIT_PROTECT_GIVEBACK_BPS,momentum_atr_ceiling:PROFIT_PROTECT_MOMENTUM_ATR_CEILING,structural_resistance_arms:true},
-    sell_signal_latch_ms:SELL_SIGNAL_LATCH_MS,
-    soft_sell_vote_decay:true,
+    soft_sell_confirmation:"2_CONSECUTIVE_VOTES",
     strong_sell_immediate:true,
   },
   live_execution:false,
