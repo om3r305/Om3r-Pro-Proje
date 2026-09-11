@@ -35,10 +35,13 @@ Apply the Evolution migrations in filename order. The important dependency chain
 11. `202609111650_brian_alpha_intelligence_layer4.sql`
 12. `202609111660_brian_alpha_intelligence_schedule.sql`
 13. `202609111670_brian_treasury_layer5.sql`
-14. `202609111680_brian_treasury_schedule.sql`
-15. `202609111690_brian_ocean_layer6.sql`
-16. `202609111700_brian_ocean_schedule.sql`
-17. `202609111710_brian_evolution_activation_control.sql`
+14. `202609111675_brian_treasury_atomic_cas_guard.sql`
+15. `202609111680_brian_treasury_schedule.sql`
+16. `202609111690_brian_ocean_layer6.sql`
+17. `202609111700_brian_ocean_schedule.sql`
+18. `202609111710_brian_evolution_activation_control.sql`
+
+The `1675` Treasury hardening migration makes the append-only cashbox a serialized compare-and-swap chain at the database boundary. Exact retries remain idempotent, while stale-parent or non-monotonic forks fail closed even if a caller races without respecting the worker lease.
 
 **Expected state after migrations:** tables/functions exist, but Evolution cron job count is **0**. Existing Brian/DIP schedules are untouched.
 
@@ -91,7 +94,9 @@ Before activating cron:
 - self-code sandbox `plan` either succeeds with the exact canonical parent or fails closed with an explicit parent-commit error; it must never silently fall back to an old commit;
 - no unexpected Evolution jobs exist in `cron.job`;
 - canonical ALPHA remains unchanged;
-- Treasury starts at `$10,000` SHADOW cash and must remain 100% cash while the Layer-4 promotion gate is closed.
+- expected-edge reliability is bound to the exact source observation / raw group / sensor family / horizon that actually voted in the decision; `intrabar_tape` must resolve back to its raw micro sensor lineage;
+- Treasury starts at `$10,000` SHADOW cash and must remain 100% cash while the Layer-4 promotion gate is closed;
+- Treasury cycle persistence rejects a stale `previous_snapshot_id` and accepts an exact completed-cycle retry idempotently.
 
 Database check:
 
@@ -126,8 +131,8 @@ After activation, wait long enough for each cadence to fire and verify collector
 - orchestrator and World Brain runs;
 - World Discovery Eye runs;
 - researcher, sandbox, experiment runner and Promotion Council receipts;
-- expected-edge challenger receipts;
-- Treasury snapshots every minute;
+- expected-edge challenger receipts with exact decision evidence lineage;
+- Treasury snapshots every minute with a single monotonic parent chain;
 - Ocean worker receipts every five minutes;
 - self-code requests carry the exact canonical parent SHA and remain isolated from canonical branches;
 - no live execution anywhere;
