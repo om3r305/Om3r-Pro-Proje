@@ -1,5 +1,6 @@
 -- Brian Evolution OS Layer 3 researcher schedule. GitHub-only until rollout.
 -- Uses the same server cron auth contract. DIP is untouched.
+-- IMPORTANT: this migration only installs the scheduler function; it never activates cron.
 
 create or replace function brian_private.schedule_evolution_researcher()
 returns bigint
@@ -34,14 +35,4 @@ $$;
 revoke all on function brian_private.schedule_evolution_researcher() from public, anon, authenticated, service_role;
 grant execute on function brian_private.schedule_evolution_researcher() to postgres;
 
-do $$
-begin
-  if exists (select 1 from vault.decrypted_secrets where name='brian_project_url')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_anon_jwt')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_cron_key') then
-    perform brian_private.schedule_evolution_researcher();
-  else
-    raise notice 'Evolution researcher not scheduled yet; provision Brian Vault runtime secrets at rollout';
-  end if;
-end;
-$$;
+-- Deliberately no auto-schedule DO block. Activation is a separate explicit rollout action.
