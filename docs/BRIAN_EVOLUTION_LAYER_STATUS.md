@@ -145,6 +145,10 @@ Implemented:
 
 Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envelope around the existing SHADOW stack. Starting an Ocean run does not enable live execution and does not create exchange credentials or orders.
 
+## Regression checkpoint
+
+The Layer 0–6 code path currently passes Deno type-checking, all 59 Evolution behavioral tests, Deno lint, dashboard JavaScript syntax checks and the dedicated no-DIP-path guard. The existing Brian 2026 and ALPHA regression suites also pass. The most recent remaining CI issue was documentation trailing whitespace; that formatting issue has been removed and a final post-documentation CI run is required before declaring the draft fully green.
+
 ## Completion state before rollout
 
 Layers 0–6 now exist at code-contract level in the draft integration branch. What remains before activation is final regression/migration review, conflict reconciliation with the moving `brian-2026` base if required, explicit merge/deploy approval, cloud rollout verification and then the actual 24–48h prospective Ocean observation.
