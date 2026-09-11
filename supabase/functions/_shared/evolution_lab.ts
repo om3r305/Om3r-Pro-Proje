@@ -1,6 +1,6 @@
 import type { ExperimentMetrics } from "./evolution_research.ts";
 
-export const EVOLUTION_LAB_VERSION = "brian.evolution-lab.v1";
+export const EVOLUTION_LAB_VERSION = "brian.evolution-lab.v2";
 
 export interface ProspectiveOutcomePoint {
   decisionId: string;
@@ -31,6 +31,7 @@ export interface GateMeasurement {
 export type ActionGateMeasurement = GateMeasurement;
 
 function finite(value: unknown): number | null {
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -73,7 +74,7 @@ function stability(points: ProspectiveOutcomePoint[]): { score: number | null; r
     buckets.set(key, values);
   }
   const mature = [...buckets.values()].filter((values) => values.length >= 5);
-  if (!mature.length) return { score: null, regimes: buckets.size };
+  if (!mature.length) return { score: null, regimes: 0 };
   const positive = mature.filter((values) => Number(avg(values)) > 0).length;
   return { score: positive / mature.length, regimes: mature.length };
 }
@@ -92,7 +93,7 @@ export function measureOutcomeSet(points: ProspectiveOutcomePoint[], complexityD
   const distinctDays = new Set(valid.map((point) => point.observedAt.slice(0, 10))).size;
   return {
     samples: valid.length,
-    regimes: Math.max(stable.regimes, distinctDays),
+    regimes: stable.regimes,
     netEdgeBps: avg(net),
     grossEdgeBps: avg(gross),
     maxDrawdownPct: maxDrawdownPctFromNetBps(net),
@@ -100,7 +101,7 @@ export function measureOutcomeSet(points: ProspectiveOutcomePoint[], complexityD
     turnover: distinctDays ? valid.length / distinctDays : valid.length || null,
     costBps: avg(costs),
     leakageDetected: false,
-    dataQualityOk: valid.length >= 30 && valid.length === points.length,
+    dataQualityOk: valid.length === points.length,
     stabilityScore: stable.score,
     complexityDelta,
   };
