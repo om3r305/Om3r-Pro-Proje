@@ -19,7 +19,8 @@ const COLLECTOR_ID="brian-evolution-experiment-runner-v1";
 const LEASE_SECONDS=240;
 const OUTCOME_HORIZON_SECONDS=900;
 const LOOKBACK_MS=7*24*3600_000;
-const MIN_REMEASURE_MS=3*3600_000;
+const MIN_REMEASURE_MS=55*60_000;
+const EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS=3*60;
 const SUPPORTED_KINDS=new Set(["ACTION_GATE","EXPECTED_EDGE","RELIABILITY_FEEDBACK","COST_CONTROL"]);
 
 type TimedOutcome=ProspectiveOutcomePoint&{resolvedAt:string};
@@ -135,7 +136,7 @@ async function loadExpectedEdgeEvidence(observedAt:string,experimentStartedAt:st
   const timedLabels:TimedLabel[]=[],openIds=new Set<string>();
   for(const row of labelsQ.data??[]){if(row.pit_clear!==true)continue;const canonical=String(row.canonical_action);if(canonical!=="OPEN_LONG"&&canonical!=="OPEN_SHORT")continue;const decisionId=String(row.decision_id);openIds.add(decisionId);timedLabels.push({decisionId,challengerAction:String(row.recommendation),observedAt:String(row.observed_at),evaluatedAt:String(row.evaluated_at)});}
   const outcomes=await loadOutcomes(observedAt,openIds,experimentStartedAt);
-  const timing=filterTimedLabels({labels:timedLabels,outcomes,experimentStartedAt,measuredAt:observedAt,maxLabelLatencySeconds:2*60});
+  const timing=filterTimedLabels({labels:timedLabels,outcomes,experimentStartedAt,measuredAt:observedAt,maxLabelLatencySeconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS});
   return{labels:timing.labels,outcomes,source:"brian_alpha_expected_edge_challenger",allowedLabel:"ALLOW_EDGE",complexityDelta:2,timingExcluded:timing.excluded,timingReasons:timing.reasons};
 }
 
@@ -149,7 +150,7 @@ async function persistMeasurement(experiment:Record<string,unknown>,observedAt:s
     const resultId=await sha(`evolution-result|${String(experiment.experiment_id)}|${role}|${observedAt}`);
     rows.push({
       result_id:resultId,experiment_id:String(experiment.experiment_id),measured_at:observedAt,role,...metricRow(metric),
-      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,null_cost_fails_closed:true},
+      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,null_cost_fails_closed:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS},
       evidence_refs:[`${evidence.source}:post-experiment`,`brian_alpha_decision_outcomes:${OUTCOME_HORIZON_SECONDS}s:post-experiment-cost-complete`],
       evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,
     });
@@ -160,7 +161,7 @@ async function persistMeasurement(experiment:Record<string,unknown>,observedAt:s
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown){
   const finishedAt=new Date().toISOString();const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,remeasure_min_minutes:55,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
   if(q.error)console.error("experiment-runner receipt",q.error.message);
 }
 
@@ -172,9 +173,9 @@ Deno.serve(async(req:Request)=>{
       const now=new Date().toISOString(),nowMs=Date.parse(now),experiments=await candidateExperiments();const results:unknown[]=[];let skippedRecent=0,stored=0;
       for(const experiment of experiments){if(await recentlyMeasured(String(experiment.experiment_id),nowMs)){skippedRecent++;continue;}const result=await persistMeasurement(experiment as Record<string,unknown>,now);results.push(result);stored+=2;}
       await receipt(startedAt,"SUCCESS",experiments.length,stored);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
-  }catch(error){await receipt(startedAt,"FAILED",0,0,error);return out({status:"FAILED",error:String(error),canonical_mutation:false,shadow_only:true,live_execution:false},500);}
+  }catch(error){await receipt(startedAt,"FAILED",0,0,error);return out({status:"FAILED",error:String(error),canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false},500);}
 });
