@@ -2,6 +2,7 @@
 -- GitHub-only until explicit deployment.
 -- Requires Vault secret `brian_cron_key` to match brian_dashboard_auth.control-v3 cron key.
 -- MAIN/ALPHA Evolution only. DIP cron/runtime is not read or changed.
+-- IMPORTANT: this migration only installs scheduler functions; it never activates cron jobs.
 
 create or replace function brian_private.schedule_evolution_os()
 returns jsonb
@@ -100,14 +101,5 @@ $$;
 revoke all on function brian_private.schedule_evolution_os() from public, anon, authenticated, service_role;
 grant execute on function brian_private.schedule_evolution_os() to postgres;
 
-do $$
-begin
-  if exists (select 1 from vault.decrypted_secrets where name='brian_project_url')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_anon_jwt')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_cron_key') then
-    perform brian_private.schedule_evolution_os();
-  else
-    raise notice 'Brian Evolution OS cron not scheduled yet: deploy time must provision brian_project_url, brian_anon_jwt and brian_cron_key, then call brian_private.schedule_evolution_os()';
-  end if;
-end;
-$$;
+-- Deliberately no DO block here. Existing Brian Vault secrets may already be present in
+-- production; auto-scheduling from a migration would violate the explicit activation gate.
