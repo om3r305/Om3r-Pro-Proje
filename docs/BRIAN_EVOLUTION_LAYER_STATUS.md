@@ -147,7 +147,7 @@ Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envel
 
 ## Regression checkpoint
 
-Current-head CI is green across all three regression surfaces: Brian Evolution OS CI, Brian ALPHA v2 CI and Brian 2026 CI. Evolution type-check, all 59 behavioral tests, lint, dashboard syntax, no-DIP-path guard and patch formatting pass; ALPHA Deno/Postgres tests and Brian full/edge/lease/migration/hard-shadow checks pass. The PR is structurally mergeable, remains draft and is not deployed.
+The Layer 0–6 code path has passed Deno type-checking, all 59 Evolution behavioral tests, Deno lint, dashboard JavaScript syntax checks and the dedicated no-DIP-path guard. The existing Brian 2026 and ALPHA regression suites have also passed on the same implementation line. The PR is structurally mergeable, remains draft and is not deployed.
 
 ## Completion state before rollout
 
