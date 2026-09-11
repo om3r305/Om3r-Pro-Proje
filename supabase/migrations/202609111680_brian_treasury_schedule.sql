@@ -1,5 +1,6 @@
 -- Brian Evolution OS Layer 5 Treasury schedule.
 -- GitHub-only until rollout. SHADOW ONLY. DIP remains untouched.
+-- IMPORTANT: this migration only installs the scheduler function; it never activates cron.
 
 create or replace function brian_private.schedule_evolution_treasury()
 returns bigint
@@ -43,14 +44,4 @@ $$;
 revoke all on function brian_private.schedule_evolution_treasury() from public, anon, authenticated, service_role;
 grant execute on function brian_private.schedule_evolution_treasury() to postgres;
 
-do $$
-begin
-  if exists (select 1 from vault.decrypted_secrets where name='brian_project_url')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_anon_jwt')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_cron_key') then
-    perform brian_private.schedule_evolution_treasury();
-  else
-    raise notice 'Evolution Treasury not scheduled yet; provision Brian Vault runtime secrets at rollout';
-  end if;
-end;
-$$;
+-- Deliberately no auto-schedule DO block. Activation is a separate explicit rollout action.
