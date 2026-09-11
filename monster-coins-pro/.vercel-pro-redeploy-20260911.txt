@@ -1,0 +1,1 @@
+Trigger Vercel redeploy after account upgrade to Pro on 2026-09-11. Safe no-op marker for brian-2026 deployment.
