@@ -151,7 +151,7 @@ The Layer 0–6 code path has passed Deno type-checking, all 59 Evolution behavi
 
 ## Completion state before rollout
 
-Layers 0–6 now exist at code-contract level in the draft integration branch. What remains before activation is final regression/migration review, conflict reconciliation with the moving `brian-2026` base if required, explicit merge/deploy approval, cloud rollout verification and then the actual 24–48h prospective Ocean observation.
+Layers 0–6 now exist at code-contract level in the draft integration branch. Remaining sequence: final CI -> migration/order review -> reconcile the moving `brian-2026` base if required -> explicit merge/deploy approval -> cloud rollout verification -> actual 24–48h Ocean observation.
 
 ## Activation rule
 
