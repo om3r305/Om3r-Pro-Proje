@@ -21,20 +21,23 @@ const OUTCOME_HORIZON_SECONDS=900;
 const LOOKBACK_MS=7*24*3600_000;
 const MIN_REMEASURE_MS=55*60_000;
 const EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS=3*60;
-const SUPPORTED_KINDS=new Set(["ACTION_GATE","EXPECTED_EDGE","RELIABILITY_FEEDBACK","COST_CONTROL"]);
+// Only kinds with dedicated prospective label lineage are eligible for automatic
+// measurement/promotion. Reliability/cost hypotheses remain research experiments until
+// their own challenger labels exist; they must not borrow EXPECTED_EDGE labels.
+const SUPPORTED_KINDS=new Set(["ACTION_GATE","EXPECTED_EDGE"]);
 
 type TimedOutcome=ProspectiveOutcomePoint&{resolvedAt:string};
 type TimedLabel=ChallengerDecisionLabel&{observedAt:string;evaluatedAt:string};
-type TimingFilterResult={labels:ChallengerDecisionLabel[];excluded:number;reasons:Record<string,number>};
+type TimingFilterResult={labels:ChallengerDecisionLabel[];excluded:number;reasons:Record<string,number>;leakageDetected:boolean};
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
 async function sha(value:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
 function meta(v:unknown):Record<string,unknown>{return(v??{}) as Record<string,unknown>;}
 function finite(v:unknown):number|null{if(v==null||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null;}
-function metricRow(metric:ExperimentMetrics){return{
+function metricRow(metric:ExperimentMetrics,leakageDetected=false){return{
   samples:metric.samples,regimes:metric.regimes,net_edge_bps:metric.netEdgeBps,gross_edge_bps:metric.grossEdgeBps,
   max_drawdown_pct:metric.maxDrawdownPct,favorable_after_cost_rate:metric.favorableAfterCostRate,turnover:metric.turnover,
-  cost_bps:metric.costBps,leakage_detected:metric.leakageDetected,data_quality_ok:metric.dataQualityOk,
+  cost_bps:metric.costBps,leakage_detected:metric.leakageDetected||leakageDetected,data_quality_ok:metric.dataQualityOk&&!leakageDetected,
   stability_score:metric.stabilityScore,complexity_delta:metric.complexityDelta,
 };}
 
@@ -45,9 +48,13 @@ function evidenceStart(measuredAt:string,experimentStartedAt:string):string{
   return new Date(Math.max(experiment,measured-LOOKBACK_MS)).toISOString();
 }
 
+function isLeakageReason(reason:string){
+  return reason.includes("predates experiment start")||reason.includes("label predates decision")||reason.includes("label was produced after outcome resolution")||reason.includes("outcome resolves after measurement time");
+}
+
 function filterTimedLabels(input:{labels:TimedLabel[];outcomes:TimedOutcome[];experimentStartedAt:string;measuredAt:string;maxLabelLatencySeconds:number|null}):TimingFilterResult{
   const outcomeById=new Map(input.outcomes.map(row=>[row.decisionId,row]));
-  const labels:ChallengerDecisionLabel[]=[];const reasons:Record<string,number>={};let excluded=0;
+  const labels:ChallengerDecisionLabel[]=[];const reasons:Record<string,number>={};let excluded=0,leakageDetected=false;
   for(const label of input.labels){
     const outcome=outcomeById.get(label.decisionId);
     if(!outcome){excluded++;reasons["outcome unavailable or cost incomplete"]=Number(reasons["outcome unavailable or cost incomplete"]??0)+1;continue;}
@@ -61,12 +68,12 @@ function filterTimedLabels(input:{labels:TimedLabel[];outcomes:TimedOutcome[];ex
     });
     if(!assessment.clean){
       excluded++;
-      for(const reason of assessment.reasons)reasons[reason]=Number(reasons[reason]??0)+1;
+      for(const reason of assessment.reasons){reasons[reason]=Number(reasons[reason]??0)+1;if(isLeakageReason(reason))leakageDetected=true;}
       continue;
     }
     labels.push({decisionId:label.decisionId,challengerAction:label.challengerAction});
   }
-  return{labels,excluded,reasons};
+  return{labels,excluded,reasons,leakageDetected};
 }
 
 async function latestHypothesisKinds(){
@@ -124,7 +131,7 @@ async function loadActionGateEvidence(observedAt:string,experimentStartedAt:stri
   for(const row of labelsQ.data??[]){const canonical=String(row.canonical_action);if(canonical!=="OPEN_LONG"&&canonical!=="OPEN_SHORT")continue;const decisionId=String(row.decision_id);openIds.add(decisionId);timedLabels.push({decisionId,challengerAction:String(row.challenger_action),observedAt:String(row.observed_at),evaluatedAt:String(row.evaluated_at)});}
   const outcomes=await loadOutcomes(observedAt,openIds,experimentStartedAt);
   const timing=filterTimedLabels({labels:timedLabels,outcomes,experimentStartedAt,measuredAt:observedAt,maxLabelLatencySeconds:5*60});
-  return{labels:timing.labels,outcomes,source:"brian_alpha_calibration_challenger",allowedLabel:"ALLOW_ACTION",complexityDelta:1,timingExcluded:timing.excluded,timingReasons:timing.reasons};
+  return{labels:timing.labels,outcomes,source:"brian_alpha_calibration_challenger",allowedLabel:"ALLOW_ACTION",complexityDelta:1,timingExcluded:timing.excluded,timingReasons:timing.reasons,leakageDetected:timing.leakageDetected};
 }
 
 async function loadExpectedEdgeEvidence(observedAt:string,experimentStartedAt:string){
@@ -137,31 +144,32 @@ async function loadExpectedEdgeEvidence(observedAt:string,experimentStartedAt:st
   for(const row of labelsQ.data??[]){if(row.pit_clear!==true)continue;const canonical=String(row.canonical_action);if(canonical!=="OPEN_LONG"&&canonical!=="OPEN_SHORT")continue;const decisionId=String(row.decision_id);openIds.add(decisionId);timedLabels.push({decisionId,challengerAction:String(row.recommendation),observedAt:String(row.observed_at),evaluatedAt:String(row.evaluated_at)});}
   const outcomes=await loadOutcomes(observedAt,openIds,experimentStartedAt);
   const timing=filterTimedLabels({labels:timedLabels,outcomes,experimentStartedAt,measuredAt:observedAt,maxLabelLatencySeconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS});
-  return{labels:timing.labels,outcomes,source:"brian_alpha_expected_edge_challenger",allowedLabel:"ALLOW_EDGE",complexityDelta:2,timingExcluded:timing.excluded,timingReasons:timing.reasons};
+  return{labels:timing.labels,outcomes,source:"brian_alpha_expected_edge_challenger",allowedLabel:"ALLOW_EDGE",complexityDelta:2,timingExcluded:timing.excluded,timingReasons:timing.reasons,leakageDetected:timing.leakageDetected};
 }
 
 async function persistMeasurement(experiment:Record<string,unknown>,observedAt:string){
   const kind=String(experiment.hypothesis_kind??"");
   const experimentStartedAt=String(experiment.created_at_source??"");
+  if(!SUPPORTED_KINDS.has(kind))throw new Error(`unsupported prospective experiment lineage:${kind}`);
   const evidence=kind==="ACTION_GATE"?await loadActionGateEvidence(observedAt,experimentStartedAt):await loadExpectedEdgeEvidence(observedAt,experimentStartedAt);
   const measured=kind==="ACTION_GATE"?measureActionGateExperiment(evidence.outcomes,evidence.labels):measureGateExperiment(evidence.outcomes,evidence.labels,evidence.allowedLabel,evidence.complexityDelta);
   const rows:Record<string,unknown>[]=[];
   for(const [role,metric] of [["CONTROL",measured.control],["CHALLENGER",measured.challenger]] as const){
     const resultId=await sha(`evolution-result|${String(experiment.experiment_id)}|${role}|${observedAt}`);
     rows.push({
-      result_id:resultId,experiment_id:String(experiment.experiment_id),measured_at:observedAt,role,...metricRow(metric),
-      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,null_cost_fails_closed:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS},
+      result_id:resultId,experiment_id:String(experiment.experiment_id),measured_at:observedAt,role,...metricRow(metric,evidence.leakageDetected),
+      metric_payload:{lab_version:EVOLUTION_LAB_VERSION,horizon_seconds:OUTCOME_HORIZON_SECONDS,measurement_kind:`PROSPECTIVE_${kind}`,hypothesis_kind:kind,lineage:measured.lineage,control_version:experiment.control_version,challenger_version:experiment.challenger_version,label_source:evidence.source,experiment_started_at:experimentStartedAt,strict_post_experiment_lineage:true,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,timing_leakage_detected:evidence.leakageDetected,null_cost_fails_closed:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS},
       evidence_refs:[`${evidence.source}:post-experiment`,`brian_alpha_decision_outcomes:${OUTCOME_HORIZON_SECONDS}s:post-experiment-cost-complete`],
       evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,
     });
   }
   const q=await db.from("brian_evolution_experiment_results").insert(rows);if(q.error)throw new Error(`persist_results:${q.error.message}`);
-  return{experiment_id:experiment.experiment_id,hypothesis_kind:kind,control:measured.control,challenger:measured.challenger,lineage:measured.lineage,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,stored:rows.length};
+  return{experiment_id:experiment.experiment_id,hypothesis_kind:kind,control:measured.control,challenger:measured.challenger,lineage:measured.lineage,timing_excluded_labels:evidence.timingExcluded,timing_exclusion_reasons:evidence.timingReasons,timing_leakage_detected:evidence.leakageDetected,stored:rows.length};
 }
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown){
   const finishedAt=new Date().toISOString();const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,remeasure_min_minutes:55,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_EXPERIMENT_RUNNER_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{lab_version:EVOLUTION_LAB_VERSION,canonical_mutation:false,supported_hypothesis_kinds:[...SUPPORTED_KINDS],strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,remeasure_min_minutes:55,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS,unsupported_kinds_fail_closed:true,timing_leakage_promotes_reject:true},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
   if(q.error)console.error("experiment-runner receipt",q.error.message);
 }
 
@@ -173,7 +181,7 @@ Deno.serve(async(req:Request)=>{
       const now=new Date().toISOString(),nowMs=Date.parse(now),experiments=await candidateExperiments();const results:unknown[]=[];let skippedRecent=0,stored=0;
       for(const experiment of experiments){if(await recentlyMeasured(String(experiment.experiment_id),nowMs)){skippedRecent++;continue;}const result=await persistMeasurement(experiment as Record<string,unknown>,now);results.push(result);stored+=2;}
       await receipt(startedAt,"SUCCESS",experiments.length,stored);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,lab_version:EVOLUTION_LAB_VERSION,experiments_considered:experiments.length,measured:results.length,skipped_recent:skippedRecent,results,strict_post_experiment_lineage:true,null_cost_fails_closed:true,oldest_active_experiments_first:true,expected_edge_max_label_latency_seconds:EXPECTED_EDGE_MAX_LABEL_LATENCY_SECONDS,unsupported_kinds_fail_closed:true,timing_leakage_promotes_reject:true,canonical_mutation:false,autonomous_apply_allowed:false,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
