@@ -12,6 +12,8 @@ Before merge or deployment:
 - Brian Evolution OS CI, Brian ALPHA v2 CI and Brian 2026 CI must all be green on the exact PR head against the current `brian-2026` base.
 - Synchronize the Evolution branch with the current `brian-2026` head before the final exact-head CI. Base-only DIP commits may be inherited by the merge commit, but Evolution must not author or modify DIP paths.
 - `git diff origin/brian-2026...HEAD` must contain no DIP paths.
+- Evolution CI must also pass the SQL-content DIP control/data guard and dormant-schedule guard.
+- The real-Postgres Evolution job must pass Treasury CAS/full-conviction persistence and Ocean concurrency/control tests.
 - Existing Brian Vault runtime secrets must be present and valid: `brian_project_url`, `brian_anon_jwt`, `brian_cron_key`.
 - No live exchange credential, withdrawal route or authenticated order route is introduced by this rollout.
 - After the final merge, set the Supabase Edge Function secret `BRIAN_EVOLUTION_PARENT_COMMIT` to the exact 40-character SHA at the head of `brian-2026`. The self-coding planner intentionally fails closed if this value is missing, malformed or stale relative to candidate materialization.
@@ -44,7 +46,7 @@ Apply the Evolution migrations in filename order. The important dependency chain
 
 The `1675` Treasury hardening migration makes the append-only cashbox a serialized compare-and-swap chain at the database boundary. Exact retries remain idempotent, while stale-parent or non-monotonic forks fail closed even if a caller races without respecting the worker lease.
 
-The `1695` Ocean control hardening migration serializes START/STOP at the database boundary and revokes direct service-role INSERT access to the command log. Two concurrent dashboard START requests therefore cannot create two active Ocean runs; command writes must pass the guarded RPCs.
+The `1695` Ocean control hardening migration serializes START/STOP at the database boundary, binds command chronology to the database clock with a narrow caller-clock skew window, and revokes direct service-role INSERT access to the command log. Two concurrent dashboard START requests therefore cannot create two active Ocean runs; command writes must pass the guarded RPCs.
 
 **Expected state after migrations:** tables/functions exist, but Evolution cron job count is **0**. Existing Brian/DIP schedules are untouched.
 
@@ -95,12 +97,20 @@ Before activating cron:
 - Treasury status reports SHADOW mode and no live execution;
 - Ocean status/control can read command/report tables;
 - self-code sandbox `plan` either succeeds with the exact canonical parent or fails closed with an explicit parent-commit error; it must never silently fall back to an old commit;
+- candidate materialization must stage every generated file before allowlist/protected-path validation, remain additive-only in the isolated namespace, and keep checkout credentials out of generated-code execution steps;
 - no unexpected Evolution jobs exist in `cron.job`;
 - canonical ALPHA remains unchanged;
 - expected-edge reliability is bound to the exact source observation / raw group / sensor family / horizon that actually voted in the decision; `intrabar_tape` must resolve back to its raw micro sensor lineage;
+- prospective label timing accepts the bounded two-minute challenger cadence with the three-minute evaluation budget but marks true pre-experiment/post-outcome contamination as leakage;
+- automatic prospective measurement is only active for experiment kinds with dedicated label lineage (`ACTION_GATE`, `EXPECTED_EDGE`); reliability/cost experiment types must fail closed until dedicated prospective labels exist;
 - Treasury starts at `$10,000` SHADOW cash and must remain 100% cash while the Layer-4 promotion gate is closed;
+- a full-conviction SHADOW position followed by an adverse mark remains persistable and can still reach the exit path; deployment utilization must not be rejected merely because MTM equity falls below deployed unlevered principal;
+- Treasury opportunity replacement must beat the remaining HOLD value after the old exit cost rather than acting on a raw edge-gap threshold;
+- a fresh KEEP on a separate EXPECTED_EDGE experiment must not revoke another experiment's still-valid PROMOTE; a later verdict on the same experiment must revoke its older authority;
+- an open position with a temporary fresh-mark gap must not abort the entire Treasury worker or permit stale evidence to open new capital;
 - Treasury cycle persistence rejects a stale `previous_snapshot_id` and accepts an exact completed-cycle retry idempotently;
-- two concurrent Ocean START attempts serialize to exactly one active run, and direct service-role command inserts are denied.
+- two concurrent Treasury child cycles from the same parent serialize to one winner;
+- two concurrent Ocean START attempts serialize to exactly one active run, direct service-role command inserts are denied, wrong-run STOP is rejected, and materially backdated/forward-dated caller timestamps are rejected.
 
 Database check:
 
@@ -137,6 +147,8 @@ After activation, wait long enough for each cadence to fire and verify collector
 - researcher, sandbox, experiment runner and Promotion Council receipts;
 - expected-edge challenger receipts with exact decision evidence lineage;
 - Treasury snapshots every minute with a single monotonic parent chain;
+- Treasury does not systemically starve expected-edge labels because of its runtime latency budget;
+- Treasury does not 500-loop when one open asset has a temporary mark gap;
 - Ocean worker receipts every five minutes;
 - self-code requests carry the exact canonical parent SHA and remain isolated from canonical branches;
 - no live execution anywhere;
