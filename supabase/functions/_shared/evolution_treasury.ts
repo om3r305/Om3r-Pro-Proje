@@ -1,4 +1,4 @@
-export const BRIAN_TREASURY_VERSION="brian.treasury-shadow.v2";
+export const BRIAN_TREASURY_VERSION="brian.treasury-shadow.v3";
 export const BRIAN_TREASURY_STARTING_EQUITY_USD=10_000;
 
 export interface TreasuryOpportunity{
@@ -49,6 +49,7 @@ function time(v:string){const t=Date.parse(v);return Number.isFinite(t)?t:null;}
 function assertFinitePositive(v:number,label:string){if(!Number.isFinite(v)||v<=0)throw new Error(`${label} must be positive`);}
 function halfCostRate(roundTripCostBps:number){return Math.max(0,roundTripCostBps)/20_000;}
 function halfCostUsd(capitalUsd:number,roundTripCostBps:number){return capitalUsd*halfCostRate(roundTripCostBps);}
+function halfCostBps(roundTripCostBps:number){return Math.max(0,roundTripCostBps)/2;}
 
 export function directionalReturnBps(position:TreasuryPosition,markPrice:number):number{
   assertFinitePositive(position.entryPrice,"entryPrice");assertFinitePositive(markPrice,"markPrice");
@@ -111,6 +112,17 @@ function markMap(opportunities:TreasuryOpportunity[],state:TreasuryState,nowMs:n
 }
 function cloneState(state:TreasuryState):TreasuryState{return{...state,positions:state.positions.map(p=>({...p}))};}
 function latestEdgeForPosition(p:TreasuryPosition,latest:Map<string,TreasuryOpportunity>){const o=latest.get(p.assetId);return o&&o.direction===p.direction?o.expectedNetEdgeBps:p.latestExpectedNetEdgeBps;}
+function remainingHoldEdgeBps(p:TreasuryPosition,latest:Map<string,TreasuryOpportunity>){
+  // Expected-net edge is quoted as a full round trip. The entry half-cost is already sunk
+  // for an open position, so add it back when comparing HOLD versus SWITCH from now.
+  return latestEdgeForPosition(p,latest)+halfCostBps(p.roundTripCostBps);
+}
+function replacementAdvantageBps(candidate:TreasuryOpportunity,weakest:TreasuryPosition,latest:Map<string,TreasuryOpportunity>){
+  // Switching must pay the old position's exit half-cost in addition to the candidate's
+  // own full-round-trip cost already embedded in expectedNetEdgeBps.
+  const switchEdgeAfterOldExit=candidate.expectedNetEdgeBps-halfCostBps(weakest.roundTripCostBps);
+  return switchEdgeAfterOldExit-remainingHoldEdgeBps(weakest,latest);
+}
 function isFreshRaw(o:TreasuryOpportunity|undefined,nowMs:number){const at=o?time(o.observedAt):null;return at!=null&&nowMs>=at&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;}
 function maxCapitalPreservingReserve(cashUsd:number,equityUsd:number,roundTripCostBps:number){
   const c=halfCostRate(roundTripCostBps);const numerator=cashUsd-MIN_CASH_RESERVE_PCT*equityUsd;
@@ -161,14 +173,14 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
     let minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
 
     // A stronger opportunity is allowed to recycle weaker deployed capital even when
-    // there is still some cash available. This is what lets Brian move, for example,
-    // a $6k weak position + $4k cash into one exceptional event opportunity instead of
-    // being trapped by the old allocation. Multiple weak positions may be replaced in
-    // one cycle, but only when the new candidate clearly dominates each one.
+    // there is still some cash available. The switch must beat the remaining HOLD value
+    // after accounting for the old position's incremental exit cost; the candidate's own
+    // full round-trip cost is already included in expectedNetEdgeBps.
     while(state.positions.length&&(state.positions.length>=MAX_POSITIONS||desired+minimumTicket<target)){
       const weakest=[...state.positions].sort((a,b)=>latestEdgeForPosition(a,latest)-latestEdgeForPosition(b,latest))[0];
       const weakEdge=latestEdgeForPosition(weakest,latest);const weakOpp=latest.get(weakest.assetId);const weakScore=weakOpp?opportunityScore(weakOpp):Math.max(0,weakEdge)*.5;
-      const dominates=o.expectedNetEdgeBps>=weakEdge+REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*REPLACEMENT_SCORE_MULTIPLIER;
+      const netSwitchAdvantage=replacementAdvantageBps(o,weakest,latest);
+      const dominates=netSwitchAdvantage>=REPLACEMENT_EDGE_ADVANTAGE_BPS&&opportunityScore(o)>weakScore*REPLACEMENT_SCORE_MULTIPLIER;
       if(!dominates)break;
       const mark=marks[weakest.assetId]??weakest.entryPrice;
       applyExit(state,weakest,mark,weakEdge,o.sourceDecisionId,"OPPORTUNITY_REPLACEMENT",actions);noReopenAssets.add(weakest.assetId);
@@ -178,7 +190,12 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
     if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),input.observedAt,actions);
   }
 
-  const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);const deploymentPct=afterEquity>0?deployed/afterEquity:0;const cashReservePct=afterEquity>0?state.cashUsd/afterEquity:0;
+  const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);
+  // deploymentPct is an operational utilization ratio, not leverage. After an adverse mark,
+  // fixed deployed principal can exceed current MTM equity even though Brian opened no new
+  // leverage. Normalize by max(MTM equity, deployed principal) so a valid all-in shadow book
+  // stays at 100% instead of becoming >100% and failing persistence before it can exit.
+  const deploymentDenominator=Math.max(afterEquity,deployed);const deploymentPct=deploymentDenominator>0?deployed/deploymentDenominator:0;const cashReservePct=afterEquity>0?state.cashUsd/afterEquity:0;
   if(deploymentPct>MAX_DEPLOYMENT_PCT+1e-6)blockedReasons.push("deployment exceeds available SHADOW equity");if(cashReservePct<MIN_CASH_RESERVE_PCT-1e-6)blockedReasons.push("cash became negative after point-in-time costs");
   return{version:BRIAN_TREASURY_VERSION,observedAt:input.observedAt,beforeEquityUsd:beforeEquity,afterEquityUsd:afterEquity,state,actions,deploymentUsd:deployed,deploymentPct,cashReservePct,blockedReasons};
 }
