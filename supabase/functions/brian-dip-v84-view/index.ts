@@ -22,22 +22,53 @@ async function authorize(req:Request){
   if(!same(await sha256(supplied),String(q.data.dashboard_key_sha256||"")))throw new Error("UNAUTHORIZED");
 }
 
+async function release(){
+  const q=await db.from("brian_dip_v84_releases").select("release_id,status,logic_hash,strategy_manifest_hash,calibration_family_id,db_contract_version,manifest,sealed_at").eq("release_id",RELEASE_ID).single();
+  if(q.error||!q.data)throw new Error("V84_RELEASE_UNAVAILABLE");
+  const rel=q.data;
+  if(rel.status!=="SEALED"||rel.manifest?.shadow_only!==true||rel.manifest?.live_execution!==false||rel.manifest?.browser_execution!==false||Number(rel.manifest?.max_shadow_leverage)!==1)throw new Error("V84_RELEASE_SAFETY_MISMATCH");
+  return rel;
+}
+
+async function latestSession(){
+  const q=await db.from("brian_dip_v84_session_events").select("*").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();
+  if(q.error)throw new Error("V84_SESSION_READ_FAILED");
+  return q.data;
+}
+
+async function restartWithCapital(capital:unknown){
+  const amount=Number(capital);
+  if(!Number.isFinite(amount)||amount<10||amount>1_000_000)throw new Error("V84_INVALID_TEST_CAPITAL");
+  await release();
+  const latest=await latestSession();
+  if(!latest)throw new Error("V84_NO_TEMPLATE_SESSION");
+  const sid=String(latest.session_id);
+  const rt=await db.from("brian_dip_v84_runtime").select("runtime").eq("session_id",sid).maybeSingle();
+  if(rt.error)throw new Error("V84_RUNTIME_READ_FAILED");
+  if(rt.data?.runtime?.pos)throw new Error("V84_OPEN_POSITION_RESTART_BLOCKED");
+  const startQ=await db.from("brian_dip_v84_session_events").select("config").eq("session_id",sid).eq("event_kind","START").order("requested_at",{ascending:true}).order("event_id",{ascending:true}).limit(1).single();
+  if(startQ.error||!startQ.data)throw new Error("V84_START_TEMPLATE_MISSING");
+  const stamp=new Date().toISOString().replace(/[-:TZ.]/g,"").slice(0,14);
+  const newSession=`dip-v84-${stamp}-${crypto.randomUUID().slice(0,8)}`;
+  const ins=await db.from("brian_dip_v84_session_events").insert({session_id:newSession,event_kind:"START",starting_equity:amount,trade_notional:amount,config:startQ.data.config}).select("session_id,requested_at,starting_equity,trade_notional").single();
+  if(ins.error)throw new Error("V84_SESSION_START_FAILED:"+ins.error.message);
+  return ins.data;
+}
+
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:CORS});
   if(req.method!=="POST")return json({error:"METHOD_NOT_ALLOWED"},405);
   try{
     await authorize(req);
     const body=await req.json().catch(()=>({}));
-    if(body?.action!=="status")return json({error:"V84_VIEW_READ_ONLY"},400);
+    if(body?.action==="restart"){
+      const started=await restartWithCapital(body?.starting_equity);
+      return json({status:"STARTED",session:started,shadow_only:true,live_execution:false,browser_execution:false});
+    }
+    if(body?.action!=="status")return json({error:"V84_ACTION_NOT_ALLOWED"},400);
 
-    const releaseQ=await db.from("brian_dip_v84_releases").select("release_id,status,logic_hash,strategy_manifest_hash,calibration_family_id,db_contract_version,manifest,sealed_at").eq("release_id",RELEASE_ID).single();
-    if(releaseQ.error||!releaseQ.data)throw new Error("V84_RELEASE_UNAVAILABLE");
-    const rel=releaseQ.data;
-    if(rel.status!=="SEALED"||rel.manifest?.shadow_only!==true||rel.manifest?.live_execution!==false||rel.manifest?.browser_execution!==false||Number(rel.manifest?.max_shadow_leverage)!==1)throw new Error("V84_RELEASE_SAFETY_MISMATCH");
-
-    const latestQ=await db.from("brian_dip_v84_session_events").select("*").order("requested_at",{ascending:false}).order("event_id",{ascending:false}).limit(1).maybeSingle();
-    if(latestQ.error)throw new Error("V84_SESSION_READ_FAILED");
-    const latest=latestQ.data;
+    const rel=await release();
+    const latest=await latestSession();
     if(!latest)return json({release:rel,session:null,snapshot:null,events:[],metrics:{decisions:0,candidate_evaluations:0},shadow_only:true,live_execution:false,browser_execution:false});
     const sid=String(latest.session_id);
     const startQ=await db.from("brian_dip_v84_session_events").select("*").eq("session_id",sid).eq("event_kind","START").order("requested_at",{ascending:true}).order("event_id",{ascending:true}).limit(1).single();
@@ -65,11 +96,11 @@ Deno.serve(async(req:Request)=>{
       decisions:decisionQ.data||[],
       candidate_evaluations:evalQ.data||[],
       metrics:{decisions:(decisionQ.data||[]).length,recent_candidate_evaluations:(evalQ.data||[]).length},
-      shadow_only:true,live_execution:false,browser_execution:false,max_shadow_leverage:1,risk_promotion_enabled:false,read_only_view:true,
+      shadow_only:true,live_execution:false,browser_execution:false,max_shadow_leverage:1,risk_promotion_enabled:false,read_only_view:false,
     });
   }catch(e){
     const message=e instanceof Error?e.message:String(e);
-    const status=message==="UNAUTHORIZED"?401:500;
+    const status=message==="UNAUTHORIZED"?401:message.includes("INVALID_TEST_CAPITAL")||message.includes("OPEN_POSITION_RESTART_BLOCKED")?409:500;
     return json({status:"FAILED_CLOSED",error:message,release_id:RELEASE_ID,shadow_only:true,live_execution:false,browser_execution:false},status);
   }
 });
