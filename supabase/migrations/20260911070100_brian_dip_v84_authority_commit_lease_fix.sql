@@ -1,4 +1,5 @@
 -- Fix the dual-release V8.4/V8.4.1 atomic commit lease-key ambiguity found by PostgreSQL CI.
+-- Preserve explicit canonical manifest identity for both accepted release families.
 create or replace function public.brian_dip_v84_commit(
   p_session_id text,p_expected_version bigint,p_owner_id text,p_lease_generation bigint,p_commit_id text,
   p_runtime jsonb,p_snapshot jsonb,p_decision jsonb,p_events jsonb
@@ -33,6 +34,13 @@ begin
   else cfg:=latest.config; end if;
   select * into rel from public.brian_dip_v84_releases where release_id=cfg->>'release_id';
   if not found or rel.status<>'SEALED' or cfg->>'logic_hash' is distinct from rel.logic_hash or cfg->>'strategy_manifest_hash' is distinct from rel.strategy_manifest_hash or cfg->>'calibration_family_id' is distinct from rel.calibration_family_id or cfg->>'db_contract_version' is distinct from rel.db_contract_version or cfg->>'shadow_only' is distinct from 'true' or cfg->>'live_execution' is distinct from 'false' or cfg->>'browser_execution' is distinct from 'false' or cfg->>'server_authoritative' is distinct from 'true' or coalesce((cfg->>'max_shadow_leverage')::integer,0)<>1 then raise exception 'V84_SESSION_CONTRACT_MISMATCH'; end if;
+  if rel.release_id='dip-v84-package1-evidence-20260910.1' then
+    if rel.strategy_manifest_hash is distinct from '9a574469a3df381e56b0993d1f1525ec3a243970b92f8e867b99e07295c06f1e' then raise exception 'V84_PACKAGE1_CANONICAL_HASH_MISMATCH'; end if;
+  elsif rel.release_id='dip-v841-brian-authority-20260911.1' then
+    if rel.strategy_manifest_hash is distinct from '1b9bc41c4edd2f0b9896be316843bde4cd27b67793d4d3912fb3450fe47ee7f1' then raise exception 'V841_AUTHORITY_CANONICAL_HASH_MISMATCH'; end if;
+  else
+    raise exception 'V84_UNKNOWN_RELEASE';
+  end if;
   v_lease_key:=coalesce(cfg->>'worker_lease_key','brian-dip-v84-worker');
   select wl.* into lease_row from public.brian_dip_v84_worker_leases wl where wl.lease_key=v_lease_key for share;
   if not found then raise exception 'V84_LEASE_MISSING'; end if;
