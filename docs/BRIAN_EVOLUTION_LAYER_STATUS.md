@@ -99,22 +99,38 @@ Not yet promoted:
 
 - canonical ALPHA still uses its existing decision compiler;
 - reliability weights are challenger outputs, not canonical weights;
-- `gross_edge_bps` / `net_edge_bps` on canonical ALPHA are not being rewritten;
-- no portfolio allocation or cash sizing is introduced here.
+- `gross_edge_bps` / `net_edge_bps` on canonical ALPHA are not being rewritten.
 
 Layer 4 promotion requires enough clean prospective samples/regimes showing better after-cost edge and acceptable drawdown/stability. Until that evidence exists, this remains challenger-only.
 
 ## Layer 5 — $10,000 SHADOW Brian Treasury
 
-Status: **NOT STARTED**
+Status: **CODE COMPLETE / ROLLOUT + PROSPECTIVE VALIDATION PENDING**
 
-Target remains one Brian-level shadow cash pool with capital allocation, opportunity replacement, risk budget, exit brain and capital recycling. It must consume a validated Layer 4 edge signal rather than raw ALPHA evidence score.
+Implemented:
+
+- one unified `$10,000` Brian SHADOW cash pool rather than independent per-signal fake tickets;
+- Layer-4 promotion gate: Treasury may deploy only when the latest EXPECTED_EDGE prospective experiment is `PROMOTE_CANDIDATE`;
+- a closed/revoked Layer-4 gate blocks new allocation and fail-closes any existing SHADOW allocation back to cash;
+- max 70% total deployment, minimum 30% cash reserve, max 12% per position, minimum 2.5% sizing band and max eight simultaneous positions;
+- sizing uses expected net edge, bounded reliability confidence and mature independent-group breadth;
+- entry/exit costs are charged against the Treasury ledger rather than displayed only as diagnostics;
+- exit brain supports direction flip, edge invalidation, stale edge, hard risk stop, profit-edge decay, time decay and opportunity replacement;
+- replacement logic can recycle capital from a weaker position when a materially better validated opportunity appears;
+- same-cycle re-open protection prevents a stopped/invalidated asset from immediately reopening from stale evidence;
+- latest marks are timestamp ordered and reserve/deployment formulas account for entry costs;
+- append-only `brian_treasury_shadow_snapshots` and normalized `brian_treasury_shadow_actions` persistence;
+- one atomic/idempotent DB commit function writes each Treasury snapshot and its actions in a single transaction;
+- cloud Treasury worker, one-minute schedule preparation, authenticated Treasury status endpoint and `/treasury.html` mobile dashboard;
+- Evolution UI links directly to Treasury while keeping browser/mobile observation-only.
+
+The Treasury remains SHADOW ONLY. No exchange order, credential, withdrawal or live-money route exists. The worker and schedule are not active until the draft PR is explicitly merged/deployed. If Layer 4 has not earned prospective promotion at runtime, the expected steady state is **100% cash**.
 
 ## Layer 6 — Ocean Run
 
 Status: **NOT STARTED**
 
-Target remains a 24–48 hour browser-independent prospective shadow run with full post-run analysis before any discussion of real execution.
+Target remains a 24–48 hour browser-independent prospective shadow run with full post-run analysis: beginning/ending Treasury, realized/unrealized P&L and costs, allocation/replacement history, discoveries, hypotheses, generated candidates, experiment outcomes, promotion/rejection decisions, capability drift, missed opportunities and ALPHA quality before/after promoted challengers.
 
 ## Activation rule
 
