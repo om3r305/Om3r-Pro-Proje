@@ -1,4 +1,4 @@
-import { measureActionGateExperiment, measureOutcomeSet, type ProspectiveOutcomePoint } from "./evolution_lab.ts";
+import { measureActionGateExperiment, measureGateExperiment, measureOutcomeSet, type ProspectiveOutcomePoint } from "./evolution_lab.ts";
 
 function point(i:number,netPositive:boolean):ProspectiveOutcomePoint{
   const grossBps=netPositive?35:5;
@@ -26,6 +26,15 @@ Deno.test("action-gate challenger only measures explicitly allowed decisions",()
   if(measured.control.samples!==80||measured.challenger.samples!==20)throw new Error(JSON.stringify(measured.lineage));
   if(Number(measured.challenger.netEdgeBps)<=Number(measured.control.netEdgeBps))throw new Error("filtered challenger should improve this fixture");
   if(measured.challenger.complexityDelta!==1)throw new Error("challenger complexity delta missing");
+});
+
+Deno.test("generic gate can measure ALLOW_EDGE expected-edge challenger",()=>{
+  const outcomes=Array.from({length:80},(_,i)=>point(i,i%5===0));
+  const labels=outcomes.map((row,i)=>({decisionId:row.decisionId,challengerAction:i%5===0?"ALLOW_EDGE":"DOWNGRADE_TO_WAIT"}));
+  const measured=measureGateExperiment(outcomes,labels,"ALLOW_EDGE",2);
+  if(measured.challenger.samples!==16||measured.lineage.allowedLabel!=="ALLOW_EDGE")throw new Error(JSON.stringify(measured.lineage));
+  if(Number(measured.challenger.netEdgeBps)<=Number(measured.control.netEdgeBps))throw new Error("expected-edge filter should improve fixture");
+  if(measured.challenger.complexityDelta!==2)throw new Error("expected-edge complexity delta missing");
 });
 
 Deno.test("bad prospective rows fail data-quality gate instead of becoming zero",()=>{
