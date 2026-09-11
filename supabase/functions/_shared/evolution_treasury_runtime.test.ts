@@ -1,0 +1,41 @@
+import { assessTreasuryRuntimeEvidence } from "./evolution_treasury_runtime.ts";
+
+Deno.test("Treasury runtime evidence is actionable only with fresh edge, evaluation and market mark", () => {
+  const result = assessTreasuryRuntimeEvidence({
+    nowIso: "2026-09-11T14:00:00Z",
+    edgeObservedAt: "2026-09-11T13:58:30Z",
+    edgeEvaluatedAt: "2026-09-11T13:59:20Z",
+    markObservedAt: "2026-09-11T13:59:50Z",
+  });
+  if (!result.actionable || result.reasons.length) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("Treasury rejects a fresh-looking edge that was evaluated too late", () => {
+  const result = assessTreasuryRuntimeEvidence({
+    nowIso: "2026-09-11T14:00:00Z",
+    edgeObservedAt: "2026-09-11T13:57:30Z",
+    edgeEvaluatedAt: "2026-09-11T13:59:50Z",
+    markObservedAt: "2026-09-11T13:59:55Z",
+  });
+  if (result.actionable || !result.reasons.some((reason) => reason.includes("too late"))) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("Treasury rejects stale market marks instead of fabricating exit PnL", () => {
+  const result = assessTreasuryRuntimeEvidence({
+    nowIso: "2026-09-11T14:00:00Z",
+    edgeObservedAt: "2026-09-11T13:59:00Z",
+    edgeEvaluatedAt: "2026-09-11T13:59:20Z",
+    markObservedAt: "2026-09-11T13:50:00Z",
+  });
+  if (result.actionable || !result.reasons.some((reason) => reason.includes("market mark is stale"))) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("Treasury rejects stale edge even when current market mark is fresh", () => {
+  const result = assessTreasuryRuntimeEvidence({
+    nowIso: "2026-09-11T14:00:00Z",
+    edgeObservedAt: "2026-09-11T13:50:00Z",
+    edgeEvaluatedAt: "2026-09-11T13:50:30Z",
+    markObservedAt: "2026-09-11T13:59:55Z",
+  });
+  if (result.actionable || !result.reasons.some((reason) => reason.includes("edge is stale"))) throw new Error(JSON.stringify(result));
+});
