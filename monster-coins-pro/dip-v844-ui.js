@@ -56,5 +56,33 @@
     const summary=document.querySelector('#decisionDetails summary');txt(summary,'Brian kararı, cycle forecast, rebase ve harvest nedenleri');
   }
 
+  // Binance-style rolling low marker. It is display-only: Brian's blue/red/green
+  // decision overlays stay untouched. The marker follows the lowest 1s Spot wick
+  // in the currently visible 180-second chart window and moves immediately when
+  // a new lower low arrives (or when the previous low scrolls out of view).
+  let dipViewport={lo:null,hi:null,at:0};
+  function dipAxis(rows){
+    const rawLo=Math.min(...rows.map(x=>n(x.l))),rawHi=Math.max(...rows.map(x=>n(x.h))),span=Math.max(rawHi-rawLo,rawHi*.00015,.05),pad=span*.12;
+    if(!(dipViewport.lo>0&&dipViewport.hi>dipViewport.lo)){dipViewport={lo:rawLo-pad,hi:rawHi+pad,at:Date.now()};return dipViewport;}
+    const vr=dipViewport.hi-dipViewport.lo,nearLo=rawLo<dipViewport.lo+vr*.08,nearHi=rawHi>dipViewport.hi-vr*.08;
+    if(nearLo)dipViewport.lo=Math.min(dipViewport.lo,rawLo-pad);
+    if(nearHi)dipViewport.hi=Math.max(dipViewport.hi,rawHi+pad);
+    const rawSpan=rawHi-rawLo;
+    if(Date.now()-dipViewport.at>60000&&rawSpan<(dipViewport.hi-dipViewport.lo)*.52)dipViewport={lo:rawLo-pad,hi:rawHi+pad,at:Date.now()};
+    return dipViewport;
+  }
+  function drawLiveDip(){
+    try{
+      const cv=el('candleCanvas'),box=el('chartWrap');if(!cv||!box||typeof model==='undefined')return;
+      const rows=(Array.isArray(model?.chart?.candles)?model.chart.candles:[]).slice(-180).map(c=>({t:n(c.t),h:n(c.h),l:n(c.l)})).filter(c=>c.t>0&&c.h>0&&c.l>0);if(rows.length<2)return;
+      let dipIndex=0;for(let i=1;i<rows.length;i++)if(rows[i].l<=rows[dipIndex].l)dipIndex=i;
+      const dip=rows[dipIndex],ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=Math.max(500,box.clientWidth),h=Math.max(360,box.clientHeight),{lo,hi}=dipAxis(rows),L=15,R=92,T=42,B=38,plotW=w-L-R,plotH=h-T-B,xw=plotW/rows.length;
+      const x=L+xw*dipIndex+xw/2,y=T+(hi-dip.l)/(hi-lo)*plotH;if(!Number.isFinite(x)||!Number.isFinite(y))return;
+      ctx.save();ctx.setTransform(dpr,0,0,dpr,0,0);ctx.strokeStyle='#d9e7f5';ctx.fillStyle='#d9e7f5';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-12,y+7);ctx.lineTo(x+12,y+7);ctx.stroke();ctx.font='700 10px system-ui';const label=`CANLI DIP ${fmt(dip.l)}`,tw=ctx.measureText(label).width,labelX=Math.max(L+3,Math.min(w-R-tw-4,x-tw/2)),labelY=Math.min(h-B-4,y+21);ctx.fillStyle='rgba(7,16,26,.94)';ctx.fillRect(labelX-3,labelY-11,tw+6,14);ctx.fillStyle='#d9e7f5';ctx.fillText(label,labelX,labelY);ctx.restore();
+    }catch{}
+  }
+  const chartRender=typeof renderChart==='function'?renderChart:null;
+  if(chartRender)renderChart=function(){chartRender();drawLiveDip();};
+
   window.addEventListener('load',()=>{patchLive();setInterval(patchLive,120);});
 })();
