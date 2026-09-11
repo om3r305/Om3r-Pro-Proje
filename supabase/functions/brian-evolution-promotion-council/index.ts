@@ -14,7 +14,9 @@ const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
 const COLLECTOR_ID="brian-evolution-promotion-council-v1";
 const LEASE_SECONDS=180;
-const MIN_REDECIDE_MS=3*3600_000;
+// Experiment measurements are refreshed hourly. Keep the anti-duplicate window slightly
+// below an hour so fresh adverse evidence can revoke a promotion on the very next council run.
+const MIN_REDECIDE_MS=55*60_000;
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
 async function sha(value:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
@@ -77,7 +79,7 @@ async function decideExperiment(experiment:Record<string,unknown>,observedAt:str
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown){
   const finishedAt=new Date().toISOString(),runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_PROMOTION_COUNCIL_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,human_promotion_required:true},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});if(q.error)console.error("promotion council receipt",q.error.message);
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_PROMOTION_COUNCIL_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,human_promotion_required:true,redecide_min_minutes:55},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});if(q.error)console.error("promotion council receipt",q.error.message);
 }
 
 Deno.serve(async(req:Request)=>{
@@ -91,7 +93,7 @@ Deno.serve(async(req:Request)=>{
       const results:unknown[]=[];let skippedRecent=0,stored=0;
       for(const raw of q.data??[]){const experiment=raw as Record<string,unknown>;if(await recentlyDecided(String(experiment.experiment_id),nowMs)){skippedRecent++;continue;}const result=await decideExperiment(experiment,observedAt);results.push(result);stored+=Number((result as {stored?:number}).stored??0)+Number((result as {drift?:number}).drift??0);}
       await receipt(startedAt,"SUCCESS",q.data?.length??0,stored);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,experiments_considered:q.data?.length??0,skipped_recent:skippedRecent,results,canonical_mutation:false,autonomous_apply_allowed:false,human_promotion_required:true,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,experiments_considered:q.data?.length??0,skipped_recent:skippedRecent,results,canonical_mutation:false,autonomous_apply_allowed:false,human_promotion_required:true,redecide_min_minutes:55,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
