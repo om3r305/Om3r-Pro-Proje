@@ -105,13 +105,16 @@ export async function getMarket(fetcher:Fetcher=fetch):Promise<Market>{
 
 async function boundary(start:number,end:number,fallback:number,fetcher:Fetcher):Promise<Segment>{
   const points:{t:number;id:number;p:number}[]=[];let nextId:number|null=null,done=false;
-  for(let page=0;page<8;page++){
+  // High-volatility ETH minutes can exceed 8,000 aggregate trades. A hard 8-page cap
+  // caused fail-closed reconciliation and blocked otherwise valid HARVEST exits.
+  // Keep exact trade ordering, but allow enough pages to complete a single partial-minute boundary.
+  for(let page=0;page<64;page++){
     const params=nextId===null?`startTime=${start}&endTime=${end-1}`:`fromId=${nextId}`,rows=await marketJson(`/fapi/v1/aggTrades?symbol=${SYMBOL}&${params}&limit=1000`,fetcher);
     if(!Array.isArray(rows))throw Error("INVALID_BOUNDARY_TRADES");
     for(const row of rows){const r=row as Record<string,unknown>,id=Number(r.a),t=Number(r.T),p=Number(r.p);if(!Number.isSafeInteger(id)||!Number.isFinite(t)||!(p>0))throw Error("INVALID_BOUNDARY_TRADES");if(nextId!==null&&id!==nextId)throw Error("TRADE_ID_GAP");nextId=id+1;if(t<start)throw Error("BOUNDARY_BEFORE_DECISION");if(t>=end){done=true;break;}if(points.length&&t<points.at(-1)!.t)throw Error("TRADE_TIME_ORDER");points.push({t,id,p});}
     if(done||rows.length<1000){done=true;break;}
   }
-  if(!done)throw Error("BOUNDARY_PAGE_LIMIT");const prices=points.map(x=>x.p);return{start,end,kind:"TRADES",points,o:prices[0]??fallback,c:prices.at(-1)??fallback,h:prices.length?Math.max(...prices):fallback,l:prices.length?Math.min(...prices):fallback};
+  if(!done)throw Error("BOUNDARY_PAGE_LIMIT_64");const prices=points.map(x=>x.p);return{start,end,kind:"TRADES",points,o:prices[0]??fallback,c:prices.at(-1)??fallback,h:prices.length?Math.max(...prices):fallback,l:prices.length?Math.min(...prices):fallback};
 }
 
 export async function pricePath(start:number,due:number,nowMs:number,entry:number,fetcher:Fetcher=fetch):Promise<{end:number;segments:Segment[]}>{

@@ -32,7 +32,7 @@ type AuthoritySize={
   qty:number;notional:number;margin:number;leverage:1;actual_fraction:number;gross_fraction:number;
   fees_open:number;worst_loss:number;risk_fraction:number;allocation:number;risk_policy:string;max_notional_fraction:number;
 };
-type ScoreState={up:number;down:number;rangePos:number;momentumAtr:number;entryQualityRaw:number;chase:boolean;reason:string[]};
+type ScoreState={up:number;down:number;rangePos:number;macroRangePos:number;momentumAtr:number;entryQualityRaw:number;chase:boolean;tacticalReclaim:boolean;reason:string[]};
 type ProfitMemory={sellVotes?:number;peakBid?:number;peakProfitBps?:number;peakPositionId?:string;lastSellReason?:string|null};
 type Runtime843=Runtime&{v842?:ProfitMemory};
 
@@ -40,9 +40,12 @@ function validLong(entry:number,stop:number,target:number){return stop<entry&&en
 
 function chartScores(m:Market,s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:CandidateResult):ScoreState{
   const rows=m.bars["1m"].slice(-60),last=rows.at(-1)!;
-  const low=Math.min(...rows.map(x=>x.l)),high=Math.max(...rows.map(x=>x.h)),span=Math.max(high-low,s1.atr*.5,1e-9);
-  const live=m.book.mid,rangePos=clip((live-low)/span,0,1);
+  const tactical=rows.slice(-12);
+  const macroLow=Math.min(...rows.map(x=>x.l)),macroHigh=Math.max(...rows.map(x=>x.h)),macroSpan=Math.max(macroHigh-macroLow,s1.atr*.5,1e-9);
+  const tacticalLow=Math.min(...tactical.map(x=>x.l),m.book.bid),tacticalHigh=Math.max(...tactical.map(x=>x.h)),tacticalSpan=Math.max(tacticalHigh-tacticalLow,s1.atr*.5,1e-9);
+  const live=m.book.mid,rangePos=clip((live-tacticalLow)/tacticalSpan,0,1),macroRangePos=clip((live-macroLow)/macroSpan,0,1);
   const c4=rows.at(-4)?.c??last.c,momentumAtr=s1.atr>0?(live-c4)/s1.atr:0;
+  const tacticalReclaim=rangePos<=.38&&momentumAtr>-1.15&&(m.flowFast.ofi>=.05||m.book.pressure>=1.05);
   let up=0,down=0;const reason:string[]=[];
   const apply=(s:Struct,w:number)=>{
     if(s.trend==="UP")up+=.55*w;else if(s.trend==="DOWN")down+=.55*w;
@@ -59,19 +62,23 @@ function chartScores(m:Market,s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:Can
   if(base.direction==="UP")up+=.55;else if(base.direction==="DOWN")down+=.25;
 
   let q=rangePos<=.22?.96:rangePos<=.40?.82:rangePos<=.58?.62:rangePos<=.70?.42:rangePos<=.82?.24:.10;
+  if(rangePos<=.38&&!tacticalReclaim&&momentumAtr<-.35)q=Math.min(q,.34);
   if(momentumAtr>1.25)q*=.72;
   if(momentumAtr>2.0)q*=.48;
   if(momentumAtr>3.0)q*=.28;
   if(momentumAtr>4.0)q*=.16;
   if(m.flowFast.ofi<-.18)q*=.82;
   if(s5.bos==="DOWN"&&s1.bos==="DOWN")q*=.72;
-  const chase=(rangePos>.76&&momentumAtr>1.25)||(momentumAtr>3.0&&rangePos>.62);
+  const chase=(rangePos>.76&&momentumAtr>1.25)||(momentumAtr>3.0&&rangePos>.62)||(macroRangePos>.93&&momentumAtr>1.0);
   if(chase){q=Math.min(q,.18);reason.push("BRIAN_CHASE_FOMO_WAIT");}
-  if(rangePos<.35)reason.push("PRICE_NEAR_RECENT_LOW");
-  if(rangePos>.65)reason.push("PRICE_NEAR_RECENT_HIGH");
+  if(tacticalReclaim)reason.push("TACTICAL_DIP_RECLAIM");
+  else if(rangePos<=.38&&momentumAtr<-.35)reason.push("TACTICAL_DIP_WAIT_RECLAIM");
+  if(rangePos<.35)reason.push("PRICE_NEAR_TACTICAL_LOW");
+  if(rangePos>.65)reason.push("PRICE_NEAR_TACTICAL_HIGH");
+  if(macroRangePos>.90)reason.push("PRICE_NEAR_MACRO_RANGE_HIGH");
   if(momentumAtr>.15)reason.push("LIVE_RECOVERY_MOMENTUM");
   if(momentumAtr<-.15)reason.push("LIVE_DECLINE_MOMENTUM");
-  return{up,down,rangePos,momentumAtr,entryQualityRaw:clip(q,0,1),chase,reason};
+  return{up,down,rangePos,macroRangePos,momentumAtr,entryQualityRaw:clip(q,0,1),chase,tacticalReclaim,reason};
 }
 
 function confidenceFor(up:number,down:number):number{
@@ -119,11 +126,17 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const direction:Direction=!hasLong&&bullish?"UP":"WAIT";
   const baseSetup=String(base.thesis.setup||"NONE"),setup:Setup=(["SWEEP_RECLAIM","FAILED_BREAK","BOS_RETEST","EARLY_REVERSAL"].includes(baseSetup)&&base.direction==="UP"?baseSetup:"EARLY_REVERSAL") as Setup;
   const fee=n(cfg.fee_bps,10),slip=n(cfg.slippage_bps,1),entry=direction==="UP"?m.book.ask*(1+slip/10000):m.book.mid;
-  const recent=m.bars["1m"].slice(-12),recentLow=Math.min(...recent.map(x=>x.l));
-  let inv:number|null=null,stopSource="AUTHORITY_RECENT_EXTREME",stopStructureId:string|null=null;
+  const recent=m.bars["1m"].slice(-12),recentLow=Math.min(...recent.map(x=>x.l),m.book.bid),recentStart=recent.at(0)?.t??0;
+  let inv:number|null=null,stopSource="AUTHORITY_TACTICAL_EXTREME",stopStructureId:string|null=null;
   if(direction==="UP"){
-    const pivot=Math.min(recentLow,s1.lastLow?.p??recentLow);inv=pivot-s1.atr*.12;stopStructureId=`UP:${s1.lastLow?.t??recent.at(-1)?.t??0}`;
-    if(base.direction==="UP"&&base.inv&&base.inv<entry){inv=base.inv;stopSource=String((base.thesis.stop as Record<string,unknown>)?.source||"PACKAGE1_STRUCTURAL_STOP");stopStructureId=String((base.thesis.stop as Record<string,unknown>)?.structure_id||stopStructureId||"")||null;}
+    const structuralLow=s1.lastLow&&s1.lastLow.t>=recentStart?s1.lastLow:null;
+    const pivot=structuralLow?Math.min(recentLow,structuralLow.p):recentLow;
+    inv=pivot-s1.atr*.30;stopStructureId=`UP:${structuralLow?.t??recent.at(-1)?.t??0}`;
+    if(base.direction==="UP"&&base.inv&&base.inv<entry){
+      const baseDistanceAtr=s1.atr>0?(entry-base.inv)/s1.atr:Number.POSITIVE_INFINITY;
+      if(baseDistanceAtr<=2.25){inv=base.inv;stopSource=String((base.thesis.stop as Record<string,unknown>)?.source||"PACKAGE1_STRUCTURAL_STOP");stopStructureId=String((base.thesis.stop as Record<string,unknown>)?.structure_id||stopStructureId||"")||null;}
+      else scores.reason.push("PACKAGE1_STOP_REJECTED_STALE_OR_TOO_WIDE");
+    }
   }
 
   const signalAt=m.bars["1m"].at(-1)!.ct+1,structs=[s1,s5,s15,s1h,s4h];
@@ -149,8 +162,8 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const ps=profitState(rt as Runtime843,m,structs);
   const targetTouched=hasLong&&rt.pos?m.book.bid>=rt.pos.target:false;
   const weakening=m.flowFast.ofi<-.12||scores.momentumAtr<-.20||rawBearish;
-  const extended=scores.rangePos>.82||scores.momentumAtr>2.6;
-  const profitProtectArmed=hasLong&&ps.peakProfitBps>=PROFIT_PROTECT_ARM_BPS&&(ps.resistanceTouched||scores.rangePos>.58||ps.peakProfitBps>=35);
+  const extended=Math.max(scores.rangePos,scores.macroRangePos)>.82||scores.momentumAtr>2.6;
+  const profitProtectArmed=hasLong&&ps.peakProfitBps>=PROFIT_PROTECT_ARM_BPS&&(ps.resistanceTouched||scores.rangePos>.58||scores.macroRangePos>.90||ps.peakProfitBps>=35);
   const profitGiveback=profitProtectArmed&&ps.givebackBps>=PROFIT_PROTECT_GIVEBACK_BPS&&scores.momentumAtr<=PROFIT_PROTECT_MOMENTUM_ATR_CEILING;
   const latchedSell=hasLong&&ps.priorSellVotes>0&&ps.profitBps>10&&(weakening||scores.momentumAtr<0);
   const strongSell=hasLong&&(rawBearish||(targetTouched&&weakening)||profitGiveback);
@@ -164,6 +177,7 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const softEvidence:string[]=[];
   if(rawBearish&&!hasLong)softEvidence.push("LONG_ONLY_BEARISH_WAIT");
   if(scores.chase)softEvidence.push("BRIAN_CHASE_FOMO_WAIT");
+  if(direction==="UP"&&scores.rangePos<=.38&&!scores.tacticalReclaim&&scores.momentumAtr<-.35)softEvidence.push("TACTICAL_DIP_WAIT_RECLAIM");
   if(direction==="UP"&&entryQuality<MIN_ENTRY_QUALITY)softEvidence.push("ENTRY_QUALITY_LOW");
   if(direction==="UP"&&economics&&economics.target_net_reward_bps<=0)softEvidence.push("TARGET_BELOW_COST");
   if(direction==="UP"&&economics&&economics.economic_rr<1)softEvidence.push("ECONOMIC_RR_LOW");
@@ -183,19 +197,19 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const targetPlan={policy:"BRIAN_DYNAMIC_ADVISORY_TARGET",target_planner_version:TARGET_PLANNER_VERSION,hard_take_profit:false,trailing_thesis:true,selected_rank:selected?.rank??null,selected_level:selected?.level??null,levels:levelPlan.levels.slice(0,10).map((x,i)=>({rank:i+1,level_id:x.level_id,price:x.normalized_price,timeframe:x.timeframe,origin:x.origin,confirmed_at:x.confirmed_at}))};
   const stopTelemetry={price:inv,source:stopSource,structure_id:stopStructureId,distance_bps:stopDistanceBps,distance_atr_1m:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null,distance_atr_setup_tf:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null};
   const calSnapshot={state:cal.state,samples:cal.samples,episodes:cal.episodes,days:cal.days,wins:cal.wins,losses:cal.losses,p:cal.p,wilson_lower:cal.lower,wilson_upper:cal.upper,ambiguous_losses:cal.ambiguousLosses,entry_blocking:false};
-  const reason=[...scores.reason,rawBearish?"BEARISH_PRESSURE_PRESENT":"",profitProtectArmed?"PROFIT_PROTECT_ARMED":"",profitGiveback?"PROFIT_GIVEBACK_TRIGGER":"",`score up=${scores.up.toFixed(2)} down=${scores.down.toFixed(2)}`,`range=${scores.rangePos.toFixed(2)}`,`live-mom=${scores.momentumAtr.toFixed(2)}ATR`,`entryQ=${entryQuality.toFixed(2)}`].filter(Boolean);
+  const reason=[...scores.reason,rawBearish?"BEARISH_PRESSURE_PRESENT":"",profitProtectArmed?"PROFIT_PROTECT_ARMED":"",profitGiveback?"PROFIT_GIVEBACK_TRIGGER":"",`score up=${scores.up.toFixed(2)} down=${scores.down.toFixed(2)}`,`range=${scores.rangePos.toFixed(2)}`,`macro-range=${scores.macroRangePos.toFixed(2)}`,`live-mom=${scores.momentumAtr.toFixed(2)}ATR`,`entryQ=${entryQuality.toFixed(2)}`].filter(Boolean);
   const targetRole="L1_EXECUTABLE" as const;
   const thesis:J={
     ...base.thesis,
     thesis_id:occurrence,occurrence_id:occurrence,episode_id:episode,material_identity:materialIdentity,trigger_identity:triggerIdentity,
     generated_at:new Date(at).toISOString(),decision_time:new Date(at).toISOString(),signal_at:new Date(signalAt).toISOString(),forecast_due_at:new Date(signalAt+MAX_HOLD_MS).toISOString(),
     setup:direction==="UP"?setup:"NONE",direction,regime:String(base.thesis.regime||"RANGE"),venue:"SHADOW_PERP",entry_price:entry,invalidation_price:inv,target_price:target,
-    target_role:target?targetRole:"NO_FORWARD_LEVEL",target_plan:targetPlan,stop:stopTelemetry,entry_guard:{mode:"BRIAN_LIVE_ENTRY_QUALITY",package1_observation:base.thesis.entry_guard??null},
+    target_role:target?targetRole:"NO_FORWARD_LEVEL",target_plan:targetPlan,stop:stopTelemetry,entry_guard:{mode:"BRIAN_TACTICAL_DIP_RECLAIM",package1_observation:base.thesis.entry_guard??null},
     rr:economicRR,economic_rr:economicRR,target_distance_bps:targetDistanceBps,stop_distance_bps:stopDistanceBps,net_reward_bps:economics?.target_net_reward_bps??0,net_risk_bps:economics?.stop_net_loss_bps??0,
     fill_forward_cost_bps:fillCost,reference_roundtrip_cost_bps:referenceRoundtripCostBps(cost,m.book.spreadBps),cost_contract:cost,
     raw_conviction:confidence,forecast_probability:null,execution_calibration:calSnapshot,leverage:1,leverage_policy:"V843_BRIAN_LONG_ONLY_1X",
     decision_authority:"BRIAN",authority_action:action,authority_confidence:confidence,authority_entry_quality:entryQuality,authority_allocation:size?.allocation??allocation,
-    authority_scores:{up:scores.up,down:scores.down,range_position:scores.rangePos,momentum_atr:scores.momentumAtr,entry_quality_raw:scores.entryQualityRaw,sell_vote:sellVote,sell_strength:sellStrength,sell_reason:sellReason,profit_bps:ps.profitBps,peak_bid:ps.peakBid,peak_profit_bps:ps.peakProfitBps,giveback_bps:ps.givebackBps,profit_protect_armed:profitProtectArmed,resistance_touched:ps.resistanceTouched,target_touched:targetTouched},authority_reason:reason,
+    authority_scores:{up:scores.up,down:scores.down,range_position:scores.rangePos,macro_range_position:scores.macroRangePos,tactical_reclaim:scores.tacticalReclaim,momentum_atr:scores.momentumAtr,entry_quality_raw:scores.entryQualityRaw,sell_vote:sellVote,sell_strength:sellStrength,sell_reason:sellReason,profit_bps:ps.profitBps,peak_bid:ps.peakBid,peak_profit_bps:ps.peakProfitBps,giveback_bps:ps.givebackBps,profit_protect_armed:profitProtectArmed,resistance_touched:ps.resistanceTouched,target_touched:targetTouched},authority_reason:reason,
     decision_market_price:m.book.mid,decision_market_received_at:new Date(m.book.receivedAt).toISOString(),soft_evidence:softEvidence,veto:hard,first_blocking_veto:hard[0]??null,veto_stage:hard.length?"TECHNICAL_RAIL":null,
     release_id:RELEASE_ID,logic_hash:LOGIC_HASH,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,calibration_family_id:CALIBRATION_FAMILY_ID,db_contract_version:DB_CONTRACT_VERSION,decision_revision:DECISION_REVISION,policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,metric_version:METRIC_VERSION,resolver_version:RESOLVER_VERSION,entry_guard_version:ENTRY_GUARD_VERSION,target_planner_version:TARGET_PLANNER_VERSION,execution_model_version:EXECUTION_MODEL_VERSION,cost_model_version:COST_MODEL_VERSION,market_data_contract_version:MARKET_DATA_CONTRACT_VERSION,shadow_only:true,live_execution:false,browser_execution:false,
   };
