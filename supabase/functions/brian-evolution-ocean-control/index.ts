@@ -10,9 +10,16 @@ const ALLOWED_ORIGIN=/^https:\/\/monster-coins(?:-pro)?-[a-z0-9-]*oemer-yildirim
 const ALLOWED_EXACT=new Set(["https://monster-coins-pro-seven.vercel.app","https://monster-coins-pro-oemer-yildirim.vercel.app","https://monster-coins-pro-git-brian-2026-oemer-yildirim.vercel.app","http://localhost:3000","http://127.0.0.1:3000"]);
 const REQUIRED_COLLECTORS=[
   {id:"brian-evolution-orchestrator-v1",label:"Evolution orchestrator",maxAgeSeconds:20*60},
+  {id:"brian-world-brain-v1",label:"World Brain",maxAgeSeconds:15*60},
+  {id:"brian-world-discovery-eye-v1",label:"World Discovery Eye",maxAgeSeconds:25*60},
   {id:"brian-evolution-researcher-v1",label:"Evolution researcher",maxAgeSeconds:75*60},
+  {id:"brian-evolution-sandbox-v1",label:"Evolution sandbox",maxAgeSeconds:75*60},
+  {id:"brian-evolution-template-generator-v1",label:"Evolution template generator",maxAgeSeconds:75*60},
+  {id:"brian-evolution-experiment-runner-v1",label:"Experiment runner",maxAgeSeconds:150*60},
+  {id:"brian-evolution-promotion-council-v1",label:"Promotion Council",maxAgeSeconds:150*60},
   {id:"brian-evolution-alpha-edge-challenger-v1",label:"Layer-4 edge worker",maxAgeSeconds:6*60},
   {id:"brian-evolution-treasury-v1",label:"Treasury worker",maxAgeSeconds:4*60},
+  {id:"brian-evolution-ocean-worker-v1",label:"Ocean worker",maxAgeSeconds:15*60},
 ] as const;
 const TREASURY_MAX_AGE_SECONDS=4*60;
 const EDGE_MAX_AGE_SECONDS=6*60;
@@ -35,23 +42,29 @@ async function preflight(nowIso=new Date().toISOString()){
   const collectorIds=REQUIRED_COLLECTORS.map(row=>row.id);
   const [treasuryQ,edgeQ,collectorQ]=await Promise.all([
     db.from("brian_treasury_shadow_latest").select("snapshot_id,observed_at,equity_usd,promotion_gate_open").limit(1).maybeSingle(),
-    db.from("brian_alpha_expected_edge_latest_by_asset").select("edge_id,observed_at").order("observed_at",{ascending:false}).limit(1).maybeSingle(),
-    db.from("brian_collector_runs").select("collector_id,status,started_at").in("collector_id",collectorIds).order("started_at",{ascending:false}).limit(100),
+    db.from("brian_alpha_expected_edge_latest_by_asset").select("edge_id,observed_at,evaluated_at").order("observed_at",{ascending:false}).limit(1).maybeSingle(),
+    db.from("brian_collector_runs").select("collector_id,status,started_at").in("collector_id",collectorIds).order("started_at",{ascending:false}).limit(500),
   ]);
   const errors=[treasuryQ.error,edgeQ.error,collectorQ.error].filter(Boolean).map(error=>error!.message);
   if(errors.length)return{ready:false,reasons:errors,treasury:null,edge:null,freshness:null};
-  const latestByCollector=new Map<string,{status:string;started_at:string}>();
-  for(const row of collectorQ.data??[]){const id=String(row.collector_id);if(!latestByCollector.has(id))latestByCollector.set(id,{status:String(row.status),started_at:String(row.started_at)});}
+
+  const rowsByCollector=new Map<string,Array<{status:string;started_at:string}>>();
+  for(const row of collectorQ.data??[]){
+    const id=String(row.collector_id),rows=rowsByCollector.get(id)??[];
+    rows.push({status:String(row.status),started_at:String(row.started_at)});rowsByCollector.set(id,rows);
+  }
   const probes:OceanPreflightProbe[]=[
     {label:"Treasury snapshot",observedAt:treasuryQ.data?.observed_at?String(treasuryQ.data.observed_at):null,maxAgeSeconds:TREASURY_MAX_AGE_SECONDS},
     {label:"Layer-4 expected-edge observation",observedAt:edgeQ.data?.observed_at?String(edgeQ.data.observed_at):null,maxAgeSeconds:EDGE_MAX_AGE_SECONDS},
   ];
   for(const requirement of REQUIRED_COLLECTORS){
-    const latest=latestByCollector.get(requirement.id);
-    probes.push({label:requirement.label,observedAt:latest?.started_at??null,maxAgeSeconds:requirement.maxAgeSeconds,status:latest?.status??null,requireSuccess:true});
+    const rows=rowsByCollector.get(requirement.id)??[],latest=rows[0];
+    const latestSuccess=rows.find(row=>row.status==="SUCCESS");
+    const terminal=latest?.status==="FAILED"||latest?.status==="DEGRADED"?latest:latestSuccess??latest;
+    probes.push({label:requirement.label,observedAt:terminal?.started_at??null,maxAgeSeconds:requirement.maxAgeSeconds,status:terminal?.status??null,requireSuccess:true});
   }
   const freshness=assessOceanPreflightFreshness(nowIso,probes);
-  return{ready:freshness.ready,reasons:freshness.reasons,treasury:treasuryQ.data??null,edge:edgeQ.data??null,freshness};
+  return{ready:freshness.ready,reasons:freshness.reasons,treasury:treasuryQ.data??null,edge:edgeQ.data??null,freshness,required_collectors:REQUIRED_COLLECTORS.map(row=>row.id)};
 }
 
 Deno.serve(async(req:Request)=>{
