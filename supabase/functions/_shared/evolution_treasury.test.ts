@@ -32,6 +32,26 @@ Deno.test("exceptional validated conviction can use effectively the full 10000 U
   if(!(p.actions[0].capitalUsd>9900&&p.actions[0].capitalUsd<10000))throw new Error(`unexpected full-conviction capital ${p.actions[0].capitalUsd}`);
 });
 
+Deno.test("full-conviction adverse mark stays persistable and can still exit on risk",()=>{
+  const initial=initialTreasuryState("2026-09-11T12:59:00Z");
+  const exceptional=opp({assetId:"EVENTUSDT",expectedNetEdgeBps:80,reliabilityConfidence:.65,matureGroupCount:8,roundTripCostBps:20,sourceDecisionId:"event-1"});
+  const opened=planTreasuryCycle({state:initial,opportunities:[exceptional],observedAt:"2026-09-11T13:00:00Z",positionIdFor:o=>`p-${o.assetId}`});
+  const marked=planTreasuryCycle({
+    state:opened.state,
+    opportunities:[opp({assetId:"EVENTUSDT",observedAt:"2026-09-11T13:00:30Z",referencePrice:99.99,expectedNetEdgeBps:80,reliabilityConfidence:.65,matureGroupCount:8,roundTripCostBps:20,sourceDecisionId:"event-2"})],
+    observedAt:"2026-09-11T13:01:00Z",
+    positionIdFor:o=>`unused-${o.assetId}`,
+  });
+  if(marked.deploymentPct>1.000001||marked.blockedReasons.some(reason=>reason.includes("deployment exceeds")))throw new Error(JSON.stringify(marked));
+  const stopped=planTreasuryCycle({
+    state:marked.state,
+    opportunities:[opp({assetId:"EVENTUSDT",observedAt:"2026-09-11T13:01:30Z",referencePrice:98,expectedNetEdgeBps:80,reliabilityConfidence:.65,matureGroupCount:8,roundTripCostBps:20,sourceDecisionId:"event-3"})],
+    observedAt:"2026-09-11T13:02:00Z",
+    positionIdFor:o=>`unused-${o.assetId}`,
+  });
+  if(stopped.actions[0]?.reason!=="RISK_STOP"||stopped.state.positions.length!==0||stopped.deploymentPct!==0)throw new Error(JSON.stringify(stopped));
+});
+
 Deno.test("exceptional new opportunity can close a weaker 6000 USD position and recycle nearly the whole cashbox",()=>{
   const s=initialTreasuryState("2026-09-11T12:50:00Z");
   s.cashUsd=4000;
@@ -43,6 +63,16 @@ Deno.test("exceptional new opportunity can close a weaker 6000 USD position and 
   if(!exit||exit.reason!=="OPPORTUNITY_REPLACEMENT"||!open)throw new Error(JSON.stringify(p.actions));
   if(p.state.positions.length!==1||p.state.positions[0].assetId!=="EVENTUSDT")throw new Error(JSON.stringify(p.state.positions));
   if(p.deploymentPct<.99)throw new Error(`strong replacement failed to concentrate capital: ${p.deploymentPct}`);
+});
+
+Deno.test("replacement refuses a marginal edge that does not pay old exit plus remaining hold value",()=>{
+  const s=initialTreasuryState("2026-09-11T12:50:00Z");s.cashUsd=4000;
+  s.positions=[pos({assetId:"OLDUSDT",capitalUsd:6000,entryExpectedNetEdgeBps:10,latestExpectedNetEdgeBps:10,roundTripCostBps:20,sourceDecisionId:"old-entry"})];
+  const oldRefresh=opp({assetId:"OLDUSDT",referencePrice:100,expectedNetEdgeBps:10,reliabilityConfidence:.55,matureGroupCount:3,roundTripCostBps:20,sourceDecisionId:"old-refresh"});
+  const marginal=opp({assetId:"NEWUSDT",expectedNetEdgeBps:30,reliabilityConfidence:.65,matureGroupCount:8,roundTripCostBps:20,sourceDecisionId:"new-marginal"});
+  const p=planTreasuryCycle({state:s,opportunities:[oldRefresh,marginal],observedAt:"2026-09-11T13:00:00Z",positionIdFor:o=>`new-${o.assetId}`});
+  if(p.actions.some(a=>a.kind==="EXIT"&&a.assetId==="OLDUSDT"&&a.reason==="OPPORTUNITY_REPLACEMENT"))throw new Error(`marginal switch ignored incremental exit economics: ${JSON.stringify(p.actions)}`);
+  if(!p.state.positions.some(row=>row.assetId==="OLDUSDT"))throw new Error("old position was incorrectly recycled");
 });
 
 Deno.test("strong edge alone cannot force all-in when reliability and maturity are weak",()=>{
