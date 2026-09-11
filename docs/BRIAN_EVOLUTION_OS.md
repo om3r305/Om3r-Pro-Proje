@@ -100,25 +100,28 @@ Implemented in the draft branch as a `$10,000` SHADOW treasury, pending rollout 
 
 The treasury is not a fixed per-trade ticket schedule. It maintains one reconciled cash pool and decides:
 
-- cash reserve
+- how much cash to keep idle
 - per-asset allocation
 - concentration
 - position replacement
 - realized-loss acceptance when a superior opportunity exists
-- liquidity-aware sizing
+- cost/liquidity-aware sizing
 - entry/exit/re-entry
 - opportunity-cost based capital recycling
 
-Current hard policy boundaries:
+SHADOW allocation policy:
 
-- maximum 70% deployment
-- minimum 30% cash reserve
-- maximum 12% per position
-- maximum eight simultaneous positions
+- no arbitrary `$3/$5/$10/$20` Treasury ticket size
+- no mandatory 30% cash reserve and no arbitrary 70% deployment ceiling
+- no arbitrary 12% per-position ceiling
+- conviction is derived from after-cost expected net edge + bounded prospective reliability + independent evidence maturity
+- ordinary evidence gets partial capital; weak evidence may get no capital; exceptional validated evidence can earn effectively 100% of available SHADOW equity after reserving point-in-time entry costs
+- a stronger opportunity may close one or more weaker positions, including at a realized loss, to recycle capital into the superior opportunity when its expected opportunity value clearly dominates
+- maximum eight simultaneous positions remains an operational book-complexity bound, not a forced diversification target
 - no deployment unless the Layer-4 EXPECTED_EDGE prospective experiment has a current `PROMOTE_CANDIDATE` decision
 - gate closure or revocation fail-closes the SHADOW portfolio back to cash
 
-A portfolio change persists its source decision, expected edge, cost and reason. Entry and exit costs are charged to the ledger. Snapshot + actions are committed atomically and append-only.
+A portfolio change persists its source decision, expected edge, cost and reason. Entry and exit costs are charged to the ledger. Snapshot + actions are committed atomically and append-only. The database additionally serializes the snapshot parent chain so stale or racing Treasury cycles cannot create divergent cashbox histories.
 
 Exit gate: treasury cash + positions + realized/unrealized P&L + costs reconcile exactly and survive browser closure/restart.
 
@@ -126,7 +129,7 @@ Exit gate: treasury cash + positions + realized/unrealized P&L + costs reconcile
 
 Implemented at code-contract level in the draft branch; actual prospective run is pending deployment and explicit start.
 
-Ocean is a 24–48h browser-independent prospective SHADOW exam. START/STOP commands are append-only. Preflight blocks start unless Treasury, Layer-4 expected edge and core Evolution workers have healthy runtime evidence. The cloud worker records periodic Treasury/system-health checkpoints and creates a final report after planned or early termination.
+Ocean is a 24–48h browser-independent prospective SHADOW exam. START/STOP commands are append-only and serialized at the database control boundary so two simultaneous dashboard requests cannot create parallel active exams. Preflight blocks start unless Treasury, Layer-4 expected edge and core Evolution workers have healthy runtime evidence. The cloud worker records periodic Treasury/system-health checkpoints and creates a final report after planned or early termination.
 
 Required post-run report:
 
@@ -174,13 +177,15 @@ Protected from autonomous promotion/mutation:
 Every code candidate must carry:
 
 - `hypothesis_id`
-- parent canonical commit
+- exact parent canonical commit
 - changed paths
 - test plan/results
 - data windows and provenance
 - replay/stress/prospective results
 - contamination declaration
 - promotion status
+
+If the canonical parent changes, candidate planning rotates to a new candidate identity rather than silently reusing evidence from an old parent. Missing or malformed canonical parent configuration fails closed.
 
 ## Dashboard target
 
