@@ -55,7 +55,7 @@ This file is the living implementation ledger for PR #92. It tracks what is actu
 
 ## Layer 3 — Self-Improvement Lab
 
-**Foundation and autonomous researcher implemented; self-coding execution remains in progress.**
+**Foundation and autonomous researcher implemented; sandbox code generation remains in progress.**
 
 Implemented:
 
@@ -75,6 +75,8 @@ Still required before Layer 3 is complete:
 - automated replay/stress/prospective result ingestion,
 - drift-driven DECAYING/RETIRED recommendations,
 - human-review handoff for promotion-ready patches.
+
+No code-generation worker will receive production/deploy credentials. Candidate patches must remain in isolated review branches/workspaces and pass the same protected-path, replay, stress and prospective gates before human-approved promotion.
 
 ## Layer 4 — ALPHA Intelligence
 
