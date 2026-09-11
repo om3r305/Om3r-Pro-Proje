@@ -16,7 +16,20 @@ Deno.test("prospective metric builder subtracts decision-time cost",()=>{
   const m=measureOutcomeSet(rows,0);
   if(m.samples!==40||m.grossEdgeBps==null||m.netEdgeBps==null)throw new Error(JSON.stringify(m));
   if(Math.abs((m.grossEdgeBps-m.netEdgeBps)-20)>1e-9)throw new Error("cost was not subtracted exactly");
-  if(!m.dataQualityOk)throw new Error("mature valid sample should pass data quality");
+  if(!m.dataQualityOk)throw new Error("clean valid sample should pass data quality independently of maturity");
+});
+
+Deno.test("clean but immature outcome sets are valid data with insufficient coverage",()=>{
+  const rows=Array.from({length:4},(_,i)=>point(i,true));
+  const m=measureOutcomeSet(rows,0);
+  if(!m.dataQualityOk)throw new Error("small clean sample should not be mislabeled as bad data");
+  if(m.regimes!==0||m.stabilityScore!==null)throw new Error(`immature temporal windows must not count as mature regimes: ${JSON.stringify(m)}`);
+});
+
+Deno.test("only six-hour windows with enough samples count as stability regimes",()=>{
+  const rows=Array.from({length:18},(_,i)=>point(i,true));
+  const m=measureOutcomeSet(rows,0);
+  if(m.regimes<1)throw new Error(`expected at least one mature window: ${JSON.stringify(m)}`);
 });
 
 Deno.test("action-gate challenger only measures explicitly allowed decisions",()=>{
