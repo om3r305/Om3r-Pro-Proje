@@ -9,12 +9,14 @@ This runbook is intentionally activation-gated. Applying migrations must not sta
 Before merge or deployment:
 
 - PR #92 remains draft until the owner explicitly approves merge/deploy.
-- Brian Evolution OS CI, Brian ALPHA v2 CI and Brian 2026 CI must all be green on the exact PR head.
+- Brian Evolution OS CI, Brian ALPHA v2 CI and Brian 2026 CI must all be green on the exact PR head against the current `brian-2026` base.
+- Synchronize the Evolution branch with the current `brian-2026` head before the final exact-head CI. Base-only DIP commits may be inherited by the merge commit, but Evolution must not author or modify DIP paths.
 - `git diff origin/brian-2026...HEAD` must contain no DIP paths.
 - Existing Brian Vault runtime secrets must be present and valid: `brian_project_url`, `brian_anon_jwt`, `brian_cron_key`.
 - No live exchange credential, withdrawal route or authenticated order route is introduced by this rollout.
+- After the final merge, set the Supabase Edge Function secret `BRIAN_EVOLUTION_PARENT_COMMIT` to the exact 40-character SHA at the head of `brian-2026`. The self-coding planner intentionally fails closed if this value is missing, malformed or stale relative to candidate materialization.
 
-The feature branch may be behind `brian-2026` by unrelated DIP-only commits. Do not rebase merely to absorb DIP work. The PR synthetic merge CI is the relevant compatibility check, and Evolution's changed-file fence must remain DIP-clean.
+If canonical `brian-2026` changes later, update `BRIAN_EVOLUTION_PARENT_COMMIT` before expecting new self-code candidates. Existing evidence remains valid; only new candidate planning should pause until the exact parent is refreshed.
 
 ## 1. Migration order
 
@@ -63,6 +65,8 @@ Deploy the Evolution functions before activation:
 - `brian-evolution-lab-status`
 - `brian-world-status`
 
+Before smoke-testing `brian-evolution-sandbox`, verify `BRIAN_EVOLUTION_PARENT_COMMIT` equals the exact current `brian-2026` SHA. Do not substitute a short SHA, old feature-branch parent or fallback value.
+
 Do not invoke the cron scheduler functions yet.
 
 ## 3. UI deployment
@@ -84,6 +88,7 @@ Before activating cron:
 - Evolution status can read the new persistence tables;
 - Treasury status reports SHADOW mode and no live execution;
 - Ocean status/control can read command/report tables;
+- self-code sandbox `plan` either succeeds with the exact canonical parent or fails closed with an explicit parent-commit error; it must never silently fall back to an old commit;
 - no unexpected Evolution jobs exist in `cron.job`;
 - canonical ALPHA remains unchanged;
 - Treasury starts at `$10,000` SHADOW cash and must remain 100% cash while the Layer-4 promotion gate is closed.
@@ -124,6 +129,7 @@ After activation, wait long enough for each cadence to fire and verify collector
 - expected-edge challenger receipts;
 - Treasury snapshots every minute;
 - Ocean worker receipts every five minutes;
+- self-code requests carry the exact canonical parent SHA and remain isolated from canonical branches;
 - no live execution anywhere;
 - no DIP collector/job change caused by Evolution.
 
