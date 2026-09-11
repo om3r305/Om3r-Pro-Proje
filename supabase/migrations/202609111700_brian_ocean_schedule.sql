@@ -1,5 +1,6 @@
 -- Brian Evolution OS Layer 6 Ocean observer schedule.
 -- GitHub-only until rollout. SHADOW ONLY.
+-- IMPORTANT: this migration only installs the scheduler function; it never activates cron.
 
 create or replace function brian_private.schedule_evolution_ocean_worker()
 returns bigint
@@ -34,14 +35,4 @@ $$;
 revoke all on function brian_private.schedule_evolution_ocean_worker() from public,anon,authenticated,service_role;
 grant execute on function brian_private.schedule_evolution_ocean_worker() to postgres;
 
-do $$
-begin
-  if exists (select 1 from vault.decrypted_secrets where name='brian_project_url')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_anon_jwt')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_cron_key') then
-    perform brian_private.schedule_evolution_ocean_worker();
-  else
-    raise notice 'Evolution Ocean worker not scheduled yet; provision Brian Vault runtime secrets at rollout';
-  end if;
-end;
-$$;
+-- Deliberately no auto-schedule DO block. Activation is a separate explicit rollout action.
