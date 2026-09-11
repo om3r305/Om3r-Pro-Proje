@@ -5,12 +5,15 @@ import {
   type TreasuryState,
 } from "./evolution_treasury.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v1";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v2";
+export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
+const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 
 export interface PromotionGateState {
   authorized: boolean;
   reason: string;
   evidenceRef: string | null;
+  decidedAt?: string | null;
 }
 
 export interface PromotionGatedTreasuryPlan extends TreasuryCyclePlan {
@@ -21,6 +24,33 @@ export interface PromotionGatedTreasuryPlan extends TreasuryCyclePlan {
 function time(value: string): number | null {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizePromotionGate(
+  gate: PromotionGateState,
+  observedAt: string,
+): PromotionGateState {
+  if (!gate.authorized) return { ...gate };
+  const now = time(observedAt);
+  const decided = gate.decidedAt ? time(gate.decidedAt) : null;
+  if (now == null) {
+    return { ...gate, authorized: false, reason: "promotion gate cycle timestamp is invalid" };
+  }
+  if (decided == null) {
+    return { ...gate, authorized: false, reason: "promotion gate has no valid decision timestamp" };
+  }
+  const ageSeconds = (now - decided) / 1000;
+  if (ageSeconds < -PROMOTION_FUTURE_SKEW_SECONDS) {
+    return { ...gate, authorized: false, reason: "promotion gate decision timestamp is in the future" };
+  }
+  if (ageSeconds > TREASURY_PROMOTION_MAX_AGE_SECONDS) {
+    return {
+      ...gate,
+      authorized: false,
+      reason: `promotion gate expired after ${Math.round(ageSeconds)}s without fresh EXPECTED_EDGE approval`,
+    };
+  }
+  return { ...gate };
 }
 
 function latestMarkByAsset(opportunities: TreasuryOpportunity[], observedAt: string): Map<string, TreasuryOpportunity> {
@@ -69,9 +99,10 @@ export function planPromotionGatedTreasuryCycle(input: {
   promotionGate: PromotionGateState;
   positionIdFor: (opportunity: TreasuryOpportunity) => string;
 }): PromotionGatedTreasuryPlan {
-  const effectiveOpportunities = input.promotionGate.authorized
+  const promotionGate = normalizePromotionGate(input.promotionGate, input.observedAt);
+  const effectiveOpportunities = promotionGate.authorized
     ? input.opportunities
-    : closedGateInvalidations(input.state, input.opportunities, input.observedAt, input.promotionGate.reason);
+    : closedGateInvalidations(input.state, input.opportunities, input.observedAt, promotionGate.reason);
 
   const planned = planTreasuryCycle({
     state: input.state,
@@ -81,12 +112,12 @@ export function planPromotionGatedTreasuryCycle(input: {
   });
 
   const blockedReasons = [...planned.blockedReasons];
-  if (!input.promotionGate.authorized) blockedReasons.unshift(`layer4 promotion gate closed: ${input.promotionGate.reason}`);
+  if (!promotionGate.authorized) blockedReasons.unshift(`layer4 promotion gate closed: ${promotionGate.reason}`);
 
   return {
     ...planned,
     blockedReasons,
-    promotionGate: { ...input.promotionGate },
+    promotionGate,
     gateVersion: BRIAN_TREASURY_GATE_VERSION,
   };
 }
