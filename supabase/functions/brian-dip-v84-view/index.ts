@@ -5,7 +5,7 @@ const ENGINE_VERSION="brian-dip-v843-profit-protect";
 const POLICY_VERSION="dip-v843-profit-protect-20260911.1";
 const DECISION_REVISION="dip-v843-long-occurrence-20260911.1";
 const METRIC_VERSION="target-before-invalidation-v843.1";
-const WORKER_LEASE_KEY="brian-dip-v842-long-stateful-worker";
+const WORKER_LEASE_KEY="brian-dip-v843-profit-protect-worker";
 const CORS={"access-control-allow-origin":"*","access-control-allow-headers":"content-type,x-brian-dashboard-key","access-control-allow-methods":"POST,OPTIONS","cache-control":"no-store","content-type":"application/json; charset=utf-8"};
 const db=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,{auth:{persistSession:false,autoRefreshToken:false}});
 function json(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:CORS});}
