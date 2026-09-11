@@ -60,6 +60,8 @@ jobs:
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
           supabase/functions/_shared/evolution_treasury.ts
           supabase/functions/_shared/evolution_treasury.test.ts
           supabase/functions/_shared/evolution_treasury_gate.ts
@@ -101,6 +103,7 @@ jobs:
           supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
           supabase/functions/_shared/evolution_treasury.test.ts
           supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/evolution_treasury_runtime.test.ts
@@ -124,6 +127,8 @@ jobs:
           supabase/functions/_shared/evolution_codegen.test.ts
           supabase/functions/_shared/evolution_alpha_intelligence.ts
           supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
           supabase/functions/_shared/evolution_treasury.ts
           supabase/functions/_shared/evolution_treasury.test.ts
           supabase/functions/_shared/evolution_treasury_gate.ts
