@@ -50,8 +50,8 @@ export const DB_CONTRACT_VERSION = "brian-dip-v84-db-2-authority" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v844-cycle-forecast-family-1" as const;
 export const STRATEGY_MANIFEST_HASH = "b41bcf3d3ff6f5359937894f03d7165bdef3b425bc9bc6ff7e8abb6669b89449" as const;
 
-// Sealed only after the behavior files are committed; metadata seal updates this value.
-export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
+// Immutable behavior identity: final behavior commit before this metadata-only seal.
+export const LOGIC_HASH = "git:e210589642dbac13e65570a6d729360c7d656b54" as const;
 
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MAX_SHADOW_LEVERAGE:1 = 1;
