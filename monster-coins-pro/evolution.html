@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/dashboard.css">
   <title>Brian Evolution OS</title>
   <style>
-    body{min-height:100vh;background:#05070c;color:#f7f8fb}.evo-shell{max-width:1180px;margin:0 auto;padding:18px 16px 56px}.evo-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}.evo-brand{display:flex;align-items:center;gap:12px}.evo-brand img{width:42px;height:42px}.evo-brand b{display:block;font-size:17px}.evo-brand span{display:block;color:#8e98aa;font-size:12px;margin-top:3px}.evo-back{display:inline-flex;text-decoration:none}.evo-hero{padding:22px}.evo-hero h1{font-size:clamp(28px,6vw,48px);margin:5px 0 10px}.evo-hero p{color:#a7b0c0;max-width:850px;line-height:1.55}.evo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.evo-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.evo-gap{height:14px}.evo-value{font-size:28px;font-weight:800;margin:8px 0 4px}.evo-muted{color:#8e98aa;font-size:12px;line-height:1.45}.evo-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07)}.evo-row:last-child{border-bottom:0}.evo-title{font-weight:700}.evo-meta{font-size:12px;color:#8e98aa;margin-top:5px;line-height:1.45}.evo-pill{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(255,255,255,.12);margin-left:6px}.evo-pill.ok{color:#7ff6b6}.evo-pill.warn{color:#ffd479}.evo-pill.bad{color:#ff8c9f}.evo-source{word-break:break-word}.evo-lock{position:fixed;inset:0;background:rgba(2,4,8,.94);display:none;align-items:center;justify-content:center;padding:20px;z-index:99}.evo-lock.show{display:flex}.evo-lock-card{width:min(420px,100%);padding:22px}.evo-lock-card input{width:100%;box-sizing:border-box;margin:14px 0 10px;padding:14px;border-radius:12px;background:#0b1019;color:#fff;border:1px solid rgba(255,255,255,.12)}@media(max-width:850px){.evo-grid{grid-template-columns:1fr 1fr}.evo-two{grid-template-columns:1fr}.evo-shell{padding:12px 12px 42px}.evo-top{align-items:flex-start}.evo-value{font-size:24px}}@media(max-width:480px){.evo-grid{grid-template-columns:1fr}.evo-back{font-size:12px;padding:9px 10px}}
+    body{min-height:100vh;background:#05070c;color:#f7f8fb}.evo-shell{max-width:1180px;margin:0 auto;padding:18px 16px 56px}.evo-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}.evo-brand{display:flex;align-items:center;gap:12px}.evo-brand img{width:42px;height:42px}.evo-brand b{display:block;font-size:17px}.evo-brand span{display:block;color:#8e98aa;font-size:12px;margin-top:3px}.evo-top-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.evo-back{display:inline-flex;text-decoration:none}.evo-hero{padding:22px}.evo-hero h1{font-size:clamp(28px,6vw,48px);margin:5px 0 10px}.evo-hero p{color:#a7b0c0;max-width:850px;line-height:1.55}.evo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.evo-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.evo-gap{height:14px}.evo-value{font-size:28px;font-weight:800;margin:8px 0 4px}.evo-muted{color:#8e98aa;font-size:12px;line-height:1.45}.evo-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07)}.evo-row:last-child{border-bottom:0}.evo-title{font-weight:700}.evo-meta{font-size:12px;color:#8e98aa;margin-top:5px;line-height:1.45}.evo-pill{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(255,255,255,.12);margin-left:6px}.evo-pill.ok{color:#7ff6b6}.evo-pill.warn{color:#ffd479}.evo-pill.bad{color:#ff8c9f}.evo-source{word-break:break-word}.evo-lock{position:fixed;inset:0;background:rgba(2,4,8,.94);display:none;align-items:center;justify-content:center;padding:20px;z-index:99}.evo-lock.show{display:flex}.evo-lock-card{width:min(420px,100%);padding:22px}.evo-lock-card input{width:100%;box-sizing:border-box;margin:14px 0 10px;padding:14px;border-radius:12px;background:#0b1019;color:#fff;border:1px solid rgba(255,255,255,.12)}@media(max-width:850px){.evo-grid{grid-template-columns:1fr 1fr}.evo-two{grid-template-columns:1fr}.evo-shell{padding:12px 12px 42px}.evo-top{align-items:flex-start}.evo-value{font-size:24px}}@media(max-width:480px){.evo-grid{grid-template-columns:1fr}.evo-back{font-size:12px;padding:9px 10px}.evo-top-actions{max-width:48%}}
   </style>
 </head>
 <body>
@@ -27,14 +27,14 @@
   <main class="evo-shell">
     <header class="evo-top">
       <div class="evo-brand"><img src="/logo.svg" alt="Brian"><div><b>Brian Evolution OS</b><span id="evoSync">Durum alınıyor…</span></div></div>
-      <a class="cc-btn evo-back" href="/">← Kontrol Merkezi</a>
+      <div class="evo-top-actions"><a class="cc-btn evo-back" href="/world.html">World Intelligence</a><a class="cc-btn evo-back" href="/">← Kontrol Merkezi</a></div>
     </header>
 
     <article class="cc-card evo-hero">
-      <div class="cc-eyebrow">Layer 1 · Evolution Core · SHADOW ONLY</div>
-      <h1>Brian kendini görüyor.</h1>
-      <p>Bu ekran Brian'ın hangi yeteneklere sahip olduğunu, nerede kör kaldığını, hangi dünya kaynaklarını keşfettiğini ve neden bir kaynağa henüz güvenmediğini gösterir. Evolution katmanı şu aşamada canonical ALPHA kararlarını veya gerçek para yüzeyini değiştirmez.</p>
-      <div class="cc-cloud-foot"><span id="evoState" class="cc-chip">◉ yükleniyor</span><span class="cc-chip">☁ tarayıcıdan bağımsız</span><span class="cc-chip">🔒 DIP kapsam dışı</span></div>
+      <div class="cc-eyebrow">Layer 1–3 · Evolution Core + Self-Improvement Lab · SHADOW ONLY</div>
+      <h1>Brian kendini görüyor, araştırıyor ve sınanabilir adaylar üretiyor.</h1>
+      <p>Bu ekran Brian'ın yeteneklerini, kör noktalarını, keşfettiği kaynakları, araştırma hipotezlerini, prospective deneylerini ve izole kod adaylarını gösterir. Kod adayları canonical ALPHA'yı otomatik değiştiremez; tüm yol hypothesis → artifact → tests → replay/stress → prospective → human review olarak izlenir.</p>
+      <div class="cc-cloud-foot"><span id="evoState" class="cc-chip">◉ yükleniyor</span><span class="cc-chip">☁ tarayıcıdan bağımsız</span><span class="cc-chip">🧪 sandbox-only</span><span class="cc-chip">🔒 DIP kapsam dışı</span></div>
     </article>
     <div class="evo-gap"></div>
 
@@ -42,13 +42,33 @@
       <article class="cc-card cc-pad"><div class="cc-kpi-label">Sağlıklı Yetenek</div><div id="evoHealthy" class="evo-value">—</div><div id="evoHealthyMeta" class="evo-muted">—</div></article>
       <article class="cc-card cc-pad"><div class="cc-kpi-label">Kritik Açık</div><div id="evoCritical" class="evo-value">—</div><div id="evoCriticalMeta" class="evo-muted">—</div></article>
       <article class="cc-card cc-pad"><div class="cc-kpi-label">Keşfedilen Kaynak</div><div id="evoSources" class="evo-value">—</div><div id="evoSourcesMeta" class="evo-muted">—</div></article>
-      <article class="cc-card cc-pad"><div class="cc-kpi-label">Karara Yetkili Kaynak</div><div id="evoDecisionSources" class="evo-value">—</div><div class="evo-muted">Layer 1'de kaynaklar doğrudan ALPHA'ya oy vermez.</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Karara Yetkili Kaynak</div><div id="evoDecisionSources" class="evo-value">—</div><div class="evo-muted">Kaynak discovery tek başına ALPHA oyu değildir.</div></article>
+    </section>
+    <div class="evo-gap"></div>
+
+    <section class="evo-grid">
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Araştırma Hipotezi</div><div id="evoHypothesisCount" class="evo-value">—</div><div class="evo-muted">Ölçülebilir zayıflıklardan üretilen research adayları.</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Prospective Deney</div><div id="evoExperimentCount" class="evo-value">—</div><div class="evo-muted">Control/challenger sonuçları ayrı tutulur.</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Kod Adayı</div><div id="evoCodeCount" class="evo-value">—</div><div class="evo-muted">Yalnız izole evolution-candidate sandbox yolları.</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">İnsan İncelemesine Hazır</div><div id="evoHumanReady" class="evo-value">—</div><div class="evo-muted">Otomatik merge/apply hiçbir zaman yok.</div></article>
     </section>
     <div class="evo-gap"></div>
 
     <section class="evo-two">
       <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Capability Graph</div><div class="cc-card-sub">Brian'ın gözleri, beyni ve araştırma organları</div></div><span class="cc-badge ok">CANLI MODEL</span></div><div id="evoCapabilities"></div></article>
       <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Gap Detector</div><div class="cc-card-sub">Eksik, stale veya henüz kurulmamış yetenekler</div></div></div><div id="evoGaps"></div></article>
+    </section>
+    <div class="evo-gap"></div>
+
+    <section class="evo-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Research Hypotheses</div><div class="cc-card-sub">Ölçülen problem → falsifiable mekanizma → başarı kriteri</div></div><span class="cc-badge">LAYER 3</span></div><div id="evoHypotheses"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Experiment & Promotion Council</div><div class="cc-card-sub">Replay/stress/prospective kapıları ve aday terfi kararı</div></div></div><div id="evoExperiments"></div></article>
+    </section>
+    <div class="evo-gap"></div>
+
+    <section class="evo-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Self-Coding Sandbox</div><div class="cc-card-sub">İzole branch manifesti, path fence ve zorunlu insan incelemesi</div></div><span class="cc-badge warn">NO AUTO APPLY</span></div><div id="evoCode"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Lab Cloud Runs</div><div class="cc-card-sub">Researcher → Sandbox → Experiment Runner → Promotion Council</div></div></div><div id="evoLabRuns"></div></article>
     </section>
     <div class="evo-gap"></div>
 
