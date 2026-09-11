@@ -13,9 +13,12 @@ on:
       - 'supabase/migrations/*brian_world*.sql'
       - 'monster-coins-pro/evolution.*'
       - 'monster-coins-pro/world.*'
+      - 'scripts/evolution_candidate_materialize.ts'
       - 'docs/BRIAN_EVOLUTION_OS.md'
+      - 'docs/BRIAN_EVOLUTION_LAYER_STATUS.md'
       - 'config/brian-evolution-baseline-v1.json'
       - '.github/workflows/brian-evolution-ci.yml'
+      - '.github/workflows/brian-evolution-candidate-materializer.yml'
   workflow_dispatch:
 
 permissions:
@@ -62,6 +65,7 @@ jobs:
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
           supabase/functions/brian-world-status/index.ts
+          scripts/evolution_candidate_materialize.ts
       - name: Run Evolution behavioral tests
         run: >-
           deno test --allow-read
@@ -100,6 +104,7 @@ jobs:
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
           supabase/functions/brian-world-status/index.ts
+          scripts/evolution_candidate_materialize.ts
       - name: Verify dashboard JavaScript syntax
         run: |
           node --check monster-coins-pro/evolution.js
