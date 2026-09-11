@@ -1,6 +1,6 @@
 export const TREASURY_MARK_MAX_AGE_SECONDS = 3 * 60;
-export const TREASURY_EDGE_MAX_AGE_SECONDS = 3 * 60;
-export const TREASURY_EDGE_EVALUATION_MAX_LATENCY_SECONDS = 2 * 60;
+export const TREASURY_EDGE_MAX_AGE_SECONDS = 5 * 60;
+export const TREASURY_EDGE_EVALUATION_MAX_LATENCY_SECONDS = 3 * 60;
 const FUTURE_SKEW_SECONDS = 5;
 
 export interface TreasuryRuntimeEvidenceInput {
