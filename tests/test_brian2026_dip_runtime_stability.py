@@ -7,12 +7,16 @@ SERVER_UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
 
 
-def test_v83_live_page_loads_only_v83_runtime_and_liveview_in_order():
-    runtime = HTML.index('/dip-v83.js')
-    liveview = HTML.index('/dip-v83-liveview.js')
-    assert runtime < liveview
-    for legacy in ('/dip-expert-v4-hotfix.js','/dip-expert-v4-runtime-guard.js','/dip-expert-v5-brain.js','/dip-server-authoritative-v7.js'):
+def test_v841_live_page_loads_v84_renderer_then_authority_control_only():
+    renderer = HTML.index('/dip-v84.js')
+    authority = HTML.index('/dip-v841-control.js')
+    assert renderer < authority
+    for legacy in ('/dip-v83.js','/dip-v83-liveview.js','/dip-expert-v4-hotfix.js','/dip-expert-v4-runtime-guard.js','/dip-expert-v5-brain.js','/dip-server-authoritative-v7.js'):
         assert legacy not in HTML
+    # Frozen V8.3 browser artifacts remain in the repository as historical fallback/evidence,
+    # but are not executed by the V8.4.1 live page.
+    assert (ROOT / 'monster-coins-pro' / 'dip-v83.js').exists()
+    assert (ROOT / 'monster-coins-pro' / 'dip-v83-liveview.js').exists()
 
 
 def test_market_loading_is_bounded_partial_and_overlay_fail_safe():
