@@ -61,7 +61,7 @@ function opportunityQuality(o:TreasuryOpportunity){
 }
 export function opportunityScore(o:TreasuryOpportunity):number{return Math.max(0,o.expectedNetEdgeBps)*opportunityQuality(o);}
 function rawOpportunityIsUsable(o:TreasuryOpportunity,nowMs:number){
-  const at=time(o.observedAt);return Boolean(o.assetId)&&o.direction!==0&&Number.isFinite(o.referencePrice)&&o.referencePrice>0&&Number.isFinite(o.expectedNetEdgeBps)&&Number.isFinite(o.roundTripCostBps)&&o.roundTripCostBps>=0&&at!=null&&at<=nowMs+5_000;
+  const at=time(o.observedAt);return Boolean(o.assetId)&&Number.isFinite(o.referencePrice)&&o.referencePrice>0&&Number.isFinite(o.expectedNetEdgeBps)&&Number.isFinite(o.roundTripCostBps)&&o.roundTripCostBps>=0&&at!=null&&at<=nowMs+5_000;
 }
 function validOpportunity(o:TreasuryOpportunity,nowMs:number){
   const at=time(o.observedAt);return rawOpportunityIsUsable(o,nowMs)&&o.pitClear&&o.recommendation==="ALLOW_EDGE"&&o.expectedNetEdgeBps>=MIN_EDGE_BPS&&at!=null&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;
