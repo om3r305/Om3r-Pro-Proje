@@ -33,7 +33,7 @@ type AuthoritySize={
   fees_open:number;worst_loss:number;risk_fraction:number;allocation:number;risk_policy:string;max_notional_fraction:number;
 };
 type ScoreState={up:number;down:number;rangePos:number;momentumAtr:number;entryQualityRaw:number;chase:boolean;reason:string[]};
-type ProfitMemory={sellVotes?:number;peakBid?:number;peakProfitBps?:number;lastSellReason?:string|null};
+type ProfitMemory={sellVotes?:number;peakBid?:number;peakProfitBps?:number;peakPositionId?:string;lastSellReason?:string|null};
 type Runtime843=Runtime&{v842?:ProfitMemory};
 
 function validLong(entry:number,stop:number,target:number){return stop<entry&&entry<target;}
@@ -96,8 +96,9 @@ function profitState(rt:Runtime843,m:Market,structs:Struct[]):{
   profitBps:number;peakBid:number;peakProfitBps:number;givebackBps:number;resistanceTouched:boolean;priorSellVotes:number;
 }{
   if(!rt.pos||rt.pos.side!=="LONG")return{profitBps:0,peakBid:0,peakProfitBps:0,givebackBps:0,resistanceTouched:false,priorSellVotes:0};
-  const mem=(rt.v842??={}) as ProfitMemory;
-  const entry=rt.pos.entry,bid=m.book.bid,priorPeak=n(mem.peakBid,entry),peakBid=Math.max(priorPeak,bid);
+  const mem=(rt.v842??={}) as ProfitMemory,entry=rt.pos.entry,bid=m.book.bid;
+  if(mem.peakPositionId!==rt.pos.position_id){mem.peakPositionId=rt.pos.position_id;mem.peakBid=entry;mem.peakProfitBps=0;}
+  const priorPeak=n(mem.peakBid,entry),peakBid=Math.max(priorPeak,bid);
   const profitBps=(bid-entry)/entry*10000,peakProfitBps=(peakBid-entry)/entry*10000,givebackBps=Math.max(0,(peakBid-bid)/peakBid*10000);
   const resistance=structs.flatMap(s=>[s.lastHigh?.p,s.equalHigh]).map(Number).filter(v=>Number.isFinite(v)&&v>entry);
   const resistanceTouched=resistance.some(v=>peakBid>=v);
