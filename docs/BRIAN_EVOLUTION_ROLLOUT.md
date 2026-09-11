@@ -38,10 +38,13 @@ Apply the Evolution migrations in filename order. The important dependency chain
 14. `202609111675_brian_treasury_atomic_cas_guard.sql`
 15. `202609111680_brian_treasury_schedule.sql`
 16. `202609111690_brian_ocean_layer6.sql`
-17. `202609111700_brian_ocean_schedule.sql`
-18. `202609111710_brian_evolution_activation_control.sql`
+17. `202609111695_brian_ocean_atomic_control_guard.sql`
+18. `202609111700_brian_ocean_schedule.sql`
+19. `202609111710_brian_evolution_activation_control.sql`
 
 The `1675` Treasury hardening migration makes the append-only cashbox a serialized compare-and-swap chain at the database boundary. Exact retries remain idempotent, while stale-parent or non-monotonic forks fail closed even if a caller races without respecting the worker lease.
+
+The `1695` Ocean control hardening migration serializes START/STOP at the database boundary and revokes direct service-role INSERT access to the command log. Two concurrent dashboard START requests therefore cannot create two active Ocean runs; command writes must pass the guarded RPCs.
 
 **Expected state after migrations:** tables/functions exist, but Evolution cron job count is **0**. Existing Brian/DIP schedules are untouched.
 
@@ -96,7 +99,8 @@ Before activating cron:
 - canonical ALPHA remains unchanged;
 - expected-edge reliability is bound to the exact source observation / raw group / sensor family / horizon that actually voted in the decision; `intrabar_tape` must resolve back to its raw micro sensor lineage;
 - Treasury starts at `$10,000` SHADOW cash and must remain 100% cash while the Layer-4 promotion gate is closed;
-- Treasury cycle persistence rejects a stale `previous_snapshot_id` and accepts an exact completed-cycle retry idempotently.
+- Treasury cycle persistence rejects a stale `previous_snapshot_id` and accepts an exact completed-cycle retry idempotently;
+- two concurrent Ocean START attempts serialize to exactly one active run, and direct service-role command inserts are denied.
 
 Database check:
 
@@ -144,7 +148,7 @@ The expected Treasury behavior at the start is conservative: if Layer 4 has not 
 
 Do not start a 24h/48h Ocean run until its preflight sees healthy runtime evidence for the required Evolution/Treasury/Layer-4 workers.
 
-Ocean observes the system; it does not bypass promotion gates and does not enable live execution.
+Ocean observes the system; it does not bypass promotion gates and does not enable live execution. Ocean START/STOP commands must pass the serialized database control RPCs installed by migration `1695`.
 
 ## 8. Emergency rollback / pause
 
