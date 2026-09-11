@@ -35,7 +35,7 @@ import { n, type J } from "./dip_v84_contract.ts";
 
 export const SYMBOL = "ETHUSDT" as const;
 export const RELEASE_ID = "dip-v842-long-stateful-20260911.1" as const;
-export const RELEASE_STAGE = "GITHUB_PREPARED_NOT_DEPLOYED" as const;
+export const RELEASE_STAGE = "PRODUCTION_SHADOW_LONG_ONLY" as const;
 export const ENGINE_VERSION = "brian-dip-v842-long-stateful" as const;
 export const POLICY_VERSION = "dip-v842-long-stateful-20260911.1" as const;
 export const DECISION_REVISION = "dip-v842-long-occurrence-20260911.1" as const;
@@ -50,8 +50,8 @@ export const DB_CONTRACT_VERSION = "brian-dip-v84-db-2-authority" as const;
 export const CALIBRATION_FAMILY_ID = "dip-v842-long-stateful-family-1" as const;
 export const STRATEGY_MANIFEST_HASH = "194db6e7c73e24a56cf7122f48339b1a64a9e883d3fdbf001c373a84548452d6" as const;
 
-// Sealed after behavior CI. Never deploy while this sentinel remains.
-export const LOGIC_HASH = "UNSEALED_GITHUB_ONLY" as const;
+// Immutable reviewed behavior identity. This is the final behavior commit before seal metadata only.
+export const LOGIC_HASH = "git:8cdc2ac1bd1a1e00cdd7f1846b8bf462234e7c3f" as const;
 
 export const MAX_HOLD_MS = 90 * 60_000;
 export const MAX_SHADOW_LEVERAGE:1 = 1;
