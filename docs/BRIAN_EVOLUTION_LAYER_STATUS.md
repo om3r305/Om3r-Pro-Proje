@@ -100,6 +100,8 @@ Target: 24–48 hour cloud-only SHADOW run with complete evidence on what Brian 
 
 A dedicated `Brian Evolution OS CI` workflow type-checks/lints/tests Evolution and World Brain code, validates dashboard JavaScript, rejects DIP-path changes in this PR, and checks patch formatting. Existing Brian and ALPHA CI remain active as independent regression gates.
 
+Latest checkpoint at branch head `221c91368d50089b1445c58dce43b55c228e6e68`: **Brian Evolution OS CI = success, Brian ALPHA v2 CI = success, Brian 2026 CI = success.**
+
 ## Activation rule
 
 PR #92 remains a draft until all planned layers are complete, CI is green, DIP isolation is verified, and the user explicitly authorizes merge + production rollout.
