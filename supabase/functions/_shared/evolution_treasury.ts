@@ -106,9 +106,9 @@ function applyExit(state:TreasuryState,p:TreasuryPosition,markPrice:number,edgeB
   const gross=positionGrossPnlUsd(p,markPrice),exitCost=halfCostUsd(p.capitalUsd,p.roundTripCostBps);state.cashUsd+=p.capitalUsd+gross-exitCost;state.realizedPnlUsd+=gross-exitCost;state.cumulativeCostsUsd+=exitCost;state.positions=state.positions.filter(x=>x.positionId!==p.positionId);
   actions.push({kind:"EXIT",assetId:p.assetId,direction:p.direction,capitalUsd:p.capitalUsd,referencePrice:markPrice,costUsd:exitCost,expectedNetEdgeBps:edgeBps,sourceDecisionId,reason,positionId:p.positionId});
 }
-function applyOpen(state:TreasuryState,o:TreasuryOpportunity,capitalUsd:number,positionId:string,actions:TreasuryAction[]){
+function applyOpen(state:TreasuryState,o:TreasuryOpportunity,capitalUsd:number,positionId:string,openedAt:string,actions:TreasuryAction[]){
   const entryCost=halfCostUsd(capitalUsd,o.roundTripCostBps);if(state.cashUsd+1e-9<capitalUsd+entryCost)return false;state.cashUsd-=capitalUsd+entryCost;state.realizedPnlUsd-=entryCost;state.cumulativeCostsUsd+=entryCost;
-  state.positions.push({positionId,assetId:o.assetId,direction:o.direction,openedAt:o.observedAt,entryPrice:o.referencePrice,capitalUsd,entryExpectedNetEdgeBps:o.expectedNetEdgeBps,latestExpectedNetEdgeBps:o.expectedNetEdgeBps,roundTripCostBps:o.roundTripCostBps,sourceDecisionId:o.sourceDecisionId,highWaterPnlBps:0});
+  state.positions.push({positionId,assetId:o.assetId,direction:o.direction,openedAt,entryPrice:o.referencePrice,capitalUsd,entryExpectedNetEdgeBps:o.expectedNetEdgeBps,latestExpectedNetEdgeBps:o.expectedNetEdgeBps,roundTripCostBps:o.roundTripCostBps,sourceDecisionId:o.sourceDecisionId,highWaterPnlBps:0});
   actions.push({kind:"OPEN",assetId:o.assetId,direction:o.direction,capitalUsd,referencePrice:o.referencePrice,costUsd:entryCost,expectedNetEdgeBps:o.expectedNetEdgeBps,sourceDecisionId:o.sourceDecisionId,reason:"POSITIVE_VALIDATED_EDGE",positionId});return true;
 }
 
@@ -149,7 +149,7 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
         );
       }
     }
-    if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),actions);
+    if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),input.observedAt,actions);
   }
 
   const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);const deploymentPct=afterEquity>0?deployed/afterEquity:0;const cashReservePct=afterEquity>0?state.cashUsd/afterEquity:0;
