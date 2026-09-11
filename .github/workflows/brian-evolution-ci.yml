@@ -43,10 +43,17 @@ jobs:
           supabase/functions/_shared/evolution_core.test.ts
           supabase/functions/_shared/evolution_research.ts
           supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.ts
+          supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
           supabase/functions/brian-evolution-researcher/index.ts
+          supabase/functions/brian-evolution-sandbox/index.ts
+          supabase/functions/brian-evolution-experiment-runner/index.ts
+          supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
@@ -57,6 +64,8 @@ jobs:
           supabase/functions/_shared/evolution_contract.test.ts
           supabase/functions/_shared/evolution_core.test.ts
           supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/world_brain.test.ts
       - name: Lint Evolution TypeScript
         run: >-
@@ -67,10 +76,17 @@ jobs:
           supabase/functions/_shared/evolution_core.test.ts
           supabase/functions/_shared/evolution_research.ts
           supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.ts
+          supabase/functions/_shared/evolution_lab.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
           supabase/functions/brian-evolution-researcher/index.ts
+          supabase/functions/brian-evolution-sandbox/index.ts
+          supabase/functions/brian-evolution-experiment-runner/index.ts
+          supabase/functions/brian-evolution-promotion-council/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
