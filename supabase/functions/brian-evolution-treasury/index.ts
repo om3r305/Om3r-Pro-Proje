@@ -7,6 +7,7 @@ import {
   planPromotionGatedTreasuryCycle,
   type PromotionGateState,
 } from "../_shared/evolution_treasury_gate.ts";
+import { assessTreasuryRuntimeEvidence } from "../_shared/evolution_treasury_runtime.ts";
 import {
   BRIAN_TREASURY_STARTING_EQUITY_USD,
   BRIAN_TREASURY_VERSION,
@@ -23,6 +24,7 @@ const COLLECTOR_ID = "brian-evolution-treasury-v1";
 const LEASE_SECONDS = 55;
 const MIN_INTERVAL_SECONDS = 45;
 const MAX_EDGE_ROWS = 100;
+const MARK_LOOKBACK_MS = 5 * 60_000;
 
 type SnapshotRow = {
   snapshot_id: string;
@@ -37,6 +39,7 @@ type SnapshotRow = {
 type EdgeRow = {
   decision_id: string;
   observed_at: string;
+  evaluated_at: string;
   asset_id: string;
   direction: number;
   estimated_round_trip_cost_bps: number | string | null;
@@ -46,6 +49,13 @@ type EdgeRow = {
   mature_group_count: number | string;
   reliability_weights: unknown;
   pit_clear: boolean;
+};
+
+type MarketMark = {
+  assetId: string;
+  decisionId: string;
+  observedAt: string;
+  price: number;
 };
 
 function out(body: unknown, status = 200) {
@@ -186,47 +196,102 @@ function averageReliability(value: unknown): number {
   return values.length ? values.reduce((sum, row) => sum + row, 0) / values.length : 0.5;
 }
 
-async function loadOpportunities(state: TreasuryState): Promise<TreasuryOpportunity[]> {
+async function loadFreshMarks(assetIds: string[], nowIso: string): Promise<Map<string, MarketMark>> {
+  const marks = new Map<string, MarketMark>();
+  if (!assetIds.length) return marks;
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(nowMs)) throw new Error("treasury_marks: invalid cycle timestamp");
+  const since = new Date(nowMs - MARK_LOOKBACK_MS).toISOString();
+  const future = new Date(nowMs + 5_000).toISOString();
+  const q = await db.from("brian_alpha_decisions")
+    .select("decision_id,asset_id,observed_at,observed_reference_price")
+    .in("asset_id", assetIds).gte("observed_at", since).lte("observed_at", future)
+    .not("observed_reference_price", "is", null)
+    .order("observed_at", { ascending: false }).limit(Math.max(500, assetIds.length * 40));
+  if (q.error) throw new Error(`treasury_marks:${q.error.message}`);
+  for (const row of q.data ?? []) {
+    const assetId = String(row.asset_id);
+    if (!assetId || marks.has(assetId)) continue;
+    const price = finite(row.observed_reference_price);
+    if (price == null || price <= 0) continue;
+    marks.set(assetId, {
+      assetId,
+      decisionId: String(row.decision_id),
+      observedAt: String(row.observed_at),
+      price,
+    });
+  }
+  return marks;
+}
+
+async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<TreasuryOpportunity[]> {
   const edgeQ = await db.from("brian_alpha_expected_edge_latest_by_asset")
-    .select("decision_id,observed_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear")
+    .select("decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear")
     .order("observed_at", { ascending: false }).limit(MAX_EDGE_ROWS);
   if (edgeQ.error) throw new Error(`treasury_edges:${edgeQ.error.message}`);
   const edges = (edgeQ.data ?? []) as EdgeRow[];
-  if (!edges.length) return [];
+  const assetIds = [...new Set([...edges.map((row) => String(row.asset_id)), ...state.positions.map((position) => position.assetId)].filter(Boolean))];
+  if (!assetIds.length) return [];
 
-  const decisionIds = [...new Set(edges.map((row) => String(row.decision_id)).filter(Boolean))];
-  const decisionQ = await db.from("brian_alpha_decisions")
-    .select("decision_id,observed_reference_price").in("decision_id", decisionIds).limit(MAX_EDGE_ROWS * 2);
-  if (decisionQ.error) throw new Error(`treasury_reference_prices:${decisionQ.error.message}`);
-  const priceByDecision = new Map<string, number>();
-  for (const row of decisionQ.data ?? []) {
-    const price = finite(row.observed_reference_price);
-    if (price != null && price > 0) priceByDecision.set(String(row.decision_id), price);
+  const marks = await loadFreshMarks(assetIds, nowIso);
+  for (const position of state.positions) {
+    if (!marks.has(position.assetId)) {
+      throw new Error(`treasury_marks: fresh current mark unavailable for open position ${position.assetId}`);
+    }
   }
+
   const positionByAsset = new Map(state.positions.map((position) => [position.assetId, position]));
+  const representedAssets = new Set<string>();
   const opportunities: TreasuryOpportunity[] = [];
   for (const row of edges) {
     const decisionId = String(row.decision_id);
     const assetId = String(row.asset_id);
-    const referencePrice = priceByDecision.get(decisionId);
+    const mark = marks.get(assetId);
     const direction = Number(row.direction);
-    if (!assetId || referencePrice == null || (direction !== 1 && direction !== -1)) continue;
+    if (!assetId || !mark || (direction !== 1 && direction !== -1)) continue;
     const existing = positionByAsset.get(assetId);
     const cost = finite(row.estimated_round_trip_cost_bps) ?? existing?.roundTripCostBps ?? null;
     const edge = finite(row.expected_net_edge_bps) ?? (existing ? 0 : null);
     if (cost == null || cost < 0 || edge == null) continue;
+
+    const runtime = assessTreasuryRuntimeEvidence({
+      nowIso,
+      edgeObservedAt: String(row.observed_at),
+      edgeEvaluatedAt: String(row.evaluated_at),
+      markObservedAt: mark.observedAt,
+    });
+    const actionable = runtime.actionable && row.eligible === true && row.pit_clear === true && String(row.recommendation) === "ALLOW_EDGE";
     opportunities.push({
       assetId,
       direction: direction as -1 | 1,
       observedAt: String(row.observed_at),
-      referencePrice,
+      referencePrice: mark.price,
       expectedNetEdgeBps: edge,
       roundTripCostBps: cost,
       reliabilityConfidence: averageReliability(row.reliability_weights),
       matureGroupCount: Math.max(0, Math.trunc(Number(row.mature_group_count ?? 0))),
-      pitClear: row.pit_clear === true,
-      recommendation: String(row.recommendation ?? "DOWNGRADE_TO_WAIT"),
+      pitClear: actionable,
+      recommendation: actionable ? "ALLOW_EDGE" : "DOWNGRADE_TO_WAIT",
       sourceDecisionId: decisionId,
+    });
+    representedAssets.add(assetId);
+  }
+
+  for (const position of state.positions) {
+    if (representedAssets.has(position.assetId)) continue;
+    const mark = marks.get(position.assetId)!;
+    opportunities.push({
+      assetId: position.assetId,
+      direction: position.direction,
+      observedAt: mark.observedAt,
+      referencePrice: mark.price,
+      expectedNetEdgeBps: 0,
+      roundTripCostBps: position.roundTripCostBps,
+      reliabilityConfidence: 0.5,
+      matureGroupCount: 0,
+      pitClear: false,
+      recommendation: "EDGE_UNAVAILABLE",
+      sourceDecisionId: `mark:${mark.decisionId}`,
     });
   }
   return opportunities;
@@ -282,6 +347,7 @@ async function commitCycle(input: {
     metadata: {
       opportunities_observed: input.opportunities.length,
       promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
+      point_in_time_execution_marks: true,
       shadow_only: true,
       live_execution: false,
       canonical_alpha_mutation: false,
@@ -342,7 +408,7 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities] = await Promise.all([loadPromotionGate(), loadOpportunities(loaded.state)]);
+      const [promotionGate, opportunities] = await Promise.all([loadPromotionGate(), loadOpportunities(loaded.state, observedAt)]);
       const plan = planPromotionGatedTreasuryCycle({
         state: loaded.state,
         opportunities,
@@ -362,6 +428,7 @@ Deno.serve(async (req: Request) => {
         equity_usd: plan.afterEquityUsd,
         cash_usd: plan.state.cashUsd,
         deployment_usd: plan.deploymentUsd,
+        point_in_time_execution_marks: true,
       });
       return {
         status: "SUCCESS",
