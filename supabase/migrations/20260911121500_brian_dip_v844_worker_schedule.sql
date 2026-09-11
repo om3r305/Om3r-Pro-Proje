@@ -1,12 +1,13 @@
 -- Activate V8.4.4 Cycle Forecast worker and stop superseded trade workers.
 -- Keep foresight/chart support jobs untouched. SHADOW ONLY.
 
-update cron.job
-set active=false
-where jobname in ('brian-dip-v842-long-worker-10s','brian-dip-v843-profit-worker-10s');
-
 do $do$
+declare j record;
 begin
+  for j in select jobid from cron.job where jobname in ('brian-dip-v842-long-worker-10s','brian-dip-v843-profit-worker-10s') loop
+    perform cron.alter_job(job_id:=j.jobid,active:=false);
+  end loop;
+
   if not exists(select 1 from cron.job where jobname='brian-dip-v844-cycle-worker-10s') then
     perform cron.schedule(
       'brian-dip-v844-cycle-worker-10s',
@@ -26,6 +27,7 @@ begin
       $cmd$
     );
   else
-    update cron.job set active=true,schedule='10 seconds' where jobname='brian-dip-v844-cycle-worker-10s';
+    select jobid into j from cron.job where jobname='brian-dip-v844-cycle-worker-10s' limit 1;
+    perform cron.alter_job(job_id:=j.jobid,schedule:='10 seconds',active:=true);
   end if;
 end $do$;
