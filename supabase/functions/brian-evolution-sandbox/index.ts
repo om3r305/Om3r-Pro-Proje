@@ -79,23 +79,40 @@ async function latestHypotheses(): Promise<HypothesisCandidate[]> {
   return rows.sort((a, b) => b.priority - a.priority);
 }
 
-async function planCandidates(): Promise<{ planned: number; skippedExisting: number; candidateIds: string[] }> {
+async function planCandidates(): Promise<{ planned: number; skippedExisting: number; rotatedParents: number; candidateIds: string[] }> {
   const hypotheses = await latestHypotheses();
-  if (!hypotheses.length) return { planned: 0, skippedExisting: 0, candidateIds: [] };
+  if (!hypotheses.length) return { planned: 0, skippedExisting: 0, rotatedParents: 0, candidateIds: [] };
   const canonicalParent = parentCommit();
-  const existingQ = await db.from("brian_evolution_codegen_requests").select("hypothesis_id,candidate_id").limit(2000);
+  const existingQ = await db.from("brian_evolution_codegen_requests")
+    .select("hypothesis_id,candidate_id,parent_commit,requested_at")
+    .order("requested_at", { ascending: false })
+    .limit(4000);
   if (existingQ.error) throw new Error(`existing_codegen:${existingQ.error.message}`);
-  const existingHypotheses = new Set((existingQ.data ?? []).map((row) => String(row.hypothesis_id)));
+  const existingPairs = new Set<string>();
+  const latestCandidateByHypothesis = new Map<string, { candidateId: string; parentCommit: string }>();
+  for (const row of existingQ.data ?? []) {
+    const hypothesisId = String(row.hypothesis_id ?? "");
+    const candidateId = String(row.candidate_id ?? "");
+    const requestParent = String(row.parent_commit ?? "").toLowerCase();
+    if (!hypothesisId || !candidateId || !requestParent) continue;
+    existingPairs.add(`${hypothesisId}|${requestParent}`);
+    if (!latestCandidateByHypothesis.has(hypothesisId)) {
+      latestCandidateByHypothesis.set(hypothesisId, { candidateId, parentCommit: requestParent });
+    }
+  }
   const candidateRows: Record<string, unknown>[] = [];
   const requestRows: Record<string, unknown>[] = [];
   const candidateIds: string[] = [];
   let skippedExisting = 0;
+  let rotatedParents = 0;
 
   for (const h of hypotheses.slice(0, 20)) {
-    if (existingHypotheses.has(h.hypothesisId)) {
+    if (existingPairs.has(`${h.hypothesisId}|${canonicalParent}`)) {
       skippedExisting++;
       continue;
     }
+    const previous = latestCandidateByHypothesis.get(h.hypothesisId) ?? null;
+    if (previous && previous.parentCommit !== canonicalParent) rotatedParents++;
     const brief = buildSandboxGenerationBrief(h, canonicalParent);
     candidateIds.push(brief.candidateId);
     candidateRows.push({
@@ -120,6 +137,8 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
         success_criteria: brief.successCriteria,
         required_human_review: true,
         artifact_state: "PLANNED",
+        supersedes_candidate_id: previous?.candidateId ?? null,
+        canonical_parent_rotated: Boolean(previous && previous.parentCommit !== canonicalParent),
       },
       evidence_class: EVOLUTION_EVIDENCE_CLASS,
       shadow_only: true,
@@ -145,6 +164,8 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
         test_plan: brief.testPlan,
         hypothesis_kind: h.hypothesisKind,
         priority: h.priority,
+        supersedes_candidate_id: previous?.candidateId ?? null,
+        canonical_parent_rotated: Boolean(previous && previous.parentCommit !== canonicalParent),
       },
       evidence_class: EVOLUTION_EVIDENCE_CLASS,
       shadow_only: true,
@@ -163,7 +184,7 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
       .upsert(requestRows, { onConflict: "request_id", ignoreDuplicates: true });
     if (q.error) throw new Error(`codegen_requests:${q.error.message}`);
   }
-  return { planned: requestRows.length, skippedExisting, candidateIds };
+  return { planned: requestRows.length, skippedExisting, rotatedParents, candidateIds };
 }
 
 async function loadRequest(candidateId: string) {
@@ -330,7 +351,7 @@ async function recordCollectorRun(startedAt: string, status: "SUCCESS" | "FAILED
     degraded_sources: [],
     error_class: error ? "EVOLUTION_SANDBOX_ERROR" : null,
     error_message: error ? String(error).slice(0, 1200) : null,
-    metadata: { sandbox_version: EVOLUTION_SANDBOX_VERSION, canonical_mutation: false, autonomous_apply_allowed: false, exact_parent_required: true },
+    metadata: { sandbox_version: EVOLUTION_SANDBOX_VERSION, canonical_mutation: false, autonomous_apply_allowed: false, exact_parent_required: true, parent_rotation_supported: true },
     evidence_class: EVOLUTION_EVIDENCE_CLASS,
     shadow_only: true,
     live_execution: false,
@@ -381,6 +402,7 @@ Deno.serve(async (req: Request) => {
         sandbox_version: EVOLUTION_SANDBOX_VERSION,
         ...result,
         exact_parent_required: true,
+        parent_rotation_supported: true,
         external_generator_required: true,
         required_human_review: true,
         canonical_mutation: false,
