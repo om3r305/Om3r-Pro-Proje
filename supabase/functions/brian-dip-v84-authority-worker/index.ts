@@ -9,9 +9,9 @@ Deno.serve(async(req:Request)=>{
   try{
     await requireCronAuth(db,req);
     const lease=await withAuthorityLease(db,l=>runWorker(db,l));
-    return Response.json(lease.contended?{status:"WAIT_LEASE",release_id:RELEASE_ID,shadow_only:true,live_execution:false,browser_execution:false}:lease.value,{headers:{"cache-control":"no-store"}});
+    return Response.json(lease.contended?{status:"WAIT_LEASE",release_id:RELEASE_ID,long_only:true,shadow_only:true,live_execution:false,browser_execution:false}:lease.value,{headers:{"cache-control":"no-store"}});
   }catch(e){
-    const message=e instanceof Error?e.message:String(e);console.error("dip-v841-authority",message);
-    return Response.json({status:"FAILED_CLOSED",error:message,release_id:RELEASE_ID,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,policy_version:POLICY_VERSION,decision_authority:"BRIAN",shadow_only:true,live_execution:false,browser_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});
+    const message=e instanceof Error?e.message:String(e);console.error("dip-v842-long-stateful",message);
+    return Response.json({status:"FAILED_CLOSED",error:message,release_id:RELEASE_ID,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,policy_version:POLICY_VERSION,decision_authority:"BRIAN",long_only:true,shadow_only:true,live_execution:false,browser_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});
   }
 });
