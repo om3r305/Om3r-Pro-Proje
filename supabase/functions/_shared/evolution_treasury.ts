@@ -1,4 +1,4 @@
-export const BRIAN_TREASURY_VERSION="brian.treasury-shadow.v1";
+export const BRIAN_TREASURY_VERSION="brian.treasury-shadow.v2";
 export const BRIAN_TREASURY_STARTING_EQUITY_USD=10_000;
 
 export interface TreasuryOpportunity{
@@ -26,12 +26,17 @@ export interface TreasuryCyclePlan{
   blockedReasons:string[];
 }
 
-const MAX_DEPLOYMENT_PCT=.70;
-const MIN_CASH_RESERVE_PCT=.30;
-const MAX_POSITION_PCT=.12;
-const MIN_POSITION_PCT=.025;
+// SHADOW Treasury has no arbitrary 70/30 portfolio split. Brian may stay completely
+// in cash or deploy effectively the whole cashbox when validated net edge, bounded
+// reliability and independent evidence maturity jointly justify exceptional conviction.
+// Point-in-time entry cost is still reserved, so "100%" never means negative cash.
+const MAX_DEPLOYMENT_PCT=1;
+const MIN_CASH_RESERVE_PCT=0;
+const MAX_POSITION_PCT=1;
+const MIN_POSITION_PCT=.005;
 const MAX_POSITIONS=8;
 const MIN_EDGE_BPS=3;
+const FULL_CONVICTION_EDGE_BPS=60;
 const REPLACEMENT_EDGE_ADVANTAGE_BPS=5;
 const EDGE_STALE_SECONDS=20*60;
 const RISK_STOP_BPS=-150;
@@ -55,9 +60,18 @@ export function treasuryEquityUsd(state:TreasuryState,marks:Record<string,number
   return equity;
 }
 function deploymentUsd(state:TreasuryState){return state.positions.reduce((s,p)=>s+p.capitalUsd,0);}
-function opportunityQuality(o:TreasuryOpportunity){
-  const reliability=clamp(o.reliabilityConfidence,.35,.65);const maturity=clamp(o.matureGroupCount/4,0,1);const edge=clamp(o.expectedNetEdgeBps/30,0,1);
-  return edge*(.5+reliability)*(.5+.5*maturity);
+
+/**
+ * Brian sizes by conviction rather than a fixed $3/$5 ticket or a fixed portfolio slice.
+ * All dimensions are measured evidence: expected net edge after costs/uncertainty,
+ * bounded prospective reliability, and independent-group maturity. A weak dimension
+ * keeps size modest even if one headline metric is large.
+ */
+export function opportunityQuality(o:TreasuryOpportunity):number{
+  const edge=clamp((o.expectedNetEdgeBps-MIN_EDGE_BPS)/(FULL_CONVICTION_EDGE_BPS-MIN_EDGE_BPS),0,1);
+  const reliability=clamp((o.reliabilityConfidence-.5)/.15,0,1);
+  const maturity=clamp((o.matureGroupCount-2)/4,0,1);
+  return clamp(.60*edge+.25*reliability+.15*maturity,0,1);
 }
 export function opportunityScore(o:TreasuryOpportunity):number{return Math.max(0,o.expectedNetEdgeBps)*opportunityQuality(o);}
 function rawOpportunityIsUsable(o:TreasuryOpportunity,nowMs:number){
@@ -67,7 +81,11 @@ function validOpportunity(o:TreasuryOpportunity,nowMs:number){
   const at=time(o.observedAt);return rawOpportunityIsUsable(o,nowMs)&&o.pitClear&&o.recommendation==="ALLOW_EDGE"&&o.expectedNetEdgeBps>=MIN_EDGE_BPS&&at!=null&&(nowMs-at)/1000<=EDGE_STALE_SECONDS;
 }
 function targetCapitalUsd(o:TreasuryOpportunity,equity:number){
-  const q=opportunityQuality(o);const pct=MIN_POSITION_PCT+(MAX_POSITION_PCT-MIN_POSITION_PCT)*q;return Math.max(0,equity*clamp(pct,MIN_POSITION_PCT,MAX_POSITION_PCT));
+  const q=opportunityQuality(o);
+  // Non-linear sizing makes ordinary edges use only part of the cashbox while allowing
+  // truly exceptional evidence to earn essentially all available SHADOW capital.
+  const pct=clamp(q*q,MIN_POSITION_PCT,MAX_POSITION_PCT);
+  return Math.max(0,equity*pct);
 }
 function latestRawByAsset(opportunities:TreasuryOpportunity[],nowMs:number){
   const map=new Map<string,TreasuryOpportunity>();
@@ -153,7 +171,7 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
   }
 
   const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);const deploymentPct=afterEquity>0?deployed/afterEquity:0;const cashReservePct=afterEquity>0?state.cashUsd/afterEquity:0;
-  if(deploymentPct>MAX_DEPLOYMENT_PCT+1e-6)blockedReasons.push("deployment cap exceeded");if(cashReservePct<MIN_CASH_RESERVE_PCT-1e-6)blockedReasons.push("cash reserve below policy after costs");
+  if(deploymentPct>MAX_DEPLOYMENT_PCT+1e-6)blockedReasons.push("deployment exceeds available SHADOW equity");if(cashReservePct<MIN_CASH_RESERVE_PCT-1e-6)blockedReasons.push("cash became negative after point-in-time costs");
   return{version:BRIAN_TREASURY_VERSION,observedAt:input.observedAt,beforeEquityUsd:beforeEquity,afterEquityUsd:afterEquity,state,actions,deploymentUsd:deployed,deploymentPct,cashReservePct,blockedReasons};
 }
 
