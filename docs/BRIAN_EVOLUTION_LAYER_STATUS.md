@@ -147,7 +147,7 @@ Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envel
 
 ## Regression checkpoint
 
-The Layer 0–6 code path has passed Deno type-checking, all 59 Evolution behavioral tests, Deno lint, dashboard JavaScript syntax checks and the dedicated no-DIP-path guard. The existing Brian 2026 and ALPHA regression suites have also passed on the same implementation line. Final documentation/navigation edits trigger one last CI pass before rollout review.
+The Layer 0–6 code path has passed Deno type-checking, all 59 Evolution behavioral tests, Deno lint, dashboard JavaScript syntax checks and the dedicated no-DIP-path guard. The existing Brian 2026 and ALPHA regression suites have also passed on the same implementation line. The branch remains draft until its final current-head CI pass and migration review are complete.
 
 ## Completion state before rollout
 
