@@ -32,6 +32,19 @@ Deno.test("exceptional validated conviction can use effectively the full 10000 U
   if(!(p.actions[0].capitalUsd>9900&&p.actions[0].capitalUsd<10000))throw new Error(`unexpected full-conviction capital ${p.actions[0].capitalUsd}`);
 });
 
+Deno.test("exceptional new opportunity can close a weaker 6000 USD position and recycle nearly the whole cashbox",()=>{
+  const s=initialTreasuryState("2026-09-11T12:50:00Z");
+  s.cashUsd=4000;
+  s.positions=[pos({assetId:"OLDUSDT",capitalUsd:6000,entryExpectedNetEdgeBps:8,latestExpectedNetEdgeBps:8,sourceDecisionId:"old-entry"})];
+  const oldRefresh=opp({assetId:"OLDUSDT",referencePrice:100,expectedNetEdgeBps:8,reliabilityConfidence:.54,matureGroupCount:2,sourceDecisionId:"old-refresh"});
+  const exceptional=opp({assetId:"EVENTUSDT",expectedNetEdgeBps:80,reliabilityConfidence:.65,matureGroupCount:8,sourceDecisionId:"event-breakout"});
+  const p=planTreasuryCycle({state:s,opportunities:[oldRefresh,exceptional],observedAt:"2026-09-11T13:00:00Z",positionIdFor:o=>`new-${o.assetId}`});
+  const exit=p.actions.find(a=>a.kind==="EXIT"&&a.assetId==="OLDUSDT");const open=p.actions.find(a=>a.kind==="OPEN"&&a.assetId==="EVENTUSDT");
+  if(!exit||exit.reason!=="OPPORTUNITY_REPLACEMENT"||!open)throw new Error(JSON.stringify(p.actions));
+  if(p.state.positions.length!==1||p.state.positions[0].assetId!=="EVENTUSDT")throw new Error(JSON.stringify(p.state.positions));
+  if(p.deploymentPct<.99)throw new Error(`strong replacement failed to concentrate capital: ${p.deploymentPct}`);
+});
+
 Deno.test("strong edge alone cannot force all-in when reliability and maturity are weak",()=>{
   const s=initialTreasuryState("2026-09-11T12:59:00Z");
   const thin=opp({assetId:"THINUSDT",expectedNetEdgeBps:100,reliabilityConfidence:.51,matureGroupCount:2,sourceDecisionId:"thin-1"});
