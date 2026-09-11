@@ -205,4 +205,4 @@ Starting/pausing an Ocean observation session from mobile mutates only append-on
 
 ## Completion definition
 
-The draft PR is technically complete only when all six layers are implemented, the protected-scope tests prove DIP isolation, all regression CI is green, migrations and rollout order are reviewed, and Ocean mode remains shadow-only. Merge/deploy remains an explicit user action after final review. The actual 24–48h Ocean observation is a post-rollout prospective exam and cannot be simulated by declaring the draft complete.
+Layers 0–6 are now implemented at code-contract level on the draft integration branch. This does not mean the system is deployed or prospectively proven. The draft is eligible for final rollout review only when protected-scope tests prove DIP isolation, all regression CI is green, migrations and rollout order are reviewed, and no unauthorized live-execution surface exists. Merge/deploy remains an explicit user action after final review. The actual 24–48h Ocean observation is a post-rollout prospective exam and cannot be simulated by declaring the draft complete.
