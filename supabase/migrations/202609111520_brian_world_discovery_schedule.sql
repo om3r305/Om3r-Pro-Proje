@@ -1,6 +1,7 @@
 -- Brian Evolution OS broad World Discovery Eye schedule.
 -- GitHub-only until explicit deployment. DIP schedules are untouched.
 -- Requires brian_project_url, brian_anon_jwt and brian_cron_key in Vault.
+-- IMPORTANT: this migration only installs the scheduler function; it never activates cron.
 
 create or replace function brian_private.schedule_world_discovery_eye()
 returns bigint
@@ -59,14 +60,4 @@ $$;
 revoke all on function brian_private.schedule_world_discovery_eye() from public, anon, authenticated, service_role;
 grant execute on function brian_private.schedule_world_discovery_eye() to postgres;
 
-do $$
-begin
-  if exists (select 1 from vault.decrypted_secrets where name='brian_project_url')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_anon_jwt')
-     and exists (select 1 from vault.decrypted_secrets where name='brian_cron_key') then
-    perform brian_private.schedule_world_discovery_eye();
-  else
-    raise notice 'World Discovery Eye not scheduled yet; provision Brian Vault runtime secrets at rollout';
-  end if;
-end;
-$$;
+-- Deliberately no auto-schedule DO block. Activation is a separate explicit rollout action.
