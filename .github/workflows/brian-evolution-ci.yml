@@ -46,6 +46,7 @@ jobs:
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-researcher/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
@@ -69,6 +70,7 @@ jobs:
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-researcher/index.ts
           supabase/functions/brian-evolution-status/index.ts
           supabase/functions/brian-world-brain/index.ts
           supabase/functions/brian-world-discovery-eye/index.ts
