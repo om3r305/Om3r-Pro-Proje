@@ -21,6 +21,7 @@ on:
       - 'scripts/evolution_candidate_materialize.ts'
       - 'docs/BRIAN_EVOLUTION_OS.md'
       - 'docs/BRIAN_EVOLUTION_LAYER_STATUS.md'
+      - 'docs/BRIAN_EVOLUTION_ROLLOUT.md'
       - 'config/brian-evolution-baseline-v1.json'
       - '.github/workflows/brian-evolution-ci.yml'
       - '.github/workflows/brian-evolution-candidate-materializer.yml'
@@ -150,6 +151,18 @@ jobs:
           node --check monster-coins-pro/world.js
           node --check monster-coins-pro/treasury.js
           node --check monster-coins-pro/ocean.js
+      - name: Verify migrations do not auto-activate Evolution cron
+        run: |
+          set -euo pipefail
+          if grep -R -nE 'perform[[:space:]]+brian_private\.schedule_' \
+            supabase/migrations/2026091115*_brian_*_schedule.sql \
+            supabase/migrations/2026091116*_brian_*_schedule.sql \
+            supabase/migrations/202609111700_brian_ocean_schedule.sql; then
+            echo 'Evolution schedule migrations must install schedulers only; activation is explicit.'
+            exit 1
+          fi
+          grep -q 'activate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
+          grep -q 'deactivate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
       - name: Verify no DIP files changed in Evolution PR
         run: |
           git fetch origin brian-2026
