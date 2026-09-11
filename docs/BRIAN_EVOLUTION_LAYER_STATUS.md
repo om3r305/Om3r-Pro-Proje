@@ -1,8 +1,8 @@
 # Brian Evolution OS — Layer Status
 
-Branch: `feat/brian-evolution-os`  
-Integration PR: #92  
-Base: `brian-2026`  
+Branch: `feat/brian-evolution-os`
+Integration PR: #92
+Base: `brian-2026`
 Mode: **GITHUB DRAFT / SHADOW ONLY / NOT DEPLOYED**
 
 ## Non-negotiable boundary
@@ -128,9 +128,26 @@ The Treasury remains SHADOW ONLY. No exchange order, credential, withdrawal or l
 
 ## Layer 6 — Ocean Run
 
-Status: **NOT STARTED**
+Status: **CODE COMPLETE / ROLLOUT + 24–48H PROSPECTIVE RUN PENDING**
 
-Target remains a 24–48 hour browser-independent prospective shadow run with full post-run analysis: beginning/ending Treasury, realized/unrealized P&L and costs, allocation/replacement history, discoveries, hypotheses, generated candidates, experiment outcomes, promotion/rejection decisions, capability drift, missed opportunities and ALPHA quality before/after promoted challengers.
+Implemented:
+
+- append-only Ocean START/STOP command ledger with only 24h or 48h planned durations;
+- dashboard-authenticated preflight that requires Treasury, Layer-4 expected-edge and key Evolution workers to have healthy runtime evidence before Ocean can start;
+- browser-independent `brian-evolution-ocean-worker` with cloud lease protection and five-minute schedule preparation;
+- active-run checkpoints capturing Treasury equity/cash/deployment/open positions plus recent collector health;
+- deterministic run-state reconstruction from immutable commands instead of a mutable browser session flag;
+- early STOP support without rewriting original planned duration;
+- automatic final report generation after planned or early termination;
+- final report covers beginning/ending Treasury, P&L/costs, actions/replacements, discoveries, hypotheses, code candidates, experiment outcomes, promotion/rejection, material drift, capability events, missed opportunities, ALPHA after-cost outcomes and collector health;
+- authenticated Ocean status/control endpoints and `/ocean.html` mobile dashboard;
+- Ocean behavioral tests cover lifecycle, 24/48h constraints, early stop and report reconciliation.
+
+Ocean does not bypass Layer 4 or Treasury gates. It is an observation/exam envelope around the existing SHADOW stack. Starting an Ocean run does not enable live execution and does not create exchange credentials or orders.
+
+## Completion state before rollout
+
+Layers 0–6 now exist at code-contract level in the draft integration branch. What remains before activation is final regression/migration review, conflict reconciliation with the moving `brian-2026` base if required, explicit merge/deploy approval, cloud rollout verification and then the actual 24–48h prospective Ocean observation.
 
 ## Activation rule
 
