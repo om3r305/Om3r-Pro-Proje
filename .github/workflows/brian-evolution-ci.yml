@@ -66,6 +66,8 @@ jobs:
           supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/evolution_ocean.ts
           supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
@@ -100,6 +102,7 @@ jobs:
           supabase/functions/_shared/evolution_treasury.test.ts
           supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
           supabase/functions/_shared/world_brain.test.ts
       - name: Lint Evolution TypeScript
         run: >-
@@ -124,6 +127,8 @@ jobs:
           supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/evolution_ocean.ts
           supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
           supabase/functions/_shared/world_brain.ts
           supabase/functions/_shared/world_brain.test.ts
           supabase/functions/brian-evolution-orchestrator/index.ts
