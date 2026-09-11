@@ -80,19 +80,35 @@ Deno.serve(async(req:Request)=>{
       if(body.confirm_shadow_only!==true)return out({error:"confirm_shadow_only=true required"},400,origin);
       const readiness=await preflight(now);if(!readiness.ready)return out({status:"PREFLIGHT_BLOCKED",preflight:readiness,shadow_only:true,live_execution:false},409,origin);
       const runId=await sha(`ocean|${now}|${duration}|${crypto.randomUUID()}`),commandId=await sha(`ocean-command|${runId}|START|${now}`);
-      const q=await db.from("brian_ocean_run_commands").insert({command_id:commandId,run_id:runId,command:"START",requested_at:now,duration_hours:duration,reason:body.reason==null?null:String(body.reason).slice(0,500),requested_by:"dashboard",metadata:{ocean_version:BRIAN_OCEAN_VERSION,preflight:readiness},shadow_only:true,live_execution:false});
-      if(q.error)throw new Error(`ocean_start:${q.error.message}`);
-      const state=deriveOceanRuns([...(commands),{commandId,runId,command:"START",requestedAt:now,durationHours:duration as 24|48,reason:body.reason==null?null:String(body.reason)}],now).find(row=>row.runId===runId);
-      return out({status:"STARTED",run:state,preflight:readiness,cloud_independent:true,shadow_only:true,live_execution:false},200,origin);
+      const reason=body.reason==null?null:String(body.reason).slice(0,500);
+      const q=await db.rpc("brian_ocean_start_run",{
+        p_command_id:commandId,p_run_id:runId,p_requested_at:now,p_duration_hours:duration,p_reason:reason,p_requested_by:"dashboard",
+        p_metadata:{ocean_version:BRIAN_OCEAN_VERSION,preflight:readiness,atomic_control:true},
+      });
+      if(q.error){
+        if(String(q.error.message).includes("OCEAN_RUN_ALREADY_ACTIVE")){
+          const refreshed=await loadCommands(),winner=activeOceanRun(refreshed,now);
+          return out({status:"ALREADY_ACTIVE",active:winner,shadow_only:true,live_execution:false},409,origin);
+        }
+        throw new Error(`ocean_start:${q.error.message}`);
+      }
+      const state=deriveOceanRuns([...(commands),{commandId,runId,command:"START",requestedAt:now,durationHours:duration as 24|48,reason}],now).find(row=>row.runId===runId);
+      return out({status:"STARTED",run:state,preflight:readiness,atomic_control:true,cloud_independent:true,shadow_only:true,live_execution:false},200,origin);
     }
     if(action==="STOP"){
       if(!active)return out({status:"NO_ACTIVE_RUN",shadow_only:true,live_execution:false},409,origin);
-      const commandId=await sha(`ocean-command|${active.runId}|STOP|${now}`);
-      const q=await db.from("brian_ocean_run_commands").insert({command_id:commandId,run_id:active.runId,command:"STOP",requested_at:now,duration_hours:null,reason:body.reason==null?"operator stop":String(body.reason).slice(0,500),requested_by:"dashboard",metadata:{ocean_version:BRIAN_OCEAN_VERSION},shadow_only:true,live_execution:false});
-      if(q.error)throw new Error(`ocean_stop:${q.error.message}`);
-      return out({status:"STOPPED",run_id:active.runId,stopped_at:now,shadow_only:true,live_execution:false},200,origin);
+      const commandId=await sha(`ocean-command|${active.runId}|STOP|${now}`),reason=body.reason==null?"operator stop":String(body.reason).slice(0,500);
+      const q=await db.rpc("brian_ocean_stop_run",{
+        p_command_id:commandId,p_run_id:active.runId,p_requested_at:now,p_reason:reason,p_requested_by:"dashboard",
+        p_metadata:{ocean_version:BRIAN_OCEAN_VERSION,atomic_control:true},
+      });
+      if(q.error){
+        if(String(q.error.message).includes("OCEAN_RUN_NOT_ACTIVE"))return out({status:"NO_ACTIVE_RUN",shadow_only:true,live_execution:false},409,origin);
+        throw new Error(`ocean_stop:${q.error.message}`);
+      }
+      return out({status:"STOPPED",run_id:active.runId,stopped_at:now,atomic_control:true,shadow_only:true,live_execution:false},200,origin);
     }
-    if(action==="PREFLIGHT")return out({status:"PREFLIGHT",preflight:await preflight(now),active,shadow_only:true,live_execution:false},200,origin);
+    if(action==="PREFLIGHT")return out({status:"PREFLIGHT",preflight:await preflight(now),active,atomic_control:true,shadow_only:true,live_execution:false},200,origin);
     return out({error:"action must be START, STOP or PREFLIGHT"},400,origin);
   }catch(error){return out({status:"FAILED",error:errorText(error),shadow_only:true,live_execution:false},500,origin);}
 });
