@@ -18,6 +18,9 @@ import {
   METRIC_VERSION,
   MIN_ENTRY_QUALITY,
   POLICY_VERSION,
+  PROFIT_PROTECT_ARM_BPS,
+  PROFIT_PROTECT_GIVEBACK_BPS,
+  PROFIT_PROTECT_MOMENTUM_ATR_CEILING,
   RELEASE_ID,
   RESOLVER_VERSION,
   STRATEGY_MANIFEST_HASH,
@@ -30,6 +33,8 @@ type AuthoritySize={
   fees_open:number;worst_loss:number;risk_fraction:number;allocation:number;risk_policy:string;max_notional_fraction:number;
 };
 type ScoreState={up:number;down:number;rangePos:number;momentumAtr:number;entryQualityRaw:number;chase:boolean;reason:string[]};
+type ProfitMemory={sellVotes?:number;peakBid?:number;peakProfitBps?:number;peakPositionId?:string;lastSellReason?:string|null};
+type Runtime843=Runtime&{v842?:ProfitMemory};
 
 function validLong(entry:number,stop:number,target:number){return stop<entry&&entry<target;}
 
@@ -37,7 +42,6 @@ function chartScores(m:Market,s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:Can
   const rows=m.bars["1m"].slice(-60),last=rows.at(-1)!;
   const low=Math.min(...rows.map(x=>x.l)),high=Math.max(...rows.map(x=>x.h)),span=Math.max(high-low,s1.atr*.5,1e-9);
   const live=m.book.mid,rangePos=clip((live-low)/span,0,1);
-  // Tactical momentum uses the live Binance USD-M book price, not the last closed 1m close.
   const c4=rows.at(-4)?.c??last.c,momentumAtr=s1.atr>0?(live-c4)/s1.atr:0;
   let up=0,down=0;const reason:string[]=[];
   const apply=(s:Struct,w:number)=>{
@@ -49,7 +53,6 @@ function chartScores(m:Market,s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:Can
   };
   apply(s1,1);apply(s5,1.35);apply(s15,.9);apply(s1h,.4);
   up+=(.5-rangePos)*2.5;down+=(rangePos-.5)*2.5;
-  // Momentum helps direction, but saturates quickly so a vertical candle cannot manufacture confidence forever.
   const mom=clip(momentumAtr,-1.5,1.5);up+=mom*.45;down-=mom*.45;
   up+=m.flowFast.ofi*.55+m.flowSlow.ofi*.30;down-=m.flowFast.ofi*.55+m.flowSlow.ofi*.30;
   const book=Math.log(Math.max(.2,Math.min(5,m.book.pressure)));up+=book*.30;down-=book*.30;
@@ -84,10 +87,24 @@ function authoritySize(input:{cash:number;tradeNotional:number;entry:number;feeB
   const notional=qty*entry,margin=notional,fees_open=notional*feeRate;
   if(!Number.isFinite(qty)||qty<rules.minQty||notional<rules.minNotional||margin+fees_open>cash+1e-8)return null;
   const worst_loss=Math.max(0,notional*Math.max(0,stopNetLossBps)/10000);
-  return{qty,notional,margin,leverage:1,actual_fraction:margin/cash,gross_fraction:notional/cash,fees_open,worst_loss,risk_fraction:cash?worst_loss/cash:0,allocation,risk_policy:"V842_BRIAN_LONG_ONLY_1X",max_notional_fraction:1};
+  return{qty,notional,margin,leverage:1,actual_fraction:margin/cash,gross_fraction:notional/cash,fees_open,worst_loss,risk_fraction:cash?worst_loss/cash:0,allocation,risk_policy:"V843_BRIAN_LONG_ONLY_1X",max_notional_fraction:1};
 }
 
 function structuralAnchor(s1:Struct,s5:Struct):string{return `UP|1m:${s1.lastLow?.t??"none"}|5m:${s5.lastLow?.t??"none"}`;}
+
+function profitState(rt:Runtime843,m:Market,structs:Struct[]):{
+  profitBps:number;peakBid:number;peakProfitBps:number;givebackBps:number;resistanceTouched:boolean;priorSellVotes:number;
+}{
+  if(!rt.pos||rt.pos.side!=="LONG")return{profitBps:0,peakBid:0,peakProfitBps:0,givebackBps:0,resistanceTouched:false,priorSellVotes:0};
+  const mem=(rt.v842??={}) as ProfitMemory,entry=rt.pos.entry,bid=m.book.bid;
+  if(mem.peakPositionId!==rt.pos.position_id){mem.peakPositionId=rt.pos.position_id;mem.peakBid=entry;mem.peakProfitBps=0;}
+  const priorPeak=n(mem.peakBid,entry),peakBid=Math.max(priorPeak,bid);
+  const profitBps=(bid-entry)/entry*10000,peakProfitBps=(peakBid-entry)/entry*10000,givebackBps=Math.max(0,(peakBid-bid)/peakBid*10000);
+  const resistance=structs.flatMap(s=>[s.lastHigh?.p,s.equalHigh]).map(Number).filter(v=>Number.isFinite(v)&&v>entry);
+  const resistanceTouched=resistance.some(v=>peakBid>=v);
+  mem.peakBid=peakBid;mem.peakProfitBps=Math.max(n(mem.peakProfitBps),peakProfitBps);
+  return{profitBps,peakBid,peakProfitBps:Math.max(n(mem.peakProfitBps),peakProfitBps),givebackBps,resistanceTouched,priorSellVotes:Math.max(0,Math.floor(n(mem.sellVotes)))};
+}
 
 export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cfg:J,tradeNotional:number,at:number,cal:ExecutionCalibration):Promise<CandidateResult>{
   const base=await package1Candidate(m,sessionId,rt,cfg,tradeNotional,at,cal);
@@ -110,7 +127,6 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   }
 
   const signalAt=m.bars["1m"].at(-1)!.ct+1,structs=[s1,s5,s15,s1h,s4h];
-  // While holding, build the next advisory target ladder from the live bid. It is not a hard take-profit.
   const ladderFill=hasLong?m.book.bid:entry;
   const levelPlan=(direction==="UP"||hasLong)?await firstForwardLevel({direction:"UP",fill:ladderFill,signalAt,tickSize:m.rules.tickSize,structs}):{l1:null,levels:[] as StructuralLevel[]};
   const cost=buildCostContract({feeOpenBps:fee,feeCloseBps:fee,openingSlippageBps:slip,expectedExitSpreadBps:m.book.spreadBps,expectedExitSlippageBps:slip,expectedFundingBps:m.fundingBpsHold});
@@ -130,11 +146,19 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const allocation=direction==="UP"?clip(.12+.88*normalizedConfidence*entryQuality,.12,1):0;
   const size=geometry&&economics&&entryQuality>=MIN_ENTRY_QUALITY&&!scores.chase?authoritySize({cash:rt.cash,tradeNotional,entry,feeBps:fee,allocation,rules:m.rules,stopNetLossBps:economics.stop_net_loss_bps}):null;
 
-  const profitBps=hasLong&&rt.pos?((m.book.bid-rt.pos.entry)/rt.pos.entry*10000):0;
+  const ps=profitState(rt as Runtime843,m,structs);
   const targetTouched=hasLong&&rt.pos?m.book.bid>=rt.pos.target:false;
   const weakening=m.flowFast.ofi<-.12||scores.momentumAtr<-.20||rawBearish;
   const extended=scores.rangePos>.82||scores.momentumAtr>2.6;
-  const sellVote=hasLong&&(rawBearish||(targetTouched&&weakening)||(extended&&weakening&&profitBps>0));
+  const profitProtectArmed=hasLong&&ps.peakProfitBps>=PROFIT_PROTECT_ARM_BPS&&(ps.resistanceTouched||scores.rangePos>.58||ps.peakProfitBps>=35);
+  const profitGiveback=profitProtectArmed&&ps.givebackBps>=PROFIT_PROTECT_GIVEBACK_BPS&&scores.momentumAtr<=PROFIT_PROTECT_MOMENTUM_ATR_CEILING;
+  const latchedSell=hasLong&&ps.priorSellVotes>0&&ps.profitBps>10&&(weakening||scores.momentumAtr<0);
+  const strongSell=hasLong&&(rawBearish||(targetTouched&&weakening)||profitGiveback);
+  const softSell=hasLong&&!strongSell&&((extended&&weakening&&ps.profitBps>0)||latchedSell);
+  const sellVote=strongSell||softSell;
+  const sellStrength=strongSell?"STRONG":softSell?"SOFT":"NONE";
+  const sellReason=rawBearish?"BEARISH_PRESSURE":targetTouched&&weakening?"ADVISORY_TARGET_WEAKENING":profitGiveback?"PROFIT_GIVEBACK_AFTER_STRUCTURE":latchedSell?"LATCHED_SELL_CONFIRMATION":extended&&weakening?"EXTENDED_WEAKENING":"NONE";
+  const mem=(rt as Runtime843).v842;if(mem)mem.lastSellReason=sellReason!=="NONE"?sellReason:mem.lastSellReason??null;
   const action=hasLong?(sellVote?"SELL":"HOLD"):(direction==="UP"&&entryQuality>=MIN_ENTRY_QUALITY&&!scores.chase&&size?"BUY":"WAIT");
 
   const softEvidence:string[]=[];
@@ -143,6 +167,8 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   if(direction==="UP"&&entryQuality<MIN_ENTRY_QUALITY)softEvidence.push("ENTRY_QUALITY_LOW");
   if(direction==="UP"&&economics&&economics.target_net_reward_bps<=0)softEvidence.push("TARGET_BELOW_COST");
   if(direction==="UP"&&economics&&economics.economic_rr<1)softEvidence.push("ECONOMIC_RR_LOW");
+  if(profitProtectArmed)softEvidence.push("PROFIT_PROTECT_ARMED");
+  if(ps.resistanceTouched)softEvidence.push("STRUCTURAL_RESISTANCE_TOUCHED");
   const hard:string[]=[];
   if(cfg.execution_mode==="OBSERVE")hard.push("OBSERVATION_ONLY");
   if(cfg.allow_shadow_short!==false)hard.push("LONG_ONLY_CONTRACT_MISMATCH");
@@ -157,7 +183,7 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const targetPlan={policy:"BRIAN_DYNAMIC_ADVISORY_TARGET",target_planner_version:TARGET_PLANNER_VERSION,hard_take_profit:false,trailing_thesis:true,selected_rank:selected?.rank??null,selected_level:selected?.level??null,levels:levelPlan.levels.slice(0,10).map((x,i)=>({rank:i+1,level_id:x.level_id,price:x.normalized_price,timeframe:x.timeframe,origin:x.origin,confirmed_at:x.confirmed_at}))};
   const stopTelemetry={price:inv,source:stopSource,structure_id:stopStructureId,distance_bps:stopDistanceBps,distance_atr_1m:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null,distance_atr_setup_tf:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null};
   const calSnapshot={state:cal.state,samples:cal.samples,episodes:cal.episodes,days:cal.days,wins:cal.wins,losses:cal.losses,p:cal.p,wilson_lower:cal.lower,wilson_upper:cal.upper,ambiguous_losses:cal.ambiguousLosses,entry_blocking:false};
-  const reason=[...scores.reason,rawBearish?"BEARISH_PRESSURE_PRESENT":"",`score up=${scores.up.toFixed(2)} down=${scores.down.toFixed(2)}`,`range=${scores.rangePos.toFixed(2)}`,`live-mom=${scores.momentumAtr.toFixed(2)}ATR`,`entryQ=${entryQuality.toFixed(2)}`].filter(Boolean);
+  const reason=[...scores.reason,rawBearish?"BEARISH_PRESSURE_PRESENT":"",profitProtectArmed?"PROFIT_PROTECT_ARMED":"",profitGiveback?"PROFIT_GIVEBACK_TRIGGER":"",`score up=${scores.up.toFixed(2)} down=${scores.down.toFixed(2)}`,`range=${scores.rangePos.toFixed(2)}`,`live-mom=${scores.momentumAtr.toFixed(2)}ATR`,`entryQ=${entryQuality.toFixed(2)}`].filter(Boolean);
   const targetRole="L1_EXECUTABLE" as const;
   const thesis:J={
     ...base.thesis,
@@ -167,9 +193,9 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
     target_role:target?targetRole:"NO_FORWARD_LEVEL",target_plan:targetPlan,stop:stopTelemetry,entry_guard:{mode:"BRIAN_LIVE_ENTRY_QUALITY",package1_observation:base.thesis.entry_guard??null},
     rr:economicRR,economic_rr:economicRR,target_distance_bps:targetDistanceBps,stop_distance_bps:stopDistanceBps,net_reward_bps:economics?.target_net_reward_bps??0,net_risk_bps:economics?.stop_net_loss_bps??0,
     fill_forward_cost_bps:fillCost,reference_roundtrip_cost_bps:referenceRoundtripCostBps(cost,m.book.spreadBps),cost_contract:cost,
-    raw_conviction:confidence,forecast_probability:null,execution_calibration:calSnapshot,leverage:1,leverage_policy:"V842_BRIAN_LONG_ONLY_1X",
+    raw_conviction:confidence,forecast_probability:null,execution_calibration:calSnapshot,leverage:1,leverage_policy:"V843_BRIAN_LONG_ONLY_1X",
     decision_authority:"BRIAN",authority_action:action,authority_confidence:confidence,authority_entry_quality:entryQuality,authority_allocation:size?.allocation??allocation,
-    authority_scores:{up:scores.up,down:scores.down,range_position:scores.rangePos,momentum_atr:scores.momentumAtr,entry_quality_raw:scores.entryQualityRaw,sell_vote:sellVote,profit_bps:profitBps,target_touched:targetTouched},authority_reason:reason,
+    authority_scores:{up:scores.up,down:scores.down,range_position:scores.rangePos,momentum_atr:scores.momentumAtr,entry_quality_raw:scores.entryQualityRaw,sell_vote:sellVote,sell_strength:sellStrength,sell_reason:sellReason,profit_bps:ps.profitBps,peak_bid:ps.peakBid,peak_profit_bps:ps.peakProfitBps,giveback_bps:ps.givebackBps,profit_protect_armed:profitProtectArmed,resistance_touched:ps.resistanceTouched,target_touched:targetTouched},authority_reason:reason,
     decision_market_price:m.book.mid,decision_market_received_at:new Date(m.book.receivedAt).toISOString(),soft_evidence:softEvidence,veto:hard,first_blocking_veto:hard[0]??null,veto_stage:hard.length?"TECHNICAL_RAIL":null,
     release_id:RELEASE_ID,logic_hash:LOGIC_HASH,strategy_manifest_hash:STRATEGY_MANIFEST_HASH,calibration_family_id:CALIBRATION_FAMILY_ID,db_contract_version:DB_CONTRACT_VERSION,decision_revision:DECISION_REVISION,policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,metric_version:METRIC_VERSION,resolver_version:RESOLVER_VERSION,entry_guard_version:ENTRY_GUARD_VERSION,target_planner_version:TARGET_PLANNER_VERSION,execution_model_version:EXECUTION_MODEL_VERSION,cost_model_version:COST_MODEL_VERSION,market_data_contract_version:MARKET_DATA_CONTRACT_VERSION,shadow_only:true,live_execution:false,browser_execution:false,
   };
