@@ -74,6 +74,10 @@ Exit gate: an event can be traced from source -> entities -> causal mechanisms -
 - promotion council evidence bundle
 - failure memory and concept-drift retirement
 
+Candidate materialization is additive-only inside isolated allowlisted namespaces. All generated files are staged before path validation; checkout credentials are not persisted; generated tests run without filesystem/network permissions; the write token is exposed only to the final push step after candidate code execution has finished. No candidate branch opens or merges its own PR.
+
+Automatic prospective measurement currently has dedicated label lineage for `ACTION_GATE` and `EXPECTED_EDGE`. Reliability/cost hypotheses may still be researched/generated, but they fail closed before automatic promotion until dedicated prospective labels exist rather than borrowing EXPECTED_EDGE evidence.
+
 Exit gate: Brian can identify a measurable weakness, propose a bounded change, generate an isolated candidate artifact, test it, and produce an auditable accept/reject result without mutating canonical behavior.
 
 ### Layer 4 — ALPHA Intelligence Upgrade
@@ -92,7 +96,7 @@ Canonical decision target:
 
 `expected_net_edge = expected_gross_move - estimated_round_trip_cost - uncertainty_penalty - event_decay_penalty`
 
-Evidence score alone must never be interpreted as expected return. Canonical ALPHA remains unchanged until the challenger earns promotion from clean prospective evidence.
+Evidence score alone must never be interpreted as expected return. Canonical ALPHA remains unchanged until the challenger earns promotion from clean prospective evidence. Expected-edge label latency is bounded but aligned with the two-minute cloud cadence, and timing contamination is persisted as leakage so Promotion Council fails closed instead of silently dropping the warning.
 
 ### Layer 5 — Brian Treasury / Portfolio Brain
 
@@ -117,11 +121,14 @@ SHADOW allocation policy:
 - conviction is derived from after-cost expected net edge + bounded prospective reliability + independent evidence maturity
 - ordinary evidence gets partial capital; weak evidence may get no capital; exceptional validated evidence can earn effectively 100% of available SHADOW equity after reserving point-in-time entry costs
 - a stronger opportunity may close one or more weaker positions, including at a realized loss, to recycle capital into the superior opportunity when its expected opportunity value clearly dominates
+- replacement compares SWITCH against the remaining HOLD value and charges the old position's incremental exit cost; a small raw edge advantage is not enough
 - maximum eight simultaneous positions remains an operational book-complexity bound, not a forced diversification target
-- no deployment unless the Layer-4 EXPECTED_EDGE prospective experiment has a current `PROMOTE_CANDIDATE` decision
+- no deployment unless at least one current EXPECTED_EDGE prospective experiment retains a valid `PROMOTE_CANDIDATE` authority; a newer immature experiment does not revoke another experiment's still-valid authority, while a later verdict on the same experiment does
 - gate closure or revocation fail-closes the SHADOW portfolio back to cash
 
 A portfolio change persists its source decision, expected edge, cost and reason. Entry and exit costs are charged to the ledger. Snapshot + actions are committed atomically and append-only. The database additionally serializes the snapshot parent chain so stale or racing Treasury cycles cannot create divergent cashbox histories.
+
+Full-conviction adverse MTM is persistable: deployment utilization is normalized against the larger of current MTM equity and deployed unlevered principal, so a normal price decline cannot manufacture >100% leverage and block the very exit cycle meant to reduce risk. Missing fresh marks no longer abort the entire worker; bounded historical marks keep the exit/gate pipeline alive while stale evidence is barred from new deployment.
 
 Exit gate: treasury cash + positions + realized/unrealized P&L + costs reconcile exactly and survive browser closure/restart.
 
@@ -129,7 +136,7 @@ Exit gate: treasury cash + positions + realized/unrealized P&L + costs reconcile
 
 Implemented at code-contract level in the draft branch; actual prospective run is pending deployment and explicit start.
 
-Ocean is a 24–48h browser-independent prospective SHADOW exam. START/STOP commands are append-only and serialized at the database control boundary so two simultaneous dashboard requests cannot create parallel active exams. Preflight blocks start unless Treasury, Layer-4 expected edge and core Evolution workers have healthy runtime evidence. The cloud worker records periodic Treasury/system-health checkpoints and creates a final report after planned or early termination.
+Ocean is a 24–48h browser-independent prospective SHADOW exam. START/STOP commands are append-only and serialized at the database control boundary so two simultaneous dashboard requests cannot create parallel active exams. The database clock, not arbitrary caller time, owns command chronology; caller timestamps are accepted only within a narrow skew window. Preflight blocks start unless Treasury, Layer-4 expected edge and core Evolution workers have healthy runtime evidence. The cloud worker records periodic Treasury/system-health checkpoints and creates a final report after planned or early termination.
 
 Required post-run report:
 
@@ -208,6 +215,12 @@ DIP remains a separate laboratory surface and is not part of Evolution OS contro
 
 Starting/pausing an Ocean observation session from mobile mutates only append-only server-side Ocean command state. Collectors, research jobs, ALPHA, portfolio accounting and Evolution workers continue in cloud infrastructure when the browser is hidden or closed.
 
+## Verification policy
+
+A green TypeScript suite alone is not sufficient evidence for database concurrency claims. Evolution CI includes a real Postgres job that applies the Treasury/Ocean persistence hardening migrations and verifies Treasury stale-parent rejection, exact-retry idempotence, full-conviction drawdown persistence, concurrent child fork rejection, concurrent Ocean START serialization, direct service-role command-insert denial and wrong-run STOP rejection.
+
+CI also checks the entire Evolution migration set for accidental top-level schedule/activation calls and inspects changed SQL for DIP control/data identifiers in addition to path-level DIP isolation.
+
 ## Completion definition
 
-Layers 0–6 are now implemented at code-contract level on the draft integration branch. This does not mean the system is deployed or prospectively proven. The draft is eligible for final rollout review only when protected-scope tests prove DIP isolation, all regression CI is green, migrations and rollout order are reviewed, and no unauthorized live-execution surface exists. Remaining sequence is final CI, migration/order review, base reconciliation if required, explicit merge/deploy approval, cloud rollout verification, then the actual 24–48h Ocean observation. The Ocean exam cannot be simulated by declaring the draft complete.
+Layers 0–6 are implemented at code-contract level on the draft integration branch. This does not mean the system is deployed or prospectively proven. The draft is eligible for final rollout review only when protected-scope tests prove DIP isolation, all regression CI is green, migrations and rollout order are reviewed, and no unauthorized live-execution surface exists. Remaining sequence is explicit merge/deploy approval, cloud rollout with Evolution schedules dormant, pre-activation smoke verification, explicit activation approval, then the actual 24–48h Ocean observation. The Ocean exam cannot be simulated by declaring the draft complete.
