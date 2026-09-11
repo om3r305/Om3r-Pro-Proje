@@ -43,25 +43,23 @@ type AuthoritySize={
 
 type ScoreState={up:number;down:number;rangePos:number;momentumAtr:number;reason:string[]};
 
-function tradeDir(x:unknown):x is "UP"|"DOWN"{return x==="UP"||x==="DOWN";}
 function validGeometry(direction:"UP"|"DOWN",entry:number,stop:number,target:number){return direction==="UP"?stop<entry&&entry<target:target<entry&&entry<stop;}
 
-function chartScores(m:Market, s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:CandidateResult):ScoreState{
+function chartScores(m:Market,s1:Struct,s5:Struct,s15:Struct,s1h:Struct,base:CandidateResult):ScoreState{
   const rows=m.bars["1m"].slice(-60),last=rows.at(-1)!;
   const low=Math.min(...rows.map(x=>x.l)),high=Math.max(...rows.map(x=>x.h)),span=Math.max(high-low,s1.atr*.5,1e-9);
   const rangePos=clip((m.book.mid-low)/span,0,1);
   const c4=rows.at(-4)?.c??last.c,momentumAtr=s1.atr>0?(last.c-c4)/s1.atr:0;
   let up=0,down=0;const reason:string[]=[];
   const apply=(s:Struct,w:number)=>{
-    if(s.trend==="UP")up+=.55*w; else if(s.trend==="DOWN")down+=.55*w;
-    if(s.bos==="UP")up+=1.15*w; else if(s.bos==="DOWN")down+=1.15*w;
-    if(s.choch==="UP")up+=.95*w; else if(s.choch==="DOWN")down+=.95*w;
-    if(s.sweep==="BULL")up+=.85*w; else if(s.sweep==="BEAR")down+=.85*w;
-    if(s.failedBreak==="BULL")up+=.70*w; else if(s.failedBreak==="BEAR")down+=.70*w;
+    if(s.trend==="UP")up+=.55*w;else if(s.trend==="DOWN")down+=.55*w;
+    if(s.bos==="UP")up+=1.15*w;else if(s.bos==="DOWN")down+=1.15*w;
+    if(s.choch==="UP")up+=.95*w;else if(s.choch==="DOWN")down+=.95*w;
+    if(s.sweep==="BULL")up+=.85*w;else if(s.sweep==="BEAR")down+=.85*w;
+    if(s.failedBreak==="BULL")up+=.70*w;else if(s.failedBreak==="BEAR")down+=.70*w;
   };
   apply(s1,1);apply(s5,1.45);apply(s15,.9);apply(s1h,.35);
-  // Buying near the recent low and selling near the recent high is part of Brian's thesis, not an external veto.
-  up+=(0.5-rangePos)*3.2;down+=(rangePos-0.5)*3.2;
+  up+=(.5-rangePos)*3.2;down+=(rangePos-.5)*3.2;
   const mom=clip(momentumAtr,-2.5,2.5);up+=mom*.65;down-=mom*.65;
   up+=m.flowFast.ofi*.75+m.flowSlow.ofi*.35;down-=m.flowFast.ofi*.75+m.flowSlow.ofi*.35;
   const book=Math.log(Math.max(.2,Math.min(5,m.book.pressure)));up+=book*.45;down-=book*.45;
@@ -97,14 +95,16 @@ function structuralAnchor(direction:"UP"|"DOWN",s1:Struct,s5:Struct):string{
 }
 
 export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cfg:J,tradeNotional:number,at:number,cal:ExecutionCalibration):Promise<CandidateResult>{
-  // Package-1 candidate generation remains useful as evidence. It no longer has independent strategy authority.
   const base=await package1Candidate(m,sessionId,rt,cfg,tradeNotional,at,cal);
   const S=base.thesis.structure as Record<string,Struct>;
   const s1=S.s1,s5=S.s5,s15=S.s15,s1h=S.s1h,s4h=S.s4h;
   if(!s1||!s5||!s15||!s1h||!s4h)return{...base,canEnter:false,firstBlockingVeto:"DATA_INCONSISTENT",vetoStage:"RUNTIME",thesis:{...base.thesis,veto:["DATA_INCONSISTENT"],decision_authority:"BRIAN"}};
 
-  const scores=chartScores(m,s1,s5,s15,s1h,base),bestDir:scores.up>=scores.down?"UP":"DOWN",bestScore=Math.max(scores.up,scores.down),otherScore=Math.min(scores.up,scores.down),confidence=confidenceFor(bestScore,otherScore);
-  // WAIT is Brian's own conclusion when the chart does not have enough directional separation yet.
+  const scores=chartScores(m,s1,s5,s15,s1h,base);
+  const bestDir:"UP"|"DOWN"=scores.up>=scores.down?"UP":"DOWN";
+  const bestScore=Math.max(scores.up,scores.down);
+  const otherScore=Math.min(scores.up,scores.down);
+  const confidence=confidenceFor(bestScore,otherScore);
   const direction:Direction=bestScore>=.75&&Math.abs(scores.up-scores.down)>=.35?bestDir:"WAIT";
   const baseSetup=String(base.thesis.setup||"NONE"),setup:Setup=(["SWEEP_RECLAIM","FAILED_BREAK","BOS_RETEST","EARLY_REVERSAL"].includes(baseSetup)&&base.direction===direction?baseSetup:"EARLY_REVERSAL") as Setup;
   const fee=n(cfg.fee_bps,10),slip=n(cfg.slippage_bps,1);
@@ -117,7 +117,6 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
     const pivot=Math.max(recentHigh,s1.lastHigh?.p??recentHigh);inv=pivot+s1.atr*.12;stopStructureId=`DOWN:${s1.lastHigh?.t??recent.at(-1)?.t??0}`;
   }
   if(direction!=="WAIT"&&base.direction===direction&&base.inv&&validGeometry(direction,entry,base.inv,direction==="UP"?entry+1:entry-1)){
-    // Preserve a structurally tighter Package-1 stop when it is on the correct side; it is evidence selected by Brian, not a veto.
     inv=base.inv;stopSource=String((base.thesis.stop as Record<string,unknown>)?.source||"PACKAGE1_STRUCTURAL_STOP");stopStructureId=String((base.thesis.stop as Record<string,unknown>)?.structure_id||stopStructureId||"")||null;
   }
 
@@ -158,7 +157,7 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const stopTelemetry={price:inv,source:stopSource,structure_id:stopStructureId,distance_bps:stopDistanceBps,distance_atr_1m:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null,distance_atr_setup_tf:inv&&s1.atr?Math.abs(entry-inv)/s1.atr:null};
   const calSnapshot={state:cal.state,samples:cal.samples,episodes:cal.episodes,days:cal.days,wins:cal.wins,losses:cal.losses,p:cal.p,wilson_lower:cal.lower,wilson_upper:cal.upper,ambiguous_losses:cal.ambiguousLosses,entry_blocking:false};
   const reason=[...scores.reason,`score up=${scores.up.toFixed(2)} down=${scores.down.toFixed(2)}`,`range=${scores.rangePos.toFixed(2)}`,`mom=${scores.momentumAtr.toFixed(2)}ATR`];
-  const targetRole="L1_EXECUTABLE" as const; // compatibility column; evidence.target_plan carries Brian-selected rank.
+  const targetRole="L1_EXECUTABLE" as const;
   const thesis:J={
     ...base.thesis,
     thesis_id:occurrence,occurrence_id:occurrence,episode_id:episode,material_identity:materialIdentity,trigger_identity:triggerIdentity,
