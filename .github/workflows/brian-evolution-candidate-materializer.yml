@@ -1,0 +1,123 @@
+name: Brian Evolution Candidate Materializer
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_id:
+        description: 'Evolution candidate id'
+        required: true
+        type: string
+      parent_sha:
+        description: 'Exact current brian-2026 parent SHA embedded in the artifact bundle'
+        required: true
+        type: string
+      branch_name:
+        description: 'Must start with evolution-candidate/'
+        required: true
+        type: string
+      artifact_b64:
+        description: 'Base64 JSON artifact bundle from the Evolution sandbox'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out canonical Brian branch without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: brian-2026
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable parent and isolated branch
+        env:
+          EXPECTED_PARENT: ${{ inputs.parent_sha }}
+          BRANCH_NAME: ${{ inputs.branch_name }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_PARENT" || { echo "parent SHA is stale: current=$actual requested=$EXPECTED_PARENT"; exit 1; }
+          case "$BRANCH_NAME" in evolution-candidate/*) ;; *) echo 'branch must start with evolution-candidate/'; exit 1;; esac
+          if git ls-remote --exit-code --heads origin "refs/heads/$BRANCH_NAME" >/dev/null 2>&1; then
+            echo "candidate branch already exists: $BRANCH_NAME"
+            exit 1
+          fi
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Materialize signed sandbox bundle
+        env:
+          EVOLUTION_ARTIFACT_B64: ${{ inputs.artifact_b64 }}
+          EVOLUTION_BRANCH_NAME: ${{ inputs.branch_name }}
+          EVOLUTION_PARENT_SHA: ${{ inputs.parent_sha }}
+        run: deno run --allow-env --allow-read --allow-write scripts/evolution_candidate_materialize.ts
+
+      - name: Stage candidate and enforce complete path fence
+        run: |
+          set -euo pipefail
+          git add -A
+          status="$(git diff --cached --name-status)"
+          test -n "$status" || { echo 'artifact produced no files'; exit 1; }
+          non_add="$(printf '%s\n' "$status" | awk '$1 != "A" {print}' || true)"
+          if [ -n "$non_add" ]; then
+            echo 'candidate may only add new isolated files:'
+            printf '%s\n' "$non_add"
+            exit 1
+          fi
+          changed="$(git diff --cached --name-only --diff-filter=A)"
+          test -n "$changed" || { echo 'artifact produced no staged candidate files'; exit 1; }
+          bad="$(printf '%s\n' "$changed" | grep -Ev '^(supabase/functions/_shared/evolution_candidates/|supabase/functions/brian-evolution-candidate-|tests/evolution_candidates/|docs/evolution_candidates/)' || true)"
+          if [ -n "$bad" ]; then
+            echo 'candidate escaped sandbox allowlist:'
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          if printf '%s\n' "$changed" | grep -Eqi '(^|/)(dip|brian_dip|brian-dip)|^\.github/|^supabase/migrations/|cron_auth|dashboard_auth|\.env|secret|credential'; then
+            echo 'candidate touched a protected path or keyword'
+            exit 1
+          fi
+
+      - name: Type-check generated TypeScript
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git diff --cached --name-only --diff-filter=A | grep -E '\.ts$' || true)
+          if [ "${#files[@]}" -gt 0 ]; then deno check "${files[@]}"; fi
+
+      - name: Run generated candidate tests without filesystem or network permissions
+        run: |
+          set -euo pipefail
+          mapfile -t tests < <(git diff --cached --name-only --diff-filter=A | grep -E '\.test\.ts$' || true)
+          test "${#tests[@]}" -gt 0 || { echo 'candidate must include at least one behavioral test'; exit 1; }
+          deno test "${tests[@]}"
+
+      - name: Verify generated formatting and staged patch
+        run: |
+          set -euo pipefail
+          mapfile -t format_files < <(git diff --cached --name-only --diff-filter=A | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
+          if [ "${#format_files[@]}" -gt 0 ]; then deno fmt --check "${format_files[@]}"; fi
+          git diff --cached --check
+
+      - name: Create isolated candidate branch only
+        env:
+          BRANCH_NAME: ${{ inputs.branch_name }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name 'brian-evolution-sandbox[bot]'
+          git config user.email 'brian-evolution-sandbox@users.noreply.github.com'
+          git switch -c "$BRANCH_NAME"
+          git commit -m "experiment(evolution): materialize $CANDIDATE_ID"
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$BRANCH_NAME"
+          echo "Candidate branch created: $BRANCH_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "No PR was opened and no canonical branch was modified." >> "$GITHUB_STEP_SUMMARY"

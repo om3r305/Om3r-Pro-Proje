@@ -1,0 +1,260 @@
+name: Brian Evolution OS CI
+
+on:
+  pull_request:
+    branches:
+      - brian-2026
+    paths:
+      - 'supabase/functions/_shared/evolution_*.ts'
+      - 'supabase/functions/_shared/evolution_candidates/**'
+      - 'supabase/functions/_shared/world_brain*.ts'
+      - 'supabase/functions/brian-evolution-*/**'
+      - 'supabase/functions/brian-world-*/**'
+      - 'supabase/migrations/*brian_evolution*.sql'
+      - 'supabase/migrations/*brian_world*.sql'
+      - 'supabase/migrations/*brian_alpha_intelligence*.sql'
+      - 'supabase/migrations/*brian_treasury*.sql'
+      - 'supabase/migrations/*brian_ocean*.sql'
+      - 'monster-coins-pro/evolution.*'
+      - 'monster-coins-pro/world.*'
+      - 'monster-coins-pro/treasury.*'
+      - 'monster-coins-pro/ocean.*'
+      - 'scripts/evolution_candidate_materialize.ts'
+      - 'tests/evolution_candidates/**'
+      - 'tests/test_brian_evolution_postgres.py'
+      - 'docs/evolution_candidates/**'
+      - 'docs/BRIAN_EVOLUTION_OS.md'
+      - 'docs/BRIAN_EVOLUTION_LAYER_STATUS.md'
+      - 'docs/BRIAN_EVOLUTION_ROLLOUT.md'
+      - 'config/brian-evolution-baseline-v1.json'
+      - '.github/workflows/brian-evolution-ci.yml'
+      - '.github/workflows/brian-evolution-candidate-materializer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evolution-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+      - name: Type-check Evolution shared contracts and cloud entrypoints
+        run: >-
+          deno check
+          supabase/functions/_shared/evolution_contract.ts
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/evolution_research.ts
+          supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.ts
+          supabase/functions/_shared/evolution_lab.test.ts
+          supabase/functions/_shared/evolution_codegen.ts
+          supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_alpha_reliability_mapping.ts
+          supabase/functions/_shared/evolution_alpha_reliability_mapping.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
+          supabase/functions/_shared/evolution_treasury.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
+          supabase/functions/_shared/evolution_treasury_runtime.ts
+          supabase/functions/_shared/evolution_treasury_runtime.test.ts
+          supabase/functions/_shared/evolution_ocean.ts
+          supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
+          supabase/functions/_shared/world_brain.ts
+          supabase/functions/_shared/world_brain.test.ts
+          supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-researcher/index.ts
+          supabase/functions/brian-evolution-sandbox/index.ts
+          supabase/functions/brian-evolution-template-generator/index.ts
+          supabase/functions/brian-evolution-experiment-runner/index.ts
+          supabase/functions/brian-evolution-promotion-council/index.ts
+          supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
+          supabase/functions/brian-evolution-alpha-intelligence-status/index.ts
+          supabase/functions/brian-evolution-treasury/index.ts
+          supabase/functions/brian-evolution-treasury-status/index.ts
+          supabase/functions/brian-evolution-ocean-control/index.ts
+          supabase/functions/brian-evolution-ocean-worker/index.ts
+          supabase/functions/brian-evolution-ocean-status/index.ts
+          supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-evolution-lab-status/index.ts
+          supabase/functions/brian-world-brain/index.ts
+          supabase/functions/brian-world-discovery-eye/index.ts
+          supabase/functions/brian-world-status/index.ts
+          scripts/evolution_candidate_materialize.ts
+      - name: Run Evolution behavioral tests
+        run: >-
+          deno test --allow-read
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.test.ts
+          supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_alpha_reliability_mapping.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
+          supabase/functions/_shared/evolution_treasury_runtime.test.ts
+          supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
+          supabase/functions/_shared/world_brain.test.ts
+      - name: Lint Evolution TypeScript
+        run: >-
+          deno lint
+          supabase/functions/_shared/evolution_contract.ts
+          supabase/functions/_shared/evolution_contract.test.ts
+          supabase/functions/_shared/evolution_core.ts
+          supabase/functions/_shared/evolution_core.test.ts
+          supabase/functions/_shared/evolution_research.ts
+          supabase/functions/_shared/evolution_research.test.ts
+          supabase/functions/_shared/evolution_sandbox.ts
+          supabase/functions/_shared/evolution_sandbox.test.ts
+          supabase/functions/_shared/evolution_lab.ts
+          supabase/functions/_shared/evolution_lab.test.ts
+          supabase/functions/_shared/evolution_codegen.ts
+          supabase/functions/_shared/evolution_codegen.test.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.ts
+          supabase/functions/_shared/evolution_alpha_intelligence.test.ts
+          supabase/functions/_shared/evolution_alpha_reliability_mapping.ts
+          supabase/functions/_shared/evolution_alpha_reliability_mapping.test.ts
+          supabase/functions/_shared/evolution_prospective_timing.ts
+          supabase/functions/_shared/evolution_prospective_timing.test.ts
+          supabase/functions/_shared/evolution_treasury.ts
+          supabase/functions/_shared/evolution_treasury.test.ts
+          supabase/functions/_shared/evolution_treasury_gate.ts
+          supabase/functions/_shared/evolution_treasury_gate.test.ts
+          supabase/functions/_shared/evolution_treasury_runtime.ts
+          supabase/functions/_shared/evolution_treasury_runtime.test.ts
+          supabase/functions/_shared/evolution_ocean.ts
+          supabase/functions/_shared/evolution_ocean.test.ts
+          supabase/functions/_shared/evolution_ocean_preflight.ts
+          supabase/functions/_shared/evolution_ocean_preflight.test.ts
+          supabase/functions/_shared/world_brain.ts
+          supabase/functions/_shared/world_brain.test.ts
+          supabase/functions/brian-evolution-orchestrator/index.ts
+          supabase/functions/brian-evolution-researcher/index.ts
+          supabase/functions/brian-evolution-sandbox/index.ts
+          supabase/functions/brian-evolution-template-generator/index.ts
+          supabase/functions/brian-evolution-experiment-runner/index.ts
+          supabase/functions/brian-evolution-promotion-council/index.ts
+          supabase/functions/brian-evolution-alpha-edge-challenger/index.ts
+          supabase/functions/brian-evolution-alpha-intelligence-status/index.ts
+          supabase/functions/brian-evolution-treasury/index.ts
+          supabase/functions/brian-evolution-treasury-status/index.ts
+          supabase/functions/brian-evolution-ocean-control/index.ts
+          supabase/functions/brian-evolution-ocean-worker/index.ts
+          supabase/functions/brian-evolution-ocean-status/index.ts
+          supabase/functions/brian-evolution-status/index.ts
+          supabase/functions/brian-evolution-lab-status/index.ts
+          supabase/functions/brian-world-brain/index.ts
+          supabase/functions/brian-world-discovery-eye/index.ts
+          supabase/functions/brian-world-status/index.ts
+          scripts/evolution_candidate_materialize.ts
+      - name: Verify dashboard JavaScript syntax
+        run: |
+          node --check monster-coins-pro/evolution.js
+          node --check monster-coins-pro/world.js
+          node --check monster-coins-pro/treasury.js
+          node --check monster-coins-pro/ocean.js
+      - name: Verify migrations remain dormant until explicit activation
+        run: |
+          set -euo pipefail
+          mapfile -t migration_files < <(find supabase/migrations -maxdepth 1 -type f \( \
+            -name '*brian_evolution*.sql' -o \
+            -name '*brian_world*.sql' -o \
+            -name '*brian_alpha_intelligence*.sql' -o \
+            -name '*brian_treasury*.sql' -o \
+            -name '*brian_ocean*.sql' \
+          \) | sort)
+          test "${#migration_files[@]}" -gt 0 || { echo 'Evolution migration set missing'; exit 1; }
+          set +e
+          matches="$(grep -nEi '^[[:space:]]*(select|perform|call)[[:space:]]+(brian_private\.(schedule_[a-z0-9_]+|activate_evolution_os)|cron\.schedule)[[:space:]]*\(' "${migration_files[@]}" 2>&1)"
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo 'Evolution migration contains an automatic schedule/activation call:'
+            printf '%s\n' "$matches"
+            exit 1
+          elif [ "$code" -ne 1 ]; then
+            echo 'Dormant migration guard itself failed:'
+            printf '%s\n' "$matches"
+            exit 1
+          fi
+          grep -Eq 'create or replace function[[:space:]]+brian_private\.activate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
+          grep -Eq 'create or replace function[[:space:]]+brian_private\.deactivate_evolution_os' supabase/migrations/202609111710_brian_evolution_activation_control.sql
+      - name: Verify no DIP files or SQL control references changed in Evolution PR
+        run: |
+          set -euo pipefail
+          git fetch origin brian-2026
+          if git diff --name-only origin/brian-2026...HEAD | grep -Eqi '(^|/)(dip|brian_dip|brian-dip)' ; then
+            echo 'Evolution OS must not modify DIP paths'
+            exit 1
+          fi
+          mapfile -t changed_sql < <(git diff --name-only origin/brian-2026...HEAD -- 'supabase/migrations/*.sql')
+          if [ "${#changed_sql[@]}" -gt 0 ]; then
+            added_sql="$(git diff --unified=0 origin/brian-2026...HEAD -- "${changed_sql[@]}" | grep '^+' | grep -Ev '^\+\+\+' || true)"
+            set +e
+            sql_matches="$(printf '%s\n' "$added_sql" | grep -Eni '\bbrian_dip\b|\bdip\.[a-z0-9_]+\b|\b(from|join|into|update|table|truncate)[[:space:]]+([a-z0-9_]+\.)?dip_[a-z0-9_]+\b|cron\.(schedule|unschedule).*dip' 2>&1)"
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
+              echo 'Evolution SQL diff references DIP control/data identifiers:'
+              printf '%s\n' "$sql_matches"
+              exit 1
+            elif [ "$code" -ne 1 ]; then
+              echo 'DIP SQL-content guard itself failed:'
+              printf '%s\n' "$sql_matches"
+              exit 1
+            fi
+          fi
+      - name: Verify patch formatting
+        run: git diff --check origin/brian-2026...HEAD
+
+  evolution-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Postgres test dependencies
+        run: python -m pip install pytest psycopg2-binary
+      - name: Run Evolution Treasury and Ocean Postgres concurrency tests
+        env:
+          BRIAN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: python -m pytest -q tests/test_brian_evolution_postgres.py -v

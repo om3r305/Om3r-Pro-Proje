@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#05070c">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/logo.svg">
+  <link rel="stylesheet" href="/dashboard.css">
+  <title>Brian World Intelligence</title>
+  <style>
+    body{min-height:100vh;background:#05070c;color:#f7f8fb}.world-shell{max-width:1220px;margin:0 auto;padding:18px 16px 60px}.world-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}.world-brand{display:flex;align-items:center;gap:12px}.world-brand img{width:42px;height:42px}.world-brand b{display:block;font-size:17px}.world-brand span{display:block;color:#8e98aa;font-size:12px;margin-top:3px}.world-links{display:flex;gap:8px;flex-wrap:wrap}.world-links a{text-decoration:none}.world-hero{padding:22px}.world-hero h1{font-size:clamp(28px,6vw,48px);margin:5px 0 10px}.world-hero p{color:#a7b0c0;max-width:900px;line-height:1.55}.world-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.world-two{display:grid;grid-template-columns:1fr 1fr;gap:14px}.world-gap{height:14px}.world-value{font-size:27px;font-weight:800;margin:8px 0 4px}.world-muted{font-size:12px;color:#8e98aa;line-height:1.45}.world-row{padding:13px 0;border-bottom:1px solid rgba(255,255,255,.07)}.world-row:last-child{border-bottom:0}.world-title{font-weight:700}.world-meta{font-size:12px;color:#8e98aa;line-height:1.48;margin-top:5px}.world-pill{display:inline-flex;padding:4px 8px;border:1px solid rgba(255,255,255,.12);border-radius:999px;font-size:10px;font-weight:800;margin-left:5px}.world-pill.up{color:#7ff6b6}.world-pill.down{color:#ff8c9f}.world-pill.neutral{color:#ffd479}.world-lock{position:fixed;inset:0;background:rgba(2,4,8,.94);display:none;align-items:center;justify-content:center;padding:20px;z-index:99}.world-lock.show{display:flex}.world-lock-card{width:min(420px,100%);padding:22px}.world-lock-card input{width:100%;box-sizing:border-box;margin:14px 0 10px;padding:14px;border-radius:12px;background:#0b1019;color:#fff;border:1px solid rgba(255,255,255,.12)}@media(max-width:850px){.world-grid{grid-template-columns:1fr 1fr}.world-two{grid-template-columns:1fr}.world-shell{padding:12px 12px 42px}.world-top{align-items:flex-start}}@media(max-width:480px){.world-grid{grid-template-columns:1fr}.world-links{justify-content:flex-end}.world-links a{font-size:11px;padding:9px}}
+  </style>
+</head>
+<body>
+  <div id="worldLock" class="world-lock"><article class="cc-card world-lock-card"><div class="cc-eyebrow">Brian World Intelligence</div><h2>Kontrol anahtarı gerekli</h2><p class="world-muted">Ana kontrol merkeziyle aynı kişisel anahtar kullanılır.</p><input id="worldKey" type="password" autocomplete="current-password" placeholder="MCP-..."><button id="worldUnlock" class="cc-btn primary">Kilidi Aç</button></article></div>
+  <main class="world-shell">
+    <header class="world-top"><div class="world-brand"><img src="/logo.svg" alt="Brian"><div><b>Brian World Intelligence</b><span id="worldSync">Durum alınıyor…</span></div></div><div class="world-links"><a class="cc-btn" href="/evolution.html">Evolution</a><a class="cc-btn" href="/">Kontrol Merkezi</a></div></header>
+    <article class="cc-card world-hero"><div class="cc-eyebrow">Layer 2 · Global World Brain · SHADOW ONLY</div><h1>Haber değil, bağlantı haritası.</h1><p>Brian burada global olayları şirketler, insanlar, emtia, döviz, teknoloji, anlatılar ve koşullu neden-sonuç zincirleriyle ilişkilendirir. Keşif verisi doğrudan işlem sinyali değildir; mekanizmalar araştırma hipotezi, senaryolar ise koşulludur.</p><div class="cc-cloud-foot"><span id="worldState" class="cc-chip">◉ yükleniyor</span><span class="cc-chip">🌍 açık dünya keşfi</span><span class="cc-chip">🧠 causal/scenario</span><span class="cc-chip">🔒 ALPHA doğrudan etki yok</span></div></article>
+    <div class="world-gap"></div>
+    <section class="world-grid">
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Aktif Narrative</div><div id="kNarratives" class="world-value">—</div><div class="world-muted">Global temalar ve breadth</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Entity</div><div id="kEntities" class="world-value">—</div><div class="world-muted">Şirket · kişi · varlık · emtia · kurum</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Yaklaşan Olay</div><div id="kFuture" class="world-value">—</div><div class="world-muted">Yalnız explicit tarihli prospective kayıt</div></article>
+      <article class="cc-card cc-pad"><div class="cc-kpi-label">Scenario Branch</div><div id="kScenarios" class="world-value">—</div><div class="world-muted">Mekanizma tutar / bozulur</div></article>
+    </section>
+    <div class="world-gap"></div>
+    <section class="world-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Narrative Radar</div><div class="cc-card-sub">AI, makro, enerji, jeopolitik, regulation ve diğer temalar</div></div></div><div id="narrativeList"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Future Calendar</div><div class="cc-card-sub">Geleceği uydurmaz; explicit zaman kaynağı ister</div></div></div><div id="futureList"></div></article>
+    </section>
+    <div class="world-gap"></div>
+    <section class="world-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Causal Mechanisms</div><div class="cc-card-sub">Sebep → aktarım kanalı → etkilenen varlıklar</div></div><span class="cc-badge warn">HİPOTEZ</span></div><div id="mechanismList"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Cross-Asset Impact</div><div class="cc-card-sub">Koşullu yön, güven ve gerekçe</div></div></div><div id="impactList"></div></article>
+    </section>
+    <div class="world-gap"></div>
+    <section class="world-two">
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Entity / Supply-Chain Graph</div><div class="cc-card-sub">Doğrulanmamış co-mention ile gerçek ilişki ayrı tutulur</div></div></div><div id="relationList"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">World Runtime</div><div class="cc-card-sub">Discovery Eye + World Brain cloud worker</div></div></div><div id="runtimeList"></div></article>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/world.js"></script>
+</body>
+</html>
