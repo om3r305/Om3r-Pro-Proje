@@ -8,7 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "monster-coins-pro" / "classic.html"
 ROOT_INDEX = ROOT / "monster-coins-pro" / "index.html"
 FRONTIER_INDEX = ROOT / "monster-coins-pro" / "frontier-v3.html"
-FRONTIER_CSS = ROOT / "monster-coins-pro" / "frontier-v3.css"
+# frontier-v3.css is now a tiny loader; the complete visual rules are preserved here.
+FRONTIER_CSS = ROOT / "monster-coins-pro" / "frontier-v3-base.css"
 FRONTIER_JS = ROOT / "monster-coins-pro" / "frontier-v3.js"
 CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
