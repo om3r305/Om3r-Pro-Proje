@@ -29,7 +29,7 @@
 
     // Dashboard API guard: a single slow Supabase function must never leave the
     // whole Brian screen stuck forever at "Bağlanıyor". Each API call fails
-    // closed after 8.5s; the normal 15s refresh loop then retries automatically.
+    // closed after 8.5s; the normal refresh loop then retries automatically.
     const nativeFetch=window.fetch.bind(window);
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
@@ -44,6 +44,7 @@
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
+    await load('/frontier-stability.js?v=20260913-s1');
     await load('/brain-development.js?v=20260912-b1');
   }catch(e){
     document.body.innerHTML='<div style="padding:24px;color:#ff8d99;background:#020712;font-family:system-ui"><h2>Brian V4 yüklenemedi</h2><pre style="white-space:pre-wrap">'+String(e)+'</pre></div>';
