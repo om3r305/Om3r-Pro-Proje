@@ -1,0 +1,47 @@
+/* Brian live-energy layer. Visual state is driven only by verified runtime health. */
+#command{transition:box-shadow .45s ease,border-color .45s ease,filter .45s ease}
+#command .brain-core{transition:filter .45s ease,opacity .45s ease,transform .45s ease}
+#command .brain-svg{transition:filter .45s ease,opacity .45s ease}
+#command .brain-orbit{transition:border-color .45s ease,box-shadow .45s ease,opacity .45s ease}
+#command .flow .stream-base,#command .flow .stream-core,#command .flow .packet{transition:opacity .4s ease,stroke-width .4s ease}
+
+#command.energy-off{filter:saturate(.45);box-shadow:inset 0 0 80px rgba(70,90,110,.08)}
+#command.energy-off .brain-core{opacity:.42;filter:grayscale(.7)}
+#command.energy-off .brain-svg{animation-duration:9s;filter:drop-shadow(0 0 8px rgba(100,130,150,.25))}
+#command.energy-off .brain-orbit{opacity:.22}
+#command.energy-off .flow{opacity:.18}
+
+#command.energy-low{border-color:rgba(255,189,85,.28);box-shadow:0 18px 50px rgba(0,0,0,.38),inset 0 0 90px rgba(255,170,45,.045)}
+#command.energy-low .brain-svg{filter:drop-shadow(0 0 12px rgba(255,189,85,.35)) drop-shadow(0 0 24px rgba(34,217,255,.24));animation-duration:6.8s}
+#command.energy-low .brain-orbit{border-color:rgba(255,189,85,.22);opacity:.52}
+#command.energy-low .flow{opacity:.48}
+
+#command.energy-mid{border-color:rgba(34,217,255,.34);box-shadow:0 18px 50px rgba(0,0,0,.38),inset 0 0 110px rgba(34,217,255,.09)}
+#command.energy-mid .brain-svg{filter:drop-shadow(0 0 20px rgba(34,217,255,.58)) drop-shadow(0 0 42px rgba(77,131,255,.34));animation-duration:4.8s}
+#command.energy-mid .brain-orbit{opacity:.72;box-shadow:0 0 32px rgba(34,217,255,.16),inset 0 0 22px rgba(34,217,255,.08)}
+#command.energy-mid .flow .packet{opacity:.82}
+
+#command.energy-high{border-color:rgba(53,240,173,.55);box-shadow:0 18px 50px rgba(0,0,0,.38),0 0 50px rgba(34,217,255,.10),inset 0 0 145px rgba(53,240,173,.11)}
+#command.energy-high .brain-core:before{content:"";position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(80,255,220,.28),rgba(34,217,255,.10) 34%,transparent 68%);filter:blur(10px);animation:brainCharge 1.8s ease-in-out infinite;z-index:-1}
+#command.energy-high .brain-svg{animation-duration:3.2s;filter:drop-shadow(0 0 24px rgba(53,240,173,.9)) drop-shadow(0 0 64px rgba(34,217,255,.72)) drop-shadow(0 0 92px rgba(77,131,255,.34))}
+#command.energy-high .brain-orbit{border-color:rgba(53,240,173,.62);opacity:1;box-shadow:0 0 40px rgba(53,240,173,.35),inset 0 0 28px rgba(34,217,255,.14)}
+#command.energy-high .flow .stream-core{stroke-width:3.1}
+#command.energy-high .flow .packet{opacity:1;filter:url(#flowGlow) drop-shadow(0 0 6px currentColor)}
+
+#command.energy-booting{border-color:rgba(34,217,255,.78);box-shadow:0 0 55px rgba(34,217,255,.18),inset 0 0 150px rgba(34,217,255,.15)}
+#command.energy-booting .brain-svg{animation:brainBoot .72s ease-in-out infinite alternate;filter:drop-shadow(0 0 30px rgba(255,255,255,.9)) drop-shadow(0 0 80px rgba(34,217,255,.9))}
+#command.energy-booting .brain-orbit{animation-duration:1.8s;border-color:rgba(255,255,255,.72);box-shadow:0 0 45px rgba(34,217,255,.55)}
+#command.energy-booting .flow .packet{opacity:1}
+
+@keyframes brainCharge{0%,100%{transform:scale(.92);opacity:.52}50%{transform:scale(1.12);opacity:1}}
+@keyframes brainBoot{from{transform:translateY(-4px) scale(1.01);opacity:.82}to{transform:translateY(-8px) scale(1.075);opacity:1}}
+
+.hero-treasury{position:absolute;top:92%;left:50%;transform:translate(-50%,-50%);z-index:8;display:flex;align-items:center;gap:7px;white-space:nowrap;padding:6px 10px;border-radius:999px;border:1px solid rgba(53,240,173,.28);background:rgba(2,12,22,.82);box-shadow:0 0 20px rgba(53,240,173,.12);backdrop-filter:blur(10px)}
+.hero-treasury span{font-size:8px;font-weight:950;letter-spacing:.12em;color:#7fd9bf}.hero-treasury b{font-size:12px;color:#fff}.hero-treasury small{font-size:8px;color:#89a5b8}
+
+.control-btn.start.running,.control-btn.start:disabled{border-color:rgba(53,240,173,.35);background:linear-gradient(145deg,rgba(6,58,47,.52),rgba(2,25,25,.86));color:#87d8bd;box-shadow:inset 0 0 18px rgba(53,240,173,.07);cursor:not-allowed;transform:none}
+.control-btn.restart:disabled,.control-btn.stop:disabled{cursor:not-allowed;filter:saturate(.45)}
+
+@media(max-width:900px){.hero-treasury{top:90%;max-width:86%;overflow:hidden}.hero-treasury small{display:none}}
+@media(max-width:420px){.hero-treasury{top:89%;padding:5px 8px}.hero-treasury b{font-size:11px}}
+@media(prefers-reduced-motion:reduce){#command .brain-svg,#command .brain-orbit,#command.energy-high .brain-core:before{animation-duration:8s!important}}
