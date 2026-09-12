@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#020712">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Brian Frontier OS">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/logo.svg">
+<link rel="apple-touch-icon" href="/logo.svg">
+<link rel="stylesheet" href="/frontier-v3.css?v=20260912-u3">
+<title>Brian Frontier OS — Birleşik Komuta Merkezi</title>
+</head>
+<body>
+<div id="unlock" class="unlock" role="dialog" aria-modal="true">
+  <div class="unlock-card">
+    <img src="/brand.svg" alt="Brian">
+    <h2>Brian Frontier Kilidi</h2>
+    <p>Canlı Brian sistemine bağlanmak için mevcut dashboard anahtarını gir.</p>
+    <input id="unlockKey" type="password" autocomplete="current-password" placeholder="MCP-...">
+    <button id="unlockBtn" class="btn primary" style="width:100%;margin-top:10px">Canlı Sisteme Bağlan</button>
+    <p style="font-size:10px;color:#8297ac">SHADOW ONLY · Gerçek emir yok · DIP ayrı sistemdir.</p>
+  </div>
+</div>
+
+<div class="app">
+<header class="topbar">
+  <div class="brand"><img src="/logo.svg" alt="Brian"><div><strong>BRIAN FRONTIER OS</strong><small id="syncText">Canlı sinir ağına bağlanıyor…</small></div></div>
+  <div class="top-actions">
+    <div class="world-switch"><a class="active" href="/">Brian</a><a href="/dip">DIP ↗</a></div>
+    <div class="health-pill"><span id="masterDot" class="dot warn"></span><span id="masterText">BAĞLANIYOR</span></div>
+  </div>
+</header>
+
+<div class="ticker"><div id="tickerTrack" class="ticker-track"><div class="ticker-item"><span class="dot warn"></span><b>Brian:</b> kritik gelişme akışı hazırlanıyor…</div><div class="ticker-item"><span class="dot warn"></span><b>Brian:</b> kritik gelişme akışı hazırlanıyor…</div></div></div>
+
+<main class="shell">
+<section id="command" class="hero">
+  <svg class="flow-map" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+    <defs><filter id="flowGlow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <g id="cableWorld" class="flow info"><path class="stream-base" d="M190 85 C330 115 375 195 500 275"/><path class="stream-core" d="M190 85 C330 115 375 195 500 275"/><circle class="packet" r="5"><animateMotion dur="2.8s" repeatCount="indefinite" path="M190 85 C330 115 375 195 500 275"/></circle><circle class="packet" r="3"><animateMotion dur="2.8s" begin="-1.4s" repeatCount="indefinite" path="M190 85 C330 115 375 195 500 275"/></circle></g>
+    <g id="cableBehavior" class="flow info"><path class="stream-base" d="M810 85 C670 115 625 195 500 275"/><path class="stream-core" d="M810 85 C670 115 625 195 500 275"/><circle class="packet" r="5"><animateMotion dur="3.1s" repeatCount="indefinite" path="M810 85 C670 115 625 195 500 275"/></circle></g>
+    <g id="cableAlpha" class="flow ok"><path class="stream-base" d="M180 265 C315 250 390 260 500 275"/><path class="stream-core" d="M180 265 C315 250 390 260 500 275"/><circle class="packet" r="5"><animateMotion dur="2.2s" repeatCount="indefinite" path="M180 265 C315 250 390 260 500 275"/></circle></g>
+    <g id="cableTreasury" class="flow ok"><path class="stream-base" d="M820 265 C685 250 610 260 500 275"/><path class="stream-core" d="M820 265 C685 250 610 260 500 275"/><circle class="packet" r="5"><animateMotion dur="2.5s" repeatCount="indefinite" path="M820 265 C685 250 610 260 500 275"/></circle></g>
+    <g id="cableResearch" class="flow info"><path class="stream-base" d="M205 485 C345 435 405 350 500 275"/><path class="stream-core" d="M205 485 C345 435 405 350 500 275"/><circle class="packet" r="5"><animateMotion dur="3.5s" repeatCount="indefinite" path="M205 485 C345 435 405 350 500 275"/></circle></g>
+    <g id="cableOcean" class="flow info"><path class="stream-base" d="M795 485 C655 435 595 350 500 275"/><path class="stream-core" d="M795 485 C655 435 595 350 500 275"/><circle class="packet" r="5"><animateMotion dur="3.8s" repeatCount="indefinite" path="M795 485 C655 435 595 350 500 275"/></circle></g>
+  </svg>
+
+  <div class="brain-core">
+    <div class="brain-orbit"></div><div class="brain-orbit"></div><div class="brain-orbit"></div>
+    <svg class="brain-svg" viewBox="0 0 240 190" aria-label="Brian canlı beyin çekirdeği">
+      <defs>
+        <radialGradient id="brainFill"><stop offset="0" stop-color="#1c8dff" stop-opacity=".55"/><stop offset=".55" stop-color="#064c8a" stop-opacity=".78"/><stop offset="1" stop-color="#021f3e" stop-opacity=".96"/></radialGradient>
+        <filter id="brainGlow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <g class="left"><path class="brain-shell" d="M116 30C98 12 66 17 59 39C34 36 22 58 31 77C12 92 19 120 41 126C37 149 59 166 80 157C91 176 113 166 118 151Z"/><path class="brain-neuron" d="M104 39C83 45 80 61 90 72M63 48C48 59 55 75 69 79M40 91C61 87 73 99 66 115M48 128C70 122 86 132 80 151M98 86C78 90 77 111 94 119M111 62C98 66 101 80 113 85"/><path class="brain-pulse" d="M45 72C73 67 71 93 99 89C111 87 110 105 118 108"/></g>
+      <g class="right"><path class="brain-shell" d="M124 30C142 12 174 17 181 39C206 36 218 58 209 77C228 92 221 120 199 126C203 149 181 166 160 157C149 176 127 166 122 151Z"/><path class="brain-neuron" d="M136 39C157 45 160 61 150 72M177 48C192 59 185 75 171 79M200 91C179 87 167 99 174 115M192 128C170 122 154 132 160 151M142 86C162 90 163 111 146 119M129 62C142 66 139 80 127 85"/><path class="brain-pulse" d="M195 72C167 67 169 93 141 89C129 87 130 105 122 108"/></g>
+      <path class="brain-neuron" d="M120 35V153M105 130C116 119 124 119 136 130"/>
+      <circle class="brain-spark" cx="120" cy="92" r="7"/><circle class="brain-spark" cx="67" cy="82" r="3"/><circle class="brain-spark" cx="174" cy="116" r="3"/>
+    </svg>
+    <div class="brain-label"><strong>BRIAN</strong><span>DÜŞÜN · BAĞLANTI KUR · ÖNGÖR · ÖĞREN</span></div>
+    <div id="brainStatus" class="brain-status">Canlı sistem doğrulanıyor…</div>
+  </div>
+
+  <div class="node" data-node="world"><strong>🌍 Dünya Gezgini</strong><small>Olaylar · kaynaklar · anlatılar</small><div class="line"><span id="dotWorld" class="dot warn"></span><span id="textWorld">Bağlanıyor</span></div></div>
+  <div class="node" data-node="behavior"><strong>🧠 Davranış Motoru</strong><small>Psikoloji · beklenti · refleksivite</small><div class="line"><span id="dotBehavior" class="dot warn"></span><span id="textBehavior">Kanıt bekleniyor</span></div></div>
+  <div class="node" data-node="alpha"><strong>α ALPHA</strong><small>Net edge · yön · karar</small><div class="line"><span id="dotAlpha" class="dot warn"></span><span id="textAlpha">Bağlanıyor</span></div></div>
+  <div class="node" data-node="treasury"><strong>◉ Hazine / Portföy</strong><small>Sermaye · fırsat · risk</small><div class="line"><span id="dotTreasury" class="dot warn"></span><span id="textTreasury">Bağlanıyor</span></div></div>
+  <div class="node" data-node="research"><strong>⚗ Araştırma Lab</strong><small>Hipotez · deney · öğrenme</small><div class="line"><span id="dotResearch" class="dot warn"></span><span id="textResearch">Bağlanıyor</span></div></div>
+  <div class="node" data-node="ocean"><strong>≈ Okyanus</strong><small>Bulut sınavı · sürekli gözlem</small><div class="line"><span id="dotOcean" class="dot warn"></span><span id="textOcean">Bağlanıyor</span></div></div>
+</section>
+
+<section class="controls">
+  <article class="card treasury-control"><div class="section-title">💠 SHADOW HAZİNE TUTARI</div><div class="section-sub">Brian'ın tek sanal kasası. Seçim Brian sistemine uygulanır; DIP etkilenmez.</div><div id="amountRow" class="amount-row"><button class="amount-btn" data-amount="1000">$1.000</button><button class="amount-btn" data-amount="2000">$2.000</button><button class="amount-btn" data-amount="3000">$3.000</button><button class="amount-btn" data-amount="5000">$5.000</button><button class="amount-btn" data-amount="10000">$10.000</button><button id="customAmount" class="amount-btn">Özel</button></div><div id="amountNote" class="amount-note">Kasa bilgisi canlı sistemden okunuyor…</div></article>
+  <article class="card system-control"><div class="card-head"><div><div class="section-title">⚙ BRIAN SİSTEM KONTROLÜ</div><div class="section-sub">Tüm Brian/ALPHA/World/Evolution modülleri tek yerden yönetilir. DIP hariç.</div></div><span id="jobBadge" class="badge warn">KONTROL</span></div><div class="system-buttons"><button id="startSystem" class="control-btn start">▶ SİSTEMİ BAŞLAT</button><button id="restartSystem" class="control-btn restart">↻ YENİDEN BAŞLAT</button><button id="stopSystem" class="control-btn stop">■ DURDUR</button></div><div id="controlFeedback" class="control-feedback"><span class="dot warn"></span><span>Canlı kontrol katmanı okunuyor…</span></div></article>
+</section>
+
+<section class="metrics">
+  <article class="card metric"><label>Sistem Sağlığı</label><b id="healthValue">—</b><small id="healthMeta">Heartbeatler okunuyor</small></article>
+  <article class="card metric"><label>ALPHA Son Karar</label><b id="alphaValue">—</b><small id="alphaMeta">Karar akışı bekleniyor</small></article>
+  <article class="card metric"><label>Hazine</label><b id="treasuryValue">—</b><small id="treasuryMeta">Shadow kasa okunuyor</small></article>
+  <article class="card metric"><label>Dünya Zekâsı</label><b id="worldValue">—</b><small id="worldMeta">Anlatılar okunuyor</small></article>
+</section>
+
+<section class="grid2">
+  <article id="worldPanel" class="card card-pad"><div class="card-head"><div><div class="section-title">🌐 Brian Filtrelemesi: Kritik Gelişmeler</div><div class="section-sub">Genel haber değil; Brian'ın piyasa etkisi, beklenti farkı veya risk taşıdığı için seçtiği olaylar.</div></div><span id="newsBadge" class="badge warn">AKIŞ</span></div><div id="criticalNews" class="news-list"></div></article>
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">🧬 MODÜL DURUMLARI</div><div class="section-sub">Yeşil yalnızca gerçek ve taze veri kanıtı varsa yanar.</div></div><span id="moduleCount" class="badge">0/6</span></div><div id="moduleList" class="module-list"></div><div class="diagnostic-strip"><div class="diag"><span>Yönetilen İşler</span><b id="jobCount">—</b></div><div class="diag"><span>Son Veri</span><b id="lastDataAge">—</b></div><div class="diag"><span>DIP</span><b>AYRI</b></div></div></article>
+</section>
+
+<section class="grid2">
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">🎯 Beklenti / Davranış / Sürpriz</div><div class="section-sub">Piyasa davranışı yazı hissiyle değil, canlı kaynak ve fiyat kanıtıyla değerlendirilir.</div></div><span id="behaviorBadge" class="badge warn">KANIT</span></div><div class="diagnostic-strip"><div class="diag"><span>Brian P</span><b id="beliefP">—</b></div><div class="diag"><span>Piyasa / Maliyet Q</span><b id="beliefQ">—</b></div><div class="diag"><span>Net Sürpriz</span><b id="beliefX">—</b></div></div><div id="behaviorText" class="section-sub" style="margin-top:10px">Davranış kanıtı bekleniyor.</div></article>
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">🚨 CANLI UYARILAR</div><div class="section-sub">Kopukluk, gecikme, başarısız worker ve riskler.</div></div><span id="alertCount" class="badge">0</span></div><div id="alertFeed" class="event-list"></div></article>
+</section>
+
+<section class="grid2">
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">α ALPHA / Fırsat Akışı</div><div class="section-sub">Gerçek directional SHADOW kararları; canlı emir yok.</div></div><span id="alphaBadge" class="badge warn">BAĞLANIYOR</span></div><div id="alphaFeed" class="event-list"></div></article>
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">⚗ Araştırma / Evolution</div><div class="section-sub">Brian'ın öğrendiği, test ettiği ve eksik gördüğü yetenekler.</div></div><span id="researchBadge" class="badge warn">BAĞLANIYOR</span></div><div id="researchFeed" class="event-list"></div></article>
+</section>
+
+<section class="grid2">
+  <article id="chatPanel" class="card card-pad"><div class="card-head"><div><div class="section-title">💬 Brian ile Konuş</div><div class="section-sub">Canlı sistem durumundan cevap verir.</div></div><span class="badge ok">CANLI DURUM</span></div><div id="chatLog" class="chat-log"><div class="bubble brian">Buradayım. “Bir sorun var mı?”, “ALPHA ne diyor?”, “Kasada ne var?” veya “En önemli haber ne?” diye sorabilirsin.</div></div><div class="quick"><button class="btn" data-q="Bir sorun var mı?">Sorun var mı?</button><button class="btn" data-q="ALPHA ne diyor?">ALPHA</button><button class="btn" data-q="Kasada ne var?">Hazine</button><button class="btn" data-q="En önemli haber ne?">Haber</button></div><div class="chat-row"><input id="chatInput" class="chat-input" placeholder="Brian'a sor…"><button id="chatSend" class="btn primary">Gönder</button></div></article>
+  <article class="card card-pad"><div class="card-head"><div><div class="section-title">👥 Brian Toplantı Odası</div><div class="section-sub">Brian'ın yardımcı beyinlerinin tek ekrandaki canlı özeti.</div></div><span class="badge info">SİNEVİZYON</span></div><div class="diagnostic-strip"><div class="diag"><span>Dünya</span><b id="mWorld">—</b></div><div class="diag"><span>ALPHA</span><b id="mAlpha">—</b></div><div class="diag"><span>Hazine</span><b id="mTreasury">—</b></div></div><button id="openMeeting" class="btn" style="width:100%;margin-top:12px">Toplantı Odasını Aç</button></article>
+</section>
+
+<div class="footer-note">Brian Frontier OS · SHADOW ONLY · Gerçek para/emir yok · DIP bağımsız sistemdir.</div>
+</main>
+
+<nav class="bottom-nav" aria-label="Ana sistemler"><a class="active" href="/">🧠 <span>Brian</span></a><a href="/dip">◈ <span>DIP</span></a></nav>
+</div>
+
+<div id="meetingModal" class="modal"><div class="modal-card"><div class="modal-top"><div><div class="section-title">Brian Toplantı Odası</div><div class="section-sub">Yardımcı sistemlerin canlı operasyon toplantısı</div></div><button class="btn" data-close="meetingModal">Kapat</button></div><div class="room"><div class="agent-chip">🌍 Dünya<br><span id="roomWorld">—</span></div><div class="agent-chip">α ALPHA<br><span id="roomAlpha">—</span></div><div class="agent-chip">◉ Hazine<br><span id="roomTreasury">—</span></div><div class="agent-chip">⚗ Araştırma<br><span id="roomResearch">—</span></div><div class="agent-chip">🛡 Şüpheci<br><span id="roomSkeptic">Kanıt arıyor</span></div><div class="room-core"><svg class="brain-svg" viewBox="0 0 240 190"><path class="brain-shell" d="M116 30C98 12 66 17 59 39C34 36 22 58 31 77C12 92 19 120 41 126C37 149 59 166 80 157C91 176 113 166 118 151Z"/><path class="brain-shell" d="M124 30C142 12 174 17 181 39C206 36 218 58 209 77C228 92 221 120 199 126C203 149 181 166 160 157C149 176 127 166 122 151Z"/></svg></div></div></div></div>
+<script src="/frontier-v3.js?v=20260912-u3"></script>
+</body></html>
