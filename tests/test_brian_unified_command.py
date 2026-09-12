@@ -5,6 +5,7 @@ HTML = (ROOT / "monster-coins-pro" / "frontier-v3.html").read_text(encoding="utf
 JS = (ROOT / "monster-coins-pro" / "frontier-v3.js").read_text(encoding="utf-8")
 EDGE = (ROOT / "supabase" / "functions" / "brian-system-control" / "index.ts").read_text(encoding="utf-8")
 SQL = (ROOT / "supabase" / "migrations" / "202609121730_brian_unified_system_control.sql").read_text(encoding="utf-8")
+CRON_FIX = (ROOT / "supabase" / "migrations" / "202609121740_brian_unified_cron_control_fix.sql").read_text(encoding="utf-8")
 
 
 def test_product_navigation_exposes_brian_and_dip_without_old_classic_dashboard():
@@ -36,7 +37,11 @@ def test_brain_visual_uses_continuous_flows_and_animated_packets():
 
 def test_global_control_is_fail_closed_and_never_targets_dip_jobs():
     assert "j.jobname not like 'brian-dip-%'" in SQL
+    assert "j.jobname not like 'brian-dip-%'" in CRON_FIX
+    assert "cron.alter_job" in CRON_FIX
+    assert "update cron.job" not in CRON_FIX.lower()
     assert "dip_touched',false" in SQL.lower()
+    assert "dip_touched',false" in CRON_FIX.lower()
     assert 'TREASURY_REBASE_OPEN_POSITIONS' in SQL
     assert 'TREASURY_REBASE_REQUIRES_STOPPED_SYSTEM' in SQL
     assert 'shadow_only: true' in EDGE
