@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#05070c">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Brian Market OS">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/logo.svg">
+  <link rel="apple-touch-icon" href="/logo.svg">
+  <link rel="stylesheet" href="/dashboard.css">
+  <title>Brian Market OS — Kontrol Merkezi</title>
+</head>
+<body>
+<div id="unlock" class="unlock" aria-modal="true" role="dialog">
+  <div class="unlockCard">
+    <img class="unlockLogo" src="/brand.svg" alt="Monster Coins Pro">
+    <h2>Brian Kontrol Kilidi</h2>
+    <p>Kişisel dashboard anahtarını bir kez gir. Anahtar yalnızca bu cihazda saklanır ve özel SHADOW verilerini açar.</p>
+    <input id="unlockKey" type="password" autocomplete="current-password" placeholder="MCP-..." aria-label="Dashboard anahtarı">
+    <button id="unlockBtn" class="cc-btn primary">Kilidi Aç</button>
+  </div>
+</div>
+
+<div class="cc-shell">
+  <aside class="cc-side">
+    <img class="cc-side-brand" src="/brand.svg" alt="Monster Coins Pro">
+    <nav class="cc-side-nav" aria-label="Ana menü">
+      <button class="active" data-view="overview">⌂ Genel Bakış</button>
+      <button data-view="alpha">α ALPHA Kararları</button>
+      <button data-view="learning">◫ Öğrenme</button>
+      <button data-view="dip">⚡ DIP Laboratuvarı</button>
+      <button data-view="system">⚙ Sistem Sağlığı</button>
+    </nav>
+    <div class="cc-side-foot"><b>SHADOW ONLY</b><br>Gerçek emir yok. MAIN / ALPHA motoru Supabase cloud cronlarıyla tarayıcıdan bağımsız çalışır.</div>
+  </aside>
+
+  <main class="cc-main">
+    <header class="cc-top">
+      <div class="cc-brand-row">
+        <div class="cc-brand">
+          <img src="/logo.svg" alt="Brian">
+          <div class="cc-brand-copy"><b>Brian Market OS</b><span id="lastSync">Cloud durumu alınıyor…</span></div>
+        </div>
+        <div id="cloudStatePill" class="cc-cloud-pill"><span id="cloudStateDot" class="cc-dot"></span><span id="cloudStateText">BAĞLANIYOR</span></div>
+      </div>
+    </header>
+
+    <section class="cc-view active" data-view-panel="overview">
+      <div class="cc-page-head"><div class="cc-eyebrow">Brian 2026 · SHADOW ONLY</div><h1>Genel Bakış</h1><p>Cloud motor, takip oturumu ve shadow performans tek ekranda.</p></div>
+      <article class="cc-card cc-cloud-hero">
+        <div class="cc-cloud-top"><div><div id="backgroundTitle" class="cc-cloud-title">Brian bulut durumu alınıyor</div><div id="backgroundMeta" class="cc-cloud-meta">Sunucu heartbeatleri kontrol ediliyor…</div></div><span id="backgroundBadge" class="cc-badge warn">KONTROL</span></div>
+        <div class="cc-cloud-foot"><span id="bgComponentChip" class="cc-chip">☁ servisler</span><span id="bgAlphaChip" class="cc-chip">α ALPHA</span><span id="bgEngineChip" class="cc-chip">◉ Phase 3.7</span></div>
+      </article>
+      <div class="cc-section-gap"></div>
+
+      <article class="cc-card cc-control">
+        <div class="cc-card-head"><div><div class="cc-card-title">Shadow Takip Oturumu</div><div class="cc-card-sub">Bu oturum yalnız performans penceresidir; Brian motorunu açıp kapatmaz.</div></div><span class="cc-badge ok">CLOUD BAĞIMSIZ</span></div>
+        <div class="cc-form-grid">
+          <div class="cc-field"><label>Sanal başlangıç bakiyesi</label><div class="cc-input-wrap"><span>$</span><input id="capitalInput" type="number" inputmode="decimal" min="1" max="1000000" step="50" value="500"></div></div>
+          <div class="cc-field"><label>Takip kapsamı</label><select id="policyScope" class="cc-select"><option value="BOTH">İkisini birlikte izle</option><option value="PROFIT">Kâr Modu</option><option value="NATIVE">Native Kontrol</option></select></div>
+        </div>
+        <div class="cc-actions">
+          <button id="startBtn" class="cc-btn primary">▶ Takibi Başlat</button>
+          <button id="restartBtn" class="cc-btn secondary">↻ Yeni Oturum</button>
+          <button id="pauseBtn" class="cc-btn warn">Ⅱ Takibi Duraklat</button>
+          <button id="reportBtn" class="cc-btn">▤ Rapor Oluştur</button>
+          <button id="notifyBtn" class="cc-btn">◉ Cihaz Bildirimi</button>
+        </div>
+        <div class="cc-session-line"><b id="sessionState">Takip oturumu yok</b><div id="sessionMeta">Brian cloud motoru yine de arka planda çalışır.</div></div>
+      </article>
+      <div class="cc-section-gap"></div>
+
+      <div class="cc-policy-bar"><label>Performans görünümü</label><select id="policyView"><option value="ALPHA" selected>ALPHA Canlı</option><option value="PROFIT">Kâr Modu (Frozen 3.7)</option><option value="NATIVE">Native Kontrol (Frozen 3.7)</option></select></div>
+      <section class="cc-grid six">
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Shadow Bakiye</div><div id="kpiEquity" class="cc-kpi-value">—</div><div id="kpiEquityMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Oturum K/Z</div><div id="kpiPnl" class="cc-kpi-value">—</div><div id="kpiPnlMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Açık Pozisyon</div><div id="kpiPositions" class="cc-kpi-value">—</div><div id="kpiPositionsMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Başarı Oranı</div><div id="kpiWin" class="cc-kpi-value">—</div><div id="kpiWinMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Shadow Aksiyon</div><div id="kpiActions" class="cc-kpi-value">—</div><div id="kpiActionsMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">İşlem Maliyeti</div><div id="kpiCost" class="cc-kpi-value">—</div><div id="kpiCostMeta" class="cc-kpi-meta">—</div></article>
+      </section>
+      <div class="cc-section-gap"></div>
+      <div class="cc-desktop-columns">
+        <div>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Shadow Equity</div><div class="cc-card-sub">Seçili takip modunun sanal bakiye eğrisi</div></div></div><div id="equityChart" class="cc-chart"></div></article>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Son Shadow Aksiyonlar</div><div class="cc-card-sub">Telefon için yatay tablo yerine okunabilir kart akışı</div></div></div><div id="tradeList" class="cc-list"></div></article>
+        </div>
+        <div>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Açık Pozisyonlar</div><div class="cc-card-sub">Seçili takip modunun mevcut shadow pozisyonları</div></div></div><div id="positionList" class="cc-list"></div></article>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Raporlar</div><div class="cc-card-sub">Saatlik ve anlık takip raporları</div></div></div><div id="reportList" class="cc-list"></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cc-view" data-view-panel="alpha">
+      <div class="cc-page-head"><div class="cc-eyebrow">Birleşik Karar Gövdesi</div><h1>ALPHA</h1><p>Karar, maliyet, outcome ve frozen Phase 3.7 karşılaştırması.</p></div>
+      <div class="cc-grid two">
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">ALPHA Durumu</div><div id="alphaState" class="cc-kpi-value">—</div><div id="alphaStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Son Karar</div><div id="alphaLastAction" class="cc-kpi-value">—</div><div id="alphaLastMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Açık Shadow Yön</div><div id="alphaPositions" class="cc-kpi-value">—</div><div id="alphaPositionsMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Karar Dağılımı</div><div id="alphaMix" class="cc-kpi-value">—</div><div id="alphaMixMeta" class="cc-kpi-meta">—</div></article>
+      </div>
+      <div class="cc-section-gap"></div>
+      <div class="cc-desktop-columns">
+        <div>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">ALPHA Karar Akışı</div><div class="cc-card-sub">LONG / SHORT / BEKLE / VETO · exact evidence lineage</div></div><span class="cc-badge ok">CANLI</span></div><div id="alphaDecisionList" class="cc-list"></div></article>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Prospective Sonuç Denetimi</div><div class="cc-card-sub">5 / 15 / 60 dakika outcome kayıtları</div></div></div><div id="alphaOutcomeList" class="cc-list"></div></article>
+        </div>
+        <div>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">ALPHA Shadow Pozisyonları</div><div class="cc-card-sub">WAIT/VETO mevcut yönü bozmaz</div></div></div><div id="alphaPositionList" class="cc-list"></div></article>
+          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Frozen Phase 3.7 Kontrol</div><div class="cc-card-sub">Değiştirilmeyen kontrol beyni ile yan yana</div></div><span class="cc-badge">FROZEN</span></div><div id="phase37List" class="cc-list"></div></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cc-view" data-view-panel="learning">
+      <div class="cc-page-head"><div class="cc-eyebrow">Prospective Öğrenme</div><h1>Öğrenme</h1><p>Reliability Learner → Feature Freeze → Calibration zinciri.</p></div>
+      <div class="cc-safe-box"><b>Güvenlik sınırı:</b> Bu katman şu anda yalnız ölçüyor. Sensör reliability değerleri hâlâ 0.5; ALPHA score, threshold veya aksiyonları otomatik değiştirilmez.</div>
+      <div class="cc-section-gap"></div>
+      <div class="cc-grid three">
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Öğrenme Modu</div><div id="learningState" class="cc-kpi-value ok">—</div><div id="learningStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Son Reliability Snapshot</div><div id="learnSnapshot" class="cc-kpi-value">—</div><div id="learnSnapshotMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Feature Coverage</div><div id="learnCoverage" class="cc-kpi-value">—</div><div id="learnCoverageMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Calibration 5/15/60</div><div id="learnCalibration" class="cc-kpi-value">—</div><div id="learnCalibrationMeta" class="cc-kpi-meta">—</div></article>
+      </div>
+      <div class="cc-section-gap"></div>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Sensör Güvenilirlik Matrisi</div><div class="cc-card-sub">Bayesian-shrunk başarı, sample sayısı ve signed bps</div></div><span class="cc-badge ok">APPEND ONLY</span></div><div id="learningGroups" class="cc-list"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Prospective Calibration</div><div class="cc-card-sub">Karar anında bilinen reliability ile daha sonra gelen outcome karşılaştırması</div></div></div><div id="calibrationList" class="cc-list"></div></article>
+    </section>
+
+    <section class="cc-view" data-view-panel="dip">
+      <div class="cc-page-head"><div class="cc-eyebrow">Ayrı Beyin · Ayrı Kasa</div><h1>DIP Laboratuvarı</h1><p>Agresif dip uzmanı MAIN / ALPHA’dan izolasyonlu çalışır.</p></div>
+      <div class="cc-grid three">
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">DIP Motoru</div><div id="dipState" class="cc-kpi-value">—</div><div id="dipStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">DIP Shadow Equity</div><div id="dipEquity" class="cc-kpi-value">—</div><div id="dipEquityMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Engine Heartbeat</div><div id="dipHeartbeat" class="cc-kpi-value">—</div><div id="dipHeartbeatMeta" class="cc-kpi-meta">—</div></article>
+      </div>
+      <div class="cc-section-gap"></div>
+      <div id="dipBackgroundNote" class="cc-warning-box">DIP çalışma modeli kontrol ediliyor…</div>
+      <div class="cc-section-gap"></div>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Agresif DIP Uzmanı</div><div class="cc-card-sub">Native timeframe + order flow + depth + cost gate · ayrı shadow kasa</div></div><span class="cc-badge">AYRI BEYİN</span></div><div class="cc-info-box">DIP directional evidence MAIN ALPHA’ya varsayılan olarak bağlı değildir. Böylece deneysel uzman ana karar beynini kirletmez.</div><div class="cc-actions"><a class="cc-btn primary link full" href="/dip.html">⚡ DIP Ekranını Aç</a></div></article>
+    </section>
+
+    <section class="cc-view" data-view-panel="system">
+      <div class="cc-page-head"><div class="cc-eyebrow">Cloud Heartbeat</div><h1>Sistem Sağlığı</h1><p>Arka plan servisleri, güvenlik ve bağlantılar.</p></div>
+      <div class="cc-grid two">
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Cloud Servisler</div><div id="systemState" class="cc-kpi-value">—</div><div id="systemStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Control Center API</div><div id="apiState" class="cc-kpi-value">—</div><div id="apiStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Telegram</div><div id="telegramState" class="cc-kpi-value">—</div><div id="telegramStateMeta" class="cc-kpi-meta">—</div></article>
+        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Execution Güvenliği</div><div id="safetyState" class="cc-kpi-value">—</div><div id="safetyStateMeta" class="cc-kpi-meta">—</div></article>
+      </div>
+      <div class="cc-section-gap"></div>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Arka Plan Bileşenleri</div><div class="cc-card-sub">Her collector için production heartbeat</div></div><button id="reloadBtn" class="cc-btn" style="min-height:36px;padding:6px 10px">Yenile</button></div><div id="componentList" class="cc-list"></div></article>
+      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Cihaz ve Güvenlik</div><div class="cc-card-sub">PWA ve yerel kontrol anahtarı</div></div></div><div class="cc-actions"><button id="installBtn" class="cc-btn hidden">＋ Uygulamayı Yükle</button><button id="lockBtn" class="cc-btn danger">⌁ Bu Cihazdaki Anahtarı Sil</button></div></article>
+    </section>
+  </main>
+</div>
+
+<nav class="cc-bottom" aria-label="Alt menü">
+  <button class="cc-nav-btn active" data-view="overview"><span class="ico">⌂</span><span>Genel</span></button>
+  <button class="cc-nav-btn" data-view="alpha"><span class="ico">α</span><span>ALPHA</span></button>
+  <button class="cc-nav-btn" data-view="learning"><span class="ico">◫</span><span>Öğrenme</span></button>
+  <button class="cc-nav-btn" data-view="dip"><span class="ico">⚡</span><span>DIP</span></button>
+  <button class="cc-nav-btn" data-view="system"><span class="ico">⚙</span><span>Sistem</span></button>
+</nav>
+<div id="toast" class="cc-toast" role="status"></div>
+<script src="/dashboard.js" defer></script>
+</body>
+</html>

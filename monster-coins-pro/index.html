@@ -1,173 +1,28 @@
-<!doctype html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#05070c">
-  <meta name="color-scheme" content="dark">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Brian Market OS">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/logo.svg">
-  <link rel="apple-touch-icon" href="/logo.svg">
-  <link rel="stylesheet" href="/dashboard.css">
-  <title>Brian Market OS — Kontrol Merkezi</title>
-</head>
-<body>
-<div id="unlock" class="unlock" aria-modal="true" role="dialog">
-  <div class="unlockCard">
-    <img class="unlockLogo" src="/brand.svg" alt="Monster Coins Pro">
-    <h2>Brian Kontrol Kilidi</h2>
-    <p>Kişisel dashboard anahtarını bir kez gir. Anahtar yalnızca bu cihazda saklanır ve özel SHADOW verilerini açar.</p>
-    <input id="unlockKey" type="password" autocomplete="current-password" placeholder="MCP-..." aria-label="Dashboard anahtarı">
-    <button id="unlockBtn" class="cc-btn primary">Kilidi Aç</button>
-  </div>
-</div>
-
-<div class="cc-shell">
-  <aside class="cc-side">
-    <img class="cc-side-brand" src="/brand.svg" alt="Monster Coins Pro">
-    <nav class="cc-side-nav" aria-label="Ana menü">
-      <button class="active" data-view="overview">⌂ Genel Bakış</button>
-      <button data-view="alpha">α ALPHA Kararları</button>
-      <button data-view="learning">◫ Öğrenme</button>
-      <button data-view="dip">⚡ DIP Laboratuvarı</button>
-      <button data-view="system">⚙ Sistem Sağlığı</button>
-    </nav>
-    <div class="cc-side-foot"><b>SHADOW ONLY</b><br>Gerçek emir yok. MAIN / ALPHA motoru Supabase cloud cronlarıyla tarayıcıdan bağımsız çalışır.</div>
-  </aside>
-
-  <main class="cc-main">
-    <header class="cc-top">
-      <div class="cc-brand-row">
-        <div class="cc-brand">
-          <img src="/logo.svg" alt="Brian">
-          <div class="cc-brand-copy"><b>Brian Market OS</b><span id="lastSync">Cloud durumu alınıyor…</span></div>
-        </div>
-        <div id="cloudStatePill" class="cc-cloud-pill"><span id="cloudStateDot" class="cc-dot"></span><span id="cloudStateText">BAĞLANIYOR</span></div>
-      </div>
-    </header>
-
-    <section class="cc-view active" data-view-panel="overview">
-      <div class="cc-page-head"><div class="cc-eyebrow">Brian 2026 · SHADOW ONLY</div><h1>Genel Bakış</h1><p>Cloud motor, takip oturumu ve shadow performans tek ekranda.</p></div>
-      <article class="cc-card cc-cloud-hero">
-        <div class="cc-cloud-top"><div><div id="backgroundTitle" class="cc-cloud-title">Brian bulut durumu alınıyor</div><div id="backgroundMeta" class="cc-cloud-meta">Sunucu heartbeatleri kontrol ediliyor…</div></div><span id="backgroundBadge" class="cc-badge warn">KONTROL</span></div>
-        <div class="cc-cloud-foot"><span id="bgComponentChip" class="cc-chip">☁ servisler</span><span id="bgAlphaChip" class="cc-chip">α ALPHA</span><span id="bgEngineChip" class="cc-chip">◉ Phase 3.7</span></div>
-      </article>
-      <div class="cc-section-gap"></div>
-
-      <article class="cc-card cc-control">
-        <div class="cc-card-head"><div><div class="cc-card-title">Shadow Takip Oturumu</div><div class="cc-card-sub">Bu oturum yalnız performans penceresidir; Brian motorunu açıp kapatmaz.</div></div><span class="cc-badge ok">CLOUD BAĞIMSIZ</span></div>
-        <div class="cc-form-grid">
-          <div class="cc-field"><label>Sanal başlangıç bakiyesi</label><div class="cc-input-wrap"><span>$</span><input id="capitalInput" type="number" inputmode="decimal" min="1" max="1000000" step="50" value="500"></div></div>
-          <div class="cc-field"><label>Takip kapsamı</label><select id="policyScope" class="cc-select"><option value="BOTH">İkisini birlikte izle</option><option value="PROFIT">Kâr Modu</option><option value="NATIVE">Native Kontrol</option></select></div>
-        </div>
-        <div class="cc-actions">
-          <button id="startBtn" class="cc-btn primary">▶ Takibi Başlat</button>
-          <button id="restartBtn" class="cc-btn secondary">↻ Yeni Oturum</button>
-          <button id="pauseBtn" class="cc-btn warn">Ⅱ Takibi Duraklat</button>
-          <button id="reportBtn" class="cc-btn">▤ Rapor Oluştur</button>
-          <button id="notifyBtn" class="cc-btn">◉ Cihaz Bildirimi</button>
-        </div>
-        <div class="cc-session-line"><b id="sessionState">Takip oturumu yok</b><div id="sessionMeta">Brian cloud motoru yine de arka planda çalışır.</div></div>
-      </article>
-      <div class="cc-section-gap"></div>
-
-      <div class="cc-policy-bar"><label>Performans görünümü</label><select id="policyView"><option value="ALPHA" selected>ALPHA Canlı</option><option value="PROFIT">Kâr Modu (Frozen 3.7)</option><option value="NATIVE">Native Kontrol (Frozen 3.7)</option></select></div>
-      <section class="cc-grid six">
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Shadow Bakiye</div><div id="kpiEquity" class="cc-kpi-value">—</div><div id="kpiEquityMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Oturum K/Z</div><div id="kpiPnl" class="cc-kpi-value">—</div><div id="kpiPnlMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Açık Pozisyon</div><div id="kpiPositions" class="cc-kpi-value">—</div><div id="kpiPositionsMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Başarı Oranı</div><div id="kpiWin" class="cc-kpi-value">—</div><div id="kpiWinMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Shadow Aksiyon</div><div id="kpiActions" class="cc-kpi-value">—</div><div id="kpiActionsMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">İşlem Maliyeti</div><div id="kpiCost" class="cc-kpi-value">—</div><div id="kpiCostMeta" class="cc-kpi-meta">—</div></article>
-      </section>
-      <div class="cc-section-gap"></div>
-      <div class="cc-desktop-columns">
-        <div>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Shadow Equity</div><div class="cc-card-sub">Seçili takip modunun sanal bakiye eğrisi</div></div></div><div id="equityChart" class="cc-chart"></div></article>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Son Shadow Aksiyonlar</div><div class="cc-card-sub">Telefon için yatay tablo yerine okunabilir kart akışı</div></div></div><div id="tradeList" class="cc-list"></div></article>
-        </div>
-        <div>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Açık Pozisyonlar</div><div class="cc-card-sub">Seçili takip modunun mevcut shadow pozisyonları</div></div></div><div id="positionList" class="cc-list"></div></article>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Raporlar</div><div class="cc-card-sub">Saatlik ve anlık takip raporları</div></div></div><div id="reportList" class="cc-list"></div></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="cc-view" data-view-panel="alpha">
-      <div class="cc-page-head"><div class="cc-eyebrow">Birleşik Karar Gövdesi</div><h1>ALPHA</h1><p>Karar, maliyet, outcome ve frozen Phase 3.7 karşılaştırması.</p></div>
-      <div class="cc-grid two">
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">ALPHA Durumu</div><div id="alphaState" class="cc-kpi-value">—</div><div id="alphaStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Son Karar</div><div id="alphaLastAction" class="cc-kpi-value">—</div><div id="alphaLastMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Açık Shadow Yön</div><div id="alphaPositions" class="cc-kpi-value">—</div><div id="alphaPositionsMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Karar Dağılımı</div><div id="alphaMix" class="cc-kpi-value">—</div><div id="alphaMixMeta" class="cc-kpi-meta">—</div></article>
-      </div>
-      <div class="cc-section-gap"></div>
-      <div class="cc-desktop-columns">
-        <div>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">ALPHA Karar Akışı</div><div class="cc-card-sub">LONG / SHORT / BEKLE / VETO · exact evidence lineage</div></div><span class="cc-badge ok">CANLI</span></div><div id="alphaDecisionList" class="cc-list"></div></article>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Prospective Sonuç Denetimi</div><div class="cc-card-sub">5 / 15 / 60 dakika outcome kayıtları</div></div></div><div id="alphaOutcomeList" class="cc-list"></div></article>
-        </div>
-        <div>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">ALPHA Shadow Pozisyonları</div><div class="cc-card-sub">WAIT/VETO mevcut yönü bozmaz</div></div></div><div id="alphaPositionList" class="cc-list"></div></article>
-          <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Frozen Phase 3.7 Kontrol</div><div class="cc-card-sub">Değiştirilmeyen kontrol beyni ile yan yana</div></div><span class="cc-badge">FROZEN</span></div><div id="phase37List" class="cc-list"></div></article>
-        </div>
-      </div>
-    </section>
-
-    <section class="cc-view" data-view-panel="learning">
-      <div class="cc-page-head"><div class="cc-eyebrow">Prospective Öğrenme</div><h1>Öğrenme</h1><p>Reliability Learner → Feature Freeze → Calibration zinciri.</p></div>
-      <div class="cc-safe-box"><b>Güvenlik sınırı:</b> Bu katman şu anda yalnız ölçüyor. Sensör reliability değerleri hâlâ 0.5; ALPHA score, threshold veya aksiyonları otomatik değiştirilmez.</div>
-      <div class="cc-section-gap"></div>
-      <div class="cc-grid three">
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Öğrenme Modu</div><div id="learningState" class="cc-kpi-value ok">—</div><div id="learningStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Son Reliability Snapshot</div><div id="learnSnapshot" class="cc-kpi-value">—</div><div id="learnSnapshotMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Feature Coverage</div><div id="learnCoverage" class="cc-kpi-value">—</div><div id="learnCoverageMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Calibration 5/15/60</div><div id="learnCalibration" class="cc-kpi-value">—</div><div id="learnCalibrationMeta" class="cc-kpi-meta">—</div></article>
-      </div>
-      <div class="cc-section-gap"></div>
-      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Sensör Güvenilirlik Matrisi</div><div class="cc-card-sub">Bayesian-shrunk başarı, sample sayısı ve signed bps</div></div><span class="cc-badge ok">APPEND ONLY</span></div><div id="learningGroups" class="cc-list"></div></article>
-      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Prospective Calibration</div><div class="cc-card-sub">Karar anında bilinen reliability ile daha sonra gelen outcome karşılaştırması</div></div></div><div id="calibrationList" class="cc-list"></div></article>
-    </section>
-
-    <section class="cc-view" data-view-panel="dip">
-      <div class="cc-page-head"><div class="cc-eyebrow">Ayrı Beyin · Ayrı Kasa</div><h1>DIP Laboratuvarı</h1><p>Agresif dip uzmanı MAIN / ALPHA’dan izolasyonlu çalışır.</p></div>
-      <div class="cc-grid three">
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">DIP Motoru</div><div id="dipState" class="cc-kpi-value">—</div><div id="dipStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">DIP Shadow Equity</div><div id="dipEquity" class="cc-kpi-value">—</div><div id="dipEquityMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Engine Heartbeat</div><div id="dipHeartbeat" class="cc-kpi-value">—</div><div id="dipHeartbeatMeta" class="cc-kpi-meta">—</div></article>
-      </div>
-      <div class="cc-section-gap"></div>
-      <div id="dipBackgroundNote" class="cc-warning-box">DIP çalışma modeli kontrol ediliyor…</div>
-      <div class="cc-section-gap"></div>
-      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Agresif DIP Uzmanı</div><div class="cc-card-sub">Native timeframe + order flow + depth + cost gate · ayrı shadow kasa</div></div><span class="cc-badge">AYRI BEYİN</span></div><div class="cc-info-box">DIP directional evidence MAIN ALPHA’ya varsayılan olarak bağlı değildir. Böylece deneysel uzman ana karar beynini kirletmez.</div><div class="cc-actions"><a class="cc-btn primary link full" href="/dip.html">⚡ DIP Ekranını Aç</a></div></article>
-    </section>
-
-    <section class="cc-view" data-view-panel="system">
-      <div class="cc-page-head"><div class="cc-eyebrow">Cloud Heartbeat</div><h1>Sistem Sağlığı</h1><p>Arka plan servisleri, güvenlik ve bağlantılar.</p></div>
-      <div class="cc-grid two">
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Cloud Servisler</div><div id="systemState" class="cc-kpi-value">—</div><div id="systemStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Control Center API</div><div id="apiState" class="cc-kpi-value">—</div><div id="apiStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Telegram</div><div id="telegramState" class="cc-kpi-value">—</div><div id="telegramStateMeta" class="cc-kpi-meta">—</div></article>
-        <article class="cc-card cc-kpi"><div class="cc-kpi-label">Execution Güvenliği</div><div id="safetyState" class="cc-kpi-value">—</div><div id="safetyStateMeta" class="cc-kpi-meta">—</div></article>
-      </div>
-      <div class="cc-section-gap"></div>
-      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Arka Plan Bileşenleri</div><div class="cc-card-sub">Her collector için production heartbeat</div></div><button id="reloadBtn" class="cc-btn" style="min-height:36px;padding:6px 10px">Yenile</button></div><div id="componentList" class="cc-list"></div></article>
-      <article class="cc-card cc-pad"><div class="cc-card-head"><div><div class="cc-card-title">Cihaz ve Güvenlik</div><div class="cc-card-sub">PWA ve yerel kontrol anahtarı</div></div></div><div class="cc-actions"><button id="installBtn" class="cc-btn hidden">＋ Uygulamayı Yükle</button><button id="lockBtn" class="cc-btn danger">⌁ Bu Cihazdaki Anahtarı Sil</button></div></article>
-    </section>
-  </main>
-</div>
-
-<nav class="cc-bottom" aria-label="Alt menü">
-  <button class="cc-nav-btn active" data-view="overview"><span class="ico">⌂</span><span>Genel</span></button>
-  <button class="cc-nav-btn" data-view="alpha"><span class="ico">α</span><span>ALPHA</span></button>
-  <button class="cc-nav-btn" data-view="learning"><span class="ico">◫</span><span>Öğrenme</span></button>
-  <button class="cc-nav-btn" data-view="dip"><span class="ico">⚡</span><span>DIP</span></button>
-  <button class="cc-nav-btn" data-view="system"><span class="ico">⚙</span><span>Sistem</span></button>
-</nav>
-<div id="toast" class="cc-toast" role="status"></div>
-<script src="/dashboard.js" defer></script>
-</body>
-</html>
+<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#030711"><meta name="color-scheme" content="dark"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Brian Frontier OS"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/logo.svg"><link rel="apple-touch-icon" href="/logo.svg"><link rel="stylesheet" href="/frontier.css?v=20260912-frontier1"><title>Brian Frontier OS — Canlı Komuta Merkezi</title></head><body>
+<div id="unlock" class="unlock" role="dialog" aria-modal="true"><div class="unlock-card"><img src="/brand.svg" alt="Monster Coins Pro"><h2>Brian Frontier Kilidi</h2><p>Canlı zeka ağına bağlanmak için mevcut dashboard anahtarını gir. Anahtar yalnızca bu cihazda saklanır.</p><input id="unlockKey" type="password" autocomplete="current-password" placeholder="MCP-..."><button id="unlockBtn" class="btn primary" style="width:100%;margin-top:10px">Canlı Sisteme Bağlan</button><p style="font-size:10px">SHADOW ONLY · Gerçek emir yok · DIP ayrı sistemdir.</p></div></div>
+<div class="app"><header class="topbar"><div class="brand"><img src="/logo.svg" alt="Brian"><div><strong>Brian Frontier OS</strong><small id="syncText">Canlı sinir ağına bağlanıyor…</small></div></div><div class="top-actions"><a class="btn" href="/classic.html">Klasik Kontrol</a><a class="btn" href="/dip">DIP ↗</a><div id="masterHealth" class="health-pill"><span id="masterDot" class="dot warn"></span><span id="masterText">BAĞLANIYOR</span></div></div></header>
+<div class="ticker"><div id="tickerTrack" class="ticker-track"><div class="ticker-item"><span class="dot warn"></span><b>Brian:</b> kritik gelişme akışı hazırlanıyor…</div><div class="ticker-item"><span class="dot warn"></span><b>Brian:</b> kritik gelişme akışı hazırlanıyor…</div></div></div>
+<div class="layout"><main class="main">
+<section class="card hero" id="command"><div class="hero-stage"><svg class="cables" viewBox="0 0 1000 500" preserveAspectRatio="none" aria-hidden="true"><path id="cableWorld" class="cable info" d="M185,78 C330,120 350,190 500,250"/><path id="cableBehavior" class="cable info" d="M815,78 C670,120 650,190 500,250"/><path id="cableAlpha" class="cable ok" d="M175,245 C330,245 355,245 500,250"/><path id="cableTreasury" class="cable ok" d="M825,245 C670,245 645,245 500,250"/><path id="cableResearch" class="cable info" d="M220,430 C350,390 380,330 500,250"/><path id="cableOcean" class="cable warn" d="M780,430 C650,390 620,330 500,250"/></svg>
+<div class="brain-wrap"><div class="brain"></div><div class="brain-label">BRIAN ÇEKİRDEK<span>DÜŞÜN · BAĞLANTI KUR · ÖNGÖR · ÖĞREN</span></div><div id="brainStatus" class="brain-status">Canlı sistem doğrulanıyor…</div></div>
+<div class="node" data-node="world"><strong>🌍 Dünya Gezgini</strong><small>Olaylar · kaynaklar · anlatılar</small><div class="line"><span id="dotWorld" class="dot warn"></span><span id="textWorld">Bağlanıyor</span></div></div>
+<div class="node" data-node="behavior"><strong>🧠 Davranış Motoru</strong><small>Psikoloji · beklenti · refleksivite</small><div class="line"><span id="dotBehavior" class="dot warn"></span><span id="textBehavior">Kanıt bekleniyor</span></div></div>
+<div class="node" data-node="alpha"><strong>α ALPHA</strong><small>Net edge · yön · karar</small><div class="line"><span id="dotAlpha" class="dot warn"></span><span id="textAlpha">Bağlanıyor</span></div></div>
+<div class="node" data-node="treasury"><strong>◉ Hazine / Portföy</strong><small>Sermaye · fırsat · risk</small><div class="line"><span id="dotTreasury" class="dot warn"></span><span id="textTreasury">Bağlanıyor</span></div></div>
+<div class="node" data-node="research"><strong>⚗ Araştırma Lab</strong><small>Hipotez · deney · öğrenme</small><div class="line"><span id="dotResearch" class="dot warn"></span><span id="textResearch">Bağlanıyor</span></div></div>
+<div class="node" data-node="ocean"><strong>≈ Okyanus</strong><small>24/48s bulut sınavı</small><div class="line"><span id="dotOcean" class="dot warn"></span><span id="textOcean">Bağlanıyor</span></div></div></div></section>
+<section class="status-grid"><article class="card metric"><div class="metric-label">Sistem Sağlığı</div><div id="healthValue" class="metric-value">—</div><div id="healthMeta" class="subtitle">Heartbeatler okunuyor</div></article><article class="card metric"><div class="metric-label">ALPHA Son Karar</div><div id="alphaValue" class="metric-value">—</div><div id="alphaMeta" class="subtitle">Karar akışı bekleniyor</div></article><article class="card metric"><div class="metric-label">Hazine</div><div id="treasuryValue" class="metric-value">—</div><div id="treasuryMeta" class="subtitle">Shadow kasa bekleniyor</div></article><article class="card metric"><div class="metric-label">Dünya Zekâsı</div><div id="worldValue" class="metric-value">—</div><div id="worldMeta" class="subtitle">Anlatılar bekleniyor</div></article></section>
+<section class="section-grid"><article class="card card-pad" id="worldPanel"><div class="card-head"><div><div class="title">🌐 Canlı Dünya ve Brian İçin Kritik Gelişmeler</div><div class="subtitle">Genel haber değil: Brian'ın piyasa etkisi, beklenti farkı veya risk taşıdığı için seçtiği gelişmeler.</div></div><span id="newsBadge" class="badge warn">AKIŞ BEKLENİYOR</span></div><div id="criticalNews" class="news-list"><div class="news"><div class="news-title">Brian dünya olaylarını tarıyor…</div><div class="news-meta">Canlı World Brain bağlandığında yalnız yüksek değerli gelişmeler burada görünür.</div></div></div></article>
+<article class="card card-pad"><div class="card-head"><div><div class="title">🎯 Beklenti ve Gerçeklik</div><div class="subtitle">P = Brian inancı · Q = piyasanın fiyatladığı · X* = gerçekleşen / çözülen durum</div></div><span class="badge">P · Q · X*</span></div><div class="expectation"><div><span>Brian P</span><b id="beliefP">—</b></div><div><span>Piyasa Q</span><b id="beliefQ">—</b></div><div><span>Sürpriz</span><b id="beliefX">—</b></div></div><div class="chart-lines"><i class="wave p"></i><i class="wave q"></i><i class="wave x"></i></div><div id="beliefMeta" class="subtitle">Frontier beklenti motoru shadow gözlem modunda.</div></article></section>
+<section class="section-grid"><article class="card card-pad"><div class="card-head"><div><div class="title">🧬 Canlı Modüller / Sinir Ağı</div><div class="subtitle">Yeşil veri akıyor · sarı gecikme/kısmi · kırmızı bağlantı/servis sorunu</div></div><span id="moduleCount" class="badge">0/0</span></div><div id="moduleList" class="module-list"></div></article>
+<article class="card card-pad"><div class="card-head"><div><div class="title">🧠 Davranış ve Psikoloji</div><div class="subtitle">Korku/hype tek başına sinyal değildir; akış ve piyasa davranışıyla doğrulanır.</div></div><span id="behaviorBadge" class="badge">KANIT ODAKLI</span></div><div class="globe"></div><div id="behaviorText" class="subtitle">Piyasa psikolojisi için gerçek davranış kanıtları bekleniyor.</div></article></section>
+<section class="section-grid"><article class="card card-pad"><div class="card-head"><div><div class="title">α ALPHA / Fırsat Akışı</div><div class="subtitle">Gerçek directional-shadow kararları · canlı emir yok</div></div><span id="alphaBadge" class="badge warn">BAĞLANIYOR</span></div><div id="alphaFeed" class="event-list"></div></article>
+<article class="card card-pad"><div class="card-head"><div><div class="title">⚗ Bugün Ne Öğrendi?</div><div class="subtitle">Evolution günlükleri, capability açıkları ve araştırma gündemi</div></div><span id="researchBadge" class="badge warn">BAĞLANIYOR</span></div><div id="researchFeed" class="event-list"></div></article></section>
+<section class="section-grid"><article class="card card-pad" id="chatPanel"><div class="card-head"><div><div class="title">💬 Brian ile Konuş</div><div class="subtitle">Canlı durum, fırsat, haber, ALPHA, Hazine ve araştırma verilerinden yanıt verir.</div></div><span class="badge ok">DURUM ASİSTANI</span></div><div id="chatLog" class="chat-log"><div class="bubble brian">Buradayım. Canlı sistem bağlandığında bana “Ne yaptın?”, “En önemli haber ne?”, “ALPHA ne diyor?” veya “Bir sorun var mı?” diye sorabilirsin.</div></div><div class="quick"><button class="btn" data-q="En önemli haber ne?">En önemli haber</button><button class="btn" data-q="Bir sorun var mı?">Sorun var mı?</button><button class="btn" data-q="ALPHA ne diyor?">ALPHA</button><button class="btn" data-q="Bugün ne öğrendin?">Ne öğrendin?</button></div><div class="chat-row"><input id="chatInput" class="chat-input" placeholder="Brian'a bir şey sor…"><button id="chatSend" class="btn primary">Gönder</button></div></article>
+<article class="card card-pad"><div class="card-head"><div><div class="title">🎛 Komuta Alanları</div><div class="subtitle">Brian'ın yardımcılarını ve canlı veri ağını görsel olarak aç.</div></div><span class="badge">SİNEVİZYON</span></div><div class="meeting-actions"><button id="openMeeting" class="btn">👥 Toplantı Odası</button><button id="open3d" class="btn">◈ 3B Canlı Görünüm</button><a class="btn" href="/evolution.html">🧬 Evolution</a><a class="btn" href="/world.html">🌍 World Brain</a><a class="btn" href="/treasury.html">◉ Hazine</a><a class="btn" href="/ocean.html">≈ Okyanus</a></div></article></section>
+<div class="footer-note">Brian Frontier OS · SHADOW ONLY · Gerçek para/emir yok · DIP kendi sistemi olarak ayrı kalır.</div></main>
+<aside class="rail"><article class="card card-pad"><div class="card-head"><div><div class="title">🚨 Canlı Uyarılar</div><div class="subtitle">Kopukluk, gecikme ve kritik riskler</div></div><span id="alertCount" class="badge">0</span></div><div id="alertFeed" class="event-list"><div class="module"><span class="dot warn"></span><div class="module-main"><div class="module-name">Bağlantılar kontrol ediliyor</div><div class="module-meta">Canlı servis heartbeatleri bekleniyor</div></div></div></div></article><article class="card card-pad"><div class="card-head"><div><div class="title">🌍 Dünya Beyni</div><div class="subtitle">Anlatı · senaryo · neden-sonuç</div></div></div><div class="globe"></div><div id="worldMini" class="module-list"></div></article><article class="card card-pad"><div class="card-head"><div><div class="title">🛡 Şüpheci</div><div class="subtitle">Tezi çürüt · kör noktayı bul</div></div><span class="badge">VETO HAKKI</span></div><div id="skepticText" class="subtitle">Şüpheci kanıt hattı Evolution verileriyle bağlanıyor.</div></article></aside></div>
+<nav class="bottom-nav" aria-label="Mobil navigasyon"><a href="#command">⌂<span>Ana</span></a><a href="#worldPanel">🌍<span>Dünya</span></a><button id="mobileChat" class="center">🧠<span>Brian</span></button><button id="mobileMeeting">👥<span>Toplantı</span></button><a href="/classic.html">▦<span>Klasik</span></a></nav></div>
+<div id="meetingModal" class="modal"><div class="modal-card"><div class="modal-top"><div><div class="title">Brian Toplantı Odası</div><div class="subtitle">Yardımcı beyinlerin canlı durum toplantısı</div></div><button class="btn" data-close="meetingModal">Kapat</button></div><div class="room"><div class="agent-ring"><div class="agent-chip">🌍 Dünya Gezgini<br><span id="mWorld">—</span></div><div class="agent-chip">α ALPHA<br><span id="mAlpha">—</span></div><div class="agent-chip">◉ Hazine<br><span id="mTreasury">—</span></div><div class="agent-chip">⚗ Araştırma<br><span id="mResearch">—</span></div><div class="agent-chip">🛡 Şüpheci<br><span id="mSkeptic">Kanıt arıyor</span></div></div><div class="room-core"><div class="brain" style="width:135px;height:108px"></div></div></div></div></div>
+<div id="view3dModal" class="modal"><div class="modal-card"><div class="modal-top"><div><div class="title">3B Canlı Brian Ağı</div><div class="subtitle">Veri akışları ve küresel bağlantılar · canlı durum renkleri</div></div><button class="btn" data-close="view3dModal">Kapat</button></div><div class="orbital-view"><div class="orbit-ring"></div><div class="globe"></div><i class="orbit-node" style="left:18%;top:35%"></i><i class="orbit-node" style="right:19%;top:31%"></i><i id="orbitFault" class="orbit-node bad" style="right:25%;bottom:24%"></i></div></div></div>
+<div id="toast" style="position:fixed;z-index:100;left:50%;bottom:85px;transform:translateX(-50%);padding:10px 14px;border-radius:12px;background:#0b2038;border:1px solid rgba(66,190,255,.3);display:none"></div><script src="/frontier.js?v=20260912-frontier1" defer></script></body></html>
