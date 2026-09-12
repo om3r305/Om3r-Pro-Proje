@@ -8,9 +8,13 @@ on:
     paths:
       - 'supabase/functions/_shared/frontier_*.ts'
       - 'supabase/functions/brian-frontier-news/**'
+      - 'supabase/functions/brian-system-control/**'
+      - 'supabase/migrations/*brian_unified_system_control*.sql'
       - 'monster-coins-pro/frontier.*'
+      - 'monster-coins-pro/frontier-v3.*'
       - 'monster-coins-pro/index.html'
       - 'monster-coins-pro/classic.html'
+      - 'tests/test_brian_unified_command.py'
       - 'docs/BRIAN_FRONTIER_V2.md'
       - '.github/workflows/brian-frontier-ci.yml'
   workflow_dispatch:
@@ -34,17 +38,35 @@ jobs:
         with:
           deno-version: '2.1.4'
 
-      - name: Type-check Frontier contracts and read-only news bridge
-        run: deno check supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Type-check Frontier contracts and command endpoints
+        run: >-
+          deno check
+          supabase/functions/_shared/frontier_*.ts
+          supabase/functions/brian-frontier-news/index.ts
+          supabase/functions/brian-system-control/index.ts
 
       - name: Run Frontier behavioral contract tests
         run: deno test supabase/functions/_shared/frontier_*.test.ts
 
+      - name: Run unified command static contracts
+        run: python -m pytest -q tests/test_brian_unified_command.py
+
       - name: Lint Frontier TypeScript
-        run: deno lint supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
+        run: >-
+          deno lint
+          supabase/functions/_shared/frontier_*.ts
+          supabase/functions/brian-frontier-news/index.ts
+          supabase/functions/brian-system-control/index.ts
 
       - name: Check Frontier dashboard JavaScript
-        run: node --check monster-coins-pro/frontier.js
+        run: |
+          node --check monster-coins-pro/frontier.js
+          node --check monster-coins-pro/frontier-v3.js
 
       - name: Verify Frontier remains outside DIP and live execution
         run: |
@@ -59,6 +81,7 @@ jobs:
             git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD -- \
               'supabase/functions/_shared/frontier_*.ts' \
               'supabase/functions/brian-frontier-news/*.ts' \
+              'supabase/functions/brian-system-control/*.ts' \
               | grep -Ev '\.test\.ts$' || true
           )
           if [ "${#runtime_files[@]}" -gt 0 ]; then
@@ -68,6 +91,12 @@ jobs:
               echo 'Frontier V2 introduced an unsafe execution/control literal in runtime code'
               exit 1
             fi
+          fi
+          if git diff --unified=0 "origin/$GITHUB_BASE_REF"...HEAD -- 'supabase/migrations/*brian_unified_system_control*.sql' \
+            | grep '^+' | grep -Ev '^\+\+\+' \
+            | grep -Eqi "update[[:space:]]+cron\.job.*brian-dip|cron\.(schedule|unschedule).*brian-dip"; then
+            echo 'Unified Brian control must never operate on DIP jobs'
+            exit 1
           fi
 
       - name: Verify committed patch formatting
