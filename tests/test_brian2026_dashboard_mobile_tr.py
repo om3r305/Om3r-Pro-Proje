@@ -8,9 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / "monster-coins-pro" / "classic.html"
 ROOT_INDEX = ROOT / "monster-coins-pro" / "index.html"
 FRONTIER_INDEX = ROOT / "monster-coins-pro" / "frontier-v3.html"
+FRONTIER_V4_INDEX = ROOT / "monster-coins-pro" / "frontier-v4.html"
 # frontier-v3.css is now a tiny loader; the complete visual rules are preserved here.
 FRONTIER_CSS = ROOT / "monster-coins-pro" / "frontier-v3-base.css"
 FRONTIER_JS = ROOT / "monster-coins-pro" / "frontier-v3.js"
+ANATOMY_JS = ROOT / "monster-coins-pro" / "brain-anatomy-live.js"
 CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
 SW = ROOT / "monster-coins-pro" / "sw.js"
@@ -39,14 +41,16 @@ def test_dashboard_is_turkish_mobile_first_and_uses_unified_views():
     assert '.cc-bottom' in css
 
 
-def test_frontier_v3_is_the_turkish_mobile_product_home_and_root_routes_to_it():
+def test_frontier_v4_is_the_turkish_mobile_product_home_and_preserves_frontier_core():
     root = text(ROOT_INDEX)
     frontier = text(FRONTIER_INDEX)
+    frontier_v4 = text(FRONTIER_V4_INDEX)
     css = text(FRONTIER_CSS)
-    assert "location.replace('/frontier-v3.html'" in root
+    assert "location.replace('/frontier-v4.html'" in root
     assert '<html lang="tr">' in frontier
     assert 'viewport-fit=cover' in frontier
     assert '/frontier-v3.css' in frontier and '/frontier-v3.js' in frontier
+    assert '/brain-anatomy-live.js' in frontier_v4
     assert 'Brian ile Konuş' in frontier
     assert 'Brian Toplantı Odası' in frontier
     assert 'SİSTEMİ BAŞLAT' in frontier
@@ -120,6 +124,6 @@ def test_dashboard_javascript_parses_when_node_is_available():
     node = shutil.which("node")
     if node is None:
         return
-    for path in (JS, FRONTIER_JS):
+    for path in (JS, FRONTIER_JS, ANATOMY_JS):
         result = subprocess.run([node, "--check", str(path)], capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
