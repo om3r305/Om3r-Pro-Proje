@@ -26,6 +26,21 @@
     const doc=new DOMParser().parseFromString(html,'text/html');
     doc.querySelectorAll('script').forEach(s=>s.remove());
     document.body.innerHTML=doc.body.innerHTML;
+
+    // Dashboard API guard: a single slow Supabase function must never leave the
+    // whole Brian screen stuck forever at "Bağlanıyor". Each API call fails
+    // closed after 8.5s; the normal 15s refresh loop then retries automatically.
+    const nativeFetch=window.fetch.bind(window);
+    window.fetch=(input,init={})=>{
+      const url=typeof input==='string'?input:String(input?.url||'');
+      if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort('BRIAN_API_TIMEOUT'),8500);
+      let signal=controller.signal;
+      if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
+      return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
+    };
+
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
