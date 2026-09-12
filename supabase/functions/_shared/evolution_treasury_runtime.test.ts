@@ -1,4 +1,7 @@
-import { assessTreasuryRuntimeEvidence } from "./evolution_treasury_runtime.ts";
+import {
+  assessTreasuryRuntimeEvidence,
+  missingTreasuryPositionEdgeAssets,
+} from "./evolution_treasury_runtime.ts";
 
 Deno.test("Treasury runtime evidence is actionable only with fresh edge, evaluation and market mark", () => {
   const result = assessTreasuryRuntimeEvidence({
@@ -48,4 +51,12 @@ Deno.test("Treasury rejects stale edge even when current market mark is fresh", 
     markObservedAt: "2026-09-11T13:59:55Z",
   });
   if (result.actionable || !result.reasons.some((reason) => reason.includes("edge is stale"))) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("Treasury separately fetches open-position edges that fall outside the global edge window", () => {
+  const missing = missingTreasuryPositionEdgeAssets(
+    ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BTCUSDT"],
+    ["BTCUSDT", "SOLUSDT", "XRPUSDT"],
+  );
+  if (missing.length !== 1 || missing[0] !== "ETHUSDT") throw new Error(JSON.stringify(missing));
 });
