@@ -28,21 +28,47 @@
     document.body.innerHTML=doc.body.innerHTML;
 
     const nativeFetch=window.fetch.bind(window);
+    const DEV_CACHE_KEY='brian-development-status-v1';
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
       if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
+      const isDevelopment=url.includes('/brian-development-status');
       const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort('BRIAN_API_TIMEOUT'),8500);
+      const timeoutMs=isDevelopment?30000:8500;
+      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':'BRIAN_API_TIMEOUT'),timeoutMs);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
-      return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
+      return nativeFetch(input,{...init,signal})
+        .then((res)=>{
+          if(isDevelopment && res.ok){
+            res.clone().text().then((text)=>{
+              try{localStorage.setItem(DEV_CACHE_KEY,JSON.stringify({savedAt:Date.now(),text}));}catch(_e){}
+            }).catch(()=>{});
+          }
+          return res;
+        })
+        .catch((error)=>{
+          if(isDevelopment){
+            try{
+              const raw=localStorage.getItem(DEV_CACHE_KEY);
+              if(raw){
+                const cached=JSON.parse(raw);
+                if(cached?.text && Date.now()-Number(cached.savedAt||0)<6*60*60*1000){
+                  return new Response(cached.text,{status:200,headers:{'content-type':'application/json; charset=utf-8','x-brian-cache':'stale-fallback'}});
+                }
+              }
+            }catch(_e){}
+          }
+          throw error;
+        })
+        .finally(()=>clearTimeout(timer));
     };
 
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
     await load('/frontier-stability.js?v=20260913-s1');
-    await load('/brain-anatomy-live.js?v=20260913-a1');
+    await load('/brain-anatomy-live.js?v=20260913-a2');
   }catch(e){
     document.body.innerHTML='<div style="padding:24px;color:#ff8d99;background:#020712;font-family:system-ui"><h2>Brian V4 yüklenemedi</h2><pre style="white-space:pre-wrap">'+String(e)+'</pre></div>';
   }
