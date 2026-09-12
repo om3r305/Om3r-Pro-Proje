@@ -6,6 +6,9 @@ JS = (ROOT / "monster-coins-pro" / "frontier-v3.js").read_text(encoding="utf-8")
 EDGE = (ROOT / "supabase" / "functions" / "brian-system-control" / "index.ts").read_text(encoding="utf-8")
 SQL = (ROOT / "supabase" / "migrations" / "202609121730_brian_unified_system_control.sql").read_text(encoding="utf-8")
 CRON_FIX = (ROOT / "supabase" / "migrations" / "202609121740_brian_unified_cron_control_fix.sql").read_text(encoding="utf-8")
+IO_THROTTLE = (ROOT / "supabase" / "migrations" / "202609121750_brian_io_budget_throttle.sql").read_text(encoding="utf-8")
+CSS_LOADER = (ROOT / "monster-coins-pro" / "frontier-v3.css").read_text(encoding="utf-8")
+CSS_LOCK = (ROOT / "monster-coins-pro" / "frontier-v3-mobile-lock.css").read_text(encoding="utf-8")
 
 
 def test_product_navigation_exposes_brian_and_dip_without_old_classic_dashboard():
@@ -35,6 +38,15 @@ def test_brain_visual_uses_continuous_flows_and_animated_packets():
     assert 'stroke-dasharray' not in HTML.split('class="flow-map"', 1)[1].split('</svg>', 1)[0]
 
 
+def test_mobile_frontier_is_hard_locked_to_the_visual_viewport():
+    assert "frontier-v3-base.css" in CSS_LOADER
+    assert "frontier-v3-mobile-lock.css" in CSS_LOADER
+    assert "overflow-x:hidden" in CSS_LOCK
+    assert "overscroll-behavior-x:none" in CSS_LOCK
+    assert "touch-action:pan-y" in CSS_LOCK
+    assert "100vw" in CSS_LOCK
+
+
 def test_global_control_is_fail_closed_and_never_targets_dip_jobs():
     assert "j.jobname not like 'brian-dip-%'" in SQL
     assert "j.jobname not like 'brian-dip-%'" in CRON_FIX
@@ -47,6 +59,18 @@ def test_global_control_is_fail_closed_and_never_targets_dip_jobs():
     assert 'shadow_only: true' in EDGE
     assert 'live_execution: false' in EDGE
     assert 'UNAUTHORIZED_DASHBOARD' in EDGE
+
+
+def test_io_budget_throttle_preserves_core_loops_and_never_mentions_dip():
+    lower = IO_THROTTLE.lower()
+    assert "cron.alter_job" in lower
+    assert "brian-sensor-reliability-calibration-5m" in IO_THROTTLE
+    assert "brian-compact-retention-hourly" in IO_THROTTLE
+    assert "39 * * * *" in IO_THROTTLE
+    assert "17 */2 * * *" in IO_THROTTLE
+    assert "brian-dip" not in lower
+    assert "alpha compiler */2m" in lower
+    assert "treasury every 1m" in lower
 
 
 def test_treasury_rebase_preserves_append_only_history():
