@@ -120,7 +120,7 @@ Deno.serve(async (req: Request) => {
       const treasury = (before?.treasury ?? null) as Record<string, unknown> | null;
       const openPositions = Number(treasury?.open_positions ?? 0);
       const currentStart = Number(treasury?.starting_equity_usd ?? 0);
-      const target = selected ?? Number(before?.treasury_target_equity_usd ?? currentStart || 10000);
+      const target = selected ?? Number(before?.treasury_target_equity_usd ?? (currentStart || 10000));
       const needsRebase = Number.isFinite(target) && target > 0 && Math.abs(currentStart - target) > 0.005;
       if (needsRebase && openPositions > 0) {
         return out({
