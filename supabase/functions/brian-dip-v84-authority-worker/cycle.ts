@@ -24,6 +24,11 @@ type CycleMemory={
 };
 type Runtime844=Runtime&{v842?:CycleMemory};
 type TacticalState={localLow:number;localHigh:number;localRangePos:number;reclaimAtr:number;microBull:boolean;microBear:boolean;ready:boolean;chase:boolean;quality:number};
+type LevelEval={level:Level;economics:ReturnType<typeof executionEconomics>;distanceBps:number};
+
+const CYCLE_HOTFIX_VERSION="v844-reclaim-lag-target-cap-20260912.1";
+const MAX_PRIMARY_FORECAST_DISTANCE_BPS=60;
+const RECOVERY_MIN_ECONOMIC_RR=.70;
 
 function num(v:unknown,fallback=0){const x=Number(v);return Number.isFinite(x)?x:fallback;}
 function obj(v:unknown):J{return v&&typeof v==="object"&&!Array.isArray(v)?v as J:{};}
@@ -119,21 +124,31 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const effectiveEntryQuality=hasLong?scores.entryQuality:tactical.quality;
   const effectiveInv=hasLong?c.inv:tacticalInvalidation(m,thesis,tactical,c.inv,c.entry);
 
-  // Forecast first. The 60m range remains macro context, while entry timing is driven
-  // by the local 12m dip/reclaim. This prevents an old deep low from making a fresh
-  // intraday dip look "too high" and from forcing an unnecessarily distant stop.
+  // Forecast first. Use the closest economically viable structural destination,
+  // never a far pivot selected only to make the trade look profitable. Strong local
+  // reclaim can inspect one extra rank, but a primary target may not exceed 60 bps.
   let rankCap=RANGE_PRIMARY_RANK_CAP;
   const strongContinuation=confidence>=.72&&scoreGap>=1.5&&scores.momentumAtr>=0&&scores.momentumAtr<=1.15&&tactical.localRangePos<.58;
-  if(strongContinuation)rankCap=STRONG_PRIMARY_RANK_CAP;
+  const recoveryForecast=tactical.ready&&effectiveEntryQuality>=.62&&!tactical.chase&&scores.momentumAtr>=-1.25&&scores.momentumAtr<=1.25&&tactical.localRangePos<=.52;
+  if(strongContinuation||recoveryForecast)rankCap=STRONG_PRIMARY_RANK_CAP;
   if(scores.momentumAtr>1.35||tactical.localRangePos>.72)rankCap=Math.min(rankCap,3);
   if(tactical.localRangePos>.84||(scores.rangePos>.96&&tactical.localRangePos>.68))rankCap=Math.min(rankCap,2);
-  const levels=normalizedLevels(thesis,c.entry),primaryLevels=levels.filter(x=>x.rank<=rankCap),primary=primaryLevels.at(-1)??null,stretch=levels.find(x=>!primary||x.rank>primary.rank)??null;
 
   const fee=num(cfg.fee_bps,10),slip=num(cfg.slippage_bps,1);
   const cost=buildCostContract({feeOpenBps:fee,feeCloseBps:fee,openingSlippageBps:slip,expectedExitSpreadBps:m.book.spreadBps,expectedExitSlippageBps:slip,expectedFundingBps:m.fundingBpsHold});
-  const primaryEconomics=!hasLong&&primary&&effectiveInv&&c.entry>0&&effectiveInv<c.entry?executionEconomics("UP",c.entry,primary.price,effectiveInv,cost):null;
+  const levels=normalizedLevels(thesis,c.entry);
+  const eligible=levels.filter(x=>x.rank<=rankCap&&((x.price-c.entry)/Math.max(c.entry,1e-9)*10000)<=MAX_PRIMARY_FORECAST_DISTANCE_BPS);
+  const evaluated:LevelEval[]=!hasLong&&effectiveInv&&c.entry>0&&effectiveInv<c.entry?eligible.map(level=>({level,economics:executionEconomics("UP",c.entry,level.price,effectiveInv,cost),distanceBps:(level.price-c.entry)/Math.max(c.entry,1e-9)*10000})):[];
+  const recoveryEconomics=recoveryForecast&&effectiveEntryQuality>=.80&&confidence>=.65&&scoreGap>=.55;
+  const minEconomicRR=recoveryEconomics?RECOVERY_MIN_ECONOMIC_RR:1;
+  const economicPick=evaluated.find(x=>x.economics.target_net_reward_bps>=MIN_FORECAST_NET_EDGE_BPS&&x.economics.economic_rr>=minEconomicRR)??null;
+  const fallbackPick=evaluated[0]??null;
+  const selectedPick=economicPick??fallbackPick;
+  const primary=selectedPick?.level??null;
+  const primaryEconomics=selectedPick?.economics??null;
+  const stretch=levels.find(x=>!primary||x.rank>primary.rank)??null;
   const forecastNetEdge=primaryEconomics?.target_net_reward_bps??0;
-  const forecastEconomic=!!primaryEconomics&&forecastNetEdge>=MIN_FORECAST_NET_EDGE_BPS&&primaryEconomics.economic_rr>=1;
+  const forecastEconomic=!!economicPick;
   const chase=tactical.chase||(scores.rangePos>.96&&tactical.localRangePos>.68&&scores.momentumAtr>.25)||scores.momentumAtr>2.0;
   const rebase=rebaseState(rt as Runtime844,m,thesis);
   const normalizedConfidence=clip((confidence-.50)/.43),allocation=clip(.12+.88*normalizedConfidence*effectiveEntryQuality,.12,1);
@@ -169,13 +184,16 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
     thesis.authority_scores=a;
     thesis.cycle_phase=action==="SELL"?"HARVEST":"RIDE";
   }else{
-    const directionalUp=c.direction==="UP"&&scoreGap>=.55;
+    const localDirectionAssist=c.direction==="UP"&&scoreGap<.55&&scoreGap>=-.75&&tactical.ready&&effectiveEntryQuality>=.72&&!tactical.microBear;
+    const directionalUp=c.direction==="UP"&&(scoreGap>=.55||localDirectionAssist);
     const entryReady=directionalUp&&effectiveEntryQuality>=MIN_ENTRY_QUALITY&&tactical.ready&&!chase&&forecastEconomic&&rebase.ready&&!!primary&&!!effectiveSize;
     action=entryReady?"BUY":"WAIT";
+    if(localDirectionAssist)pushUnique(soft,"TACTICAL_DIRECTION_LAG_ASSIST_ACTIVE");
     if(chase)pushUnique(soft,"CYCLE_WAIT_DONT_CHASE_RALLY");
     if(!tactical.ready)pushUnique(soft,"CYCLE_WAIT_FOR_TACTICAL_DIP_RECLAIM");
     if(!primary)pushUnique(soft,"NO_NEAR_TERM_FORECAST_DESTINATION");
     if(primary&&!forecastEconomic)pushUnique(soft,"PRIMARY_FORECAST_BELOW_COST_WAIT");
+    if(levels.length>0&&eligible.length===0)pushUnique(soft,"PRIMARY_FORECAST_TOO_FAR_WAIT");
     if(rebase.required&&!rebase.ready)pushUnique(soft,"CYCLE_WAIT_FOR_PULLBACK_REBASE");
     if(effectiveEntryQuality<MIN_ENTRY_QUALITY)pushUnique(soft,"CYCLE_ENTRY_QUALITY_LOW");
     if(tactical.ready)pushUnique(soft,"TACTICAL_DIP_RECLAIM_READY");
@@ -185,11 +203,12 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const macroPenalty=1-Math.max(0,scores.rangePos-.85)*.30;
   const recoveryBoost=!hasLong&&tactical.ready ? .06 : 0;
   const forecastProbability=clip(confidence*macroPenalty*(1-Math.max(0,scores.momentumAtr-1)*.15)+recoveryBoost,.05,.95);
-  const targetPlan={...obj(thesis.target_plan),policy:"BRIAN_FORECAST_PRIMARY_WITH_STRETCH_TELEMETRY",target_planner_version:TARGET_PLANNER_VERSION,selected_rank:primary?.rank??null,selected_level:primary,forecast_primary_rank_cap:rankCap,forecast_primary:primary,stretch_target:stretch,far_pivots:"STRETCH_ONLY"};
+  const targetPlan={...obj(thesis.target_plan),policy:"BRIAN_FORECAST_PRIMARY_WITH_STRETCH_TELEMETRY",target_planner_version:TARGET_PLANNER_VERSION,selected_rank:primary?.rank??null,selected_level:primary,forecast_primary_rank_cap:rankCap,forecast_primary:primary,stretch_target:stretch,far_pivots:"STRETCH_ONLY",selection_mode:"NEAREST_ECONOMIC_WITH_DISTANCE_CAP",max_primary_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS,min_economic_rr:minEconomicRR};
   const a=obj(thesis.authority_scores);
-  Object.assign(a,{range_position_macro:scores.rangePos,tactical_range_position:tactical.localRangePos,tactical_low:tactical.localLow,tactical_high:tactical.localHigh,tactical_reclaim_atr:tactical.reclaimAtr,tactical_recovery:tactical.ready,tactical_micro_bull:tactical.microBull,tactical_micro_bear:tactical.microBear,tactical_chase:tactical.chase,entry_quality_tactical:effectiveEntryQuality});
+  Object.assign(a,{range_position_macro:scores.rangePos,tactical_range_position:tactical.localRangePos,tactical_low:tactical.localLow,tactical_high:tactical.localHigh,tactical_reclaim_atr:tactical.reclaimAtr,tactical_recovery:tactical.ready,tactical_micro_bull:tactical.microBull,tactical_micro_bear:tactical.microBear,tactical_chase:tactical.chase,entry_quality_tactical:effectiveEntryQuality,forecast_max_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS});
   thesis.authority_scores=a;
   thesis.target_plan=targetPlan;
+  thesis.cycle_hotfix_version=CYCLE_HOTFIX_VERSION;
   thesis.forecast_destination_price=primary?.price??null;
   thesis.forecast_probability=forecastProbability;
   thesis.forecast_primary_rank=primary?.rank??null;
@@ -218,7 +237,7 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   let decision=c.decision as any;
   const canEnter=!hasLong&&action==="BUY"&&!!primary&&!!primaryEconomics&&!!effectiveSize&&!!effectiveInv&&veto.length===0;
   if(canEnter&&decision){
-    decision={...decision,target_price:primary!.price,invalidation_price:effectiveInv,forecast_probability:forecastProbability,l1_id:primary!.level_id??null,evidence:{...obj(decision.evidence),authority_action:action,authority_reason:reasons,authority_scores:thesis.authority_scores,authority_entry_quality:effectiveEntryQuality,authority_allocation:effectiveSize?.allocation??allocation,target_plan:targetPlan,soft_evidence:soft,fill_forward_cost_bps:fillForwardCostBps(cost),reference_roundtrip_cost_bps:referenceRoundtripCostBps(cost,m.book.spreadBps),economic_rr:primaryEconomics!.economic_rr,forecast_destination_price:primary!.price,forecast_probability:forecastProbability,forecast_net_edge_bps:forecastNetEdge,cycle_phase:thesis.cycle_phase,rebase_required:rebase.required,rebase_ready:rebase.ready,tactical_dip_reclaim:true,tactical_low:tactical.localLow,tactical_range_position:tactical.localRangePos,tactical_reclaim_atr:tactical.reclaimAtr}};
+    decision={...decision,target_price:primary!.price,invalidation_price:effectiveInv,forecast_probability:forecastProbability,l1_id:primary!.level_id??null,evidence:{...obj(decision.evidence),authority_action:action,authority_reason:reasons,authority_scores:thesis.authority_scores,authority_entry_quality:effectiveEntryQuality,authority_allocation:effectiveSize?.allocation??allocation,target_plan:targetPlan,soft_evidence:soft,fill_forward_cost_bps:fillForwardCostBps(cost),reference_roundtrip_cost_bps:referenceRoundtripCostBps(cost,m.book.spreadBps),economic_rr:primaryEconomics!.economic_rr,forecast_destination_price:primary!.price,forecast_probability:forecastProbability,forecast_net_edge_bps:forecastNetEdge,cycle_phase:thesis.cycle_phase,cycle_hotfix_version:CYCLE_HOTFIX_VERSION,rebase_required:rebase.required,rebase_ready:rebase.ready,tactical_dip_reclaim:true,tactical_low:tactical.localLow,tactical_range_position:tactical.localRangePos,tactical_reclaim_atr:tactical.reclaimAtr}};
   }else if(!hasLong){
     // WAIT observations stay in candidate telemetry; do not freeze an occurrence/target in the decision ledger.
     decision=null;
