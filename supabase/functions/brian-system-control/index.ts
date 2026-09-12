@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
 
     if (action === "stop") {
       const changed = await rpc("brian_set_system_enabled", { p_enabled: false });
-      return out({ status: "STOPPED", result: changed, ...(await status()) }, 200, origin);
+      return out({ ...(await status()), command_status: "STOPPED", result: changed }, 200, origin);
     }
 
     if (action === "set_treasury") {
@@ -112,7 +112,7 @@ Deno.serve(async (req: Request) => {
         await rpc("brian_rebase_treasury_if_safe", { p_amount: selected });
         applied = true;
       }
-      return out({ status: applied ? "TREASURY_APPLIED" : "TREASURY_QUEUED", selected, applied, ...(await status()) }, 200, origin);
+      return out({ ...(await status()), command_status: applied ? "TREASURY_APPLIED" : "TREASURY_QUEUED", selected, applied }, 200, origin);
     }
 
     if (action === "start" || action === "restart") {
@@ -139,7 +139,7 @@ Deno.serve(async (req: Request) => {
       if (selected != null) await rpc("brian_set_treasury_target", { p_amount: selected });
       if (needsRebase) await rpc("brian_rebase_treasury_if_safe", { p_amount: target });
       const changed = await rpc("brian_set_system_enabled", { p_enabled: true });
-      return out({ status: action === "restart" ? "RESTARTED" : "RUNNING", result: changed, ...(await status()) }, 200, origin);
+      return out({ ...(await status()), command_status: action === "restart" ? "RESTARTED" : "RUNNING", result: changed }, 200, origin);
     }
 
     return out({ status: "UNKNOWN_ACTION", action }, 400, origin);
