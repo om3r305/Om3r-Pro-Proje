@@ -4,10 +4,11 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 DASH = (ROOT / "monster-coins-pro" / "dashboard.js").read_text(encoding="utf-8")
-# The legacy operational UI remains available as /classic.html after Frontier
-# becomes the default product home. These assertions protect its control semantics.
+# The legacy operational UI remains available as a hidden recovery/reference shell;
+# it is no longer a product-facing navigation destination.
 INDEX = (ROOT / "monster-coins-pro" / "classic.html").read_text(encoding="utf-8")
-FRONTIER_INDEX = (ROOT / "monster-coins-pro" / "index.html").read_text(encoding="utf-8")
+ROOT_INDEX = (ROOT / "monster-coins-pro" / "index.html").read_text(encoding="utf-8")
+FRONTIER = (ROOT / "monster-coins-pro" / "frontier-v3.html").read_text(encoding="utf-8")
 GUARD = (ROOT / "monster-coins-pro" / "dip-expert-v4-runtime-guard.js").read_text(encoding="utf-8")
 SERVER_UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read_text(encoding="utf-8")
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
@@ -21,9 +22,15 @@ def test_general_overview_defaults_to_live_alpha_instead_of_zero_frozen_tracker(
     assert "OPEN_LONG/SHORT" in DASH
 
 
-def test_frontier_home_keeps_a_route_back_to_the_operational_dashboard():
-    assert 'href="/classic.html"' in FRONTIER_INDEX
-    assert 'Klasik Kontrol' in FRONTIER_INDEX
+def test_product_home_routes_to_unified_brian_and_exposes_only_brian_and_dip_worlds():
+    assert "location.replace('/frontier-v3.html'" in ROOT_INDEX
+    assert 'href="/">Brian</a>' in FRONTIER
+    assert 'href="/dip">DIP' in FRONTIER
+    assert 'href="/classic.html"' not in FRONTIER
+    assert 'href="/world.html"' not in FRONTIER
+    assert 'href="/evolution.html"' not in FRONTIER
+    assert 'href="/treasury.html"' not in FRONTIER
+    assert 'href="/ocean.html"' not in FRONTIER
 
 
 def test_dip_universe_is_sticky_and_self_recovers_from_partial_refresh():
@@ -54,6 +61,6 @@ def test_modified_javascript_parses_when_node_is_available():
     node = shutil.which("node")
     if node is None:
         return
-    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js", "monster-coins-pro/frontier.js"]:
+    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js", "monster-coins-pro/frontier.js", "monster-coins-pro/frontier-v3.js"]:
         result = subprocess.run([node, "--check", str(ROOT / rel)], capture_output=True, text=True)
         assert result.returncode == 0, f"{rel}: {result.stderr}"
