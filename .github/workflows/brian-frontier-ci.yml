@@ -1,0 +1,77 @@
+name: Brian Frontier V2 CI
+
+on:
+  pull_request:
+    branches:
+      - feat/brian-evolution-os
+      - brian-2026
+    paths:
+      - 'supabase/functions/_shared/frontier_*.ts'
+      - 'supabase/functions/brian-frontier-news/**'
+      - 'monster-coins-pro/frontier.*'
+      - 'monster-coins-pro/index.html'
+      - 'monster-coins-pro/classic.html'
+      - 'docs/BRIAN_FRONTIER_V2.md'
+      - '.github/workflows/brian-frontier-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontier-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Type-check Frontier contracts and read-only news bridge
+        run: deno check supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
+
+      - name: Run Frontier behavioral contract tests
+        run: deno test supabase/functions/_shared/frontier_*.test.ts
+
+      - name: Lint Frontier TypeScript
+        run: deno lint supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
+
+      - name: Check Frontier dashboard JavaScript
+        run: node --check monster-coins-pro/frontier.js
+
+      - name: Verify Frontier remains outside DIP and live execution
+        run: |
+          set -euo pipefail
+          git fetch origin "$GITHUB_BASE_REF"
+          changed="$(git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD)"
+          if printf '%s\n' "$changed" | grep -Eqi '(^|/)(dip|brian_dip|brian-dip)'; then
+            echo 'Frontier V2 must not modify DIP paths'
+            exit 1
+          fi
+          mapfile -t runtime_files < <(
+            git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD -- \
+              'supabase/functions/_shared/frontier_*.ts' \
+              'supabase/functions/brian-frontier-news/*.ts' \
+              | grep -Ev '\.test\.ts$' || true
+          )
+          if [ "${#runtime_files[@]}" -gt 0 ]; then
+            if git diff --unified=0 "origin/$GITHUB_BASE_REF"...HEAD -- "${runtime_files[@]}" \
+              | grep '^+' | grep -Ev '^\+\+\+' \
+              | grep -Eqi 'liveExecution:[[:space:]]*true|canonicalAlphaMutation:[[:space:]]*true|dipControlled:[[:space:]]*true'; then
+              echo 'Frontier V2 introduced an unsafe execution/control literal in runtime code'
+              exit 1
+            fi
+          fi
+
+      - name: Verify committed patch formatting
+        run: |
+          set -euo pipefail
+          git fetch origin "$GITHUB_BASE_REF"
+          git diff --check "origin/$GITHUB_BASE_REF"...HEAD

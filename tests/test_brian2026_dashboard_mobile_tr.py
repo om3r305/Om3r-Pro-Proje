@@ -3,7 +3,10 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX = ROOT / "monster-coins-pro" / "index.html"
+# The cinematic Frontier command center is now the product home. The previous
+# unified operational dashboard remains intentionally preserved at /classic.html.
+INDEX = ROOT / "monster-coins-pro" / "classic.html"
+FRONTIER_INDEX = ROOT / "monster-coins-pro" / "index.html"
 CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
 SW = ROOT / "monster-coins-pro" / "sw.js"
@@ -32,6 +35,18 @@ def test_dashboard_is_turkish_mobile_first_and_uses_unified_views():
     assert '.cc-bottom' in css
 
 
+def test_frontier_is_the_turkish_mobile_product_home_and_classic_is_preserved():
+    frontier = text(FRONTIER_INDEX)
+    assert '<html lang="tr">' in frontier
+    assert 'viewport-fit=cover' in frontier
+    assert '/frontier.css' in frontier and '/frontier.js' in frontier
+    assert 'BRIAN ÇEKİRDEK' in frontier
+    assert 'Brian ile Konuş' in frontier
+    assert 'Toplantı Odası' in frontier
+    assert '3B Canlı Görünüm' in frontier
+    assert 'Klasik Kontrol' in frontier
+
+
 def test_dashboard_explains_server_background_semantics_instead_of_browser_magic():
     html = text(INDEX)
     js = text(JS)
@@ -50,7 +65,7 @@ def test_control_center_wraps_pinned_core_and_adds_v8_server_authoritative_dip()
     assert 'v8DipSummary' in src
     assert 'brian_dip_session_events' in src
     assert 'brian_dip_v8_runtime' in src
-    assert 'brian_dip_v8_ledger' not in src  # status overlay is read-only runtime/session summary
+    assert 'brian_dip_v8_ledger' not in src
     assert 'dip_browser_independent: true' in src
     assert 'dip_server_authoritative: true' in src
     assert 'raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/' in core
