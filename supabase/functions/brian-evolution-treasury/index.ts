@@ -7,7 +7,10 @@ import {
   planPromotionGatedTreasuryCycle,
   type PromotionGateState,
 } from "../_shared/evolution_treasury_gate.ts";
-import { assessTreasuryRuntimeEvidence } from "../_shared/evolution_treasury_runtime.ts";
+import {
+  assessTreasuryRuntimeEvidence,
+  missingTreasuryPositionEdgeAssets,
+} from "../_shared/evolution_treasury_runtime.ts";
 import {
   BRIAN_TREASURY_STARTING_EQUITY_USD,
   BRIAN_TREASURY_VERSION,
@@ -26,6 +29,7 @@ const MIN_INTERVAL_SECONDS = 45;
 const MAX_EDGE_ROWS = 100;
 const MARK_LOOKBACK_MS = 5 * 60_000;
 const DEGRADED_MARK_LOOKBACK_MS = 60 * 60_000;
+const EDGE_SELECT = "decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear";
 
 type SnapshotRow = {
   snapshot_id: string;
@@ -235,12 +239,34 @@ async function loadMarks(assetIds: string[], nowIso: string, lookbackMs: number)
   return marks;
 }
 
-async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<TreasuryOpportunity[]> {
+async function loadEdgeRows(state: TreasuryState): Promise<EdgeRow[]> {
   const edgeQ = await db.from("brian_alpha_expected_edge_latest_by_asset")
-    .select("decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear")
+    .select(EDGE_SELECT)
     .order("observed_at", { ascending: false }).limit(MAX_EDGE_ROWS);
   if (edgeQ.error) throw new Error(`treasury_edges:${edgeQ.error.message}`);
   const edges = (edgeQ.data ?? []) as EdgeRow[];
+
+  // The global top-N window is discovery-oriented and must never decide whether an
+  // already-funded position still has edge evidence. Open positions are at most eight,
+  // so fetch any position asset missing from that window explicitly before synthesizing
+  // EDGE_UNAVAILABLE. This prevents false invalidation/churn when the market universe is
+  // wider than MAX_EDGE_ROWS.
+  const missingPositionAssets = missingTreasuryPositionEdgeAssets(
+    state.positions.map((position) => position.assetId),
+    edges.map((row) => String(row.asset_id)),
+  );
+  if (!missingPositionAssets.length) return edges;
+
+  const positionEdgeQ = await db.from("brian_alpha_expected_edge_latest_by_asset")
+    .select(EDGE_SELECT)
+    .in("asset_id", missingPositionAssets)
+    .order("observed_at", { ascending: false }).limit(missingPositionAssets.length);
+  if (positionEdgeQ.error) throw new Error(`treasury_position_edges:${positionEdgeQ.error.message}`);
+  return [...edges, ...((positionEdgeQ.data ?? []) as EdgeRow[])];
+}
+
+async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<TreasuryOpportunity[]> {
+  const edges = await loadEdgeRows(state);
   const assetIds = [...new Set([...edges.map((row) => String(row.asset_id)), ...state.positions.map((position) => position.assetId)].filter(Boolean))];
   if (!assetIds.length) return [];
 
@@ -374,6 +400,7 @@ async function commitCycle(input: {
       promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
       point_in_time_execution_marks: true,
       degraded_mark_fallback_enabled: true,
+      open_position_edge_supplement_enabled: true,
       shadow_only: true,
       live_execution: false,
       canonical_alpha_mutation: false,
@@ -456,6 +483,7 @@ Deno.serve(async (req: Request) => {
         deployment_usd: plan.deploymentUsd,
         point_in_time_execution_marks: true,
         degraded_mark_fallback_enabled: true,
+        open_position_edge_supplement_enabled: true,
       });
       return {
         status: "SUCCESS",
