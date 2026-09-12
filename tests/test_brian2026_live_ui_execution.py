@@ -4,7 +4,10 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 DASH = (ROOT / "monster-coins-pro" / "dashboard.js").read_text(encoding="utf-8")
-INDEX = (ROOT / "monster-coins-pro" / "index.html").read_text(encoding="utf-8")
+# The legacy operational UI remains available as /classic.html after Frontier
+# becomes the default product home. These assertions protect its control semantics.
+INDEX = (ROOT / "monster-coins-pro" / "classic.html").read_text(encoding="utf-8")
+FRONTIER_INDEX = (ROOT / "monster-coins-pro" / "index.html").read_text(encoding="utf-8")
 GUARD = (ROOT / "monster-coins-pro" / "dip-expert-v4-runtime-guard.js").read_text(encoding="utf-8")
 SERVER_UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read_text(encoding="utf-8")
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
@@ -16,6 +19,11 @@ def test_general_overview_defaults_to_live_alpha_instead_of_zero_frozen_tracker(
     assert "renderAlphaOverview" in DASH
     assert "direction-only/no notional" in DASH
     assert "OPEN_LONG/SHORT" in DASH
+
+
+def test_frontier_home_keeps_a_route_back_to_the_operational_dashboard():
+    assert 'href="/classic.html"' in FRONTIER_INDEX
+    assert 'Klasik Kontrol' in FRONTIER_INDEX
 
 
 def test_dip_universe_is_sticky_and_self_recovers_from_partial_refresh():
@@ -46,6 +54,6 @@ def test_modified_javascript_parses_when_node_is_available():
     node = shutil.which("node")
     if node is None:
         return
-    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js"]:
+    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js", "monster-coins-pro/frontier.js"]:
         result = subprocess.run([node, "--check", str(ROOT / rel)], capture_output=True, text=True)
         assert result.returncode == 0, f"{rel}: {result.stderr}"
