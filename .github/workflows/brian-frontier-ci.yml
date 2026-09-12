@@ -1,0 +1,70 @@
+name: Brian Frontier V2 CI
+
+on:
+  pull_request:
+    branches:
+      - feat/brian-evolution-os
+      - brian-2026
+    paths:
+      - 'supabase/functions/_shared/frontier_*.ts'
+      - 'docs/BRIAN_FRONTIER_V2.md'
+      - '.github/workflows/brian-frontier-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontier-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Type-check Frontier contracts
+        run: >-
+          deno check
+          supabase/functions/_shared/frontier_market_belief.ts
+          supabase/functions/_shared/frontier_market_belief.test.ts
+
+      - name: Run Frontier behavioral contract tests
+        run: >-
+          deno test
+          supabase/functions/_shared/frontier_market_belief.test.ts
+
+      - name: Lint Frontier contracts
+        run: >-
+          deno lint
+          supabase/functions/_shared/frontier_market_belief.ts
+          supabase/functions/_shared/frontier_market_belief.test.ts
+
+      - name: Verify Frontier remains outside DIP and live execution
+        run: |
+          set -euo pipefail
+          git fetch origin "$GITHUB_BASE_REF"
+          changed="$(git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD)"
+          if printf '%s\n' "$changed" | grep -Eqi '(^|/)(dip|brian_dip|brian-dip)'; then
+            echo 'Frontier V2 must not modify DIP paths'
+            exit 1
+          fi
+          if git diff --unified=0 "origin/$GITHUB_BASE_REF"...HEAD -- 'supabase/functions/_shared/frontier_*.ts' \
+            | grep '^+' | grep -Ev '^\+\+\+' \
+            | grep -Eqi 'liveExecution:[[:space:]]*true|canonicalAlphaMutation:[[:space:]]*true|dipControlled:[[:space:]]*true'; then
+            echo 'Frontier V2 introduced an unsafe execution/control literal'
+            exit 1
+          fi
+
+      - name: Verify committed patch formatting
+        run: |
+          set -euo pipefail
+          git fetch origin "$GITHUB_BASE_REF"
+          git diff --check "origin/$GITHUB_BASE_REF"...HEAD
