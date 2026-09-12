@@ -23,6 +23,15 @@ function time(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+export function missingTreasuryPositionEdgeAssets(
+  positionAssetIds: string[],
+  fetchedEdgeAssetIds: string[],
+): string[] {
+  const fetched = new Set(fetchedEdgeAssetIds.map((value) => value.trim()).filter(Boolean));
+  const uniquePositions = [...new Set(positionAssetIds.map((value) => value.trim()).filter(Boolean))];
+  return uniquePositions.filter((assetId) => !fetched.has(assetId));
+}
+
 export function assessTreasuryRuntimeEvidence(
   input: TreasuryRuntimeEvidenceInput,
 ): TreasuryRuntimeEvidenceAssessment {
