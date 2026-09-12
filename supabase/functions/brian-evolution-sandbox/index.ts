@@ -54,8 +54,18 @@ function toHypothesis(row: Record<string, unknown>): HypothesisCandidate {
   };
 }
 
-function parentCommit(): string {
-  const value = (Deno.env.get("BRIAN_EVOLUTION_PARENT_COMMIT") ?? "").trim();
+async function parentCommit(): Promise<string> {
+  const configured = (Deno.env.get("BRIAN_EVOLUTION_PARENT_COMMIT") ?? "").trim();
+  if (configured) {
+    if (!/^[0-9a-f]{40}$/i.test(configured)) throw new Error("EVOLUTION_PARENT_COMMIT_INVALID");
+    return configured.toLowerCase();
+  }
+  const q = await db.from("brian_evolution_runtime_config")
+    .select("config_value")
+    .eq("config_key", "canonical_parent_commit")
+    .single();
+  if (q.error || !q.data) throw new Error("EVOLUTION_PARENT_COMMIT_MISSING");
+  const value = String(q.data.config_value ?? "").trim();
   if (!value) throw new Error("EVOLUTION_PARENT_COMMIT_MISSING");
   if (!/^[0-9a-f]{40}$/i.test(value)) throw new Error("EVOLUTION_PARENT_COMMIT_INVALID");
   return value.toLowerCase();
@@ -82,7 +92,7 @@ async function latestHypotheses(): Promise<HypothesisCandidate[]> {
 async function planCandidates(): Promise<{ planned: number; skippedExisting: number; rotatedParents: number; candidateIds: string[] }> {
   const hypotheses = await latestHypotheses();
   if (!hypotheses.length) return { planned: 0, skippedExisting: 0, rotatedParents: 0, candidateIds: [] };
-  const canonicalParent = parentCommit();
+  const canonicalParent = await parentCommit();
   const existingQ = await db.from("brian_evolution_codegen_requests")
     .select("hypothesis_id,candidate_id,parent_commit,requested_at")
     .order("requested_at", { ascending: false })
