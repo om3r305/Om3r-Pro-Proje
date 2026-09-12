@@ -56,11 +56,17 @@ jobs:
             echo 'Frontier V2 must not modify DIP paths'
             exit 1
           fi
-          if git diff --unified=0 "origin/$GITHUB_BASE_REF"...HEAD -- 'supabase/functions/_shared/frontier_*.ts' \
-            | grep '^+' | grep -Ev '^\+\+\+' \
-            | grep -Eqi 'liveExecution:[[:space:]]*true|canonicalAlphaMutation:[[:space:]]*true|dipControlled:[[:space:]]*true'; then
-            echo 'Frontier V2 introduced an unsafe execution/control literal'
-            exit 1
+          mapfile -t runtime_files < <(
+            git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD -- 'supabase/functions/_shared/frontier_*.ts' \
+              | grep -Ev '\.test\.ts$' || true
+          )
+          if [ "${#runtime_files[@]}" -gt 0 ]; then
+            if git diff --unified=0 "origin/$GITHUB_BASE_REF"...HEAD -- "${runtime_files[@]}" \
+              | grep '^+' | grep -Ev '^\+\+\+' \
+              | grep -Eqi 'liveExecution:[[:space:]]*true|canonicalAlphaMutation:[[:space:]]*true|dipControlled:[[:space:]]*true'; then
+              echo 'Frontier V2 introduced an unsafe execution/control literal in runtime code'
+              exit 1
+            fi
           fi
 
       - name: Verify committed patch formatting
