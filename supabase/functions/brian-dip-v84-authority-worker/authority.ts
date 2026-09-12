@@ -120,9 +120,12 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   if(!s1||!s5||!s15||!s1h||!s4h)return{...base,canEnter:false,firstBlockingVeto:"DATA_INCONSISTENT",vetoStage:"RUNTIME",thesis:{...base.thesis,veto:["DATA_INCONSISTENT"],decision_authority:"BRIAN"}};
 
   const scores=chartScores(m,s1,s5,s15,s1h,base),confidence=confidenceFor(scores.up,scores.down);
-  const bullish=scores.up>=1.0&&scores.up-scores.down>=.55;
+  const hasLong=rt.pos?.side==="LONG",scoreGap=scores.up-scores.down;
+  const classicBullish=scores.up>=1.0&&scoreGap>=.55;
+  const localReversalAssist=!hasLong&&!scores.chase&&scores.rangePos<=.48&&scores.macroRangePos<=.92&&scores.entryQualityRaw>=.62&&scores.momentumAtr>=-.85&&scores.momentumAtr<=1.15&&scoreGap>=-.75&&(m.flowFast.ofi>=.10||(m.book.pressure>=1.30&&m.flowSlow.ofi>=-.05));
+  const bullish=classicBullish||localReversalAssist;
+  if(localReversalAssist&&!classicBullish)scores.reason.push("TACTICAL_DIRECTION_LAG_ASSIST");
   const rawBearish=scores.down>=1.0&&scores.down-scores.up>=.55;
-  const hasLong=rt.pos?.side==="LONG";
   const direction:Direction=!hasLong&&bullish?"UP":"WAIT";
   const baseSetup=String(base.thesis.setup||"NONE"),setup:Setup=(["SWEEP_RECLAIM","FAILED_BREAK","BOS_RETEST","EARLY_REVERSAL"].includes(baseSetup)&&base.direction==="UP"?baseSetup:"EARLY_REVERSAL") as Setup;
   const fee=n(cfg.fee_bps,10),slip=n(cfg.slippage_bps,1),entry=direction==="UP"?m.book.ask*(1+slip/10000):m.book.mid;
@@ -140,8 +143,8 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   }
 
   const signalAt=m.bars["1m"].at(-1)!.ct+1,structs=[s1,s5,s15,s1h,s4h];
-  const ladderFill=hasLong?m.book.bid:entry;
-  const levelPlan=(direction==="UP"||hasLong)?await firstForwardLevel({direction:"UP",fill:ladderFill,signalAt,tickSize:m.rules.tickSize,structs}):{l1:null,levels:[] as StructuralLevel[]};
+  const ladderFill=hasLong?m.book.bid:(direction==="UP"?entry:m.book.ask*(1+slip/10000));
+  const levelPlan=await firstForwardLevel({direction:"UP",fill:ladderFill,signalAt,tickSize:m.rules.tickSize,structs});
   const cost=buildCostContract({feeOpenBps:fee,feeCloseBps:fee,openingSlippageBps:slip,expectedExitSpreadBps:m.book.spreadBps,expectedExitSlippageBps:slip,expectedFundingBps:m.fundingBpsHold});
   const viable=direction==="UP"&&inv?levelPlan.levels.map((level,rank)=>{
     const target=level.normalized_price;if(!validLong(entry,inv!,target))return null;
