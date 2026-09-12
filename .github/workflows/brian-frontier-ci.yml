@@ -31,21 +31,13 @@ jobs:
           deno-version: '2.1.4'
 
       - name: Type-check Frontier contracts
-        run: >-
-          deno check
-          supabase/functions/_shared/frontier_market_belief.ts
-          supabase/functions/_shared/frontier_market_belief.test.ts
+        run: deno check supabase/functions/_shared/frontier_*.ts
 
       - name: Run Frontier behavioral contract tests
-        run: >-
-          deno test
-          supabase/functions/_shared/frontier_market_belief.test.ts
+        run: deno test supabase/functions/_shared/frontier_*.test.ts
 
       - name: Lint Frontier contracts
-        run: >-
-          deno lint
-          supabase/functions/_shared/frontier_market_belief.ts
-          supabase/functions/_shared/frontier_market_belief.test.ts
+        run: deno lint supabase/functions/_shared/frontier_*.ts
 
       - name: Verify Frontier remains outside DIP and live execution
         run: |
