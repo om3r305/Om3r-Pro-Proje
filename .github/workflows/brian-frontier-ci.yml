@@ -7,6 +7,10 @@ on:
       - brian-2026
     paths:
       - 'supabase/functions/_shared/frontier_*.ts'
+      - 'supabase/functions/brian-frontier-news/**'
+      - 'monster-coins-pro/frontier.*'
+      - 'monster-coins-pro/index.html'
+      - 'monster-coins-pro/classic.html'
       - 'docs/BRIAN_FRONTIER_V2.md'
       - '.github/workflows/brian-frontier-ci.yml'
   workflow_dispatch:
@@ -30,14 +34,17 @@ jobs:
         with:
           deno-version: '2.1.4'
 
-      - name: Type-check Frontier contracts
-        run: deno check supabase/functions/_shared/frontier_*.ts
+      - name: Type-check Frontier contracts and read-only news bridge
+        run: deno check supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
 
       - name: Run Frontier behavioral contract tests
         run: deno test supabase/functions/_shared/frontier_*.test.ts
 
-      - name: Lint Frontier contracts
-        run: deno lint supabase/functions/_shared/frontier_*.ts
+      - name: Lint Frontier TypeScript
+        run: deno lint supabase/functions/_shared/frontier_*.ts supabase/functions/brian-frontier-news/index.ts
+
+      - name: Check Frontier dashboard JavaScript
+        run: node --check monster-coins-pro/frontier.js
 
       - name: Verify Frontier remains outside DIP and live execution
         run: |
@@ -49,7 +56,9 @@ jobs:
             exit 1
           fi
           mapfile -t runtime_files < <(
-            git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD -- 'supabase/functions/_shared/frontier_*.ts' \
+            git diff --name-only "origin/$GITHUB_BASE_REF"...HEAD -- \
+              'supabase/functions/_shared/frontier_*.ts' \
+              'supabase/functions/brian-frontier-news/*.ts' \
               | grep -Ev '\.test\.ts$' || true
           )
           if [ "${#runtime_files[@]}" -gt 0 ]; then
