@@ -3,10 +3,13 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-# The cinematic Frontier command center is now the product home. The previous
-# unified operational dashboard remains intentionally preserved at /classic.html.
+# The previous operational dashboard remains available as a hidden recovery/reference
+# shell, while the product-facing world is now the unified Brian command center.
 INDEX = ROOT / "monster-coins-pro" / "classic.html"
-FRONTIER_INDEX = ROOT / "monster-coins-pro" / "index.html"
+ROOT_INDEX = ROOT / "monster-coins-pro" / "index.html"
+FRONTIER_INDEX = ROOT / "monster-coins-pro" / "frontier-v3.html"
+FRONTIER_CSS = ROOT / "monster-coins-pro" / "frontier-v3.css"
+FRONTIER_JS = ROOT / "monster-coins-pro" / "frontier-v3.js"
 CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
 SW = ROOT / "monster-coins-pro" / "sw.js"
@@ -35,16 +38,24 @@ def test_dashboard_is_turkish_mobile_first_and_uses_unified_views():
     assert '.cc-bottom' in css
 
 
-def test_frontier_is_the_turkish_mobile_product_home_and_classic_is_preserved():
+def test_frontier_v3_is_the_turkish_mobile_product_home_and_root_routes_to_it():
+    root = text(ROOT_INDEX)
     frontier = text(FRONTIER_INDEX)
+    css = text(FRONTIER_CSS)
+    assert "location.replace('/frontier-v3.html'" in root
     assert '<html lang="tr">' in frontier
     assert 'viewport-fit=cover' in frontier
-    assert '/frontier.css' in frontier and '/frontier.js' in frontier
-    assert 'BRIAN ÇEKİRDEK' in frontier
+    assert '/frontier-v3.css' in frontier and '/frontier-v3.js' in frontier
     assert 'Brian ile Konuş' in frontier
-    assert 'Toplantı Odası' in frontier
-    assert '3B Canlı Görünüm' in frontier
-    assert 'Klasik Kontrol' in frontier
+    assert 'Brian Toplantı Odası' in frontier
+    assert 'SİSTEMİ BAŞLAT' in frontier
+    assert 'YENİDEN BAŞLAT' in frontier
+    assert 'DURDUR' in frontier
+    assert 'SHADOW HAZİNE TUTARI' in frontier
+    assert 'href="/dip"' in frontier
+    assert '/classic.html' not in frontier
+    assert '.bottom-nav' in css
+    assert 'env(safe-area-inset-bottom' in css
 
 
 def test_dashboard_explains_server_background_semantics_instead_of_browser_magic():
@@ -108,5 +119,6 @@ def test_dashboard_javascript_parses_when_node_is_available():
     node = shutil.which("node")
     if node is None:
         return
-    result = subprocess.run([node, "--check", str(JS)], capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
+    for path in (JS, FRONTIER_JS):
+        result = subprocess.run([node, "--check", str(path)], capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
