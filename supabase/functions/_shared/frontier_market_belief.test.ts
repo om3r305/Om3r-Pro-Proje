@@ -117,16 +117,18 @@ Deno.test("Frontier requires independent evidence before psychology can become r
 });
 
 Deno.test("Frontier safety envelope refuses DIP control or live execution", () => {
-  const input = base() as FrontierOpportunityContext & { safety: Record<string, boolean> };
-  input.safety = {
-    shadowOnly: true,
-    liveExecution: true,
-    canonicalAlphaMutation: false,
-    dipControlled: false,
-  };
+  const unsafe = {
+    ...base(),
+    safety: {
+      shadowOnly: true,
+      liveExecution: true,
+      canonicalAlphaMutation: false,
+      dipControlled: false,
+    },
+  } as unknown as FrontierOpportunityContext;
   let threw = false;
   try {
-    assessFrontierOpportunity(input as FrontierOpportunityContext);
+    assessFrontierOpportunity(unsafe);
   } catch {
     threw = true;
   }
