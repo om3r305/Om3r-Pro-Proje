@@ -108,7 +108,7 @@ Deno.serve(async (req: Request) => {
       db.from("brian_evolution_codegen_requests").select("request_id", { count: "exact", head: true }),
       db.from("brian_evolution_code_candidates").select("candidate_id", { count: "exact", head: true }),
       db.from("brian_evolution_code_artifact_receipts").select("receipt_id", { count: "exact", head: true }),
-      db.from("brian_world_source_candidates").select("candidate_id", { count: "exact", head: true }),
+      db.from("brian_world_source_candidates").select("source_id", { count: "exact", head: true }),
     ]);
 
     const codegen = requireOk("codegen", codegenQ as QueryResult);
