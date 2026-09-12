@@ -15,7 +15,7 @@
   let queued=false;
 
   document.documentElement.dataset.v844StableOwner='1';
-  window.__v844UiStabilityVersion='20260912.1';
+  window.__v844UiStabilityVersion='20260912.2';
 
   function installCss(){
     if(el('v844NoJumpStyle'))return;
@@ -66,7 +66,7 @@
     txt(el('markPriceText'),`Brian ${action} · Cycle ${phase} · Primary ${fmt(forecast)} · net edge ${edge.toFixed(2)} bps · timing ${timing}`);
     txt(el('freshnessBar'),`Binance Spot ${spotAt?ageSeconds(spotAt):'—'} · Brian karar ${ageSeconds(decisionAt)} · Worker ${ageSeconds(workerAt)} · Motor 10 sn · SHORT KAPALI`);
     txt(el('feedMeta'),'Ekran: Binance Spot 1s · Brian motoru: USD-M SHADOW · karar 10 sn');
-    const state=el('feedState');if(state){txt(state,feedState);state.className=spotLive||spotRest?'good':'warn';}
+    const state=el('feedState');if(state){txt(state,feedState);const cls=spotLive||spotRest?'good':'warn';if(state.className!==cls)state.className=cls;}
     txt(el('chartSource'),source);
   }
 
