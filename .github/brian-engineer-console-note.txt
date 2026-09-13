@@ -1,1 +1,0 @@
-Brian Engineer live console integration branch. Read-only dashboard/status surface; no DIP/live-execution changes.
