@@ -12,7 +12,7 @@ FRONTIER_V4_INDEX = ROOT / "monster-coins-pro" / "frontier-v4.html"
 # frontier-v3.css is now a tiny loader; the complete visual rules are preserved here.
 FRONTIER_CSS = ROOT / "monster-coins-pro" / "frontier-v3-base.css"
 FRONTIER_JS = ROOT / "monster-coins-pro" / "frontier-v3.js"
-ANATOMY_JS = ROOT / "monster-coins-pro" / "brain-anatomy-live.js"
+ANATOMY_JS = ROOT / "monster-coins-pro" / "brain-anatomy-v2.js"
 CSS = ROOT / "monster-coins-pro" / "dashboard.css"
 JS = ROOT / "monster-coins-pro" / "dashboard.js"
 SW = ROOT / "monster-coins-pro" / "sw.js"
@@ -50,7 +50,7 @@ def test_frontier_v4_is_the_turkish_mobile_product_home_and_preserves_frontier_c
     assert '<html lang="tr">' in frontier
     assert 'viewport-fit=cover' in frontier
     assert '/frontier-v3.css' in frontier and '/frontier-v3.js' in frontier
-    assert '/brain-anatomy-live.js' in frontier_v4
+    assert '/brain-anatomy-v2.js' in frontier_v4
     assert 'Brian ile Konuş' in frontier
     assert 'Brian Toplantı Odası' in frontier
     assert 'SİSTEMİ BAŞLAT' in frontier
