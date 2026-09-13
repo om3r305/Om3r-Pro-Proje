@@ -33,10 +33,12 @@ decision timestamps are integral epoch milliseconds and normalize to the same
 canonical UTC instant as equivalent timestamp strings. Fillability must also
 clear the safe lower bound implied by the bounded estimated round-trip cost;
 otherwise cost arithmetic fails closed rather than producing an unbounded
-estimate. Equal-time contradictory observations or reliability snapshots
-contaminate the result; exact duplicates are canonicalized. Future source,
-reliability, event, and cost evidence never enters the decision projection and
-is exposed only as telemetry.
+estimate. Reliability provenance is retained in normalized rows and duplicate
+identity: equal-time snapshots with distinct valid provenance contaminate the
+result, while exact duplicates from the same provenance are canonicalized.
+Equal-time contradictory observations also contaminate the result. Future
+source, reliability, event, and cost evidence never enters the decision
+projection and is exposed only as telemetry.
 
 Replay compares the compiler with an independently hand-specified immutable
 projection. Adversarial stress evidence separately covers malformed and missing

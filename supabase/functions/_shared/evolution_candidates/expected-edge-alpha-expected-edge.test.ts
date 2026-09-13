@@ -154,6 +154,24 @@ Deno.test("future and conflicting evidence cannot become decision features", () 
   }
 });
 
+Deno.test("conflicting equal-time reliability provenance fails closed", () => {
+  const result = compileExpectedEdgeAlphaCandidate(
+    input({
+      reliabilitySnapshots: [
+        reliability("o1", "g1", { provenance: "reliability-a" }),
+        reliability("o1", "g1", { provenance: "reliability-b" }),
+        reliability("o2", "g2"),
+      ],
+    }),
+    { decisionAt: now },
+  );
+  if (
+    result.recommendation !== "CONTAMINATED_EVIDENCE" ||
+    result.eligible ||
+    !result.reasons.includes("conflicting reliability snapshots")
+  ) throw new Error(JSON.stringify(result));
+});
+
 Deno.test("input order and stale evidence remain bounded and deterministic", () => {
   const a = compileExpectedEdgeAlphaCandidate(
     input({ eventAt: "2026-09-13T11:00:00Z", eventCadenceSeconds: 300 }),

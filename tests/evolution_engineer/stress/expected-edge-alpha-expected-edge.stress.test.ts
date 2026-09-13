@@ -171,3 +171,20 @@ Deno.test("stress matrix fails closed for malformed, extreme, and future evidenc
     throw new Error("numeric decision timestamp is not deterministic");
   }
 });
+
+Deno.test("stress rejects valid equal-time reliability rows with distinct provenance", () => {
+  const value = validInput({
+    reliabilitySnapshots: [
+      reliability("o0", "g0", { provenance: "stress-reliability-a" }),
+      reliability("o0", "g0", { provenance: "stress-reliability-b" }),
+      reliability("o1", "g1"),
+    ],
+  });
+  const result = compileExpectedEdgeAlphaCandidate(value, { decisionAt });
+  if (
+    result.recommendation !== "CONTAMINATED_EVIDENCE" ||
+    result.eligible ||
+    !result.reasons.includes("conflicting reliability snapshots")
+  ) throw new Error(JSON.stringify(result));
+  assertSafety(result);
+});

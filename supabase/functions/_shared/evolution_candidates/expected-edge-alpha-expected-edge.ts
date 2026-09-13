@@ -67,6 +67,7 @@ type Observation = {
 };
 type Reliability = Observation & {
   groupId: string;
+  provenance: string;
   snapshotAt: Instant;
   expectedMoveBps: number;
   reliability: number;
@@ -302,6 +303,7 @@ export function compileExpectedEdgeAlphaCandidate(
     const row = {
       ...base,
       groupId,
+      provenance,
       snapshotAt,
       expectedMoveBps,
       reliability: reliabilityValue,
@@ -319,7 +321,8 @@ export function compileExpectedEdgeAlphaCandidate(
   }
   const unique = new Map<string, Reliability>();
   for (const row of validReliability) {
-    const key = `${row.observationId}|${row.groupId}|${row.snapshotAt.ms}`;
+    const key =
+      `${row.observationId}|${row.groupId}|${row.snapshotAt.ms}|${row.provenance}`;
     const prior = unique.get(key);
     if (!prior || fingerprint(row).localeCompare(fingerprint(prior)) < 0) {
       unique.set(key, row);
@@ -328,7 +331,8 @@ export function compileExpectedEdgeAlphaCandidate(
   const rows = [...unique.values()].sort((a, b) =>
     a.groupId.localeCompare(b.groupId) ||
     a.observationId.localeCompare(b.observationId) ||
-    a.snapshotAt.ms - b.snapshotAt.ms
+    a.snapshotAt.ms - b.snapshotAt.ms ||
+    a.provenance.localeCompare(b.provenance)
   );
   report.matureIndependentGroupCount =
     new Set(rows.map((row) => row.groupId)).size;

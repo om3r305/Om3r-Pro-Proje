@@ -187,3 +187,29 @@ Deno.test("replay projection is unchanged by future evidence permutations", () =
     }
   }
 });
+
+Deno.test("replay rejects equal-time reliability provenance disagreement", () => {
+  const result = compileExpectedEdgeAlphaCandidate({
+    ...envelope,
+    reliabilitySnapshots: [
+      envelope.reliabilitySnapshots[0],
+      {
+        ...envelope.reliabilitySnapshots[0],
+        provenance: "reliability-conflicting",
+      },
+      envelope.reliabilitySnapshots[1],
+    ],
+  }, { decisionAt });
+  if (
+    result.recommendation !== "CONTAMINATED_EVIDENCE" ||
+    result.eligible ||
+    !result.reasons.includes("conflicting reliability snapshots") ||
+    result.futureTelemetry.futureEvidenceCount !== 0
+  ) {
+    throw new Error(
+      `reliability provenance conflict was not isolated: ${
+        JSON.stringify(result)
+      }`,
+    );
+  }
+});
