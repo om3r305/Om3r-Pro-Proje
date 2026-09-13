@@ -2,8 +2,13 @@
 (()=>{
   const $=(q,r=document)=>r.querySelector(q);
 
+  function anatomyOpen(){
+    const a=$('#brianAnatomyLive');
+    return Boolean(a && (a.classList.contains('show') || a.classList.contains('bal-show')));
+  }
+
   function overlayOpen(){
-    return Boolean($('.unlock.show') || $('.modal.show') || $('#brianAnatomyLive.bal-show'));
+    return Boolean($('.unlock.show') || $('.modal.show') || anatomyOpen());
   }
 
   function setStyle(el,key,value){
@@ -33,7 +38,7 @@
       setStyle(el,'pointerEvents',el.classList.contains('show')?'auto':'none');
     });
     const anatomy=$('#brianAnatomyLive');
-    if(anatomy) setStyle(anatomy,'pointerEvents',anatomy.classList.contains('bal-show')?'auto':'none');
+    if(anatomy) setStyle(anatomy,'pointerEvents',anatomyOpen()?'auto':'none');
   }
 
   function boot(){
@@ -47,8 +52,6 @@
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')repair()});
     document.addEventListener('click',()=>setTimeout(repair,0),true);
 
-    // Only watch DOM insertion/removal. Never observe class/style attributes here:
-    // observing our own style writes caused an infinite MutationObserver loop on iOS Safari.
     const mo=new MutationObserver(()=>requestAnimationFrame(repair));
     mo.observe(document.body,{subtree:true,childList:true});
   }
