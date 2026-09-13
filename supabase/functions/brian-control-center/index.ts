@@ -16,8 +16,6 @@ function ageSeconds(v: string | null): number | null {
 }
 
 async function v8DipSummary() {
-  // Session events are the control-plane truth. The monotonic restart migration
-  // guarantees the newest START is strictly newer than the PAUSE it supersedes.
   const latestEventQ = await db.from("brian_dip_session_events")
     .select("event_id,session_id,event_kind,requested_at")
     .order("requested_at", { ascending: false }).order("event_id", { ascending: false })
@@ -70,8 +68,6 @@ async function v8DipSummary() {
   };
 
   return {
-    // Legacy frontend recognizes BROWSER_ACTIVE as its green running state.
-    // The authoritative flags below tell the UI that execution is actually cloud/server-side.
     status: !active ? "PAUSED" : heartbeatAge != null && heartbeatAge <= 420 ? "BROWSER_ACTIVE" : "BROWSER_STOPPED",
     session_id: sid,
     started_at: startQ.data.requested_at ?? null,
@@ -90,6 +86,73 @@ async function v8DipSummary() {
     symbol: "ETHUSDT",
     shadow_only: runtimeQ.data.shadow_only !== false,
     live_execution: runtimeQ.data.live_execution === true,
+  };
+}
+
+type RadarCandidate = {
+  symbol: string;
+  base_asset: string;
+  radar_score: number;
+  price_change_pct: number;
+  range_pct: number;
+  spread_bps: number | null;
+  quote_volume: number | null;
+  trades_24h: number | null;
+  momentum_score: number | null;
+  volatility_score: number | null;
+  reasons: string[];
+};
+
+async function marketRadarSummary() {
+  const result = await db.from("brian_universe_snapshots")
+    .select("snapshot_id,provider,observed_at,eligible_count,candidates")
+    .order("observed_at", { ascending: false })
+    .limit(1).maybeSingle();
+  if (result.error) throw result.error;
+  if (!result.data) {
+    return { status: "EMPTY", observed_at: null, age_seconds: null, candidates: [], hot: [] };
+  }
+
+  const payload = (result.data.candidates ?? {}) as Record<string, unknown>;
+  const rawRows = Array.isArray(payload.candidates) ? payload.candidates : [];
+  const candidates: RadarCandidate[] = rawRows.map((value) => {
+    const row = (value ?? {}) as Record<string, unknown>;
+    const symbol = String(row.symbol ?? "").toUpperCase();
+    const baseAsset = String(row.base_asset ?? symbol.replace(/USDT$/i, "")).toUpperCase();
+    return {
+      symbol,
+      base_asset: baseAsset,
+      radar_score: finite(row.radar_score) ?? 0,
+      price_change_pct: finite(row.price_change_pct) ?? 0,
+      range_pct: finite(row.range_pct) ?? 0,
+      spread_bps: finite(row.spread_bps),
+      quote_volume: finite(row.quote_volume),
+      trades_24h: finite(row.trades_24h),
+      momentum_score: finite(row.momentum_score),
+      volatility_score: finite(row.volatility_score),
+      reasons: Array.isArray(row.reasons) ? row.reasons.map((x) => String(x)).slice(0, 6) : [],
+    };
+  }).filter((row) => /^[A-Z0-9]{2,20}USDT$/.test(row.symbol) && /^[A-Z0-9]{2,16}$/.test(row.base_asset));
+
+  const hot = candidates
+    .filter((row) => Math.abs(row.price_change_pct) >= 5 || row.range_pct >= 15 || (row.momentum_score ?? 0) >= 0.8 || (row.volatility_score ?? 0) >= 0.8)
+    .sort((a, b) => b.radar_score - a.radar_score)
+    .slice(0, 10);
+  const observedAt = String(result.data.observed_at ?? "");
+  const age = ageSeconds(observedAt || null);
+
+  return {
+    status: age != null && age <= 420 ? "ONLINE" : "STALE",
+    provider: result.data.provider ?? null,
+    snapshot_id: result.data.snapshot_id ?? null,
+    observed_at: observedAt || null,
+    age_seconds: age,
+    eligible_count: Number(result.data.eligible_count ?? 0),
+    collector_version: String(payload.collector_version ?? ""),
+    candidates: candidates.slice(0, 16),
+    hot,
+    shadow_only: true,
+    live_execution: false,
   };
 }
 
@@ -128,7 +191,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const dip = await v8DipSummary();
+    const [dip, radar] = await Promise.all([v8DipSummary(), marketRadarSummary()]);
     if (dip) {
       const system = (data.system ?? {}) as Record<string, unknown>;
       system.dip = dip;
@@ -139,14 +202,18 @@ Deno.serve(async (req: Request) => {
       };
       data.system = system;
     }
+    const alpha = (data.alpha_v2 ?? {}) as Record<string, unknown>;
+    alpha.market_radar = radar;
+    data.alpha_v2 = alpha;
+    data.market_radar = radar;
   } catch (e) {
-    console.error("control-center-v8-overlay", e instanceof Error ? e.message : String(e));
+    console.error("control-center-v8-radar-overlay", e instanceof Error ? e.message : String(e));
   }
 
   const outHeaders = new Headers(core.headers);
   outHeaders.delete("content-length");
   outHeaders.set("content-type", "application/json; charset=utf-8");
   outHeaders.set("cache-control", "no-store");
-  outHeaders.set("x-brian-dip-overlay", "v8-server-authoritative");
+  outHeaders.set("x-brian-dip-overlay", "v8-server-authoritative+market-radar");
   return new Response(JSON.stringify(data), { status: core.status, headers: outHeaders });
 });
