@@ -28,10 +28,15 @@ uncertainty - eventDecay - freshnessDecay`.
 
 Spread, fee, and slippage are explicit round-trip cost components and must be
 finite, non-negative, and available at or before the decision. Inputs,
-contribution counts, numeric values, and timestamps are bounded. Equal-time
-contradictory observations or reliability snapshots contaminate the result;
-exact duplicates are canonicalized. Future source, reliability, event, and cost
-evidence never enters the decision projection and is exposed only as telemetry.
+contribution counts, numeric values, and timestamps are bounded. Numeric
+decision timestamps are integral epoch milliseconds and normalize to the same
+canonical UTC instant as equivalent timestamp strings. Fillability must also
+clear the safe lower bound implied by the bounded estimated round-trip cost;
+otherwise cost arithmetic fails closed rather than producing an unbounded
+estimate. Equal-time contradictory observations or reliability snapshots
+contaminate the result; exact duplicates are canonicalized. Future source,
+reliability, event, and cost evidence never enters the decision projection and
+is exposed only as telemetry.
 
 Replay compares the compiler with an independently hand-specified immutable
 projection. Adversarial stress evidence separately covers malformed and missing

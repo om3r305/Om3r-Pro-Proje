@@ -126,6 +126,30 @@ Deno.test("replay projection is unchanged by future evidence permutations", () =
   ) {
     throw new Error("input permutation contaminated replay");
   }
+  const numericDecision = compileExpectedEdgeAlphaCandidate(
+    envelope,
+    { decisionAt: Date.parse("2026-09-13T13:00:00Z") },
+  );
+  if (
+    JSON.stringify({
+      recommendation: numericDecision.recommendation,
+      eligible: numericDecision.eligible,
+      expectedGrossMoveBps: numericDecision.expectedGrossMoveBps,
+      estimatedRoundTripCostBps: numericDecision.estimatedRoundTripCostBps,
+      uncertaintyPenaltyBps: numericDecision.uncertaintyPenaltyBps,
+      matureIndependentGroupCount: numericDecision.matureIndependentGroupCount,
+      supportingObservationIds:
+        numericDecision.provenance.supportingObservationIds,
+    }) !== JSON.stringify({
+      recommendation: baseline.recommendation,
+      eligible: baseline.eligible,
+      expectedGrossMoveBps: baseline.expectedGrossMoveBps,
+      estimatedRoundTripCostBps: baseline.estimatedRoundTripCostBps,
+      uncertaintyPenaltyBps: baseline.uncertaintyPenaltyBps,
+      matureIndependentGroupCount: baseline.matureIndependentGroupCount,
+      supportingObservationIds: baseline.provenance.supportingObservationIds,
+    })
+  ) throw new Error("numeric decision timestamp changed replay");
   const futures = [
     {
       observationId: "future",

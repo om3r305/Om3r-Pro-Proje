@@ -80,6 +80,38 @@ Deno.test("fails closed for missing, zero, negative, and non-finite costs", () =
   }
 });
 
+Deno.test("fails closed before tiny fillability can overflow cost arithmetic", () => {
+  const result = compileExpectedEdgeAlphaCandidate(
+    input({ cost: cost({ fillability: Number.MIN_VALUE }) }),
+    { decisionAt: now },
+  );
+  if (
+    result.recommendation !== "COST_UNAVAILABLE" ||
+    result.eligible ||
+    result.estimatedRoundTripCostBps !== null ||
+    result.expectedNetEdgeBps !== null
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("normalizes numeric decision timestamps like equivalent UTC strings", () => {
+  const numeric = compileExpectedEdgeAlphaCandidate(input(), {
+    decisionAt: Date.parse(now),
+  });
+  const string = compileExpectedEdgeAlphaCandidate(input(), {
+    decisionAt: now,
+  });
+  if (
+    JSON.stringify(numeric) !== JSON.stringify(string) ||
+    numeric.provenance.decisionAt !== "2026-09-13T13:00:00.000Z"
+  ) throw new Error(JSON.stringify({ numeric, string }));
+  for (const decisionAt of [Number.NaN, 1.5, Number.MAX_VALUE]) {
+    const result = compileExpectedEdgeAlphaCandidate(input(), { decisionAt });
+    if (result.recommendation !== "CONTAMINATED_EVIDENCE") {
+      throw new Error(JSON.stringify(result));
+    }
+  }
+});
+
 Deno.test("requires independent mature groups and exact observation binding", () => {
   const result = compileExpectedEdgeAlphaCandidate(
     input({

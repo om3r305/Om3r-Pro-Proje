@@ -49,6 +49,8 @@ export interface ExpectedEdgeReport {
 const MAX_ROWS = 2_000;
 const MAX_CONTRIBUTIONS = 200;
 const MAX_BPS = 1_000_000;
+const MAX_ESTIMATED_COST_BPS = MAX_BPS * 3;
+const MAX_DATE_MS = 8.64e15;
 const MAX_CADENCE_SECONDS = 7 * 86_400;
 const ISO_UTC =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
@@ -76,6 +78,14 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function instant(value: unknown): Instant | null {
+  if (typeof value === "number") {
+    if (
+      !Number.isFinite(value) || !Number.isInteger(value) ||
+      Math.abs(value) > MAX_DATE_MS
+    ) return null;
+    const date = new Date(value);
+    return { text: date.toISOString(), ms: value };
+  }
   if (typeof value !== "string") return null;
   const match = ISO_UTC.exec(value);
   if (!match) return null;
@@ -392,7 +402,17 @@ export function compileExpectedEdgeAlphaCandidate(
     report.recommendation = "COST_UNAVAILABLE";
     return report;
   }
-  report.estimatedRoundTripCostBps = totalCostBps / validatedFillability;
+  const estimatedRoundTripCostBps = totalCostBps / validatedFillability;
+  if (
+    validatedFillability < totalCostBps / MAX_ESTIMATED_COST_BPS ||
+    !Number.isFinite(estimatedRoundTripCostBps) ||
+    estimatedRoundTripCostBps > MAX_ESTIMATED_COST_BPS
+  ) {
+    report.reasons.push("decision-time fillability-aware cost unavailable");
+    report.recommendation = "COST_UNAVAILABLE";
+    return report;
+  }
+  report.estimatedRoundTripCostBps = estimatedRoundTripCostBps;
   const eventAt = instant(input.eventAt);
   const eventCadence = cadence(input.eventCadenceSeconds);
   if (eventAt && eventAt.ms > decision.ms) {
@@ -419,6 +439,11 @@ export function compileExpectedEdgeAlphaCandidate(
   report.expectedNetEdgeBps = report.expectedGrossMoveBps -
     report.estimatedRoundTripCostBps -
     report.uncertaintyPenaltyBps - report.eventDecayPenaltyBps;
+  if (!Number.isFinite(report.expectedNetEdgeBps)) {
+    report.reasons.push("decision-time edge arithmetic unavailable");
+    report.recommendation = "COST_UNAVAILABLE";
+    return report;
+  }
   if (
     report.reasons.length || report.invalidEvidenceCount ||
     report.matureIndependentGroupCount < minimumGroups

@@ -125,6 +125,7 @@ Deno.test("stress matrix fails closed for malformed, extreme, and future evidenc
       }],
     },
     { ...base, cost: validCost({ fillability: 0 }) },
+    { ...base, cost: validCost({ fillability: Number.MIN_VALUE }) },
     { ...base, cost: validCost({ spreadBps: Number.NaN }) },
     {
       ...base,
@@ -155,5 +156,18 @@ Deno.test("stress matrix fails closed for malformed, extreme, and future evidenc
       result.live_execution !== false || result.canonical_mutation !== false ||
       result.promotionReady !== false
     ) throw new Error(JSON.stringify(result));
+    if (
+      (result.estimatedRoundTripCostBps !== null &&
+        !Number.isFinite(result.estimatedRoundTripCostBps)) ||
+      (result.expectedNetEdgeBps !== null &&
+        !Number.isFinite(result.expectedNetEdgeBps))
+    ) throw new Error(`non-finite arithmetic: ${JSON.stringify(result)}`);
+  }
+  const numeric = compileExpectedEdgeAlphaCandidate(base, {
+    decisionAt: Date.parse(decisionAt),
+  });
+  const string = compileExpectedEdgeAlphaCandidate(base, { decisionAt });
+  if (JSON.stringify(numeric) !== JSON.stringify(string)) {
+    throw new Error("numeric decision timestamp is not deterministic");
   }
 });
