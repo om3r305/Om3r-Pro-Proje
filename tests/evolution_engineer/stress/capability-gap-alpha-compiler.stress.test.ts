@@ -20,14 +20,26 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     second = { id: "failure-b", message: "b" };
   const rows: unknown[] = [
     make("a", "alpha", { failures: [first, first] }),
-    make("b", "alpha", { failures: [second] }),
-    make("conflict", "alpha", { health: "DEGRADED" }),
+    make("b", "alpha", {
+      completedAt: "2026-09-13T12:00:01Z",
+      freshnessAt: "2026-09-13T12:00:01Z",
+      failures: [second],
+    }),
+    make("conflict-healthy", "conflict", {
+      completedAt: "2026-09-13T12:00:00Z",
+      freshnessAt: "2026-09-13T12:00:00Z",
+    }),
+    make("conflict-degraded", "conflict", {
+      completedAt: "2026-09-13T12:00:00.0Z",
+      freshnessAt: "2026-09-13T12:00:00Z",
+      health: "DEGRADED",
+    }),
     make("malformed", "validonly", { failures: [{ id: "broken" }] }),
     make("future", "alpha", { completedAt: "2026-09-14T00:00:00Z" }),
     make("bad-provider", "9bad"),
   ];
   for (let i = 0; i < 40; i++) {
-    rows.push(make(`overflow-${i}`, `provider-${i}`));
+    rows.push(make(`overflow-${i}`, `z-provider-${i}`));
   }
   const result = compileCapabilityGapAlphaCompiler(rows, {
     observedAt: "2026-09-13T13:00:00Z",

@@ -59,7 +59,7 @@ Deno.test("future freshness and future-only providers are isolated", () => {
   if (
     result.providers.some((provider) => provider.providerId === "futureonly") ||
     result.futureTelemetry.futureEvidenceCount !== 1 ||
-    result.providers[0]?.freshnessAt !== "2026-09-13T12:00:00Z"
+    result.providers[0]?.freshnessAt !== "2026-09-13T12:00:00.000Z"
   ) throw new Error(JSON.stringify(result));
 });
 
@@ -216,7 +216,13 @@ Deno.test("future-only providers do not consume provider diagnostics or truncati
 
 Deno.test("non-finite limits use bounded defaults", () => {
   const result = compileCapabilityGapAlphaCompiler(
-    [row(), row({ rowId: "second" })],
+    [
+      row(),
+      row({
+        rowId: "second",
+        completedAt: "2026-09-13T12:00:01Z",
+      }),
+    ],
     { observedAt: now, maxRows: Number.NaN, maxProviders: Infinity },
   );
   if (result.processedDecisionRowCount !== 2 || result.providers.length !== 1) {
