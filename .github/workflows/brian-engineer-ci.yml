@@ -12,10 +12,8 @@ on:
       - 'supabase/functions/_shared/evolution_engineer_guard.ts'
       - 'supabase/functions/_shared/evolution_engineer_guard.test.ts'
       - 'supabase/functions/brian-evolution-engineering-gateway/**'
-      - 'supabase/migrations/202609131250_brian_evolution_engineering_pipeline.sql'
-      - 'supabase/migrations/202609131251_brian_evolution_engineering_rpc_bridge.sql'
-      - 'supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql'
-      - 'tests/test_brian_evolution_engineering_pipeline.py'
+      - 'supabase/migrations/*_brian_evolution_engineering_*.sql'
+      - 'tests/test_brian_evolution_engineering_*.py'
   workflow_dispatch:
 
 permissions:
@@ -81,7 +79,7 @@ jobs:
           grep -Fq "human_approval_status='APPROVED'" supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql
           grep -Fq "github.event.review.user.login == github.repository_owner" .github/workflows/brian-engineer-release.yml
           grep -Fq "Automatic rollback refused because canonical branch advanced" .github/workflows/brian-engineer-release.yml
-          if grep -Eqi 'cron\.schedule|activate_evolution_os' supabase/migrations/20260913125*.sql; then
+          if grep -Eqi 'cron\.schedule|activate_evolution_os' supabase/migrations/*_brian_evolution_engineering_*.sql; then
             echo 'Engineering migrations must not self-schedule or activate Evolution OS.'
             exit 1
           fi
@@ -147,18 +145,15 @@ jobs:
       - name: Apply engineering migrations on PostgreSQL 16
         run: |
           set -euo pipefail
-          for migration in \
-            supabase/migrations/202609131250_brian_evolution_engineering_pipeline.sql \
-            supabase/migrations/202609131251_brian_evolution_engineering_rpc_bridge.sql \
-            supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql; do
+          for migration in $(printf '%s\n' supabase/migrations/*_brian_evolution_engineering_*.sql | sort); do
             echo "Applying $migration"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Run real lifecycle and rollback tests
+      - name: Run real lifecycle, rollback and queue tests
         run: |
           python -m pip install -q pytest psycopg2-binary
-          python -m pytest -q tests/test_brian_evolution_engineering_pipeline.py -v
+          python -m pytest -q tests/test_brian_evolution_engineering_*.py -v
 
       - name: Verify service-role-only RPC grants
         run: |
