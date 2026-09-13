@@ -2,15 +2,15 @@
 @media (max-width: 900px) {
   html, body {
     min-height: 100%;
-    height: auto;
+    height: auto !important;
     max-width: 100%;
-    overflow-x: hidden;
-    touch-action: pan-y pinch-zoom;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    touch-action: pan-y pinch-zoom !important;
     -webkit-overflow-scrolling: touch;
   }
 
   body:not(.frontier-overlay-open) {
-    overflow-y: auto !important;
     position: relative !important;
   }
 
@@ -18,7 +18,7 @@
     min-height: 100dvh;
     height: auto !important;
     overflow: visible !important;
-    padding-bottom: calc(132px + env(safe-area-inset-bottom)) !important;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom)) !important;
   }
 
   .shell,
@@ -28,18 +28,17 @@
   .section,
   main,
   section {
-    height: auto;
-    max-height: none;
+    height: auto !important;
+    max-height: none !important;
   }
 
-  /* Animated full-size SVG is decorative; never steal taps/scroll gestures. */
+  /* Decorative hero graphics must never become gesture targets. */
   .hero .flow-map,
   .hero .brain-core,
   .hero .brain-orbit,
   .hero .brain-svg,
   .hero::before {
     pointer-events: none !important;
-    touch-action: none !important;
   }
 
   .hero .node,
@@ -49,11 +48,10 @@
   textarea,
   select,
   [role="button"] {
-    pointer-events: auto;
-    touch-action: manipulation;
+    pointer-events: auto !important;
   }
 
-  /* Hidden full-screen layers must be truly inert on iOS Safari. */
+  /* Hidden fullscreen layers are fully inert. */
   .unlock:not(.show),
   .modal:not(.show),
   #brianAnatomyLive:not(.bal-show) {
@@ -69,20 +67,11 @@
     pointer-events: auto !important;
   }
 
-  /* Bottom selector stays reachable but no longer masks the last content. */
+  /* Mobile already has Brian / DIP switch in the header. Remove duplicate fixed nav. */
   .bottom-nav {
-    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
-    width: calc(100vw - 28px) !important;
-    max-width: 560px !important;
-    z-index: 80 !important;
-    pointer-events: none;
-  }
-  .bottom-nav a {
-    pointer-events: auto;
-    min-height: 48px;
+    display: none !important;
   }
 
-  /* Let every dashboard block participate in normal document flow. */
   #worldPanel,
   #autonomyRow,
   #developmentLaunch,
@@ -92,9 +81,4 @@
     position: relative;
     min-height: 0;
   }
-}
-
-@media (max-width: 430px) {
-  .app { padding-bottom: calc(122px + env(safe-area-inset-bottom)) !important; }
-  .bottom-nav { width: calc(100vw - 20px) !important; }
 }
