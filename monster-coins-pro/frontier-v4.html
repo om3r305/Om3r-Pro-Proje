@@ -45,6 +45,7 @@
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
+    await load('/frontier-engineer-console.js?v=20260914-e1');
     await load('/frontier-stability.js?v=20260913-s1');
     await load('/frontier-status-truth.js?v=20260913-t1');
     await load('/brain-anatomy-v2.js?v=20260913-rich1');
