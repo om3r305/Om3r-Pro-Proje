@@ -14,9 +14,9 @@ async function git(...args: string[]): Promise<string> {
 
 const base = (Deno.env.get("BRIAN_ENGINEER_BASE_SHA") ?? "").trim();
 if (!/^[0-9a-f]{7,64}$/i.test(base)) fail("BRIAN_ENGINEER_BASE_SHA must be a git SHA");
-const changed = (await git("diff", "--name-only", "--diff-filter=ACMR", `${base}...HEAD`)).split("\n").map((x) => x.trim()).filter(Boolean);
-const patch = await git("diff", "--no-ext-diff", "--binary", `${base}...HEAD`);
-const addedText = (await git("diff", "--unified=0", `${base}...HEAD`)).split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).join("\n");
+const changed = (await git("diff", "--name-only", "--diff-filter=ACMR", base)).split("\n").map((x) => x.trim()).filter(Boolean);
+const patch = await git("diff", "--no-ext-diff", "--binary", base);
+const addedText = (await git("diff", "--unified=0", base)).split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).join("\n");
 const patchBytes = new TextEncoder().encode(patch).length;
 const result = validateEngineerChangeSet({ changedPaths: changed, patchBytes, addedText });
 if (!result.valid) fail(result.reasons.join(" | "));
