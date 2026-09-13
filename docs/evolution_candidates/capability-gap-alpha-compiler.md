@@ -26,12 +26,17 @@ order.
 
 The input envelope, decision row count, and provider diagnostics are
 independently bounded. Overflow is exposed as truncation telemetry, not invalid
-evidence. Future rows are partitioned before the decision budget and are
-represented only by `futureTelemetry`; malformed future rows remain invalid
-evidence, while well-formed future rows cannot change classification, freshness,
-failures, lease accounting, invalid counts, blockers, provider diagnostics, or
-truncation state. The report always includes an explicit missing prospective
-multi-window shadow A/B blocker and remains non-promotable.
+evidence. The complete recognized provider set is determined from the accepted
+hard input envelope after runtime validation and future-row exclusion, before
+`maxRows` slices the retained decision rows; valid providers beyond the row
+limit still participate in deterministic provider-limit accounting, while
+well-formed future-only providers remain telemetry-only. Future rows are
+partitioned before the decision budget and are represented only by
+`futureTelemetry`; malformed future rows remain invalid evidence, while
+well-formed future rows cannot change classification, freshness, failures, lease
+accounting, invalid counts, blockers, provider diagnostics, or truncation state.
+The report always includes an explicit missing prospective multi-window shadow
+A/B blocker and remains non-promotable.
 
 Replay and adversarial stress evidence are intentionally separate from
 prospective shadow A/B evidence. This artifact is not promotable until

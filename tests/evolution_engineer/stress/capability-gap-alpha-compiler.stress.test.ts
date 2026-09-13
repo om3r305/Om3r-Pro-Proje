@@ -16,15 +16,17 @@ const make = (
 });
 
 Deno.test("stress bounds oversized evidence and deduplicates named failures", () => {
-  const first = { id: "failure-a", message: "a" },
-    second = { id: "failure-b", message: "b" };
-  const rows: unknown[] = [
-    make("a", "alpha", { failures: [first, first] }),
-    make("b", "alpha", {
+  const failureA = { id: "failure-a", message: "a" };
+  const failureB = { id: "failure-b", message: "b" };
+  const alphaFailureRows = [
+    make("alpha-row-1", "alpha", { failures: [failureA, failureA] }),
+    make("alpha-row-2", "alpha", {
       completedAt: "2026-09-13T12:00:01Z",
       freshnessAt: "2026-09-13T12:00:01Z",
-      failures: [second],
+      failures: [failureB],
     }),
+  ];
+  const conflictRows = [
     make("conflict-healthy", "conflict", {
       completedAt: "2026-09-13T12:00:00Z",
       freshnessAt: "2026-09-13T12:00:00Z",
@@ -34,8 +36,15 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
       freshnessAt: "2026-09-13T12:00:00Z",
       health: "DEGRADED",
     }),
+  ];
+  const rows: unknown[] = [
+    ...alphaFailureRows,
+    ...conflictRows,
     make("malformed", "validonly", { failures: [{ id: "broken" }] }),
-    make("future", "alpha", { completedAt: "2026-09-14T00:00:00Z" }),
+    make("future-only", "futureonly", {
+      completedAt: "2026-09-14T00:00:00Z",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    }),
     make("bad-provider", "9bad"),
   ];
   for (let i = 0; i < 40; i++) {
@@ -47,36 +56,77 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     maxProviders: 3,
     maxInputRows: 100,
   });
-  const rawFailureOccurrences = 3;
-  const expectedUniqueFailureIdentities = 2;
+  const rawFailureOccurrences = alphaFailureRows.flatMap((row) => row.failures)
+    .length;
+  const uniqueFailureIdentities = new Set(
+    alphaFailureRows.flatMap((row) =>
+      row.failures.map((failure) =>
+        JSON.stringify({
+          providerId: row.providerId,
+          rowId: row.rowId,
+          id: failure.id,
+          message: failure.message,
+        })
+      )
+    ),
+  ).size;
   const alpha = result.providers.find((provider) =>
     provider.providerId === "alpha"
   );
+  const providerIds = result.providers.map((provider) => provider.providerId);
+  const reversedResult = compileCapabilityGapAlphaCompiler(
+    [...rows].reverse(),
+    {
+      observedAt: "2026-09-13T13:00:00Z",
+      maxRows: 2,
+      maxProviders: 3,
+      maxInputRows: 100,
+    },
+  );
   if (
-    rawFailureOccurrences <= expectedUniqueFailureIdentities ||
-    alpha?.failedCount !== expectedUniqueFailureIdentities ||
-    alpha?.recentFailures.length !== expectedUniqueFailureIdentities
+    rawFailureOccurrences !== 3 ||
+    uniqueFailureIdentities !== 2 ||
+    rawFailureOccurrences <= uniqueFailureIdentities ||
+    alpha?.failedCount !== 2 ||
+    alpha?.recentFailures.length !== 2 ||
+    JSON.stringify(alpha?.recentFailures) !== JSON.stringify(["a", "b"])
   ) {
     throw new Error(`dedupe failed: ${JSON.stringify(result)}`);
   }
   if (
+    JSON.stringify(providerIds) !==
+      JSON.stringify(["alpha", "conflict", "validonly"]) ||
+    result.providerDiagnosticsTruncated !== true ||
+    result.providers.some((provider) => provider.providerId === "futureonly") ||
+    result.providers.some((provider) =>
+      provider.providerId.startsWith("z-provider-")
+    ) ||
     !result.blockers.includes(
       "ambiguous conflicting equal-timestamp evidence",
-    ) || result.invalidProviderCount < 1
-  ) throw new Error("stress blockers missing");
-  if (
-    result.providers.find((provider) => provider.providerId === "validonly")
-      ?.invalidEvidenceCount !== 1
-  ) throw new Error("invalid-only provider missing");
-  if (
-    result.processedDecisionRowCount > 2 || result.providers.length > 3 ||
+    ) ||
+    result.invalidProviderCount !== 1 ||
     result.invalidEvidenceCount !== 2 ||
     result.futureTelemetry.futureEvidenceCount !== 1 ||
+    result.processedDecisionRowCount > 2 ||
+    result.providers.length > 3 ||
+    JSON.stringify(result.providers) !==
+      JSON.stringify(reversedResult.providers)
+  ) {
+    throw new Error(
+      `provider-limit or dedupe invariance failed: ${JSON.stringify(result)}`,
+    );
+  }
+  if (
+    result.providers.find((provider) => provider.providerId === "validonly")
+        ?.invalidEvidenceCount !== 1 ||
     !result.blockers.includes(
       "missing prospective multi-window shadow A/B evidence",
-    ) || result.shadow_only !== true || result.live_execution !== false ||
+    ) ||
+    result.shadow_only !== true || result.live_execution !== false ||
     result.promotionReady !== false
-  ) throw new Error("hard bound or future isolation failed");
+  ) {
+    throw new Error("stress blockers or shadow semantics failed");
+  }
 });
 
 Deno.test("stress malformed future evidence remains invalid and order invariant", () => {

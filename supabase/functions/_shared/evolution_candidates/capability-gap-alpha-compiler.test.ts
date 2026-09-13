@@ -214,6 +214,45 @@ Deno.test("future-only providers do not consume provider diagnostics or truncati
   ) throw new Error(JSON.stringify(withFutureProvider));
 });
 
+Deno.test("provider candidates include recognized providers before maxRows slicing", () => {
+  const rows = [
+    row({
+      providerId: "alpha",
+      rowId: "r1",
+      completedAt: "2026-09-13T12:00:00Z",
+    }),
+    row({
+      providerId: "alpha",
+      rowId: "r2",
+      completedAt: "2026-09-13T12:00:01Z",
+    }),
+    row({
+      providerId: "beta",
+      rowId: "r3",
+      completedAt: "2026-09-13T12:00:02Z",
+    }),
+    row({
+      providerId: "gamma",
+      rowId: "r4",
+      completedAt: "2026-09-13T12:00:03Z",
+    }),
+  ];
+  const result = compileCapabilityGapAlphaCompiler(rows, {
+    observedAt: now,
+    maxRows: 2,
+    maxProviders: 2,
+  });
+  if (
+    result.processedDecisionRowCount !== 2 ||
+    !result.providerDiagnosticsTruncated ||
+    JSON.stringify(result.providers.map((provider) => provider.providerId)) !==
+      JSON.stringify(["alpha", "beta"]) ||
+    result.providers[0]?.classification !== "UNKNOWN"
+  ) {
+    throw new Error(JSON.stringify(result));
+  }
+});
+
 Deno.test("non-finite limits use bounded defaults", () => {
   const result = compileCapabilityGapAlphaCompiler(
     [

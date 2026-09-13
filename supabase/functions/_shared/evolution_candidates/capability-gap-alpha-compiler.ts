@@ -360,14 +360,15 @@ export function compileCapabilityGapAlphaCompiler(
   report.decisionTruncated = report.rowsExceeded;
 
   const providerCandidates = new Set<string>([
-    ...selected.map((row) => row.providerId),
+    ...uniqueValid.map((row) => row.providerId),
     ...invalidByProvider.keys(),
   ]);
-  const boundedProviders = [...providerCandidates].sort().slice(
-    0,
-    maxProviders,
+  const orderedProviderCandidates = [...providerCandidates].sort((a, b) =>
+    a.localeCompare(b)
   );
-  report.providerDiagnosticsTruncated = providerCandidates.size > maxProviders;
+  const boundedProviders = orderedProviderCandidates.slice(0, maxProviders);
+  report.providerDiagnosticsTruncated =
+    orderedProviderCandidates.length > maxProviders;
   report.providers = boundedProviders.map((id): ProviderDiagnostic => {
     const rows = selected.filter((row) => row.providerId === id);
     const failures = new Map<string, string>();
