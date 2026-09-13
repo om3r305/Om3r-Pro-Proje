@@ -131,9 +131,18 @@ begin
 
   if not allowed then raise exception 'invalid engineering transition % -> % (%).',r.phase,p_phase,p_event_kind; end if;
 
-  if p_phase not in ('DEPLOY','MONITOR','ROLLBACK','BLOCKED') and p_commit_sha is not null then
+  if p_phase not in ('DEPLOY','MONITOR','ROLLBACK','COMPLETE','BLOCKED') and p_commit_sha is not null then
     if p_commit_sha !~ '^[0-9a-fA-F]{40}$' then raise exception 'candidate commit SHA invalid'; end if;
     if r.commit_sha is not null and r.commit_sha<>p_commit_sha then raise exception 'candidate commit SHA changed after evidence started'; end if;
+  end if;
+
+  if p_phase='DEPLOY' then
+    if p_commit_sha is null or p_commit_sha !~ '^[0-9a-fA-F]{40}$' then raise exception 'deployed commit SHA invalid'; end if;
+  elsif p_phase in ('MONITOR','COMPLETE') then
+    if r.deployed_sha is null then raise exception 'deployed SHA missing before monitor/complete'; end if;
+    if p_commit_sha is distinct from r.deployed_sha then raise exception 'monitor/complete SHA does not match deployed SHA'; end if;
+  elsif p_phase='ROLLBACK' and p_commit_sha is not null and p_commit_sha !~ '^[0-9a-fA-F]{40}$' then
+    raise exception 'rollback commit SHA invalid';
   end if;
 
   insert into public.brian_evolution_engineering_events(run_id,event_kind,phase,passed,commit_sha,payload)
