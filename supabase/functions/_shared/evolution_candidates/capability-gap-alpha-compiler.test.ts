@@ -163,6 +163,35 @@ Deno.test("canonical instants detect equivalent-spelling conflicts deterministic
   }
 });
 
+Deno.test("same-instant conflict diagnostics remain input-order invariant", () => {
+  const rows = [
+    row({
+      rowId: "first",
+      completedAt: "2026-09-13T12:00:00Z",
+      freshnessAt: "2026-09-13T11:00:00Z",
+      health: "HEALTHY",
+      failures: [{ id: "a", message: "alpha" }],
+    }),
+    row({
+      rowId: "second",
+      completedAt: "2026-09-13T12:00:00.0Z",
+      freshnessAt: "2026-09-13T12:00:00Z",
+      health: "DEGRADED",
+      failures: [{ id: "b", message: "beta" }],
+    }),
+  ];
+  const forward = compileCapabilityGapAlphaCompiler(rows, { observedAt: now });
+  const backward = compileCapabilityGapAlphaCompiler([...rows].reverse(), {
+    observedAt: now,
+  });
+  if (
+    forward.blockers.join(",") !== backward.blockers.join(",") ||
+    JSON.stringify(forward.providers) !== JSON.stringify(backward.providers)
+  ) {
+    throw new Error(`${JSON.stringify(forward)} | ${JSON.stringify(backward)}`);
+  }
+});
+
 Deno.test("future-only providers do not consume provider diagnostics or truncation", () => {
   const baseline = compileCapabilityGapAlphaCompiler([row()], {
     observedAt: now,
