@@ -43,7 +43,7 @@ def test_collector_is_public_data_shadow_only_and_has_no_exchange_order_surface(
     assert "https://api.binance.com/api/v3/ticker/bookTicker" in source
     assert 'shadow_only: true' in source
     assert 'contentType: "application/gzip"' in source
-    assert 'MIN_INTERVAL_SECONDS = 780' in source
+    assert 'MIN_INTERVAL_SECONDS = 240' in source
 
     forbidden = (
         "/api/v3/order",
