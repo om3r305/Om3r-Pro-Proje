@@ -70,6 +70,7 @@ jobs:
           echo "run_id=$(jq -r '.claim.run_id' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
           echo "branch_name=$(jq -r '.claim.branch_name' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
           echo "base_sha=$(jq -r '.claim.base_sha' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
+          echo "resume_sha=$(jq -r '.claim.task.metadata.failed_candidate_sha // ""' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
 
       - name: Stop cleanly when queue is empty
         if: steps.claim.outputs.has_task != 'true'
@@ -85,6 +86,38 @@ jobs:
           test "$(git rev-parse HEAD)" = "$BASE_SHA"
           case "$BRANCH_NAME" in brian-engineer/*) ;; *) echo 'invalid engineering branch'; exit 1;; esac
           test -z "$(git status --porcelain)"
+
+      - name: Restore prior failed candidate checkpoint when available
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+          RESUME_SHA: ${{ steps.claim.outputs.resume_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RESUME_SHA" ]; then
+            echo 'No prior candidate checkpoint requested.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [[ "$RESUME_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || { echo 'Invalid prior candidate SHA'; exit 1; }
+          if ! git cat-file -e "${RESUME_SHA}^{commit}" 2>/dev/null; then
+            echo "Prior candidate $RESUME_SHA was created before checkpoint persistence existed; bootstrap this retry from canonical base." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          RESUME_BASE="$(git merge-base "$BASE_SHA" "$RESUME_SHA")"
+          test -n "$RESUME_BASE"
+          git diff --binary "$RESUME_BASE...$RESUME_SHA" > /tmp/brian-engineer-resume.patch
+          if [ ! -s /tmp/brian-engineer-resume.patch ]; then
+            echo 'Prior candidate has no resumable delta.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git apply --3way --index /tmp/brian-engineer-resume.patch
+          BRIAN_ENGINEER_BASE_SHA="$BASE_SHA" deno run --allow-env --allow-run --allow-read scripts/brian_engineer_guard.ts | tee /tmp/brian-engineer-resume-guard.json
+          jq -e '.status == "PASS"' /tmp/brian-engineer-resume-guard.json >/dev/null
+          git config user.name 'brian-engineer[bot]'
+          git config user.email 'brian-engineer@users.noreply.github.com'
+          git commit -m "engineer(brian): resume prior candidate ${RESUME_SHA:0:12}"
+          test -z "$(git status --porcelain)"
+          echo "Resumed prior candidate $RESUME_SHA on current canonical base." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build injection-resistant analysis brief
         if: steps.claim.outputs.has_task == 'true'
@@ -167,12 +200,24 @@ jobs:
           git commit -m "engineer(brian): candidate ${{ steps.claim.outputs.run_id }}"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Persist isolated candidate checkpoint before evidence
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BRANCH_NAME: ${{ steps.claim.outputs.branch_name }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -z "$(git status --porcelain)"
+          git push origin "$CANDIDATE_SHA:refs/heads/$BRANCH_NAME"
+          echo "Persisted isolated candidate checkpoint $CANDIDATE_SHA before evidence gates; it is not merged or deployed." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record exact CODE commit
         if: steps.claim.outputs.has_task == 'true'
         env:
           RUN_ID: ${{ steps.claim.outputs.run_id }}
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
-        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" CODE CODE "$CANDIDATE_SHA" '{"evidence":"Exact local candidate commit created; not pushed"}'
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" CODE CODE "$CANDIDATE_SHA" '{"evidence":"Exact candidate commit persisted on isolated branch; not merged or deployed"}'
 
       - name: Compile and type-check exact candidate
         if: steps.claim.outputs.has_task == 'true'
