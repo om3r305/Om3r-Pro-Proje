@@ -51,7 +51,7 @@ begin
     request_id,candidate_id,hypothesis_id,worker_id,base_branch,base_sha,source_parent_sha,branch_name,previous_good_sha,metadata
   ) values (
     req.request_id,req.candidate_id,req.hypothesis_id,p_worker_id,cfg.base_branch,p_base_sha,req.parent_commit,
-    'brian-engineer/' || substr(req.request_id,1,16),p_base_sha,p_base_sha,
+    'brian-engineer/' || substr(req.request_id,1,16),p_base_sha,
     jsonb_build_object(
       'requested_at',req.requested_at,
       'objective',req.objective,
