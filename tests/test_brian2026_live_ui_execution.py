@@ -10,7 +10,7 @@ INDEX = (ROOT / "monster-coins-pro" / "classic.html").read_text(encoding="utf-8"
 ROOT_INDEX = (ROOT / "monster-coins-pro" / "index.html").read_text(encoding="utf-8")
 FRONTIER = (ROOT / "monster-coins-pro" / "frontier-v3.html").read_text(encoding="utf-8")
 FRONTIER_V4 = (ROOT / "monster-coins-pro" / "frontier-v4.html").read_text(encoding="utf-8")
-ANATOMY = (ROOT / "monster-coins-pro" / "brain-anatomy-live.js").read_text(encoding="utf-8")
+ANATOMY = (ROOT / "monster-coins-pro" / "brain-anatomy-v2.js").read_text(encoding="utf-8")
 GUARD = (ROOT / "monster-coins-pro" / "dip-expert-v4-runtime-guard.js").read_text(encoding="utf-8")
 SERVER_UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read_text(encoding="utf-8")
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
@@ -26,8 +26,8 @@ def test_general_overview_defaults_to_live_alpha_instead_of_zero_frozen_tracker(
 
 def test_product_home_routes_to_unified_brian_v4_and_exposes_only_brian_and_dip_worlds():
     assert "location.replace('/frontier-v4.html'" in ROOT_INDEX
-    assert '/brain-anatomy-live.js' in FRONTIER_V4
-    assert 'BRIAN GELİŞİM ANATOMİSİ' in ANATOMY
+    assert '/brain-anatomy-v2.js' in FRONTIER_V4
+    assert 'Brian Gelişim Anatomisi' in ANATOMY
     assert 'href="/">Brian</a>' in FRONTIER
     assert 'href="/dip">DIP' in FRONTIER
     assert 'href="/classic.html"' not in FRONTIER
@@ -65,6 +65,6 @@ def test_modified_javascript_parses_when_node_is_available():
     node = shutil.which("node")
     if node is None:
         return
-    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js", "monster-coins-pro/frontier.js", "monster-coins-pro/frontier-v3.js", "monster-coins-pro/brain-anatomy-live.js"]:
+    for rel in ["monster-coins-pro/dashboard.js", "monster-coins-pro/dip-expert-v4-runtime-guard.js", "monster-coins-pro/dip-server-authoritative-v7.js", "monster-coins-pro/frontier.js", "monster-coins-pro/frontier-v3.js", "monster-coins-pro/brain-anatomy-v2.js"]:
         result = subprocess.run([node, "--check", str(ROOT / rel)], capture_output=True, text=True)
         assert result.returncode == 0, f"{rel}: {result.stderr}"
