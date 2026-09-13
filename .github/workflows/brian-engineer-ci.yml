@@ -12,9 +12,7 @@ on:
       - 'supabase/functions/_shared/evolution_engineer_guard.ts'
       - 'supabase/functions/_shared/evolution_engineer_guard.test.ts'
       - 'supabase/functions/brian-evolution-engineering-gateway/**'
-      - 'supabase/migrations/202609131250_brian_evolution_engineering_pipeline.sql'
-      - 'supabase/migrations/202609131251_brian_evolution_engineering_rpc_bridge.sql'
-      - 'supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql'
+      - 'supabase/migrations/*_brian_evolution_engineering_*.sql'
       - 'tests/test_brian_evolution_engineering_pipeline.py'
   workflow_dispatch:
 
@@ -81,7 +79,7 @@ jobs:
           grep -Fq "human_approval_status='APPROVED'" supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql
           grep -Fq "github.event.review.user.login == github.repository_owner" .github/workflows/brian-engineer-release.yml
           grep -Fq "Automatic rollback refused because canonical branch advanced" .github/workflows/brian-engineer-release.yml
-          if grep -Eqi 'cron\.schedule|activate_evolution_os' supabase/migrations/20260913125*.sql; then
+          if grep -Eqi 'cron\.schedule|activate_evolution_os' supabase/migrations/*_brian_evolution_engineering_*.sql; then
             echo 'Engineering migrations must not self-schedule or activate Evolution OS.'
             exit 1
           fi
@@ -147,10 +145,7 @@ jobs:
       - name: Apply engineering migrations on PostgreSQL 16
         run: |
           set -euo pipefail
-          for migration in \
-            supabase/migrations/202609131250_brian_evolution_engineering_pipeline.sql \
-            supabase/migrations/202609131251_brian_evolution_engineering_rpc_bridge.sql \
-            supabase/migrations/202609131252_brian_evolution_engineering_hardening.sql; do
+          for migration in $(printf '%s\n' supabase/migrations/*_brian_evolution_engineering_*.sql | sort); do
             echo "Applying $migration"
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
           done
