@@ -32,7 +32,12 @@ def analysis_prompt(task):
         - Define deterministic unit/regression evidence plus a separate non-DIP replay test and adversarial stress test.
         - Preserve shadow_only=true and live_execution=false.
 
-        Return exactly two top-level sections named UNDERSTAND and PLAN. Do not claim that code or tests have run.
+        Output contract:
+        - Return exactly two top-level sections named UNDERSTAND and PLAN.
+        - The first non-empty output line must be exactly UNDERSTAND at column 1.
+        - The PLAN heading must be exactly PLAN at column 1.
+        - Do not prefix either heading with Markdown markers such as #, ##, bullets, or numbering.
+        - Do not claim that code or tests have run.
         """
     )
 
