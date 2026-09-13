@@ -80,3 +80,64 @@ Deno.test("immutable replay keeps every decision field isolated from future perm
     }
   }
 });
+
+Deno.test("hard envelope boundary is explicit and observable", () => {
+  const inside = [
+    base,
+    future("inside-future", "2026-09-14T00:00:00Z"),
+  ];
+  const withinEnvelope = compileCapabilityGapAlphaCompiler(inside, {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 1,
+    maxInputRows: 2,
+  });
+  const beyondEnvelope = compileCapabilityGapAlphaCompiler([
+    ...inside,
+    {
+      ...base,
+      providerId: "beyond",
+      rowId: "beyond-envelope",
+      completedAt: "2026-09-13T12:00:02Z",
+      freshnessAt: "2026-09-13T12:00:02Z",
+      failures: [{ id: "beyond-failure", message: "observed only inside" }],
+    },
+  ], {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 1,
+    maxInputRows: 2,
+  });
+  const movedInside = compileCapabilityGapAlphaCompiler([
+    base,
+    {
+      ...base,
+      providerId: "beyond",
+      rowId: "beyond-envelope",
+      completedAt: "2026-09-13T12:00:02Z",
+      freshnessAt: "2026-09-13T12:00:02Z",
+      failures: [{ id: "beyond-failure", message: "observed only inside" }],
+    },
+  ], {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 1,
+    maxInputRows: 2,
+  });
+  if (
+    withinEnvelope.inputEnvelopeTruncated ||
+    !beyondEnvelope.inputEnvelopeTruncated ||
+    !beyondEnvelope.blockers.includes("input envelope truncated") ||
+    !beyondEnvelope.blockers.includes(
+      "input envelope limit prevents complete evidence inspection",
+    ) ||
+    beyondEnvelope.providers.some((provider) =>
+      provider.providerId === "beyond"
+    ) ||
+    movedInside.providers.every((provider) =>
+      provider.providerId !== "beyond"
+    ) ||
+    movedInside.invalidEvidenceCount !== 0
+  ) {
+    throw new Error(
+      JSON.stringify({ withinEnvelope, beyondEnvelope, movedInside }),
+    );
+  }
+});

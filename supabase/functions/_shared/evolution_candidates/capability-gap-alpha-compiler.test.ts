@@ -287,3 +287,92 @@ Deno.test("overflow remains bounded and separate from invalid evidence", () => {
     result.promotionReady !== false
   ) throw new Error(JSON.stringify(result));
 });
+
+Deno.test("invalid limit values use the default bounded options", () => {
+  const baseline = compileCapabilityGapAlphaCompiler([
+    row({ rowId: "a", completedAt: "2026-09-13T12:00:00Z" }),
+    row({ rowId: "b", completedAt: "2026-09-13T12:00:01Z" }),
+  ], { observedAt: now });
+  for (const value of [NaN, Infinity, -Infinity, 0, -1, 1.5]) {
+    const result = compileCapabilityGapAlphaCompiler([
+      row({ rowId: "a", completedAt: "2026-09-13T12:00:00Z" }),
+      row({ rowId: "b", completedAt: "2026-09-13T12:00:01Z" }),
+    ], {
+      observedAt: now,
+      maxRows: value,
+      maxProviders: value,
+      maxInputRows: value,
+    });
+    if (
+      result.processedDecisionRowCount !==
+        baseline.processedDecisionRowCount ||
+      result.providers.length !== baseline.providers.length ||
+      result.inputEnvelopeTruncated !== baseline.inputEnvelopeTruncated ||
+      result.invalidEvidenceCount !== 0
+    ) throw new Error(`invalid option changed defaults: ${value}`);
+  }
+});
+
+Deno.test("future freshness is telemetry-only and malformed freshness is invalid", () => {
+  const baseline = compileCapabilityGapAlphaCompiler([row()], {
+    observedAt: now,
+    maxProviders: 1,
+  });
+  const futureFreshness = compileCapabilityGapAlphaCompiler([
+    row({
+      rowId: "future-freshness",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    }),
+  ], { observedAt: now, maxProviders: 1 });
+  if (
+    futureFreshness.futureTelemetry.futureEvidenceCount !== 1 ||
+    futureFreshness.providers.length !== 0 ||
+    futureFreshness.invalidEvidenceCount !== 0 ||
+    futureFreshness.processedDecisionRowCount !== 0 ||
+    futureFreshness.providerDiagnosticsTruncated ||
+    futureFreshness.decisionTruncated
+  ) throw new Error(JSON.stringify(futureFreshness));
+  const malformed = compileCapabilityGapAlphaCompiler([
+    row({ freshnessAt: "2026-09-14T00:00:00+01:00" }),
+  ], { observedAt: now });
+  if (
+    malformed.futureTelemetry.futureEvidenceCount !== 0 ||
+    malformed.invalidEvidenceCount !== 1 ||
+    malformed.providers[0]?.invalidEvidenceCount !== 1
+  ) throw new Error(JSON.stringify({ baseline, malformed }));
+});
+
+Deno.test("provider diagnostics are independent from maxRows", () => {
+  const rows = [
+    row({ providerId: "alpha", rowId: "a" }),
+    row({
+      providerId: "beta",
+      rowId: "b",
+      completedAt: "2026-09-13T12:00:01Z",
+    }),
+    row({
+      providerId: "gamma",
+      rowId: "c",
+      completedAt: "2026-09-13T12:00:02Z",
+    }),
+    row({
+      providerId: "validonly",
+      rowId: "bad",
+      completedAt: "2026-09-13T12:00:03Z",
+      failures: [{ id: "missing-message" }],
+    }),
+  ];
+  const result = compileCapabilityGapAlphaCompiler(rows, {
+    observedAt: now,
+    maxRows: 1,
+    maxProviders: 3,
+  });
+  if (
+    JSON.stringify(result.providers.map((provider) => provider.providerId)) !==
+      JSON.stringify(["alpha", "beta", "gamma"]) ||
+    result.providers[0]?.classification !== "UNKNOWN" ||
+    result.providerDiagnosticsTruncated !== true ||
+    result.processedDecisionRowCount !== 1 ||
+    result.invalidEvidenceCount !== 1
+  ) throw new Error(JSON.stringify(result));
+});

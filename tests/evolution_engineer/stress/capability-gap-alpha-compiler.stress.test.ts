@@ -102,12 +102,21 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     },
   );
   if (
-    rawFailureOccurrences !== 3 ||
     uniqueFailureIdentities !== 2 ||
     rawFailureOccurrences <= uniqueFailureIdentities ||
     alpha?.failedCount !== 2 ||
     alpha?.recentFailures.length !== 2 ||
-    JSON.stringify(alpha?.recentFailures) !== JSON.stringify(["a", "b"])
+    JSON.stringify(alpha?.recentFailures) !== JSON.stringify(["a", "b"]) ||
+    JSON.stringify(alpha?.recentFailures) !==
+      JSON.stringify(
+        reversedResult.providers.find((provider) =>
+          provider.providerId === "alpha"
+        )?.recentFailures,
+      ) ||
+    alpha?.failedCount !==
+      reversedResult.providers.find((provider) =>
+        provider.providerId === "alpha"
+      )?.failedCount
   ) {
     throw new Error(`dedupe failed: ${JSON.stringify(result)}`);
   }

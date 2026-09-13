@@ -41,3 +41,22 @@ A/B blocker and remains non-promotable.
 Replay and adversarial stress evidence are intentionally separate from
 prospective shadow A/B evidence. This artifact is not promotable until
 independent prospective evidence covers multiple cadence windows.
+
+Option limits accept only finite positive integers; non-finite, zero, negative,
+and fractional values use bounded defaults. `maxRows` selects retained decision
+rows, while `maxProviders` independently bounds diagnostics over all recognized
+decision-time providers in the inspected envelope. Invalid-only providers may
+receive `UNKNOWN` diagnostics and provider-scoped invalid counts; provider
+overflow is truncation telemetry, never invalid evidence.
+
+A decision-time completion with a future `freshnessAt` is excluded from provider
+recognition and classification and appears only in future telemetry. A malformed
+non-null freshness value is invalid evidence, including when the completion
+itself is future-dated. The fixed input envelope is an observability boundary:
+rows beyond it are not classified, and envelope truncation produces explicit
+fail-closed blockers rather than an assertion about uninspected data.
+
+The explicit missing prospective multi-window shadow A/B blocker is intentional.
+Current diagnostics and replay/stress evidence do not constitute promotion
+evidence; `promotionReady` remains false until that separate shadow A/B gate is
+supplied.
