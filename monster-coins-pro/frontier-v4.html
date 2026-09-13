@@ -33,8 +33,10 @@
       const url=typeof input==='string'?input:String(input?.url||'');
       if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
       const isDevelopment=url.includes('/brian-development-status');
+      const isHeartbeat=url.includes('/brian-frontier-heartbeat');
       const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':'BRIAN_API_TIMEOUT'),isDevelopment?35000:8500);
+      const timeout=isDevelopment?35000:isHeartbeat?15000:8500;
+      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
       return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
@@ -44,6 +46,7 @@
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
     await load('/frontier-stability.js?v=20260913-s1');
+    await load('/frontier-status-truth.js?v=20260913-t1');
     await load('/brain-anatomy-v2.js?v=20260913-rich1');
     await load('/frontier-v4-mobile-rescue.js?v=20260913-r2');
   }catch(e){
