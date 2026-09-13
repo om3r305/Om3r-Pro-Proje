@@ -4,9 +4,9 @@ import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
 import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 
-const URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
+const db = createClient(SUPABASE_URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const COLLECTOR_ID = "brian-world-discovery-eye-v1";
 const BUCKET = "brian-intelligence-raw";
 const LEASE_SECONDS = 240;
