@@ -1,0 +1,407 @@
+name: Brian Engineer
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: 'Optional exact Evolution codegen request id'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  id-token: write
+  copilot-requests: write
+
+concurrency:
+  group: brian-engineer-production-queue
+  cancel-in-progress: false
+
+env:
+  ENGINEERING_GATEWAY: https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-evolution-engineering-gateway
+  ENGINEERING_AUDIENCE: brian-evolution-engineering-v1
+
+jobs:
+  engineer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out canonical Brian branch
+        uses: actions/checkout@v4
+        with:
+          ref: brian-2026
+          fetch-depth: 0
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Claim one trusted Evolution engineering task
+        id: claim
+        env:
+          REQUEST_ID: ${{ inputs.request_id || '' }}
+        run: |
+          set -euo pipefail
+          BASE_SHA="$(git rev-parse HEAD)"
+          oidc_json="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ENGINEERING_AUDIENCE}")"
+          token="$(printf '%s' "$oidc_json" | jq -er '.value')"
+          payload="$(jq -nc --arg action claim --arg base_sha "$BASE_SHA" --arg request_id "$REQUEST_ID" '{action:$action,base_sha:$base_sha,request_id:(if $request_id=="" then null else $request_id end)}')"
+          response="$(curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data "$payload")"
+          printf '%s' "$response" > /tmp/brian-engineer-claim.json
+          status="$(jq -r '.status' /tmp/brian-engineer-claim.json)"
+          if [ "$status" = "NO_TASK" ]; then
+            echo 'has_task=false' >> "$GITHUB_OUTPUT"
+            echo 'Brian Engineer queue is idle.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test "$status" = "CLAIMED"
+          jq -e '.claim.run_id and .claim.branch_name and .claim.base_sha and .claim.task.objective and .claim.task.changed_paths' /tmp/brian-engineer-claim.json >/dev/null
+          echo 'has_task=true' >> "$GITHUB_OUTPUT"
+          echo "run_id=$(jq -r '.claim.run_id' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
+          echo "branch_name=$(jq -r '.claim.branch_name' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$(jq -r '.claim.base_sha' /tmp/brian-engineer-claim.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Stop cleanly when queue is empty
+        if: steps.claim.outputs.has_task != 'true'
+        run: echo 'No eligible engineering task.'
+
+      - name: Validate isolated branch identity
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BRANCH_NAME: ${{ steps.claim.outputs.branch_name }}
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          case "$BRANCH_NAME" in brian-engineer/*) ;; *) echo 'invalid engineering branch'; exit 1;; esac
+          test -z "$(git status --porcelain)"
+
+      - name: Build injection-resistant analysis brief
+        if: steps.claim.outputs.has_task == 'true'
+        run: python scripts/brian_engineer_prompt.py analysis > /tmp/brian-engineer-analysis-prompt.txt
+
+      - name: Install GitHub Copilot CLI
+        if: steps.claim.outputs.has_task == 'true'
+        run: npm install -g @github/copilot@latest
+
+      - name: Understand and plan read-only
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          copilot -p "$(cat /tmp/brian-engineer-analysis-prompt.txt)" -s --effort=high --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-analysis.txt
+          grep -Eq '^UNDERSTAND([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
+          grep -Eq '^PLAN([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
+          test -z "$(git status --porcelain)" || { echo 'Read-only analysis mutated the worktree'; exit 1; }
+
+      - name: Record UNDERSTAND
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" UNDERSTAND UNDERSTAND '' '{"evidence":"Read-only repository inspection completed"}'
+
+      - name: Record PLAN
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan completed before source mutation"}'
+
+      - name: Build coding brief from analysis artifact
+        if: steps.claim.outputs.has_task == 'true'
+        run: python scripts/brian_engineer_prompt.py code > /tmp/brian-engineer-code-prompt.txt
+
+      - name: Code only in the unpushed worktree
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          copilot -p "$(cat /tmp/brian-engineer-code-prompt.txt)" -s --agent=brian-engineer --effort=high --allow-tool='write' --disable-builtin-mcps | tee /tmp/brian-engineer-agent.txt
+          grep -Eq '^CODE([[:space:]:]|$)' /tmp/brian-engineer-agent.txt
+          git add -N .
+
+      - name: Enforce immutable protected scope including transitive DIP dependencies
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BRIAN_ENGINEER_BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: deno run --allow-env --allow-run --allow-read scripts/brian_engineer_guard.ts | tee /tmp/brian-engineer-guard.json
+
+      - name: Create isolated local branch and exact candidate commit
+        if: steps.claim.outputs.has_task == 'true'
+        id: candidate
+        env:
+          BRANCH_NAME: ${{ steps.claim.outputs.branch_name }}
+        run: |
+          set -euo pipefail
+          git switch -c "$BRANCH_NAME"
+          git add -A
+          git diff --cached --quiet && { echo 'Agent produced no material change.'; exit 1; }
+          git config user.name 'brian-engineer[bot]'
+          git config user.email 'brian-engineer@users.noreply.github.com'
+          git commit -m "engineer(brian): candidate ${{ steps.claim.outputs.run_id }}"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Record exact CODE commit
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" CODE CODE "$CANDIDATE_SHA" '{"evidence":"Exact local candidate commit created; not pushed"}'
+
+      - name: Compile and type-check exact candidate
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t ts_files < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.tsx?$' || true)
+          if [ "${#ts_files[@]}" -gt 0 ]; then deno check "${ts_files[@]}"; fi
+          mapfile -t js_files < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.(js|cjs|mjs)$' || true)
+          for file in "${js_files[@]}"; do node --check "$file"; done
+          mapfile -t py_files < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.py$' || true)
+          if [ "${#py_files[@]}" -gt 0 ]; then python -m py_compile "${py_files[@]}"; fi
+
+      - name: Record COMPILE
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" COMPILE COMPILE "$CANDIDATE_SHA" '{"evidence":"Exact candidate syntax and type checks passed"}'
+
+      - name: Run changed tests and non-protected Evolution regression suite
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t deno_tests < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.test\.ts$' || true)
+          if [ "${#deno_tests[@]}" -gt 0 ]; then deno test --allow-read "${deno_tests[@]}"; fi
+          deno test --allow-read \
+            supabase/functions/_shared/evolution_contract.test.ts \
+            supabase/functions/_shared/evolution_core.test.ts \
+            supabase/functions/_shared/evolution_research.test.ts \
+            supabase/functions/_shared/evolution_sandbox.test.ts \
+            supabase/functions/_shared/evolution_lab.test.ts \
+            supabase/functions/_shared/evolution_codegen.test.ts \
+            supabase/functions/_shared/evolution_alpha_intelligence.test.ts \
+            supabase/functions/_shared/evolution_alpha_reliability_mapping.test.ts \
+            supabase/functions/_shared/evolution_prospective_timing.test.ts
+          mapfile -t py_tests < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '^tests/.*\.py$' || true)
+          if [ "${#py_tests[@]}" -gt 0 ]; then python -m pip install -q pytest && python -m pytest -q "${py_tests[@]}"; fi
+
+      - name: Record TEST
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" UNIT_REGRESSION TEST "$CANDIDATE_SHA" '{"evidence":"Changed tests and non-DIP Evolution regression suite passed"}'
+
+      - name: Run independent non-protected replay evidence
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t replay_tests < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '^tests/evolution_engineer/replay/.*\.test\.ts$' || true)
+          test "${#replay_tests[@]}" -gt 0 || { echo 'A changed non-protected replay test is mandatory.'; exit 1; }
+          deno test --allow-read "${replay_tests[@]}"
+
+      - name: Record REPLAY
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" REPLAY REPLAY "$CANDIDATE_SHA" '{"evidence":"Independent non-DIP replay passed"}'
+
+      - name: Run adversarial stress evidence
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t stress_tests < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '^tests/evolution_engineer/stress/.*\.test\.ts$' || true)
+          test "${#stress_tests[@]}" -gt 0 || { echo 'A changed adversarial stress test is mandatory.'; exit 1; }
+          deno test --allow-read "${stress_tests[@]}"
+
+      - name: Record STRESS
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: bash scripts/brian_engineer_gateway.sh event "$RUN_ID" STRESS REPLAY "$CANDIDATE_SHA" '{"evidence":"Adversarial non-DIP stress suite passed"}'
+
+      - name: Lint formatting and immutable-commit gate
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -z "$(git status --porcelain)" || { git status --short; echo 'Verification mutated exact candidate'; exit 1; }
+          mapfile -t format_files < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
+          if [ "${#format_files[@]}" -gt 0 ]; then deno fmt --check "${format_files[@]}"; fi
+          mapfile -t ts_files < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.tsx?$' || true)
+          if [ "${#ts_files[@]}" -gt 0 ]; then deno lint "${ts_files[@]}"; fi
+          git diff --check "$BASE_SHA...HEAD"
+
+      - name: Independent read-only engineering review
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git diff "$BASE_SHA...HEAD" > /tmp/brian-engineer.diff
+          python scripts/brian_engineer_prompt.py review > /tmp/brian-review-prompt.txt
+          copilot -p "$(cat /tmp/brian-review-prompt.txt)" -s --effort=high --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-review.txt
+          test "$(tail -n 1 /tmp/brian-engineer-review.txt)" = 'ENGINEER_REVIEW_VERDICT=PASS'
+          test -z "$(git status --porcelain)" || { echo 'Read-only review mutated candidate'; exit 1; }
+
+      - name: Record REVIEW
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -nc --arg review "$(tail -n 80 /tmp/brian-engineer-review.txt)" '{verdict:"PASS",review_tail:$review}')"
+          bash scripts/brian_engineer_gateway.sh event "$RUN_ID" INDEPENDENT_REVIEW REVIEW "$CANDIDATE_SHA" "$payload"
+
+      - name: Push exact reviewed branch only
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BRANCH_NAME: ${{ steps.claim.outputs.branch_name }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -z "$(git status --porcelain)"
+          git push origin "$CANDIDATE_SHA:refs/heads/$BRANCH_NAME"
+
+      - name: Open guarded engineering PR
+        if: steps.claim.outputs.has_task == 'true'
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH_NAME: ${{ steps.claim.outputs.branch_name }}
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            'Automated Brian engineering candidate.' \
+            '' \
+            'Understand, plan, compile, regression, isolated replay, adversarial stress and independent review gates are independently evidenced.' \
+            '' \
+            'This exact commit cannot merge until preview, measurement and explicit repository-owner approval pass.' \
+            '' \
+            'DIP is a protected boundary and is excluded.' > /tmp/brian-engineer-pr-body.md
+          PR_URL="$(gh pr create --base brian-2026 --head "$BRANCH_NAME" --title "Brian Engineer: ${RUN_ID}" --body-file /tmp/brian-engineer-pr-body.md)"
+          PR_NUMBER="$(gh pr view "$PR_URL" --json number --jq '.number')"
+          ACTUAL_HEAD="$(gh pr view "$PR_URL" --json headRefOid --jq '.headRefOid')"
+          test "$ACTUAL_HEAD" = "$CANDIDATE_SHA"
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Record PR
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          payload="$(jq -nc --arg pr_url "$PR_URL" --arg pr_number "$PR_NUMBER" '{pr_url:$pr_url,pr_number:$pr_number}')"
+          bash scripts/brian_engineer_gateway.sh event "$RUN_ID" PR_CREATED PR "$CANDIDATE_SHA" "$payload"
+
+      - name: Verify real preview when web changed or isolated branch preview otherwise
+        if: steps.claim.outputs.has_task == 'true'
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          if git diff --name-only "$BASE_SHA...HEAD" | grep -Eq '^monster-coins-pro/'; then
+            ok=false
+            preview_url=''
+            for _ in $(seq 1 60); do
+              checks="$(gh pr checks "$PR_URL" --json name,bucket,state,link 2>/dev/null || echo '[]')"
+              printf '%s' "$checks" > /tmp/brian-preview-checks.json
+              preview_url="$(printf '%s' "$checks" | jq -r '[.[] | select(.name|ascii_downcase|contains("vercel")) | .link][0] // ""')"
+              if printf '%s' "$checks" | jq -e '[.[] | select((.name|ascii_downcase|contains("vercel")) and (.bucket=="pass" or .state=="SUCCESS"))] | length > 0' >/dev/null; then ok=true; break; fi
+              if printf '%s' "$checks" | jq -e '[.[] | select((.name|ascii_downcase|contains("vercel")) and (.bucket=="fail" or .state=="FAILURE" or .state=="ERROR"))] | length > 0' >/dev/null; then break; fi
+              sleep 10
+            done
+            $ok || { echo 'No successful Vercel preview evidence was observed.'; cat /tmp/brian-preview-checks.json; exit 1; }
+            echo 'event_kind=VERCEL_PREVIEW' >> "$GITHUB_OUTPUT"
+            echo 'kind=vercel-runtime' >> "$GITHUB_OUTPUT"
+            echo "url=$preview_url" >> "$GITHUB_OUTPUT"
+          else
+            echo 'event_kind=PREVIEW_EQUIVALENT' >> "$GITHUB_OUTPUT"
+            echo 'kind=isolated-git-branch' >> "$GITHUB_OUTPUT"
+            echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record PREVIEW
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          PREVIEW_EVENT: ${{ steps.preview.outputs.event_kind }}
+          PREVIEW_KIND: ${{ steps.preview.outputs.kind }}
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: |
+          payload="$(jq -nc --arg preview_url "$PREVIEW_URL" --arg preview_kind "$PREVIEW_KIND" '{preview_url:$preview_url,preview_kind:$preview_kind}')"
+          bash scripts/brian_engineer_gateway.sh event "$RUN_ID" "$PREVIEW_EVENT" PREVIEW "$CANDIDATE_SHA" "$payload"
+
+      - name: Measure exact candidate commit and enter human-approval gate
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+          PREVIEW_KIND: ${{ steps.preview.outputs.kind }}
+        run: |
+          set -euo pipefail
+          patch_bytes="$(git diff --binary "$BASE_SHA...$CANDIDATE_SHA" | wc -c | tr -d ' ')"
+          changed_files="$(git diff --name-only "$BASE_SHA...$CANDIDATE_SHA" | sed '/^$/d' | wc -l | tr -d ' ')"
+          source_files="$(git diff --name-only "$BASE_SHA...$CANDIDATE_SHA" | grep -Ec '\.(ts|tsx|js|jsx|py|sql)$' || true)"
+          test_files="$(git diff --name-only "$BASE_SHA...$CANDIDATE_SHA" | grep -Ec '(\.test\.|^tests/)' || true)"
+          replay_files="$(git diff --name-only "$BASE_SHA...$CANDIDATE_SHA" | grep -Ec '^tests/evolution_engineer/replay/' || true)"
+          stress_files="$(git diff --name-only "$BASE_SHA...$CANDIDATE_SHA" | grep -Ec '^tests/evolution_engineer/stress/' || true)"
+          measurement="$(jq -nc \
+            --arg exact_commit_sha "$CANDIDATE_SHA" --arg preview_kind "$PREVIEW_KIND" \
+            --argjson patch_bytes "$patch_bytes" --argjson changed_files "$changed_files" --argjson source_files "$source_files" \
+            --argjson test_files "$test_files" --argjson replay_files "$replay_files" --argjson stress_files "$stress_files" \
+            '{measurement_kind:"EXACT_COMMIT_ENGINEERING",exact_commit_sha:$exact_commit_sha,patch_bytes:$patch_bytes,changed_files:$changed_files,source_files:$source_files,test_files:$test_files,replay_files:$replay_files,stress_files:$stress_files,compile_passed:true,regression_passed:true,replay_passed:true,stress_passed:true,independent_review_passed:true,preview_passed:true,preview_kind:$preview_kind,protected_scope_clear:true,indirect_dip_dependency_clear:true,canonical_behavior_promotion:false,shadow_only:true}')"
+          bash scripts/brian_engineer_gateway.sh measure "$RUN_ID" "$CANDIDATE_SHA" "$measurement" | tee /tmp/brian-measure.json
+          test "$(jq -r '.status' /tmp/brian-measure.json)" = 'MEASURED'
+          echo 'Exact candidate commit is measured and waiting for repository-owner approval.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail closed and record blocked run
+        if: failure() && steps.claim.outputs.has_task == 'true'
+        continue-on-error: true
+        env:
+          RUN_ID: ${{ steps.claim.outputs.run_id }}
+        run: |
+          set +e
+          commit_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+          bash scripts/brian_engineer_gateway.sh event "$RUN_ID" BLOCKED BLOCKED "$commit_sha" '{"error":"Brian Engineer workflow failed before human approval"}' >/dev/null 2>&1
+          exit 0

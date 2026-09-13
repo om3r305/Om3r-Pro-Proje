@@ -4,9 +4,9 @@ import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
 import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 
-const URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
+const db = createClient(SUPABASE_URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const COLLECTOR_ID = "brian-world-discovery-eye-v1";
 const BUCKET = "brian-intelligence-raw";
 const LEASE_SECONDS = 240;
@@ -26,6 +26,7 @@ const THEMES: Theme[] = [
 type Article = { url?: string; title?: string; seendate?: string; publishedAt?: string | null; domain?: string; language?: string; sourcecountry?: string };
 type Provider = "public_rss" | "gdelt_doc2" | "google_news_rss";
 type ThemeResult = { articles: Article[]; captureId: string; observedAt: string; provider: Provider; fallbackUsed: boolean; primaryError?: string };
+type GdeltPayload = { articles?: Article[] };
 
 function out(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -68,7 +69,7 @@ function parseRss(xml: string, defaultDomain = "rss"): Article[] {
     if (pubDate) { const d = new Date(pubDate); if (Number.isFinite(d.getTime())) publishedAt = d.toISOString(); }
     if (!title || !url) continue;
     let domain = sourceName || defaultDomain;
-    try { domain = new URL(sourceUrl || url).hostname.replace(/^www\./, "") || domain; } catch (_) {}
+    try { domain = new URL(sourceUrl || url).hostname.replace(/^www\./, "") || domain; } catch (_) { /* malformed source URL: keep fallback domain */ }
     articles.push({ url, title, publishedAt, domain, language: "en", sourcecountry: "" });
     if (articles.length >= 75) break;
   }
@@ -108,7 +109,7 @@ async function fetchPublicRss(theme: Theme): Promise<Omit<ThemeResult, "fallback
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const xml = await response.text();
       let fallbackDomain = "public-rss";
-      try { fallbackDomain = new URL(feed).hostname.replace(/^www\./, ""); } catch (_) {}
+      try { fallbackDomain = new URL(feed).hostname.replace(/^www\./, ""); } catch (_) { /* malformed configured feed URL: keep fallback */ }
       const articles = parseRss(xml, fallbackDomain);
       if (!articles.length) throw new Error("EMPTY");
       const observedAt = new Date().toISOString();
@@ -128,9 +129,9 @@ async function fetchGdelt(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed
     throw new Error(`GDELT:${theme.id}:${response.status}${body ? `:${body}` : ""}`);
   }
   const text = await response.text();
-  let payload: any;
-  try { payload = JSON.parse(text); } catch (_) { throw new Error(`GDELT:${theme.id}:INVALID_JSON`); }
-  const articles = Array.isArray(payload?.articles) ? payload.articles as Article[] : [];
+  let payload: GdeltPayload;
+  try { payload = JSON.parse(text) as GdeltPayload; } catch (_) { throw new Error(`GDELT:${theme.id}:INVALID_JSON`); }
+  const articles = Array.isArray(payload?.articles) ? payload.articles : [];
   if (!articles.length) throw new Error(`GDELT:${theme.id}:EMPTY`);
   const observedAt = new Date().toISOString();
   const captureId = await rawCapture(theme, payload, observedAt, "gdelt_doc2", requestUrl);
