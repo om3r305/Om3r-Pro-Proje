@@ -167,7 +167,7 @@
         const widened=Math.min(8,Math.max(w,w*1.48));
         return original.call(this,x-(widened-w)/2,y,widened,h);
       }
-      return original.call(this,x,y,widened,h);
+      return original.call(this,x,y,w,h);
     };
   }
 
