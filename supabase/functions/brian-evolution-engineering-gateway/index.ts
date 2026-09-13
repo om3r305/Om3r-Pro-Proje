@@ -35,7 +35,8 @@ const RELEASE_EVENTS = new Map<string, string>([
 ]);
 
 type Claims = Record<string, unknown>;
-let jwksCache: { expires: number; keys: JsonWebKey[] } | null = null;
+type JwkWithKid = JsonWebKey & { kid?: string };
+let jwksCache: { expires: number; keys: JwkWithKid[] } | null = null;
 
 function out(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -53,11 +54,11 @@ function jsonPart(value: string): Record<string, unknown> {
 function audienceOk(value: unknown): boolean {
   return typeof value === "string" ? value === AUDIENCE : Array.isArray(value) && value.map(String).includes(AUDIENCE);
 }
-async function jwks(): Promise<JsonWebKey[]> {
+async function jwks(): Promise<JwkWithKid[]> {
   if (jwksCache && jwksCache.expires > Date.now()) return jwksCache.keys;
   const response = await fetch(`${ISSUER}/.well-known/jwks`, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`OIDC_JWKS_HTTP_${response.status}`);
-  const body = await response.json() as { keys?: JsonWebKey[] };
+  const body = await response.json() as { keys?: JwkWithKid[] };
   if (!Array.isArray(body.keys) || !body.keys.length) throw new Error("OIDC_JWKS_EMPTY");
   jwksCache = { expires: Date.now() + 60 * 60_000, keys: body.keys };
   return body.keys;
