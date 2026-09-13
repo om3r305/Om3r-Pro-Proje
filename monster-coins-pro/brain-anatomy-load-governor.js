@@ -36,19 +36,33 @@
     // Multiple legacy anatomy layers can ask at once; serve one live request to all of them.
     const c=readCache();
     if(c&&Date.now()-c.at<25000)return Promise.resolve(response(c.txt,'fresh-cache'));
-    if(inflight)return inflight.then(({txt})=>response(txt,'deduped'));
+    if(inflight)return inflight.then(({txt,status,ok})=>ok?response(txt,'deduped'):new Response(txt,{status:status||500,headers:{'content-type':'application/json; charset=utf-8'}}));
 
     inflight=wrapped(input,init).then(async r=>{
-      if(!r.ok)return{txt:await r.clone().text(),status:r.status,ok:false,headers:r.headers};
       const txt=await r.clone().text();
-      memoryText=txt;memoryAt=Date.now();
-      try{localStorage.setItem(CACHE,JSON.stringify({savedAt:memoryAt,text:txt}))}catch(_e){}
-      return{txt,status:r.status,ok:true,headers:r.headers};
+      if(r.ok){
+        memoryText=txt;memoryAt=Date.now();
+        try{localStorage.setItem(CACHE,JSON.stringify({savedAt:memoryAt,text:txt}))}catch(_e){}
+      }
+      return{txt,status:r.status,ok:r.ok};
     }).finally(()=>{setTimeout(()=>{inflight=null},0)});
 
-    return inflight.then(x=>{
-      if(x.ok)return response(x.txt,'live');
-      return new Response(x.txt,{status:x.status||500,headers:{'content-type':'application/json; charset=utf-8'}});
-    });
+    return inflight.then(x=>x.ok?response(x.txt,'live'):new Response(x.txt,{status:x.status||500,headers:{'content-type':'application/json; charset=utf-8'}}));
   };
+
+  // The exact skin has its own state. Wake it immediately after the user opens anatomy.
+  document.addEventListener('click',e=>{
+    if(!e.target?.closest?.('#balOpen'))return;
+    setTimeout(()=>{
+      if(!visible())return;
+      const refresh=document.querySelector('.bax-ref-wrap .bax-refresh');
+      if(refresh)refresh.click();
+    },80);
+  },true);
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible'||!visible())return;
+    const c=readCache();
+    if(!c||Date.now()-c.at>60000)setTimeout(()=>document.querySelector('.bax-ref-wrap .bax-refresh')?.click(),80);
+  });
 })();
