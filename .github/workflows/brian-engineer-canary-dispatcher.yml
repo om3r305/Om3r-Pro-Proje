@@ -1,0 +1,44 @@
+name: Brian Engineer Canary Dispatcher
+
+on:
+  push:
+    branches: [brian-2026]
+    paths:
+      - '.github/brian-engineer-canary.trigger'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: brian-engineer-canary-dispatcher
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out canonical branch
+        uses: actions/checkout@v4
+        with:
+          ref: brian-2026
+          fetch-depth: 1
+
+      - name: Dispatch canonical Brian Engineer workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          request_id=''
+          if [ -f .github/brian-engineer-canary.trigger ]; then
+            request_id="$(tr -d '[:space:]' < .github/brian-engineer-canary.trigger)"
+          fi
+          if [ -n "$request_id" ]; then
+            gh workflow run brian-engineer.yml --ref brian-2026 -f request_id="$request_id"
+          else
+            gh workflow run brian-engineer.yml --ref brian-2026
+          fi
+          echo 'Canonical Brian Engineer workflow dispatched.' >> "$GITHUB_STEP_SUMMARY"
