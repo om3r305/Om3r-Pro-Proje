@@ -80,10 +80,6 @@ function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function sha256(value: string | Uint8Array): Promise<string> {
   const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -186,60 +182,33 @@ async function rawCapture(
   return captureId;
 }
 
-async function fetchGdelt(theme: Theme, query: string, timespan: string): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
+async function fetchGdelt(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
   const params = new URLSearchParams({
-    query,
+    query: theme.query,
     mode: "ArtList",
     maxrecords: "75",
     format: "json",
     sort: "HybridRel",
-    timespan,
+    timespan: "6h",
   });
   const requestUrl = `${GDELT_BASE}?${params}`;
   const response = await fetch(requestUrl, {
     headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(18000),
+    signal: AbortSignal.timeout(7000),
   });
   if (!response.ok) {
-    const body = (await response.text().catch(() => "")).slice(0, 220).replace(/\s+/g, " ");
+    const body = (await response.text().catch(() => "")).slice(0, 180).replace(/\s+/g, " ");
     throw new Error(`GDELT:${theme.id}:${response.status}${body ? `:${body}` : ""}`);
   }
   const text = await response.text();
   let payload: any;
-  try {
-    payload = JSON.parse(text);
-  } catch (_) {
-    throw new Error(`GDELT:${theme.id}:INVALID_JSON:${text.slice(0, 180).replace(/\s+/g, " ")}`);
-  }
+  try { payload = JSON.parse(text); }
+  catch (_) { throw new Error(`GDELT:${theme.id}:INVALID_JSON:${text.slice(0, 140).replace(/\s+/g, " ")}`); }
   const articles = Array.isArray(payload?.articles) ? payload.articles as Article[] : [];
   if (!articles.length) throw new Error(`GDELT:${theme.id}:EMPTY`);
   const observedAt = new Date().toISOString();
   const captureId = await rawCapture(theme, payload, observedAt, "gdelt_doc2", requestUrl);
   return { articles, captureId, observedAt, provider: "gdelt_doc2" };
-}
-
-async function fetchGoogleNews(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
-  const params = new URLSearchParams({
-    q: `(${theme.fallbackQuery}) when:6h`,
-    hl: "en-US",
-    gl: "US",
-    ceid: "US:en",
-  });
-  const requestUrl = `${GOOGLE_NEWS_RSS}?${params}`;
-  const response = await fetch(requestUrl, {
-    headers: {
-      accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-      "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.2)",
-    },
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!response.ok) throw new Error(`GOOGLE_NEWS:${theme.id}:${response.status}`);
-  const xml = await response.text();
-  const articles = parseRss(xml, "news.google.com");
-  if (!articles.length) throw new Error(`GOOGLE_NEWS:${theme.id}:EMPTY`);
-  const observedAt = new Date().toISOString();
-  const captureId = await rawCapture(theme, xml, observedAt, "google_news_rss", requestUrl, "application/rss+xml");
-  return { articles, captureId, observedAt, provider: "google_news_rss" };
 }
 
 async function fetchPublicRss(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
@@ -249,9 +218,9 @@ async function fetchPublicRss(theme: Theme): Promise<Omit<ThemeResult, "fallback
       const response = await fetch(feed, {
         headers: {
           accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-          "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.2)",
+          "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.3)",
         },
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(7000),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const xml = await response.text();
@@ -269,33 +238,44 @@ async function fetchPublicRss(theme: Theme): Promise<Omit<ThemeResult, "fallback
   throw new Error(`PUBLIC_RSS:${theme.id}:${errors.join(" | ")}`);
 }
 
+async function fetchGoogleNews(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
+  const params = new URLSearchParams({
+    q: `(${theme.fallbackQuery}) when:6h`,
+    hl: "en-US",
+    gl: "US",
+    ceid: "US:en",
+  });
+  const requestUrl = `${GOOGLE_NEWS_RSS}?${params}`;
+  const response = await fetch(requestUrl, {
+    headers: {
+      accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+      "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.3)",
+    },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!response.ok) throw new Error(`GOOGLE_NEWS:${theme.id}:${response.status}`);
+  const xml = await response.text();
+  const articles = parseRss(xml, "news.google.com");
+  if (!articles.length) throw new Error(`GOOGLE_NEWS:${theme.id}:EMPTY`);
+  const observedAt = new Date().toISOString();
+  const captureId = await rawCapture(theme, xml, observedAt, "google_news_rss", requestUrl, "application/rss+xml");
+  return { articles, captureId, observedAt, provider: "google_news_rss" };
+}
+
 async function fetchTheme(theme: Theme): Promise<ThemeResult> {
   const errors: string[] = [];
-  const attempts = [
-    { query: theme.query, timespan: "2h" },
-    { query: theme.fallbackQuery, timespan: "6h" },
-  ];
-  for (let i = 0; i < attempts.length; i++) {
-    try {
-      const result = await fetchGdelt(theme, attempts[i].query, attempts[i].timespan);
-      return { ...result, fallbackUsed: i > 0, primaryError: errors.join(" | ") || undefined };
-    } catch (error) {
-      errors.push(errorText(error));
-      if (i < attempts.length - 1) await sleep(500);
-    }
-  }
   try {
-    const result = await fetchGoogleNews(theme);
-    return { ...result, fallbackUsed: true, primaryError: errors.join(" | ") };
-  } catch (error) {
-    errors.push(errorText(error));
-  }
+    const result = await fetchGdelt(theme);
+    return { ...result, fallbackUsed: false };
+  } catch (error) { errors.push(errorText(error)); }
   try {
     const result = await fetchPublicRss(theme);
     return { ...result, fallbackUsed: true, primaryError: errors.join(" | ") };
-  } catch (error) {
-    errors.push(errorText(error));
-  }
+  } catch (error) { errors.push(errorText(error)); }
+  try {
+    const result = await fetchGoogleNews(theme);
+    return { ...result, fallbackUsed: true, primaryError: errors.join(" | ") };
+  } catch (error) { errors.push(errorText(error)); }
   throw new Error(errors.join(" || "));
 }
 
@@ -348,7 +328,7 @@ Deno.serve(async (req: Request) => {
       const themeErrors: Record<string, string> = {};
       let observed = 0;
 
-      for (const theme of themes) {
+      await Promise.all(themes.map(async (theme) => {
         try {
           const result = await fetchTheme(theme);
           providerByTheme[theme.id] = result.provider;
@@ -400,7 +380,7 @@ Deno.serve(async (req: Request) => {
           themeErrors[theme.id] = errorText(error).slice(0, 900);
           console.error("world discovery theme", theme.id, error);
         }
-      }
+      }));
 
       if (events.length) {
         const q = await db.from("brian_intel_events").upsert(events, { onConflict: "event_id", ignoreDuplicates: true });
