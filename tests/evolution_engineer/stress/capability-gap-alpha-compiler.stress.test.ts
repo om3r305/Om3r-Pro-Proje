@@ -15,16 +15,34 @@ const make = (
   ...extra,
 });
 
+type StressFailure = {
+  id: string;
+  message: string;
+};
+
+type CountableAlphaRow = {
+  providerId: string;
+  rowId: string;
+  completedAt: string;
+  freshnessAt: string;
+  failures: StressFailure[];
+};
+
 Deno.test("stress bounds oversized evidence and deduplicates named failures", () => {
-  const failureA = { id: "failure-a", message: "a" };
-  const failureB = { id: "failure-b", message: "b" };
-  const alphaFailureRows = [
-    make("alpha-row-1", "alpha", { failures: [failureA, failureA] }),
-    make("alpha-row-2", "alpha", {
-      completedAt: "2026-09-13T12:00:01Z",
-      freshnessAt: "2026-09-13T12:00:01Z",
+  const failureA: StressFailure = { id: "failure-a", message: "a" };
+  const failureB: StressFailure = { id: "failure-b", message: "b" };
+  const alphaFailureRows: CountableAlphaRow[] = [
+    {
+      ...make("alpha-row-1", "alpha"),
+      failures: [failureA, failureA],
+    },
+    {
+      ...make("alpha-row-2", "alpha", {
+        completedAt: "2026-09-13T12:00:01Z",
+        freshnessAt: "2026-09-13T12:00:01Z",
+      }),
       failures: [failureB],
-    }),
+    },
   ];
   const conflictRows = [
     make("conflict-healthy", "conflict", {
