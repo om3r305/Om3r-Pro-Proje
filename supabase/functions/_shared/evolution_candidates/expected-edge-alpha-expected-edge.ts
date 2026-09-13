@@ -189,6 +189,8 @@ export function compileExpectedEdgeAlphaCandidate(
     MAX_CONTRIBUTIONS,
     MAX_CONTRIBUTIONS,
   );
+  report.truncated = source.length > maxRows ||
+    reliabilityRows.length > maxRows;
   const addInvalid = () => {
     report.invalidEvidenceCount++;
   };
@@ -349,13 +351,19 @@ export function compileExpectedEdgeAlphaCandidate(
     )
     : null;
   const fillability = cost ? boundedNumber(cost.fillability, 1) : null;
-  const validatedCostParts = costParts?.reduce<number[] | null>(
-    (parts, part) =>
-      parts === null || part == null || !Number.isFinite(part) || part < 0
-        ? null
-        : [...parts, part],
-    [],
-  );
+  let validatedCostParts: number[] | null = null;
+  if (costParts !== null) {
+    const numericParts: number[] = [];
+    let valid = true;
+    for (const part of costParts) {
+      if (part == null || !Number.isFinite(part) || part < 0) {
+        valid = false;
+        break;
+      }
+      numericParts.push(part);
+    }
+    if (valid) validatedCostParts = numericParts;
+  }
   const validatedFillability = fillability != null &&
       Number.isFinite(fillability) && fillability > 0 && fillability <= 1
     ? fillability
@@ -373,9 +381,17 @@ export function compileExpectedEdgeAlphaCandidate(
     report.recommendation = "COST_UNAVAILABLE";
     return report;
   }
-  report.estimatedRoundTripCostBps =
-    validatedCostParts.reduce((sum, part) => sum + part, 0) /
-    validatedFillability;
+  const totalCostBps = validatedCostParts === null
+    ? null
+    : validatedCostParts.reduce((sum, part) => sum + part, 0);
+  if (
+    totalCostBps === null || totalCostBps <= 0 || validatedFillability === null
+  ) {
+    report.reasons.push("decision-time fillability-aware cost unavailable");
+    report.recommendation = "COST_UNAVAILABLE";
+    return report;
+  }
+  report.estimatedRoundTripCostBps = totalCostBps / validatedFillability;
   const eventAt = instant(input.eventAt);
   const eventCadence = cadence(input.eventCadenceSeconds);
   if (eventAt && eventAt.ms > decision.ms) {

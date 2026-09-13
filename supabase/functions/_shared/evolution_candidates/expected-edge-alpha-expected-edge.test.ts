@@ -7,10 +7,10 @@ const observation = (id: string, extra: Record<string, unknown> = {}) => ({
   sensorFamily: "momentum",
   horizon: "300s",
   direction: "up",
-  observedAt: "2026-09-13T12:00:00Z",
+  observedAt: "2026-09-13T12:55:00Z",
   cadenceSeconds: 300,
-  evaluationStartAt: "2026-09-13T12:00:00Z",
-  evaluationEndAt: "2026-09-13T12:05:00Z",
+  evaluationStartAt: "2026-09-13T12:55:00Z",
+  evaluationEndAt: "2026-09-13T13:00:00Z",
   ...extra,
 });
 const reliability = (
@@ -20,7 +20,7 @@ const reliability = (
 ) => ({
   observationId: id,
   groupId,
-  snapshotAt: "2026-09-13T12:30:00Z",
+  snapshotAt: "2026-09-13T12:58:00Z",
   horizon: "300s",
   cadenceSeconds: 300,
   provenance: "reliability-a",
@@ -31,7 +31,7 @@ const reliability = (
   ...extra,
 });
 const cost = (extra: Record<string, unknown> = {}) => ({
-  asOf: "2026-09-13T12:45:00Z",
+  asOf: "2026-09-13T12:59:00Z",
   spreadBps: 10,
   feeBps: 5,
   slippageBps: 5,
@@ -146,21 +146,21 @@ Deno.test("preserves a horizon-aligned 24-hour evaluation window", () => {
     input({
       sourceObservations: [observation("long", {
         horizon: "24h",
-        observedAt: "2026-09-12T12:00:00Z",
+        observedAt: "2026-09-12T13:00:00Z",
         cadenceSeconds: 3600,
-        evaluationStartAt: "2026-09-12T12:00:00Z",
+        evaluationStartAt: "2026-09-12T13:00:00Z",
         evaluationEndAt: "2026-09-13T12:00:00Z",
       })],
       reliabilitySnapshots: [
         reliability("long", "g1", {
           horizon: "24h",
           cadenceSeconds: 3600,
-          snapshotAt: "2026-09-13T11:30:00Z",
+          snapshotAt: "2026-09-13T12:30:00Z",
         }),
         reliability("o2", "g2", {
           horizon: "24h",
           cadenceSeconds: 3600,
-          snapshotAt: "2026-09-13T11:30:00Z",
+          snapshotAt: "2026-09-13T12:30:00Z",
         }),
       ],
     }),
