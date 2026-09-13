@@ -15,8 +15,9 @@ are detected using the parsed completion instant across the accepted input
 envelope before the decision row limit is applied. Equivalent UTC spellings
 collapse deterministically; contradictory rows use a complete classification
 fingerprint containing row identity, health, canonical freshness, normalized
-status, and sorted failure identities including messages, and block independent
-of input order.
+status (with all lease-skip aliases normalized to one lease-skipped semantic),
+and sorted failure identities including messages, and block independent of input
+order. The raw validated status remains available for lease accounting.
 
 Collector status is an explicit allowlist: `COMPLETED`, `LEASE_SKIPPED`,
 `SKIPPED_LEASE`, and `LEASE_UNAVAILABLE`. Other statuses are invalid evidence.

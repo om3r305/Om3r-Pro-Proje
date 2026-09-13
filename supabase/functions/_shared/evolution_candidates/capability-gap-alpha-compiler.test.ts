@@ -192,6 +192,30 @@ Deno.test("same-instant conflict diagnostics remain input-order invariant", () =
   }
 });
 
+Deno.test("lease-skip aliases are equivalent in same-instant fingerprints", () => {
+  const aliases = ["LEASE_SKIPPED", "SKIPPED_LEASE", "LEASE_UNAVAILABLE"];
+  const result = compileCapabilityGapAlphaCompiler(
+    aliases.map((status) => row({ rowId: "same-row", status })),
+    { observedAt: now },
+  );
+  if (
+    result.blockers.includes(
+      "ambiguous conflicting equal-timestamp evidence",
+    ) ||
+    result.providers[0]?.leaseSkippedCount !== 1
+  ) throw new Error(JSON.stringify(result));
+
+  const conflict = compileCapabilityGapAlphaCompiler([
+    row({ rowId: "same-row", status: "LEASE_SKIPPED" }),
+    row({ rowId: "same-row", status: "COMPLETED" }),
+  ], { observedAt: now });
+  if (
+    !conflict.blockers.includes(
+      "ambiguous conflicting equal-timestamp evidence",
+    )
+  ) throw new Error(JSON.stringify(conflict));
+});
+
 Deno.test("future-only providers do not consume provider diagnostics or truncation", () => {
   const baseline = compileCapabilityGapAlphaCompiler([row()], {
     observedAt: now,
@@ -289,24 +313,41 @@ Deno.test("overflow remains bounded and separate from invalid evidence", () => {
 });
 
 Deno.test("invalid limit values use the default bounded options", () => {
-  const baseline = compileCapabilityGapAlphaCompiler([
-    row({ rowId: "a", completedAt: "2026-09-13T12:00:00Z" }),
-    row({ rowId: "b", completedAt: "2026-09-13T12:00:01Z" }),
-  ], { observedAt: now });
+  const input = [
+    row({
+      providerId: "alpha",
+      rowId: "a",
+      completedAt: "2026-09-13T12:00:00Z",
+    }),
+    row({
+      providerId: "beta",
+      rowId: "b",
+      completedAt: "2026-09-13T12:00:01Z",
+    }),
+    row({
+      providerId: "gamma",
+      rowId: "c",
+      completedAt: "2026-09-13T12:00:02Z",
+    }),
+  ];
+  const baseline = compileCapabilityGapAlphaCompiler(input, {
+    observedAt: now,
+  });
   for (const value of [NaN, Infinity, -Infinity, 0, -1, 1.5]) {
-    const result = compileCapabilityGapAlphaCompiler([
-      row({ rowId: "a", completedAt: "2026-09-13T12:00:00Z" }),
-      row({ rowId: "b", completedAt: "2026-09-13T12:00:01Z" }),
-    ], {
+    const result = compileCapabilityGapAlphaCompiler(input, {
       observedAt: now,
       maxRows: value,
       maxProviders: value,
       maxInputRows: value,
     });
+    const defaultResult = compileCapabilityGapAlphaCompiler(input, {
+      observedAt: now,
+    });
     if (
       result.processedDecisionRowCount !==
-        baseline.processedDecisionRowCount ||
+        defaultResult.processedDecisionRowCount ||
       result.providers.length !== baseline.providers.length ||
+      result.providerDiagnosticsTruncated ||
       result.inputEnvelopeTruncated !== baseline.inputEnvelopeTruncated ||
       result.invalidEvidenceCount !== 0
     ) throw new Error(`invalid option changed defaults: ${value}`);

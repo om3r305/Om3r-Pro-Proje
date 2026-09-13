@@ -59,8 +59,12 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     ...alphaFailureRows,
     ...conflictRows,
     make("malformed", "validonly", { failures: [{ id: "broken" }] }),
+    make("unsupported", "validonly", { status: "UNSUPPORTED_STATUS" }),
     make("future-only", "futureonly", {
       completedAt: "2026-09-14T00:00:00Z",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    }),
+    make("future-freshness", "futurefresh", {
       freshnessAt: "2026-09-14T00:00:00Z",
     }),
     make("bad-provider", "9bad"),
@@ -68,11 +72,12 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   for (let i = 0; i < 40; i++) {
     rows.push(make(`overflow-${i}`, `z-provider-${i}`));
   }
+  const overflowRows = rows.slice(9);
   const result = compileCapabilityGapAlphaCompiler(rows, {
     observedAt: "2026-09-13T13:00:00Z",
     maxRows: 2,
     maxProviders: 3,
-    maxInputRows: 100,
+    maxInputRows: 12,
   });
   const rawFailureOccurrences = alphaFailureRows.flatMap((row) => row.failures)
     .length;
@@ -92,15 +97,21 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     provider.providerId === "alpha"
   );
   const providerIds = result.providers.map((provider) => provider.providerId);
-  const reversedResult = compileCapabilityGapAlphaCompiler(
-    [...rows].reverse(),
-    {
-      observedAt: "2026-09-13T13:00:00Z",
-      maxRows: 2,
-      maxProviders: 3,
-      maxInputRows: 100,
-    },
-  );
+  const reversedResult = compileCapabilityGapAlphaCompiler([
+    ...alphaFailureRows.slice().reverse(),
+    ...conflictRows,
+    rows[4],
+    rows[5],
+    rows[6],
+    rows[7],
+    rows[8],
+    ...overflowRows.slice().reverse(),
+  ], {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 2,
+    maxProviders: 3,
+    maxInputRows: 12,
+  });
   if (
     uniqueFailureIdentities !== 2 ||
     rawFailureOccurrences <= uniqueFailureIdentities ||
@@ -132,8 +143,13 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
       "ambiguous conflicting equal-timestamp evidence",
     ) ||
     result.invalidProviderCount !== 1 ||
-    result.invalidEvidenceCount !== 2 ||
-    result.futureTelemetry.futureEvidenceCount !== 1 ||
+    result.invalidEvidenceCount !== 3 ||
+    result.futureTelemetry.futureEvidenceCount !== 2 ||
+    !result.inputEnvelopeTruncated ||
+    !result.blockers.includes("input envelope truncated") ||
+    !result.blockers.includes(
+      "input envelope limit prevents complete evidence inspection",
+    ) ||
     result.processedDecisionRowCount > 2 ||
     result.providers.length > 3 ||
     JSON.stringify(result.providers) !==
@@ -145,7 +161,7 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   }
   if (
     result.providers.find((provider) => provider.providerId === "validonly")
-        ?.invalidEvidenceCount !== 1 ||
+        ?.invalidEvidenceCount !== 2 ||
     !result.blockers.includes(
       "missing prospective multi-window shadow A/B evidence",
     ) ||

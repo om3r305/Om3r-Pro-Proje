@@ -91,6 +91,7 @@ Deno.test("hard envelope boundary is explicit and observable", () => {
     maxRows: 1,
     maxInputRows: 2,
   });
+
   const beyondEnvelope = compileCapabilityGapAlphaCompiler([
     ...inside,
     {
@@ -140,4 +141,34 @@ Deno.test("hard envelope boundary is explicit and observable", () => {
       JSON.stringify({ withinEnvelope, beyondEnvelope, movedInside }),
     );
   }
+});
+
+Deno.test("future freshness changes telemetry but no decision projection", () => {
+  const baseline = compileCapabilityGapAlphaCompiler([base], {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 1,
+    maxProviders: 1,
+    maxInputRows: 4,
+  });
+  const futureFreshness = compileCapabilityGapAlphaCompiler([
+    base,
+    {
+      ...base,
+      rowId: "future-freshness",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    },
+  ], {
+    observedAt: "2026-09-13T13:00:00Z",
+    maxRows: 1,
+    maxProviders: 1,
+    maxInputRows: 4,
+  });
+  if (projection(futureFreshness) !== projection(baseline)) {
+    throw new Error("future freshness changed decision projection");
+  }
+  if (
+    JSON.stringify(futureFreshness.futureTelemetry) !==
+      '{"futureEvidenceCount":1}' ||
+    futureFreshness.providers.length !== baseline.providers.length
+  ) throw new Error(JSON.stringify(futureFreshness));
 });

@@ -116,7 +116,7 @@ function classificationFingerprint(row: ValidRow): string {
     health: row.health,
     freshnessAt: row.freshnessAt,
     freshnessMs: row.freshnessMs,
-    status: row.status,
+    status: classificationStatus(row.status),
     failures: [...row.failures].sort((a, b) =>
       a.id.localeCompare(b.id) || a.message.localeCompare(b.message)
     ),
@@ -159,6 +159,12 @@ function collectorStatus(value: unknown): CollectorStatus | null {
     default:
       return null;
   }
+}
+
+function classificationStatus(
+  status: CollectorStatus,
+): "COMPLETED" | "LEASE_SKIPPED" {
+  return status === "COMPLETED" ? "COMPLETED" : "LEASE_SKIPPED";
 }
 
 function stableRow(
@@ -286,7 +292,6 @@ export function compileCapabilityGapAlphaCompiler(
   if (report.inputEnvelopeTruncated) {
     report.blockers.push("input envelope truncated");
   }
-  const recognized = new Set<string>();
   const invalidByProvider = new Map<string, number>();
   const valid: ValidRow[] = [];
   let invalid = 0;
@@ -301,14 +306,12 @@ export function compileCapabilityGapAlphaCompiler(
     if (parsed.invalid) {
       invalid++;
       if (parsed.providerId) {
-        recognized.add(parsed.providerId);
         invalidByProvider.set(
           parsed.providerId,
           (invalidByProvider.get(parsed.providerId) ?? 0) + 1,
         );
       }
     } else if (parsed.row) {
-      recognized.add(parsed.row.providerId);
       valid.push(parsed.row);
     } else invalid++;
   }
