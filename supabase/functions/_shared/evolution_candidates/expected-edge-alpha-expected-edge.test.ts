@@ -8,6 +8,9 @@ const observation = (id: string, extra: Record<string, unknown> = {}) => ({
   horizon: "300s",
   direction: "up",
   observedAt: "2026-09-13T12:00:00Z",
+  cadenceSeconds: 300,
+  evaluationStartAt: "2026-09-13T12:00:00Z",
+  evaluationEndAt: "2026-09-13T12:05:00Z",
   ...extra,
 });
 const reliability = (
@@ -18,6 +21,9 @@ const reliability = (
   observationId: id,
   groupId,
   snapshotAt: "2026-09-13T12:30:00Z",
+  horizon: "300s",
+  cadenceSeconds: 300,
+  provenance: "reliability-a",
   expectedMoveBps: 100,
   reliability: 0.8,
   uncertaintyBps: 5,
@@ -30,6 +36,8 @@ const cost = (extra: Record<string, unknown> = {}) => ({
   feeBps: 5,
   slippageBps: 5,
   fillability: 1,
+  sourceId: "book-a",
+  cadenceSeconds: 300,
   ...extra,
 });
 const input = (extra: Record<string, unknown> = {}) => ({
@@ -116,14 +124,14 @@ Deno.test("future and conflicting evidence cannot become decision features", () 
 
 Deno.test("input order and stale evidence remain bounded and deterministic", () => {
   const a = compileExpectedEdgeAlphaCandidate(
-    input({ eventAt: "2026-09-13T11:00:00Z" }),
+    input({ eventAt: "2026-09-13T11:00:00Z", eventCadenceSeconds: 300 }),
     {
       decisionAt: now,
       minimumNetMarginBps: 10,
     },
   );
   const b = compileExpectedEdgeAlphaCandidate({
-    ...input({ eventAt: "2026-09-13T11:00:00Z" }),
+    ...input({ eventAt: "2026-09-13T11:00:00Z", eventCadenceSeconds: 300 }),
     sourceObservations: [observation("o2"), observation("o1")],
     reliabilitySnapshots: [reliability("o2", "g2"), reliability("o1", "g1")],
   }, { decisionAt: now, minimumNetMarginBps: 10 });
@@ -131,4 +139,49 @@ Deno.test("input order and stale evidence remain bounded and deterministic", () 
     JSON.stringify(a) !== JSON.stringify(b) ||
     Math.abs(a.expectedNetEdgeBps ?? 0) > 1_000_000
   ) throw new Error("unstable result");
+});
+
+Deno.test("preserves a horizon-aligned 24-hour evaluation window", () => {
+  const result = compileExpectedEdgeAlphaCandidate(
+    input({
+      sourceObservations: [observation("long", {
+        horizon: "24h",
+        observedAt: "2026-09-12T12:00:00Z",
+        cadenceSeconds: 3600,
+        evaluationStartAt: "2026-09-12T12:00:00Z",
+        evaluationEndAt: "2026-09-13T12:00:00Z",
+      })],
+      reliabilitySnapshots: [
+        reliability("long", "g1", {
+          horizon: "24h",
+          cadenceSeconds: 3600,
+          snapshotAt: "2026-09-13T11:30:00Z",
+        }),
+        reliability("o2", "g2", {
+          horizon: "24h",
+          cadenceSeconds: 3600,
+          snapshotAt: "2026-09-13T11:30:00Z",
+        }),
+      ],
+    }),
+    { decisionAt: now },
+  );
+  if (result.invalidEvidenceCount === 0 || result.eligible) {
+    throw new Error("mismatched source horizon was not rejected");
+  }
+});
+
+Deno.test("rejects missing provenance and stale cadence contracts", () => {
+  const result = compileExpectedEdgeAlphaCandidate(
+    input({
+      reliabilitySnapshots: [
+        reliability("o1", "g1", { provenance: undefined }),
+      ],
+      cost: cost({ asOf: "2026-09-13T10:00:00Z" }),
+    }),
+    { decisionAt: now },
+  );
+  if (result.eligible || result.recommendation !== "COST_UNAVAILABLE") {
+    throw new Error(JSON.stringify(result));
+  }
 });

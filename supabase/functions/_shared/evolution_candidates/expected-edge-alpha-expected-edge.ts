@@ -49,17 +49,19 @@ export interface ExpectedEdgeReport {
 const MAX_ROWS = 2_000;
 const MAX_CONTRIBUTIONS = 200;
 const MAX_BPS = 1_000_000;
+const MAX_CADENCE_SECONDS = 7 * 86_400;
 const ISO_UTC =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
-
 type Instant = { text: string; ms: number };
+type Horizon = { text: string; seconds: number };
 type Observation = {
   observationId: string;
   providerId: string;
   sensorFamily: string;
-  horizon: string;
+  horizon: Horizon;
   direction: string;
   observedAt: Instant;
+  cadenceSeconds: number;
 };
 type Reliability = Observation & {
   groupId: string;
@@ -73,27 +75,33 @@ type Reliability = Observation & {
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-
 function instant(value: unknown): Instant | null {
   if (typeof value !== "string") return null;
   const match = ISO_UTC.exec(value);
   if (!match) return null;
   const ms = Date.parse(value);
-  if (!Number.isFinite(ms)) return null;
   const fraction = (match[7] ?? "").padEnd(3, "0");
   const text = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${
     match[6]
   }.${fraction}Z`;
-  return new Date(ms).toISOString() === text ? { text, ms } : null;
+  return Number.isFinite(ms) && new Date(ms).toISOString() === text
+    ? { text, ms }
+    : null;
 }
-
+function horizon(value: unknown): Horizon | null {
+  if (typeof value !== "string") return null;
+  const match = /^(\d+)(s|m|h|d)$/.exec(value);
+  if (!match) return null;
+  const seconds = Number(match[1]) *
+    ({ s: 1, m: 60, h: 3600, d: 86400 } as Record<string, number>)[match[2]];
+  return seconds > 0 && seconds <= 86_400 ? { text: value, seconds } : null;
+}
 function boundedNumber(value: unknown, max = MAX_BPS): number | null {
   return typeof value === "number" && Number.isFinite(value) &&
       Math.abs(value) <= max
     ? value
     : null;
 }
-
 function positiveInt(
   value: unknown,
   fallback: number,
@@ -104,19 +112,20 @@ function positiveInt(
     ? Math.min(value, maximum)
     : fallback;
 }
-
 function identifier(value: unknown): string | null {
   return typeof value === "string" && /^[a-z][a-z0-9_.:-]{0,127}$/i.test(value)
     ? value
     : null;
 }
-
 function text(value: unknown): string | null {
   return typeof value === "string" && /^[a-zA-Z0-9_.:/-]{1,128}$/.test(value)
     ? value
     : null;
 }
-
+function cadence(value: unknown): number | null {
+  const result = boundedNumber(value, MAX_CADENCE_SECONDS);
+  return result != null && result > 0 ? result : null;
+}
 function baseReport(decisionAt: string | null): ExpectedEdgeReport {
   return {
     recommendation: "INSUFFICIENT_LAGGED_EVIDENCE",
@@ -139,9 +148,17 @@ function baseReport(decisionAt: string | null): ExpectedEdgeReport {
     promotionReady: false,
   };
 }
-
-function fingerprint(value: Observation | Reliability): string {
+function fingerprint(value: unknown): string {
   return JSON.stringify(value);
+}
+function futureEvidence(
+  row: Record<string, unknown>,
+  decision: Instant,
+): boolean {
+  return Object.values(row).some((value) => {
+    const parsed = instant(value);
+    return parsed != null && parsed.ms > decision.ms;
+  });
 }
 
 export function compileExpectedEdgeAlphaCandidate(
@@ -172,125 +189,121 @@ export function compileExpectedEdgeAlphaCandidate(
     MAX_CONTRIBUTIONS,
     MAX_CONTRIBUTIONS,
   );
-  const future = (row: Record<string, unknown>): boolean =>
-    [row.observedAt, row.snapshotAt, row.asOf].some((value) => {
-      const parsed = instant(value);
-      return parsed != null && parsed.ms > decision.ms;
-    });
+  const addInvalid = () => {
+    report.invalidEvidenceCount++;
+  };
   const observations = new Map<string, Observation>();
-  const observationFingerprints = new Map<string, Set<string>>();
-  const validSource = source.slice(0, maxRows);
-  report.truncated = source.length > validSource.length ||
-    reliabilityRows.length > maxRows;
-  for (const value of validSource) {
+  const conflicts = new Set<string>();
+  for (const value of source.slice(0, maxRows)) {
     if (!record(value)) {
-      report.invalidEvidenceCount++;
+      addInvalid();
       continue;
     }
-    if (future(value)) {
+    if (futureEvidence(value, decision)) {
       report.futureTelemetry.futureEvidenceCount++;
       continue;
     }
-    const observationId = identifier(value.observationId);
+    const id = identifier(value.observationId);
     const providerId = identifier(value.providerId);
     const sensorFamily = text(value.sensorFamily);
-    const horizon = text(value.horizon);
+    const parsedHorizon = horizon(value.horizon);
     const direction = text(value.direction);
     const observedAt = instant(value.observedAt);
+    const cadenceSeconds = cadence(value.cadenceSeconds);
+    const start = instant(value.evaluationStartAt);
+    const end = instant(value.evaluationEndAt);
+    const aligned = parsedHorizon && start && end &&
+      start.ms === observedAt?.ms &&
+      end.ms - start.ms === parsedHorizon.seconds * 1000;
     if (
-      !observationId || !providerId || !sensorFamily || !horizon ||
-      !direction || !observedAt || observedAt.ms > decision.ms
+      !id || !providerId || !sensorFamily || !parsedHorizon || !direction ||
+      !observedAt || cadenceSeconds == null || !aligned ||
+      end!.ms > decision.ms || decision.ms - observedAt.ms >
+        Math.min(
+          7 * 86_400_000,
+          Math.max(parsedHorizon.seconds, cadenceSeconds * 2) * 1000 + 300_000,
+        )
     ) {
-      report.invalidEvidenceCount++;
+      addInvalid();
       continue;
     }
     const row = {
-      observationId,
+      observationId: id,
       providerId,
       sensorFamily,
-      horizon,
+      horizon: parsedHorizon,
       direction,
       observedAt,
+      cadenceSeconds,
     };
-    const set = observationFingerprints.get(observationId) ?? new Set<string>();
-    set.add(fingerprint(row));
-    observationFingerprints.set(observationId, set);
-    const previous = observations.get(observationId);
-    if (
-      !previous || fingerprint(row).localeCompare(fingerprint(previous)) < 0
-    ) {
-      observations.set(observationId, row);
+    const prior = observations.get(id);
+    if (prior && fingerprint(prior) !== fingerprint(row)) conflicts.add(id);
+    if (!prior || fingerprint(row).localeCompare(fingerprint(prior)) < 0) {
+      observations.set(id, row);
     }
   }
-  const supportingIds = [...observations.keys()].sort();
-  report.provenance.supportingObservationIds = supportingIds;
-  if ([...observationFingerprints.values()].some((set) => set.size > 1)) {
-    report.reasons.push("conflicting source observations");
-  }
-
-  const reliability: Reliability[] = [];
-  const seenReliability = new Map<string, Set<string>>();
+  report.provenance.supportingObservationIds = [...observations.keys()].sort();
+  if (conflicts.size) report.reasons.push("conflicting source observations");
+  const validReliability: Reliability[] = [];
+  const reliabilityKeys = new Map<string, Set<string>>();
   for (const value of reliabilityRows.slice(0, maxRows)) {
     if (!record(value)) {
-      report.invalidEvidenceCount++;
+      addInvalid();
       continue;
     }
-    if (future(value)) {
+    if (futureEvidence(value, decision)) {
       report.futureTelemetry.futureEvidenceCount++;
       continue;
     }
-    const observationId = identifier(value.observationId);
-    const base = observationId ? observations.get(observationId) : undefined;
+    const id = identifier(value.observationId);
+    const base = id ? observations.get(id) : undefined;
     const groupId = identifier(value.groupId);
     const snapshotAt = instant(value.snapshotAt);
     const expectedMoveBps = boundedNumber(value.expectedMoveBps);
     const reliabilityValue = boundedNumber(value.reliability, 1);
     const uncertaintyBps = boundedNumber(value.uncertaintyBps);
-    const mature = value.mature === true;
+    const provenance = identifier(value.provenance);
+    const snapshotCadence = cadence(value.cadenceSeconds);
     if (
-      !base || !groupId || !snapshotAt || snapshotAt.ms > decision.ms ||
-      expectedMoveBps == null || reliabilityValue == null ||
-      reliabilityValue < 0 || reliabilityValue > 1 || uncertaintyBps == null ||
-      uncertaintyBps < 0 || !mature
+      !base || !groupId || !snapshotAt || expectedMoveBps == null ||
+      reliabilityValue == null || reliabilityValue < 0 ||
+      reliabilityValue > 1 ||
+      uncertaintyBps == null || uncertaintyBps < 0 || value.mature !== true ||
+      !provenance || snapshotCadence == null ||
+      snapshotCadence !== base.cadenceSeconds ||
+      decision.ms - snapshotAt.ms >
+        Math.min(
+          7 * 86_400_000,
+          Math.max(base.horizon.seconds, snapshotCadence * 2) * 1000 + 300_000,
+        ) ||
+      value.horizon !== base.horizon.text
     ) {
-      report.invalidEvidenceCount++;
+      addInvalid();
       continue;
     }
-    if (
-      value.providerId !== undefined && value.providerId !== base.providerId ||
-      value.sensorFamily !== undefined &&
-        value.sensorFamily !== base.sensorFamily ||
-      value.horizon !== undefined && value.horizon !== base.horizon ||
-      value.direction !== undefined && value.direction !== base.direction
-    ) {
-      report.invalidEvidenceCount++;
-      continue;
-    }
-    const row: Reliability = {
+    const row = {
       ...base,
       groupId,
       snapshotAt,
       expectedMoveBps,
       reliability: reliabilityValue,
       uncertaintyBps,
-      mature,
+      mature: true,
     };
-    const key = `${observationId}|${groupId}|${snapshotAt.ms}`;
-    const set = seenReliability.get(key) ?? new Set<string>();
+    const key = `${id}|${groupId}|${snapshotAt.ms}`;
+    const set = reliabilityKeys.get(key) ?? new Set<string>();
     set.add(fingerprint(row));
-    seenReliability.set(key, set);
-    reliability.push(row);
+    reliabilityKeys.set(key, set);
+    validReliability.push(row);
   }
-  if ([...seenReliability.values()].some((set) => set.size > 1)) {
+  if ([...reliabilityKeys.values()].some((set) => set.size > 1)) {
     report.reasons.push("conflicting reliability snapshots");
   }
   const unique = new Map<string, Reliability>();
-  for (const row of reliability) {
+  for (const row of validReliability) {
     const key = `${row.observationId}|${row.groupId}|${row.snapshotAt.ms}`;
-    const previous = unique.get(key);
-    if (
-      !previous || fingerprint(row).localeCompare(fingerprint(previous)) < 0
-    ) {
+    const prior = unique.get(key);
+    if (!prior || fingerprint(row).localeCompare(fingerprint(prior)) < 0) {
       unique.set(key, row);
     }
   }
@@ -299,24 +312,27 @@ export function compileExpectedEdgeAlphaCandidate(
     a.observationId.localeCompare(b.observationId) ||
     a.snapshotAt.ms - b.snapshotAt.ms
   );
-  const groups = new Set(rows.map((row) => row.groupId));
-  report.matureIndependentGroupCount = groups.size;
+  report.matureIndependentGroupCount =
+    new Set(rows.map((row) => row.groupId)).size;
   const minimumGroups = positiveInt(options.minimumMatureGroups, 2, 100);
-  for (const row of rows.slice(0, maxContributions)) {
-    const contributionBps = row.expectedMoveBps * row.reliability;
+  if (report.truncated || rows.length > maxContributions) {
+    report.reasons.push("incomplete bounded evidence");
+  }
+  const selected = rows.slice(0, maxContributions);
+  for (const row of selected) {
     report.contributions.push({
       observationId: row.observationId,
       groupId: row.groupId,
       expectedMoveBps: row.expectedMoveBps,
       reliability: row.reliability,
-      contributionBps,
+      contributionBps: row.expectedMoveBps * row.reliability,
     });
   }
-  report.expectedGrossMoveBps = report.contributions.reduce(
-    (sum, row) => sum + row.contributionBps,
+  report.expectedGrossMoveBps = selected.reduce(
+    (sum, row) => sum + row.expectedMoveBps * row.reliability,
     0,
   );
-  report.uncertaintyPenaltyBps = rows.slice(0, maxContributions).reduce(
+  report.uncertaintyPenaltyBps = selected.reduce(
     (sum, row) => sum + row.uncertaintyBps,
     0,
   );
@@ -324,41 +340,56 @@ export function compileExpectedEdgeAlphaCandidate(
   const costAsOf = cost ? instant(cost.asOf) : null;
   if (costAsOf && costAsOf.ms <= decision.ms) {
     report.provenance.costAsOf = costAsOf.text;
-  } else if (costAsOf && costAsOf.ms > decision.ms) {
-    report.futureTelemetry.futureEvidenceCount++;
-  }
-  const costParts = cost &&
-    ["spreadBps", "feeBps", "slippageBps"].map((key) =>
+  } else if (costAsOf) report.futureTelemetry.futureEvidenceCount++;
+  const costCadence = cost ? cadence(cost.cadenceSeconds) : null;
+  const costSource = cost ? identifier(cost.sourceId) : null;
+  const costParts = cost
+    ? ["spreadBps", "feeBps", "slippageBps"].map((key) =>
       boundedNumber(cost[key])
-    );
+    )
+    : null;
   const fillability = cost ? boundedNumber(cost.fillability, 1) : null;
   if (
-    !cost || !costAsOf || costAsOf.ms > decision.ms ||
+    !cost || !costAsOf || costAsOf.ms > decision.ms || !costSource ||
+    costCadence == null ||
     !costParts || costParts.some((part) => part == null || part < 0) ||
     fillability == null || fillability <= 0 || fillability > 1 ||
-    costParts.every((part) => part === 0)
+    costParts.every((part) => part === 0) ||
+    decision.ms - costAsOf.ms >
+      Math.min(7 * 86_400_000, costCadence * 2 * 1000 + 300_000)
   ) {
     report.reasons.push("decision-time fillability-aware cost unavailable");
     report.recommendation = "COST_UNAVAILABLE";
     return report;
   }
   report.estimatedRoundTripCostBps =
-    (costParts as number[]).reduce((sum, part) => sum + part, 0) /
-    fillability;
+    costParts.reduce((sum, part) => sum + part!, 0) / fillability;
+  const eventAt = instant(input.eventAt);
+  const eventCadence = cadence(input.eventCadenceSeconds);
+  if (eventAt && eventAt.ms > decision.ms) {
+    report.futureTelemetry.futureEvidenceCount++;
+  }
+  if (
+    input.eventAt !== undefined &&
+    (!eventAt || eventAt.ms > decision.ms || eventCadence == null ||
+      decision.ms - eventAt.ms >
+        Math.min(7 * 86_400_000, eventCadence * 2 * 1000 + 300_000))
+  ) {
+    addInvalid();
+    report.reasons.push("event evidence unavailable");
+  }
   const freshness = rows.length
     ? Math.max(...rows.map((row) => decision.ms - row.snapshotAt.ms))
     : 0;
-  const eventAt = instant(input.eventAt);
-  const eventDecay = eventAt && eventAt.ms <= decision.ms
-    ? Math.max(0, (decision.ms - eventAt.ms) / 3_600_000)
-    : 0;
   report.eventDecayPenaltyBps = Math.min(
     MAX_BPS,
-    eventDecay + Math.max(0, freshness / 3_600_000),
+    (eventAt ? decision.ms - eventAt.ms : 0) / 3_600_000 +
+      freshness /
+        Math.max(3_600_000, (rows[0]?.horizon.seconds ?? 3600) * 1000),
   );
   report.expectedNetEdgeBps = report.expectedGrossMoveBps -
-    report.estimatedRoundTripCostBps - report.uncertaintyPenaltyBps -
-    report.eventDecayPenaltyBps;
+    report.estimatedRoundTripCostBps -
+    report.uncertaintyPenaltyBps - report.eventDecayPenaltyBps;
   if (
     report.reasons.length || report.invalidEvidenceCount ||
     report.matureIndependentGroupCount < minimumGroups
