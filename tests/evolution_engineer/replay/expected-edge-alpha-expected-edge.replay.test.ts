@@ -199,7 +199,7 @@ Deno.test("replay rejects equal-time reliability provenance disagreement", () =>
       },
       envelope.reliabilitySnapshots[1],
     ],
-  }, { decisionAt });
+  }, { decisionAt: "2026-09-13T13:00:00Z" });
   if (
     result.recommendation !== "CONTAMINATED_EVIDENCE" ||
     result.eligible ||
