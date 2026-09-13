@@ -327,7 +327,8 @@ jobs:
           git diff "$BASE_SHA...HEAD" > /tmp/brian-engineer.diff
           python scripts/brian_engineer_prompt.py review > /tmp/brian-review-prompt.txt
           copilot -p "$(cat /tmp/brian-review-prompt.txt)" -s --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-review.txt
-          test "$(tail -n 1 /tmp/brian-engineer-review.txt)" = 'ENGINEER_REVIEW_VERDICT=PASS'
+          review_verdict="$(awk 'NF { line=$0 } END { gsub(/^[[:space:]]+|[[:space:]]+$/, "", line); print line }' /tmp/brian-engineer-review.txt)"
+          test "$review_verdict" = 'ENGINEER_REVIEW_VERDICT=PASS'
           test -z "$(git status --porcelain)" || { echo 'Read-only review mutated candidate'; exit 1; }
 
       - name: Record REVIEW
