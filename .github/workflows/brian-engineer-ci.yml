@@ -13,7 +13,7 @@ on:
       - 'supabase/functions/_shared/evolution_engineer_guard.test.ts'
       - 'supabase/functions/brian-evolution-engineering-gateway/**'
       - 'supabase/migrations/*_brian_evolution_engineering_*.sql'
-      - 'tests/test_brian_evolution_engineering_pipeline.py'
+      - 'tests/test_brian_evolution_engineering_*.py'
   workflow_dispatch:
 
 permissions:
@@ -150,10 +150,10 @@ jobs:
             psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Run real lifecycle and rollback tests
+      - name: Run real lifecycle, rollback and queue tests
         run: |
           python -m pip install -q pytest psycopg2-binary
-          python -m pytest -q tests/test_brian_evolution_engineering_pipeline.py -v
+          python -m pytest -q tests/test_brian_evolution_engineering_*.py -v
 
       - name: Verify service-role-only RPC grants
         run: |
