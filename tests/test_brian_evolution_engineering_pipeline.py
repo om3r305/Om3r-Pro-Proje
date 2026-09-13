@@ -110,32 +110,37 @@ def test_pipeline_rejects_stage_skips_and_requires_exact_commit_owner_approval()
             run_id = claimed["run_id"]
             assert claimed["base_sha"] == BASE_SHA
             assert claimed["task"]["source_parent_sha"] == "9" * 40
-
         conn.commit()
 
         with conn.cursor() as cur:
             with pytest.raises(psycopg2.Error):
                 record(cur, run_id, "VERCEL_PREVIEW", "PREVIEW", CANDIDATE_SHA)
-            conn.rollback()
+        conn.rollback()
 
         with conn.cursor() as cur:
             advance_to_preview(cur, run_id)
+        conn.commit()
+
+        with conn.cursor() as cur:
             with pytest.raises(psycopg2.Error):
                 cur.execute(
                     "select brian_private.approve_engineering_run(%s,%s,%s)",
                     (run_id, CANDIDATE_SHA, "om3r305"),
                 )
-            conn.rollback()
+        conn.rollback()
 
         with conn.cursor() as cur:
             measured = measure(cur, run_id)
             assert measured["status"] == "WAITING_HUMAN_APPROVAL"
+        conn.commit()
+
+        with conn.cursor() as cur:
             with pytest.raises(psycopg2.Error):
                 cur.execute(
                     "select brian_private.approve_engineering_run(%s,%s,%s)",
                     (run_id, "e" * 40, "om3r305"),
                 )
-            conn.rollback()
+        conn.rollback()
 
         with conn.cursor() as cur:
             cur.execute(
@@ -173,6 +178,7 @@ def test_pipeline_rejects_stage_skips_and_requires_exact_commit_owner_approval()
                 "MONITOR_HEALTHY",
                 "COMPLETE",
             ]
+        conn.commit()
 
 
 def test_pipeline_can_rollback_only_after_human_approval_stage():
@@ -194,6 +200,7 @@ def test_pipeline_can_rollback_only_after_human_approval_stage():
                 (run_id,),
             )
             assert cur.fetchone() == ("ROLLBACK", "ROLLED_BACK", ROLLBACK_SHA)
+        conn.commit()
 
 
 def test_autonomous_claim_is_dormant_by_default():
