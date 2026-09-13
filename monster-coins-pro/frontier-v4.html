@@ -32,8 +32,9 @@
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
       if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
+      const isDevelopment=url.includes('/brian-development-status');
       const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort('BRIAN_API_TIMEOUT'),8500);
+      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':'BRIAN_API_TIMEOUT'),isDevelopment?35000:8500);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
       return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
@@ -43,7 +44,7 @@
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
     await load('/frontier-stability.js?v=20260913-s1');
-    await load('/brain-anatomy-clean.js?v=20260913-clean2');
+    await load('/brain-anatomy-v2.js?v=20260913-rich1');
     await load('/frontier-v4-mobile-rescue.js?v=20260913-r2');
   }catch(e){
     document.body.innerHTML='<div style="padding:24px;color:#ff8d99;background:#020712;font-family:system-ui"><h2>Brian V4 yüklenemedi</h2><pre style="white-space:pre-wrap">'+String(e)+'</pre></div>';
