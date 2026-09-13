@@ -8,7 +8,7 @@ const CONTROL_PLANE_PREFIXES = [
   "supabase/migrations/",
   "supabase/functions/brian-evolution-engineering-gateway/",
   "supabase/functions/_shared/evolution_engineer_guard.ts",
-  "scripts/brian_engineer_guard.ts",
+  "scripts/brian_engineer_",
 ] as const;
 
 const AUTH_OR_SECRET_PATTERNS = [
