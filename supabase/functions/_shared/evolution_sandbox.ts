@@ -15,6 +15,8 @@ const ALLOWED_PATH_PREFIXES = [
   "supabase/functions/_shared/evolution_candidates/",
   "supabase/functions/brian-evolution-candidate-",
   "tests/evolution_candidates/",
+  "tests/evolution_engineer/replay/",
+  "tests/evolution_engineer/stress/",
   "docs/evolution_candidates/",
 ] as const;
 
