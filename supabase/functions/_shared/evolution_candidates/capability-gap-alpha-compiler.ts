@@ -188,10 +188,11 @@ function stableRow(
     : null;
   const rowHealth = health(raw.health);
   const status = collectorStatus(raw.status);
-  const rawFailures = raw.failures == null ? [] : raw.failures;
+  const hasFailures = Object.prototype.hasOwnProperty.call(raw, "failures");
+  const rawFailures = hasFailures ? raw.failures : [];
   const failures: Array<{ id: string; message: string }> = [];
   let nestedInvalid = false;
-  if (!Array.isArray(rawFailures)) nestedInvalid = true;
+  if (rawFailures === null || !Array.isArray(rawFailures)) nestedInvalid = true;
   else {
     for (const failure of rawFailures) {
       if (!isRecord(failure)) {

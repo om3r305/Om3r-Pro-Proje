@@ -23,7 +23,10 @@ Collector status is an explicit allowlist: `COMPLETED`, `LEASE_SKIPPED`,
 `SKIPPED_LEASE`, and `LEASE_UNAVAILABLE`. Other statuses are invalid evidence.
 Failure identities include provider, row, failure ID, and message, so exact
 duplicates collapse while different messages remain distinct in deterministic
-order.
+order. An omitted `failures` field follows the compatibility empty-list
+contract, but an explicitly present `failures: null` value is malformed nested
+evidence, increments global and provider-scoped invalid counts, and blocks the
+report.
 
 The input envelope, decision row count, and provider diagnostics are
 independently bounded. Overflow is exposed as truncation telemetry, not invalid

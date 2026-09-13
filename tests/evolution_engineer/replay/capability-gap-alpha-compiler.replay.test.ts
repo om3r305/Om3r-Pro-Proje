@@ -172,3 +172,32 @@ Deno.test("future freshness changes telemetry but no decision projection", () =>
     futureFreshness.providers.length !== baseline.providers.length
   ) throw new Error(JSON.stringify(futureFreshness));
 });
+
+Deno.test("explicit null failures remain invalid under replay reversal", () => {
+  const rows = [
+    {
+      ...base,
+      rowId: "null-failures",
+      failures: null,
+    },
+    {
+      ...base,
+      rowId: "valid",
+      completedAt: "2026-09-13T12:00:01Z",
+    },
+  ];
+  const forward = compileCapabilityGapAlphaCompiler(rows, {
+    observedAt: "2026-09-13T13:00:00Z",
+  });
+  const reverse = compileCapabilityGapAlphaCompiler([...rows].reverse(), {
+    observedAt: "2026-09-13T13:00:00Z",
+  });
+  if (
+    projection(forward) !== projection(reverse) ||
+    forward.invalidEvidenceCount !== 1 ||
+    forward.providers.find((provider) => provider.providerId === "alpha")
+        ?.invalidEvidenceCount !== 1 ||
+    forward.futureTelemetry.futureEvidenceCount !== 0 ||
+    reverse.futureTelemetry.futureEvidenceCount !== 0
+  ) throw new Error(JSON.stringify({ forward, reverse }));
+});

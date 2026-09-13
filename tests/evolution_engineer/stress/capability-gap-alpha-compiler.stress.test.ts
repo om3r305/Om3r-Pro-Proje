@@ -28,6 +28,25 @@ type CountableAlphaRow = {
   failures: StressFailure[];
 };
 
+const completeDecisionProjection = (
+  result: ReturnType<typeof compileCapabilityGapAlphaCompiler>,
+) =>
+  JSON.stringify({
+    classification: result.classification,
+    providers: result.providers,
+    processedDecisionRowCount: result.processedDecisionRowCount,
+    rowsExceeded: result.rowsExceeded,
+    decisionTruncated: result.decisionTruncated,
+    invalidEvidenceCount: result.invalidEvidenceCount,
+    invalidProviderCount: result.invalidProviderCount,
+    blockers: result.blockers,
+    inputEnvelopeTruncated: result.inputEnvelopeTruncated,
+    providerDiagnosticsTruncated: result.providerDiagnosticsTruncated,
+    shadow_only: result.shadow_only,
+    live_execution: result.live_execution,
+    promotionReady: result.promotionReady,
+  });
+
 Deno.test("stress bounds oversized evidence and deduplicates named failures", () => {
   const failureA: StressFailure = { id: "failure-a", message: "a" };
   const failureB: StressFailure = { id: "failure-b", message: "b" };
@@ -55,11 +74,15 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
       health: "DEGRADED",
     }),
   ];
+  const validOnlyInvalidRows = [
+    make("malformed", "validonly", { failures: [{ id: "broken" }] }),
+    make("unsupported", "validonly", { status: "UNSUPPORTED_STATUS" }),
+    make("null-failures", "validonly", { failures: null }),
+  ];
   const rows: unknown[] = [
     ...alphaFailureRows,
     ...conflictRows,
-    make("malformed", "validonly", { failures: [{ id: "broken" }] }),
-    make("unsupported", "validonly", { status: "UNSUPPORTED_STATUS" }),
+    ...validOnlyInvalidRows,
     make("future-only", "futureonly", {
       completedAt: "2026-09-14T00:00:00Z",
       freshnessAt: "2026-09-14T00:00:00Z",
@@ -72,7 +95,8 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   for (let i = 0; i < 40; i++) {
     rows.push(make(`overflow-${i}`, `z-provider-${i}`));
   }
-  const overflowRows = rows.slice(9);
+  const inspectedRows = rows.slice(0, 12);
+  const overflowRows = rows.slice(12);
   const result = compileCapabilityGapAlphaCompiler(rows, {
     observedAt: "2026-09-13T13:00:00Z",
     maxRows: 2,
@@ -98,13 +122,7 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   );
   const providerIds = result.providers.map((provider) => provider.providerId);
   const reversedResult = compileCapabilityGapAlphaCompiler([
-    ...alphaFailureRows.slice().reverse(),
-    ...conflictRows,
-    rows[4],
-    rows[5],
-    rows[6],
-    rows[7],
-    rows[8],
+    ...inspectedRows.slice().reverse(),
     ...overflowRows.slice().reverse(),
   ], {
     observedAt: "2026-09-13T13:00:00Z",
@@ -143,7 +161,7 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
       "ambiguous conflicting equal-timestamp evidence",
     ) ||
     result.invalidProviderCount !== 1 ||
-    result.invalidEvidenceCount !== 3 ||
+    result.invalidEvidenceCount !== 4 ||
     result.futureTelemetry.futureEvidenceCount !== 2 ||
     !result.inputEnvelopeTruncated ||
     !result.blockers.includes("input envelope truncated") ||
@@ -153,7 +171,9 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     result.processedDecisionRowCount > 2 ||
     result.providers.length > 3 ||
     JSON.stringify(result.providers) !==
-      JSON.stringify(reversedResult.providers)
+      JSON.stringify(reversedResult.providers) ||
+    completeDecisionProjection(result) !==
+      completeDecisionProjection(reversedResult)
   ) {
     throw new Error(
       `provider-limit or dedupe invariance failed: ${JSON.stringify(result)}`,
@@ -161,7 +181,7 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   }
   if (
     result.providers.find((provider) => provider.providerId === "validonly")
-        ?.invalidEvidenceCount !== 2 ||
+        ?.invalidEvidenceCount !== 3 ||
     !result.blockers.includes(
       "missing prospective multi-window shadow A/B evidence",
     ) ||
@@ -169,6 +189,20 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     result.promotionReady !== false
   ) {
     throw new Error("stress blockers or shadow semantics failed");
+  }
+  if (
+    result.rowsExceeded !== true ||
+    result.decisionTruncated !== true ||
+    result.inputEnvelopeTruncated !== true ||
+    result.providerDiagnosticsTruncated !== true ||
+    result.futureTelemetry.futureEvidenceCount !==
+      reversedResult.futureTelemetry.futureEvidenceCount
+  ) {
+    throw new Error(
+      `stress projection/category mismatch: ${
+        completeDecisionProjection(result)
+      }`,
+    );
   }
 });
 

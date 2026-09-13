@@ -87,6 +87,27 @@ Deno.test("malformed nested failures are invalid evidence", () => {
   ) throw new Error(JSON.stringify(result));
 });
 
+Deno.test("missing failures remain empty but explicit null fails closed", () => {
+  const withoutFailures: Record<string, unknown> = row({
+    rowId: "missing-failures",
+  });
+  delete withoutFailures.failures;
+  const missing = compileCapabilityGapAlphaCompiler([withoutFailures], {
+    observedAt: now,
+  });
+  const explicitNull = compileCapabilityGapAlphaCompiler([
+    row({ rowId: "null-failures", failures: null }),
+  ], { observedAt: now });
+  if (
+    missing.invalidEvidenceCount !== 0 ||
+    missing.providers[0]?.failedCount !== 0 ||
+    explicitNull.invalidEvidenceCount !== 1 ||
+    explicitNull.providers[0]?.invalidEvidenceCount !== 1 ||
+    explicitNull.classification !== "BLOCKED" ||
+    !explicitNull.blockers.includes("invalid evidence present")
+  ) throw new Error(JSON.stringify({ missing, explicitNull }));
+});
+
 Deno.test("conflicts and malformed rows are found before maxRows truncation", () => {
   const result = compileCapabilityGapAlphaCompiler([
     row(),
