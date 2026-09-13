@@ -5,6 +5,7 @@
   const n=(v,f=0)=>Number.isFinite(Number(v))?Number(v):f;
   const fmt=v=>{const x=Number(v);return x>0?x.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';};
   const fmtCoin=v=>{const x=Number(v);if(!(x>0))return '—';const d=x<1?6:x<100?4:2;return x.toLocaleString('en-US',{minimumFractionDigits:Math.min(2,d),maximumFractionDigits:d});};
+  const signedPct=v=>{const x=Number(v);return Number.isFinite(x)?`${x>=0?'+':''}${x.toFixed(Math.abs(x)>=100?0:1)}%`:'—';};
   const txt=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
   const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const ageSeconds=value=>{
@@ -19,7 +20,7 @@
   let queued=false;
 
   document.documentElement.dataset.v844StableOwner='1';
-  window.__v844UiStabilityVersion='20260914.1';
+  window.__v844UiStabilityVersion='20260914.2';
 
   function installCss(){
     if(el('v844NoJumpStyle'))return;
@@ -36,16 +37,20 @@
       #chartSource{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-width:128px!important;min-height:34px!important;white-space:nowrap!important}
       #healthPanel .healthRow{min-height:82px!important}
       #decisionContext{overflow-anchor:none!important}
-      #alphaRadarPanel{min-height:228px!important}
-      #alphaRadarPanel .alpha-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+      #alphaRadarPanel{min-height:410px!important}
+      #alphaRadarPanel .alpha-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}
       #alphaRadarPanel .alpha-title{font-weight:850;font-size:16px;color:#eef6ff}
       #alphaRadarPanel .alpha-meta{font-size:11px;line-height:1.45;color:#8091a6;margin-top:3px}
-      #alphaRadarPanel .alpha-live{white-space:nowrap;color:#35f0ae;font-weight:850;font-size:12px}
-      #alphaRadarPanel .alpha-list{display:grid;gap:7px;min-height:126px}
-      #alphaRadarPanel .alpha-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #183246;border-radius:10px;background:rgba(7,17,28,.56)}
-      #alphaRadarPanel .alpha-coin{font-weight:820;color:#e7f2ff;font-size:12px}
+      #alphaRadarPanel .alpha-live{white-space:nowrap;color:#35f0ae;font-weight:850;font-size:11px}
+      #alphaRadarPanel .alpha-list{display:grid;gap:6px;min-height:278px}
+      #alphaRadarPanel .alpha-section{margin:4px 1px 0;font-size:10px;font-weight:900;letter-spacing:.08em;color:#8da4bb;text-transform:uppercase}
+      #alphaRadarPanel .alpha-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border:1px solid #183246;border-radius:9px;background:rgba(7,17,28,.56)}
+      #alphaRadarPanel .alpha-row.hot{border-color:#24513f;background:rgba(8,31,25,.58)}
+      #alphaRadarPanel .alpha-coin{font-weight:850;color:#e7f2ff;font-size:12px}
       #alphaRadarPanel .alpha-sub{font-size:10px;color:#8193a8;margin-top:2px;line-height:1.35}
-      #alphaRadarPanel .alpha-side{font-size:11px;font-weight:850;color:#35f0ae;white-space:nowrap}
+      #alphaRadarPanel .alpha-side{font-size:11px;font-weight:900;color:#35f0ae;white-space:nowrap}
+      #alphaRadarPanel .alpha-side.down{color:#ff6278}
+      #alphaRadarPanel .alpha-side.score{color:#62c7ff}
       #alphaRadarPanel .alpha-wait{color:#f3c969}
       #alphaRadarPanel .alpha-link{display:inline-flex;margin-top:9px;font-size:11px;font-weight:750;color:#62c7ff;text-decoration:none}
       @media(max-width:760px){
@@ -57,7 +62,7 @@
         #feedMeta{height:3.2em!important;min-height:3.2em!important;line-height:1.42!important}
         #feedState{min-width:96px!important}
         #chartSource{min-width:116px!important}
-        #alphaRadarPanel{min-height:248px!important}
+        #alphaRadarPanel{min-height:430px!important}
       }
     `;
     document.head.appendChild(style);
@@ -77,9 +82,24 @@
     if(!right)return null;
     const panel=document.createElement('section');
     panel.id='alphaRadarPanel';panel.className='panel';
-    panel.innerHTML=`<div class="alpha-head"><div><div class="alpha-title">🔥 Patlama Radar / ALPHA</div><div class="alpha-meta">ETH grafiği V8.4.4 DIP motoruna özel. Bu kart piyasa genelindeki ayrı ALPHA SHADOW motorunu gösterir.</div></div><div id="alphaRadarState" class="alpha-live">BAĞLANIYOR</div></div><div id="alphaRadarList" class="alpha-list"><div class="alpha-row"><div><div class="alpha-coin">Piyasa radarı yükleniyor…</div><div class="alpha-sub">LSK, CVC ve diğer USDT adayları ayrı motorda taranıyor.</div></div><span class="alpha-side alpha-wait">WAIT</span></div></div><a class="alpha-link" href="/alpha">Tam ALPHA / Radar ekranını aç →</a>`;
+    panel.innerHTML=`<div class="alpha-head"><div><div class="alpha-title">🔥 Patlama Radar / ALPHA</div><div class="alpha-meta">Binance piyasa evrenindeki gerçek sıcak coinler + ayrı ALPHA SHADOW pozisyonları.</div></div><div id="alphaRadarState" class="alpha-live">BAĞLANIYOR</div></div><div id="alphaRadarList" class="alpha-list"><div class="alpha-row"><div><div class="alpha-coin">Piyasa radarı yükleniyor…</div><div class="alpha-sub">Binance universe snapshot bekleniyor.</div></div><span class="alpha-side alpha-wait">WAIT</span></div></div><a class="alpha-link" href="/alpha">Tam ALPHA / Radar ekranını aç →</a>`;
     right.insertBefore(panel,right.firstChild);
     return panel;
+  }
+
+  function hotRow(row){
+    const asset=String(row.base_asset||row.symbol||'').replace(/USDT$/i,'').replace(/[^A-Z0-9_-]/gi,'');
+    const change=n(row.price_change_pct);
+    const score=Math.round(n(row.radar_score)*100);
+    const range=n(row.range_pct);
+    const spread=Number.isFinite(Number(row.spread_bps))?`${n(row.spread_bps).toFixed(1)} bps`:'—';
+    return `<div class="alpha-row hot"><div><div class="alpha-coin">🔥 ${esc(asset)} · ${esc(signedPct(change))}</div><div class="alpha-sub">Radar ${score}/100 · 24s range ${range.toFixed(1)}% · spread ${esc(spread)}</div></div><span class="alpha-side ${change<0?'down':'score'}">${change>=0?'HOT':'VOL'}</span></div>`;
+  }
+
+  function positionRow(p){
+    const asset=String(p.asset_id||'').replace('crypto:','').replace(/[^A-Z0-9_-]/gi,'');
+    const side=n(p.position)>0?'LONG':'SHORT';
+    return `<div class="alpha-row"><div><div class="alpha-coin">${esc(asset)} · SHADOW ${side}</div><div class="alpha-sub">Entry ${fmtCoin(p.entry_price)} · Son ref ${fmtCoin(p.last_reference_price)}</div></div><span class="alpha-side ${side==='SHORT'?'down':''}">${side}</span></div>`;
   }
 
   async function refreshAlphaRadar(){
@@ -91,29 +111,31 @@
     try{
       const response=await fetch(ALPHA_API,{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'})});
       if(!response.ok)throw new Error(`HTTP ${response.status}`);
-      const data=await response.json(),alpha=data?.alpha_v2||{};
+      const data=await response.json(),alpha=data?.alpha_v2||{},radar=alpha?.market_radar||data?.market_radar||{};
+      const hot=Array.isArray(radar.hot)?radar.hot:[];
       const positions=Array.isArray(alpha.positions)?alpha.positions:[];
-      const decisions=Array.isArray(alpha.decisions)?alpha.decisions:[];
-      const online=String(alpha.status||'').toUpperCase()==='ONLINE';
-      txt(state,online?'ALPHA LIVE':String(alpha.status||'ALPHA WAIT'));
-      state.className=`alpha-live${online?'':' alpha-wait'}`;
+      const radarOnline=String(radar.status||'').toUpperCase()==='ONLINE';
+      const alphaOnline=String(alpha.status||'').toUpperCase()==='ONLINE';
+      const radarAge=Number.isFinite(Number(radar.age_seconds))?`${Math.round(n(radar.age_seconds))}s`:'—';
+      txt(state,radarOnline?`RADAR LIVE · ${radarAge}`:hot.length?`RADAR ${String(radar.status||'STALE')}`:alphaOnline?'ALPHA LIVE':'RADAR WAIT');
+      state.className=`alpha-live${radarOnline?'':' alpha-wait'}`;
+
       const rows=[];
-      for(const p of positions.slice(0,4)){
-        const asset=String(p.asset_id||'').replace('crypto:','').replace(/[^A-Z0-9_-]/gi,'');
-        const side=n(p.position)>0?'LONG':'SHORT';
-        rows.push(`<div class="alpha-row"><div><div class="alpha-coin">${esc(asset)} · SHADOW ${side}</div><div class="alpha-sub">Entry ${fmtCoin(p.entry_price)} · Son ref ${fmtCoin(p.last_reference_price)}</div></div><span class="alpha-side">${side}</span></div>`);
+      rows.push('<div class="alpha-section">🔥 Piyasa sıcakları</div>');
+      if(hot.length){
+        for(const row of hot.slice(0,5))rows.push(hotRow(row));
+      }else{
+        rows.push('<div class="alpha-row"><div><div class="alpha-coin">Radar snapshot bekleniyor</div><div class="alpha-sub">Universe collector canlı veriyi hazırlıyor.</div></div><span class="alpha-side alpha-wait">WAIT</span></div>');
       }
-      const seen=new Set(positions.map(p=>String(p.asset_id||'')));
-      for(const d of decisions){
-        if(rows.length>=6)break;
-        const id=String(d.asset_id||'');if(!id||seen.has(id))continue;seen.add(id);
-        const asset=id.replace('crypto:','').replace(/[^A-Z0-9_-]/gi,'');
-        const action=String(d.action||'WAIT');
-        rows.push(`<div class="alpha-row"><div><div class="alpha-coin">${esc(asset)} · ${esc(action)}</div><div class="alpha-sub">Evidence ${n(d.evidence_score).toFixed(3)} · Net edge ${Number.isFinite(Number(d.net_edge_bps))?n(d.net_edge_bps).toFixed(1)+' bps':'—'}</div></div><span class="alpha-side ${action==='WAIT'?'alpha-wait':''}">${esc(action)}</span></div>`);
+      rows.push('<div class="alpha-section">ALPHA SHADOW açık pozisyonlar</div>');
+      if(positions.length){
+        for(const p of positions.slice(0,3))rows.push(positionRow(p));
+      }else{
+        rows.push('<div class="alpha-row"><div><div class="alpha-coin">Açık SHADOW pozisyon yok</div><div class="alpha-sub">Radar sıcak coinleri göstermeye devam eder.</div></div><span class="alpha-side alpha-wait">0</span></div>');
       }
-      list.innerHTML=rows.length?rows.join(''):'<div class="alpha-row"><div><div class="alpha-coin">ALPHA aday bekliyor</div><div class="alpha-sub">Radar canlı; ekonomik giriş oluşunca burada görünecek.</div></div><span class="alpha-side alpha-wait">WAIT</span></div>';
+      list.innerHTML=rows.join('');
     }catch(error){
-      txt(state,'ALPHA ERROR');state.className='alpha-live alpha-wait';
+      txt(state,'RADAR ERROR');state.className='alpha-live alpha-wait';
       list.innerHTML='<div class="alpha-row"><div><div class="alpha-coin">Radar paneli veri alamadı</div><div class="alpha-sub">ETH V8.4.4 motoru bundan bağımsız çalışmaya devam ediyor.</div></div><span class="alpha-side alpha-wait">RETRY</span></div>';
     }
   }
@@ -154,9 +176,6 @@
     for(const id of ids){const node=el(id);if(node)observer.observe(node,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});}
   }
 
-  // The 1s canvas deliberately used narrow candle bodies (about 64% of each slot),
-  // which looked like broken/dotted price paths on mobile. Widen only the tiny candle
-  // body rectangles on this one canvas. This is display-only; market/Brian data is untouched.
   function installCandleContinuity(){
     const proto=window.CanvasRenderingContext2D?.prototype;
     if(!proto||proto.__v844GapFixInstalled)return;
