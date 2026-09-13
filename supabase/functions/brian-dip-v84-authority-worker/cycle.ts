@@ -21,14 +21,14 @@ type Level={rank:number;level_id?:string;price:number;timeframe?:string;origin?:
 type CycleMemory={
   sellVotes?:number;lastExitAt?:number|null;lastExitPrice?:number|null;lastExitReason?:string|null;lastTargetRaiseAt?:number|null;
   lastPeakPrice?:number|null;postExitLow?:number|null;rebaseReady?:boolean;
-  breakoutBlockedLevel?:number|null;breakoutCrossAt?:number|null;breakoutSeedQuality?:number|null;
+  breakoutBlockedLevel?:number|null;breakoutCrossAt?:number|null;breakoutSeedQuality?:number|null;breakoutArmedAt?:number|null;breakoutLastSeenAt?:number|null;
 };
 type Runtime844=Runtime&{v842?:CycleMemory};
 type TacticalState={localLow:number;localHigh:number;localRangePos:number;reclaimAtr:number;microBull:boolean;microBear:boolean;ready:boolean;chase:boolean;quality:number};
 type LevelEval={level:Level;economics:ReturnType<typeof executionEconomics>;distanceBps:number};
-type BreakoutState={level:number|null;confirmed:boolean;holdMs:number;overshootBps:number;seedQuality:number};
+type BreakoutState={level:number|null;confirmed:boolean;holdMs:number;overshootBps:number;seedQuality:number;ageMs:number};
 
-const CYCLE_HOTFIX_VERSION="v844-breakout-rollover-20260912.3";
+const CYCLE_HOTFIX_VERSION="v844-breakout-memory-bridge-20260913.4";
 const MAX_PRIMARY_FORECAST_DISTANCE_BPS=60;
 const BREAKOUT_TARGET_DISTANCE_BPS=45;
 const RECOVERY_MIN_ECONOMIC_RR=.70;
@@ -39,6 +39,13 @@ const BREAKOUT_MAX_OVERSHOOT_BPS=10;
 const BREAKOUT_MIN_SCORE_GAP=.35;
 const BREAKOUT_MIN_SEED_QUALITY=.72;
 const BREAKOUT_MAX_MOMENTUM_ATR=1.40;
+const BREAKOUT_MEMORY_TTL_MS=30*60_000;
+const BREAKOUT_MAX_SETBACK_BPS=80;
+const BREAKOUT_BRIDGE_MAX_NEAR_BPS=18;
+const BREAKOUT_BRIDGE_MIN_SCORE_GAP=1.0;
+const BREAKOUT_BRIDGE_MIN_QUALITY=.88;
+const BREAKOUT_BRIDGE_MIN_MOMENTUM_ATR=-.45;
+const BREAKOUT_BRIDGE_MAX_MOMENTUM_ATR=.90;
 
 function num(v:unknown,fallback=0){const x=Number(v);return Number.isFinite(x)?x:fallback;}
 function obj(v:unknown):J{return v&&typeof v==="object"&&!Array.isArray(v)?v as J:{};}
@@ -111,8 +118,12 @@ function structureDamage(thesis:J):boolean{
 }
 
 function cycleMemory(rt:Runtime844):CycleMemory{
-  if(!rt.v842)rt.v842={sellVotes:0,lastExitAt:null,lastExitPrice:null,lastExitReason:null,lastTargetRaiseAt:null,lastPeakPrice:null,postExitLow:null,rebaseReady:false,breakoutBlockedLevel:null,breakoutCrossAt:null,breakoutSeedQuality:null};
+  if(!rt.v842)rt.v842={sellVotes:0,lastExitAt:null,lastExitPrice:null,lastExitReason:null,lastTargetRaiseAt:null,lastPeakPrice:null,postExitLow:null,rebaseReady:false,breakoutBlockedLevel:null,breakoutCrossAt:null,breakoutSeedQuality:null,breakoutArmedAt:null,breakoutLastSeenAt:null};
   return rt.v842;
+}
+
+function clearBreakoutMemory(mem:CycleMemory){
+  mem.breakoutBlockedLevel=null;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=null;mem.breakoutArmedAt=null;mem.breakoutLastSeenAt=null;
 }
 
 function rebaseState(rt:Runtime844,m:Market,thesis:J,minPullbackBps=REBASE_PULLBACK_BPS):{required:boolean;ready:boolean;pullbackBps:number;reclaimAtr:number;reference:number|null;low:number|null}{
@@ -130,27 +141,30 @@ function rebaseState(rt:Runtime844,m:Market,thesis:J,minPullbackBps=REBASE_PULLB
 function breakoutState(rt:Runtime844,m:Market,thesis:J,nearest:LevelEval|null,nearestEconomic:boolean,tactical:TacticalState,scores:ReturnType<typeof scoreState>,scoreGap:number,at:number,roundtripCostBps:number):BreakoutState{
   const mem=cycleMemory(rt),live=m.book.mid,s1=obj(obj(thesis.structure).s1),atr=Math.max(num(s1.atr),m.rules.tickSize),buffer=Math.max(m.rules.tickSize*4,atr*.06,live*.00004);
   const armDistance=Math.max(6,Math.min(14,roundtripCostBps*.65));
+  const existing=num(mem.breakoutBlockedLevel),armedAt=num(mem.breakoutArmedAt),setbackBps=existing>0&&live<existing?(existing-live)/existing*10000:0;
+  if(existing>0&&((armedAt>0&&at-armedAt>BREAKOUT_MEMORY_TTL_MS)||setbackBps>BREAKOUT_MAX_SETBACK_BPS))clearBreakoutMemory(mem);
   if(!mem.breakoutBlockedLevel&&nearest&&!nearestEconomic&&nearest.distanceBps<=armDistance&&tactical.ready&&tactical.quality>=BREAKOUT_MIN_SEED_QUALITY&&!tactical.microBear){
-    mem.breakoutBlockedLevel=nearest.level.price;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=tactical.quality;
-  }else if(mem.breakoutBlockedLevel&&nearest&&Math.abs(nearest.level.price-mem.breakoutBlockedLevel)<=buffer*2){
-    mem.breakoutSeedQuality=Math.max(num(mem.breakoutSeedQuality),tactical.quality);
+    mem.breakoutBlockedLevel=nearest.level.price;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=tactical.quality;mem.breakoutArmedAt=at;mem.breakoutLastSeenAt=at;
+  }else if(mem.breakoutBlockedLevel&&nearest&&Math.abs(nearest.level.price-num(mem.breakoutBlockedLevel))<=buffer*3){
+    mem.breakoutSeedQuality=Math.max(num(mem.breakoutSeedQuality),tactical.quality);mem.breakoutLastSeenAt=at;if(!mem.breakoutArmedAt)mem.breakoutArmedAt=at;
   }
   const level=num(mem.breakoutBlockedLevel);
-  if(!(level>0))return{level:null,confirmed:false,holdMs:0,overshootBps:0,seedQuality:0};
+  if(!(level>0)){mem.breakoutCrossAt=null;return{level:null,confirmed:false,holdMs:0,overshootBps:0,seedQuality:0,ageMs:0};}
+  if(!mem.breakoutArmedAt)mem.breakoutArmedAt=at;
   const overshootBps=(live-level)/level*10000;
   if(live>=level+buffer){if(!mem.breakoutCrossAt)mem.breakoutCrossAt=at;}
-  else if(live<level-buffer){mem.breakoutCrossAt=null;if((level-live)/level*10000>Math.max(12,roundtripCostBps*.7)){mem.breakoutBlockedLevel=null;mem.breakoutSeedQuality=null;}}
-  const holdMs=mem.breakoutCrossAt?Math.max(0,at-mem.breakoutCrossAt):0;
+  else if(live<level-buffer){mem.breakoutCrossAt=null;}
+  const holdMs=mem.breakoutCrossAt?Math.max(0,at-mem.breakoutCrossAt):0,ageMs=Math.max(0,at-num(mem.breakoutArmedAt,at));
   const flowOk=m.flowFast.ofi>=.05||m.book.pressure>=1.20;
   const momentumOk=scores.momentumAtr>=-.10&&scores.momentumAtr<=BREAKOUT_MAX_MOMENTUM_ATR;
   const confirmed=holdMs>=BREAKOUT_CONFIRM_MS&&overshootBps>=0&&overshootBps<=BREAKOUT_MAX_OVERSHOOT_BPS&&flowOk&&momentumOk&&scoreGap>=BREAKOUT_MIN_SCORE_GAP&&!tactical.microBear&&num(mem.breakoutSeedQuality)>=BREAKOUT_MIN_SEED_QUALITY;
-  return{level:mem.breakoutBlockedLevel??null,confirmed,holdMs,overshootBps,seedQuality:num(mem.breakoutSeedQuality)};
+  return{level:mem.breakoutBlockedLevel??null,confirmed,holdMs,overshootBps,seedQuality:num(mem.breakoutSeedQuality),ageMs};
 }
 
 export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cfg:J,tradeNotional:number,at:number,cal:ExecutionCalibration):Promise<CandidateResult>{
   const c=await legacyAuthorityCandidate(m,sessionId,rt,cfg,tradeNotional,at,cal);
   const thesis=c.thesis as J,scores=scoreState(thesis),hasLong=rt.pos?.side==="LONG",tactical=tacticalState(m,thesis),mem=cycleMemory(rt as Runtime844);
-  if(hasLong){mem.breakoutBlockedLevel=null;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=null;}
+  if(hasLong)clearBreakoutMemory(mem);
   const reasons=arr(thesis.authority_reason).map(String),soft=arr(thesis.soft_evidence).map(String),veto=arr(thesis.veto).map(String);
   const scoreGap=scores.up-scores.down,confidence=num(thesis.authority_confidence,.5);
   const effectiveEntryQuality=hasLong?scores.entryQuality:tactical.quality;
@@ -174,12 +188,25 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const minEconomicRR=recoveryEconomics?RECOVERY_MIN_ECONOMIC_RR:1;
   const nearestPick=evaluated[0]??null;
   const nearestEconomic=!!(nearestPick&&nearestPick.economics.target_net_reward_bps>=MIN_FORECAST_NET_EDGE_BPS&&nearestPick.economics.economic_rr>=minEconomicRR);
-  const breakout=hasLong?{level:null,confirmed:false,holdMs:0,overshootBps:0,seedQuality:0}:breakoutState(rt as Runtime844,m,thesis,nearestPick,nearestEconomic,tactical,scores,scoreGap,at,roundtripCostBps);
+  const breakout=hasLong?{level:null,confirmed:false,holdMs:0,overshootBps:0,seedQuality:0,ageMs:0}:breakoutState(rt as Runtime844,m,thesis,nearestPick,nearestEconomic,tactical,scores,scoreGap,at,roundtripCostBps);
   const breakoutLevels=levels.filter(x=>x.rank<=STRONG_PRIMARY_RANK_CAP&&((x.price-c.entry)/Math.max(c.entry,1e-9)*10000)<=BREAKOUT_TARGET_DISTANCE_BPS);
   const breakoutEvaluated=evalLevels(breakoutLevels);
-  const breakoutPick=breakout.confirmed?breakoutEvaluated.find(x=>x.economics.target_net_reward_bps>=MIN_FORECAST_NET_EDGE_BPS&&x.economics.economic_rr>=RECOVERY_MIN_ECONOMIC_RR)??null:null;
+
+  const breakoutNearest=breakout.confirmed?(breakoutEvaluated[0]??null):null;
+  const breakoutNearestEconomic=!!(breakoutNearest&&breakoutNearest.economics.target_net_reward_bps>=MIN_FORECAST_NET_EDGE_BPS&&breakoutNearest.economics.economic_rr>=RECOVERY_MIN_ECONOMIC_RR);
+  const breakoutPick=breakoutNearestEconomic?breakoutNearest:null;
+  const breakoutChainPending=!!(breakout.confirmed&&breakoutNearest&&!breakoutNearestEconomic);
+  if(breakoutChainPending&&breakoutNearest){
+    mem.breakoutBlockedLevel=breakoutNearest.level.price;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=Math.max(breakout.seedQuality,tactical.quality);mem.breakoutArmedAt=at;mem.breakoutLastSeenAt=at;
+  }
+
+  const bridgeSuccessor=nearestPick?breakoutEvaluated.find(x=>x.level.price>nearestPick.level.price+m.rules.tickSize*2)??null:null;
+  const bridgeSuccessorEconomic=!!(bridgeSuccessor&&bridgeSuccessor.economics.target_net_reward_bps>=MIN_FORECAST_NET_EDGE_BPS&&bridgeSuccessor.economics.economic_rr>=.80);
+  const bridgeFlowOk=m.flowFast.ofi>=.03||m.book.pressure>=1.15;
+  const preBreakoutBridge=!!(!hasLong&&nearestPick&&!nearestEconomic&&breakout.level&&Math.abs(nearestPick.level.price-breakout.level)<=Math.max(m.rules.tickSize*8,c.entry*.00008)&&nearestPick.distanceBps<=BREAKOUT_BRIDGE_MAX_NEAR_BPS&&bridgeSuccessorEconomic&&tactical.ready&&effectiveEntryQuality>=BREAKOUT_BRIDGE_MIN_QUALITY&&!tactical.chase&&!tactical.microBear&&c.direction==="UP"&&scoreGap>=BREAKOUT_BRIDGE_MIN_SCORE_GAP&&scores.momentumAtr>=BREAKOUT_BRIDGE_MIN_MOMENTUM_ATR&&scores.momentumAtr<=BREAKOUT_BRIDGE_MAX_MOMENTUM_ATR&&bridgeFlowOk);
+  const bridgePick=preBreakoutBridge?bridgeSuccessor:null;
   const breakoutContinuation=!!breakoutPick&&breakout.confirmed&&c.direction==="UP";
-  const economicPick=nearestEconomic?nearestPick:breakoutPick;
+  const economicPick=nearestEconomic?nearestPick:(bridgePick??breakoutPick);
   const selectedPick=economicPick??nearestPick;
   const primary=selectedPick?.level??null;
   const primaryEconomics=selectedPick?.economics??null;
@@ -188,7 +215,7 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   const forecastEconomic=!!economicPick;
   const rawChase=tactical.chase||(scores.rangePos>.96&&tactical.localRangePos>.68&&scores.momentumAtr>.25)||scores.momentumAtr>2.0;
   const chase=rawChase&&!breakoutContinuation;
-  const decisionEntryQuality=breakoutContinuation?Math.max(effectiveEntryQuality,breakout.seedQuality):effectiveEntryQuality;
+  const decisionEntryQuality=(breakoutContinuation||preBreakoutBridge)?Math.max(effectiveEntryQuality,breakout.seedQuality):effectiveEntryQuality;
   const rebaseMinPullbackBps=Math.max(REBASE_PULLBACK_BPS,roundtripCostBps*REBASE_COST_FRACTION);
   const rebase=hasLong?{required:false,ready:true,pullbackBps:0,reclaimAtr:0,reference:null,low:null}:rebaseState(rt as Runtime844,m,thesis,rebaseMinPullbackBps);
   const normalizedConfidence=clip((confidence-.50)/.43),allocation=clip(.12+.88*normalizedConfidence*decisionEntryQuality,.12,1);
@@ -225,32 +252,36 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
     thesis.authority_scores=a;thesis.cycle_phase=action==="SELL"?"HARVEST":"RIDE";
   }else{
     const localDirectionAssist=c.direction==="UP"&&scoreGap<.55&&scoreGap>=-.75&&tactical.ready&&decisionEntryQuality>=.72&&!tactical.microBear;
-    const directionalUp=(c.direction==="UP"&&(scoreGap>=.55||localDirectionAssist))||breakoutContinuation;
-    const recoveryReady=tactical.ready||breakoutContinuation;
+    const directionalUp=(c.direction==="UP"&&(scoreGap>=.55||localDirectionAssist))||breakoutContinuation||preBreakoutBridge;
+    const recoveryReady=tactical.ready||breakoutContinuation||preBreakoutBridge;
     const entryReady=directionalUp&&decisionEntryQuality>=MIN_ENTRY_QUALITY&&recoveryReady&&!chase&&forecastEconomic&&rebase.ready&&!!primary&&!!effectiveSize;
     action=entryReady?"BUY":"WAIT";
     if(localDirectionAssist)pushUnique(soft,"TACTICAL_DIRECTION_LAG_ASSIST_ACTIVE");
+    if(preBreakoutBridge)pushUnique(soft,"ANTICIPATORY_BREAKOUT_BRIDGE_READY");
     if(breakoutContinuation)pushUnique(soft,"CONFIRMED_BREAKOUT_TARGET_ROLLOVER");
+    if(breakoutChainPending)pushUnique(soft,"BREAKOUT_CHAIN_ROLLOVER_PENDING");
     if(breakout.level&&!breakout.confirmed&&breakout.holdMs>0)pushUnique(soft,"BREAKOUT_CONFIRMATION_PENDING");
+    if(breakout.level&&!breakout.confirmed&&breakout.ageMs>0)pushUnique(soft,"BREAKOUT_MEMORY_PERSISTENT");
     if(chase)pushUnique(soft,"CYCLE_WAIT_DONT_CHASE_RALLY");
     if(!recoveryReady)pushUnique(soft,"CYCLE_WAIT_FOR_TACTICAL_DIP_RECLAIM");
     if(!primary)pushUnique(soft,"NO_NEAR_TERM_FORECAST_DESTINATION");
     if(primary&&!forecastEconomic)pushUnique(soft,"PRIMARY_FORECAST_BELOW_COST_WAIT");
-    if(levels.length>0&&eligible.length===0&&!breakoutContinuation)pushUnique(soft,"PRIMARY_FORECAST_TOO_FAR_WAIT");
+    if(levels.length>0&&eligible.length===0&&!breakoutContinuation&&!preBreakoutBridge)pushUnique(soft,"PRIMARY_FORECAST_TOO_FAR_WAIT");
     if(rebase.required&&!rebase.ready)pushUnique(soft,"CYCLE_WAIT_FOR_PULLBACK_REBASE");
     if(rebase.required&&rebase.pullbackBps<rebaseMinPullbackBps)pushUnique(soft,"CYCLE_REBASE_COST_GUARD");
     if(decisionEntryQuality<MIN_ENTRY_QUALITY)pushUnique(soft,"CYCLE_ENTRY_QUALITY_LOW");
     if(tactical.ready)pushUnique(soft,"TACTICAL_DIP_RECLAIM_READY");
     thesis.cycle_phase=rebase.required&&!rebase.ready?"REBASE":entryReady?"ENTER_RECOVERY":"SEEK_DIP";
-    if(entryReady){mem.breakoutBlockedLevel=null;mem.breakoutCrossAt=null;mem.breakoutSeedQuality=null;}
+    if(entryReady)clearBreakoutMemory(mem);
   }
 
   const macroPenalty=1-Math.max(0,scores.rangePos-.85)*.30;
-  const recoveryBoost=!hasLong&&(tactical.ready||breakoutContinuation) ? .06 : 0;
+  const recoveryBoost=!hasLong&&(tactical.ready||breakoutContinuation||preBreakoutBridge) ? .06 : 0;
   const forecastProbability=clip(confidence*macroPenalty*(1-Math.max(0,scores.momentumAtr-1)*.15)+recoveryBoost,.05,.95);
-  const targetPlan={...obj(thesis.target_plan),policy:"BRIAN_FORECAST_PRIMARY_WITH_STRETCH_TELEMETRY",target_planner_version:TARGET_PLANNER_VERSION,selected_rank:primary?.rank??null,selected_level:primary,forecast_primary_rank_cap:rankCap,forecast_primary:primary,stretch_target:stretch,far_pivots:"STRETCH_ONLY",selection_mode:breakoutContinuation?"CONFIRMED_BREAKOUT_ROLLOVER":"NEAREST_STRUCTURAL_MUST_CLEAR_COST",max_primary_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS,breakout_target_distance_bps:BREAKOUT_TARGET_DISTANCE_BPS,min_economic_rr:minEconomicRR};
+  const selectionMode=preBreakoutBridge?"ANTICIPATORY_BREAKOUT_BRIDGE":breakoutContinuation?"CONFIRMED_BREAKOUT_ROLLOVER":"NEAREST_STRUCTURAL_MUST_CLEAR_COST";
+  const targetPlan={...obj(thesis.target_plan),policy:"BRIAN_FORECAST_PRIMARY_WITH_STRETCH_TELEMETRY",target_planner_version:TARGET_PLANNER_VERSION,selected_rank:primary?.rank??null,selected_level:primary,forecast_primary_rank_cap:rankCap,forecast_primary:primary,stretch_target:stretch,far_pivots:"STRETCH_ONLY",selection_mode:selectionMode,max_primary_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS,breakout_target_distance_bps:BREAKOUT_TARGET_DISTANCE_BPS,min_economic_rr:minEconomicRR};
   const a=obj(thesis.authority_scores);
-  Object.assign(a,{range_position_macro:scores.rangePos,tactical_range_position:tactical.localRangePos,tactical_low:tactical.localLow,tactical_high:tactical.localHigh,tactical_reclaim_atr:tactical.reclaimAtr,tactical_recovery:tactical.ready,tactical_micro_bull:tactical.microBull,tactical_micro_bear:tactical.microBear,tactical_chase:tactical.chase,entry_quality_tactical:decisionEntryQuality,forecast_max_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS,rebase_min_pullback_bps:rebaseMinPullbackBps,breakout_blocked_level:breakout.level,breakout_confirmed:breakout.confirmed,breakout_hold_ms:breakout.holdMs,breakout_overshoot_bps:breakout.overshootBps,breakout_seed_quality:breakout.seedQuality});
+  Object.assign(a,{range_position_macro:scores.rangePos,tactical_range_position:tactical.localRangePos,tactical_low:tactical.localLow,tactical_high:tactical.localHigh,tactical_reclaim_atr:tactical.reclaimAtr,tactical_recovery:tactical.ready,tactical_micro_bull:tactical.microBull,tactical_micro_bear:tactical.microBear,tactical_chase:tactical.chase,entry_quality_tactical:decisionEntryQuality,forecast_max_distance_bps:MAX_PRIMARY_FORECAST_DISTANCE_BPS,rebase_min_pullback_bps:rebaseMinPullbackBps,breakout_blocked_level:breakout.level,breakout_confirmed:breakout.confirmed,breakout_hold_ms:breakout.holdMs,breakout_age_ms:breakout.ageMs,breakout_overshoot_bps:breakout.overshootBps,breakout_seed_quality:breakout.seedQuality,breakout_chain_pending:breakoutChainPending,anticipatory_breakout_bridge:preBreakoutBridge});
   thesis.authority_scores=a;
   thesis.target_plan=targetPlan;
   thesis.cycle_hotfix_version=CYCLE_HOTFIX_VERSION;
@@ -260,17 +291,17 @@ export async function authorityCandidate(m:Market,sessionId:string,rt:Runtime,cf
   thesis.stretch_target_price=stretch?.price??null;
   thesis.forecast_net_edge_bps=forecastNetEdge;
   thesis.forecast_economic=forecastEconomic;
-  thesis.entry_timing_state=chase?"WAIT_CHASE":rebase.required&&!rebase.ready?"WAIT_REBASE":!hasLong&&!tactical.ready&&!breakoutContinuation?"WAIT_DIP_RECLAIM":action==="BUY"?"ENTRY_READY":"WAIT";
+  thesis.entry_timing_state=chase?"WAIT_CHASE":rebase.required&&!rebase.ready?"WAIT_REBASE":!hasLong&&!tactical.ready&&!breakoutContinuation&&!preBreakoutBridge?"WAIT_DIP_RECLAIM":action==="BUY"?"ENTRY_READY":"WAIT";
   thesis.rebase_required=rebase.required;thesis.rebase_ready=rebase.ready;thesis.rebase_pullback_bps=rebase.pullbackBps;thesis.rebase_reclaim_atr=rebase.reclaimAtr;thesis.rebase_min_pullback_bps=rebaseMinPullbackBps;
   thesis.authority_entry_quality=decisionEntryQuality;thesis.authority_allocation=effectiveSize?.allocation??allocation;thesis.authority_action=action;thesis.authority_reason=reasons;thesis.soft_evidence=soft;thesis.veto=veto;
-  thesis.invalidation_price=effectiveInv;thesis.stop={...obj(thesis.stop),price:effectiveInv,source:!hasLong&&(tactical.ready||breakoutContinuation)?"TACTICAL_DIP_RECLAIM":obj(thesis.stop).source};
+  thesis.invalidation_price=effectiveInv;thesis.stop={...obj(thesis.stop),price:effectiveInv,source:!hasLong&&preBreakoutBridge?"TACTICAL_BREAKOUT_BRIDGE":!hasLong&&(tactical.ready||breakoutContinuation)?"TACTICAL_DIP_RECLAIM":obj(thesis.stop).source};
   thesis.target_price=primaryTarget;thesis.target_role=primaryTarget?"L1_EXECUTABLE":"NO_FORWARD_LEVEL";thesis.fill_forward_cost_bps=fillForwardCostBps(cost);thesis.reference_roundtrip_cost_bps=roundtripCostBps;
   if(primaryEconomics){thesis.economic_rr=primaryEconomics.economic_rr;thesis.rr=primaryEconomics.economic_rr;thesis.net_reward_bps=primaryEconomics.target_net_reward_bps;thesis.net_risk_bps=primaryEconomics.stop_net_loss_bps;}
 
   let decision=c.decision as any;
   const canEnter=!hasLong&&action==="BUY"&&!!primary&&!!primaryEconomics&&!!effectiveSize&&!!effectiveInv&&veto.length===0;
   if(canEnter&&decision){
-    decision={...decision,target_price:primary!.price,invalidation_price:effectiveInv,forecast_probability:forecastProbability,l1_id:primary!.level_id??null,evidence:{...obj(decision.evidence),authority_action:action,authority_reason:reasons,authority_scores:thesis.authority_scores,authority_entry_quality:decisionEntryQuality,authority_allocation:effectiveSize?.allocation??allocation,target_plan:targetPlan,soft_evidence:soft,fill_forward_cost_bps:fillForwardCostBps(cost),reference_roundtrip_cost_bps:roundtripCostBps,economic_rr:primaryEconomics!.economic_rr,forecast_destination_price:primary!.price,forecast_probability:forecastProbability,forecast_net_edge_bps:forecastNetEdge,cycle_phase:thesis.cycle_phase,cycle_hotfix_version:CYCLE_HOTFIX_VERSION,rebase_required:rebase.required,rebase_ready:rebase.ready,rebase_min_pullback_bps:rebaseMinPullbackBps,tactical_dip_reclaim:tactical.ready,breakout_continuation:breakoutContinuation,breakout_blocked_level:breakout.level,breakout_hold_ms:breakout.holdMs,tactical_low:tactical.localLow,tactical_range_position:tactical.localRangePos,tactical_reclaim_atr:tactical.reclaimAtr}};
+    decision={...decision,target_price:primary!.price,invalidation_price:effectiveInv,forecast_probability:forecastProbability,l1_id:primary!.level_id??null,evidence:{...obj(decision.evidence),authority_action:action,authority_reason:reasons,authority_scores:thesis.authority_scores,authority_entry_quality:decisionEntryQuality,authority_allocation:effectiveSize?.allocation??allocation,target_plan:targetPlan,soft_evidence:soft,fill_forward_cost_bps:fillForwardCostBps(cost),reference_roundtrip_cost_bps:roundtripCostBps,economic_rr:primaryEconomics!.economic_rr,forecast_destination_price:primary!.price,forecast_probability:forecastProbability,forecast_net_edge_bps:forecastNetEdge,cycle_phase:thesis.cycle_phase,cycle_hotfix_version:CYCLE_HOTFIX_VERSION,rebase_required:rebase.required,rebase_ready:rebase.ready,rebase_min_pullback_bps:rebaseMinPullbackBps,tactical_dip_reclaim:tactical.ready,breakout_continuation:breakoutContinuation,anticipatory_breakout_bridge:preBreakoutBridge,breakout_blocked_level:breakout.level,breakout_hold_ms:breakout.holdMs,breakout_age_ms:breakout.ageMs,tactical_low:tactical.localLow,tactical_range_position:tactical.localRangePos,tactical_reclaim_atr:tactical.reclaimAtr}};
   }else if(!hasLong){decision=null;}
 
   return{...c,thesis,decision,inv:effectiveInv,size:effectiveSize,target:primaryTarget,targetRole:primaryTarget?"L1_EXECUTABLE":"NO_FORWARD_LEVEL",canEnter,firstBlockingVeto:veto[0]??null,vetoStage:veto.length?"TECHNICAL_RAIL":null};
