@@ -47,7 +47,39 @@ const validInput = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-Deno.test("stress input is bounded, deterministic, and shadow-only", () => {
+function assertSafety(
+  result: ReturnType<typeof compileExpectedEdgeAlphaCandidate>,
+) {
+  if (
+    result.shadow_only !== true || result.live_execution !== false ||
+    result.canonical_mutation !== false || result.promotionReady !== false
+  ) throw new Error(JSON.stringify(result));
+}
+
+Deno.test("within-limit valid stress input is eligible and deterministic", () => {
+  const value = validInput();
+  const result = compileExpectedEdgeAlphaCandidate(value, {
+    decisionAt,
+    maxInputRows: 100,
+    maxContributions: 10,
+  });
+  const reversed = compileExpectedEdgeAlphaCandidate({
+    ...value,
+    sourceObservations: [...value.sourceObservations].reverse(),
+    reliabilitySnapshots: [...value.reliabilitySnapshots].reverse(),
+  }, { decisionAt, maxInputRows: 100, maxContributions: 10 });
+  if (
+    JSON.stringify(result) !== JSON.stringify(reversed) ||
+    result.truncated || result.recommendation !== "ALLOW_EDGE" ||
+    !result.eligible || result.matureIndependentGroupCount !== 2 ||
+    result.invalidEvidenceCount !== 0 ||
+    result.estimatedRoundTripCostBps !== 3 ||
+    result.contributions.length !== 2
+  ) throw new Error(JSON.stringify(result));
+  assertSafety(result);
+});
+
+Deno.test("oversized stress input is bounded, deterministic, and fail-closed", () => {
   const sourceObservations = Array.from(
     { length: 3_000 },
     (_, index) => source(`o${index}`),
@@ -69,11 +101,16 @@ Deno.test("stress input is bounded, deterministic, and shadow-only", () => {
   }, { decisionAt, maxInputRows: 100, maxContributions: 10 });
   if (
     JSON.stringify(result) !== JSON.stringify(reversed) ||
-    !result.truncated || result.recommendation === "COST_UNAVAILABLE" ||
-    result.eligible || result.contributions.length > 10 ||
-    result.shadow_only !== true || result.live_execution !== false ||
-    result.canonical_mutation !== false || result.promotionReady !== false
+    !result.truncated ||
+    result.recommendation !== "INSUFFICIENT_LAGGED_EVIDENCE" ||
+    result.eligible || result.reasons.length !== 1 ||
+    result.reasons[0] !== "incomplete bounded evidence" ||
+    result.invalidEvidenceCount !== 0 ||
+    result.matureIndependentGroupCount !== 2 ||
+    result.estimatedRoundTripCostBps !== 3 ||
+    result.contributions.length > 10
   ) throw new Error(JSON.stringify(result));
+  assertSafety(result);
 });
 
 Deno.test("stress matrix fails closed for malformed, extreme, and future evidence", () => {

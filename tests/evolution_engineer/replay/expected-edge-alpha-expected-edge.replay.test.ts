@@ -101,6 +101,31 @@ Deno.test("replay projection is unchanged by future evidence permutations", () =
   if (JSON.stringify(projection) !== JSON.stringify(expectedProjection)) {
     throw new Error(`immutable replay mismatch: ${JSON.stringify(projection)}`);
   }
+  const permuted = compileExpectedEdgeAlphaCandidate({
+    ...envelope,
+    sourceObservations: [...envelope.sourceObservations].reverse(),
+    reliabilitySnapshots: [...envelope.reliabilitySnapshots].reverse(),
+  }, options);
+  const permutedProjection = {
+    recommendation: permuted.recommendation,
+    eligible: permuted.eligible,
+    expectedGrossMoveBps: permuted.expectedGrossMoveBps,
+    estimatedRoundTripCostBps: permuted.estimatedRoundTripCostBps,
+    uncertaintyPenaltyBps: permuted.uncertaintyPenaltyBps,
+    matureIndependentGroupCount: permuted.matureIndependentGroupCount,
+    supportingObservationIds: permuted.provenance.supportingObservationIds,
+    safety: {
+      shadow_only: permuted.shadow_only,
+      live_execution: permuted.live_execution,
+      canonical_mutation: permuted.canonical_mutation,
+      promotionReady: permuted.promotionReady,
+    },
+  };
+  if (
+    JSON.stringify(permutedProjection) !== JSON.stringify(expectedProjection)
+  ) {
+    throw new Error("input permutation contaminated replay");
+  }
   const futures = [
     {
       observationId: "future",

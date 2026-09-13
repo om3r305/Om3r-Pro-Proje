@@ -149,7 +149,7 @@ function baseReport(decisionAt: string | null): ExpectedEdgeReport {
   };
 }
 function fingerprint(value: unknown): string {
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? "";
 }
 function futureEvidence(
   row: Record<string, unknown>,
@@ -196,7 +196,10 @@ export function compileExpectedEdgeAlphaCandidate(
   };
   const observations = new Map<string, Observation>();
   const conflicts = new Set<string>();
-  for (const value of source.slice(0, maxRows)) {
+  const boundedSource = [...source].sort((a, b) =>
+    fingerprint(a).localeCompare(fingerprint(b))
+  ).slice(0, maxRows);
+  for (const value of boundedSource) {
     if (!record(value)) {
       addInvalid();
       continue;
@@ -248,7 +251,10 @@ export function compileExpectedEdgeAlphaCandidate(
   if (conflicts.size) report.reasons.push("conflicting source observations");
   const validReliability: Reliability[] = [];
   const reliabilityKeys = new Map<string, Set<string>>();
-  for (const value of reliabilityRows.slice(0, maxRows)) {
+  const boundedReliability = [...reliabilityRows].sort((a, b) =>
+    fingerprint(a).localeCompare(fingerprint(b))
+  ).slice(0, maxRows);
+  for (const value of boundedReliability) {
     if (!record(value)) {
       addInvalid();
       continue;
@@ -370,9 +376,8 @@ export function compileExpectedEdgeAlphaCandidate(
     : null;
   if (
     !cost || !costAsOf || costAsOf.ms > decision.ms || !costSource ||
-    costCadence == null ||
-    !validatedCostParts || validatedCostParts.length !== 3 ||
-    !validatedFillability ||
+    costCadence == null || validatedCostParts === null ||
+    validatedCostParts.length !== 3 || validatedFillability === null ||
     validatedCostParts.every((part) => part === 0) ||
     decision.ms - costAsOf.ms >
       Math.min(7 * 86_400_000, costCadence * 2 * 1000 + 300_000)
@@ -381,12 +386,8 @@ export function compileExpectedEdgeAlphaCandidate(
     report.recommendation = "COST_UNAVAILABLE";
     return report;
   }
-  const totalCostBps = validatedCostParts === null
-    ? null
-    : validatedCostParts.reduce((sum, part) => sum + part, 0);
-  if (
-    totalCostBps === null || totalCostBps <= 0 || validatedFillability === null
-  ) {
+  const totalCostBps = validatedCostParts.reduce((sum, part) => sum + part, 0);
+  if (totalCostBps <= 0) {
     report.reasons.push("decision-time fillability-aware cost unavailable");
     report.recommendation = "COST_UNAVAILABLE";
     return report;
