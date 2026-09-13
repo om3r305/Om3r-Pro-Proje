@@ -35,10 +35,16 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     maxProviders: 3,
     maxInputRows: 100,
   });
+  const rawFailureOccurrences = 3;
+  const expectedUniqueFailureIdentities = 2;
   const alpha = result.providers.find((provider) =>
     provider.providerId === "alpha"
   );
-  if (alpha?.failedCount !== 2 || alpha?.recentFailures.length !== 2) {
+  if (
+    rawFailureOccurrences <= expectedUniqueFailureIdentities ||
+    alpha?.failedCount !== expectedUniqueFailureIdentities ||
+    alpha?.recentFailures.length !== expectedUniqueFailureIdentities
+  ) {
     throw new Error(`dedupe failed: ${JSON.stringify(result)}`);
   }
   if (
@@ -53,6 +59,10 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
   if (
     result.processedDecisionRowCount > 2 || result.providers.length > 3 ||
     result.invalidEvidenceCount !== 2 ||
-    result.futureTelemetry.futureEvidenceCount !== 1
+    result.futureTelemetry.futureEvidenceCount !== 1 ||
+    !result.blockers.includes(
+      "missing prospective multi-window shadow A/B evidence",
+    ) || result.shadow_only !== true || result.live_execution !== false ||
+    result.promotionReady !== false
   ) throw new Error("hard bound or future isolation failed");
 });

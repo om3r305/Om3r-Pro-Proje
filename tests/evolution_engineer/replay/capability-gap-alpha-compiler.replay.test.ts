@@ -12,7 +12,9 @@ const base = {
 const future = (rowId: string, completedAt: string) => ({
   ...base,
   rowId,
+  providerId: rowId === "future-only" ? "futureonly" : "alpha",
   completedAt,
+  freshnessAt: completedAt,
 });
 const projection = (
   result: ReturnType<typeof compileCapabilityGapAlphaCompiler>,
@@ -28,6 +30,9 @@ const projection = (
     blockers: result.blockers,
     inputEnvelopeTruncated: result.inputEnvelopeTruncated,
     providerDiagnosticsTruncated: result.providerDiagnosticsTruncated,
+    shadow_only: result.shadow_only,
+    live_execution: result.live_execution,
+    promotionReady: result.promotionReady,
   });
 
 Deno.test("immutable replay keeps every decision field isolated from future permutations", () => {
@@ -38,7 +43,7 @@ Deno.test("immutable replay keeps every decision field isolated from future perm
   const futures = [
     future("f1", "2026-09-14T00:00:00Z"),
     future("f2", "2026-09-15T00:00:00Z"),
-    future("f3", "2026-09-16T00:00:00Z"),
+    future("future-only", "2026-09-16T00:00:00Z"),
   ];
   for (
     const permutation of [[...futures], [futures[2], futures[0], futures[1]], [
@@ -58,6 +63,11 @@ Deno.test("immutable replay keeps every decision field isolated from future perm
     }
     if (result.futureTelemetry.futureEvidenceCount !== 3) {
       throw new Error("future telemetry missing");
+    }
+    if (
+      result.providers.some((provider) => provider.providerId === "futureonly")
+    ) {
+      throw new Error("future-only provider entered decision state");
     }
   }
 });

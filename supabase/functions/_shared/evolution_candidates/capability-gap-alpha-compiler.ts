@@ -48,9 +48,15 @@ interface ValidRow {
   freshnessAt: string | null;
   freshnessMs: number | null;
   health: ProviderHealth;
-  status: string;
+  status: CollectorStatus;
   failures: Array<{ id: string; message: string }>;
 }
+
+type CollectorStatus =
+  | "COMPLETED"
+  | "LEASE_SKIPPED"
+  | "SKIPPED_LEASE"
+  | "LEASE_UNAVAILABLE";
 
 const DEFAULT_MAX_ROWS = 100;
 const DEFAULT_MAX_PROVIDERS = 20;
@@ -58,6 +64,12 @@ const DEFAULT_MAX_INPUT_ROWS = 10_000;
 const ISO_UTC =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
 const LEASE_STATUSES = new Set([
+  "LEASE_SKIPPED",
+  "SKIPPED_LEASE",
+  "LEASE_UNAVAILABLE",
+]);
+const SUPPORTED_STATUSES = new Set<string>([
+  "COMPLETED",
   "LEASE_SKIPPED",
   "SKIPPED_LEASE",
   "LEASE_UNAVAILABLE",
@@ -108,6 +120,21 @@ function observedMs(value: number | string): number | null {
   return parsed?.ms ?? null;
 }
 
+function collectorStatus(value: unknown): CollectorStatus | null {
+  if (typeof value !== "string" || !SUPPORTED_STATUSES.has(value)) {
+    return null;
+  }
+  switch (value) {
+    case "COMPLETED":
+    case "LEASE_SKIPPED":
+    case "SKIPPED_LEASE":
+    case "LEASE_UNAVAILABLE":
+      return value;
+    default:
+      return null;
+  }
+}
+
 function stableRow(
   value: unknown,
   observation: number,
@@ -128,12 +155,13 @@ function stableRow(
     ? raw.rowId.trim()
     : null;
   const rowHealth = health(raw.health);
-  const status = typeof raw.status === "string" ? raw.status : null;
+  const status = collectorStatus(raw.status);
   const rawFailures = raw.failures == null ? [] : raw.failures;
   const failures: Array<{ id: string; message: string }> = [];
   let nestedInvalid = false;
   if (!Array.isArray(rawFailures)) nestedInvalid = true;
-  else {for (const failure of rawFailures) {
+  else {
+    for (const failure of rawFailures) {
       if (!isRecord(failure)) {
         nestedInvalid = true;
         continue;
@@ -147,11 +175,13 @@ function stableRow(
         : null;
       if (!id || !message) nestedInvalid = true;
       else failures.push({ id, message });
-    }}
-  const future = completion != null && completion.ms > observation;
+    }
+  }
+  const future = (completion != null && completion.ms > observation) ||
+    (freshness != null && freshness.ms > observation);
   if (
     !parsedProvider || !completion || !rowId || !rowHealth || !status ||
-    nestedInvalid
+    (raw.freshnessAt != null && !freshness) || nestedInvalid
   ) {
     return { row: null, providerId: parsedProvider, future, invalid: true };
   }
@@ -182,7 +212,9 @@ function baseReport(): CompilerReport {
     decisionTruncated: false,
     invalidEvidenceCount: 0,
     invalidProviderCount: 0,
-    blockers: [],
+    blockers: [
+      "missing prospective multi-window shadow A/B evidence",
+    ],
     futureTelemetry: { futureEvidenceCount: 0 },
     inputEnvelopeTruncated: false,
     providerDiagnosticsTruncated: false,
@@ -236,7 +268,6 @@ export function compileCapabilityGapAlphaCompiler(
   let future = 0;
   for (const value of envelope) {
     const parsed = stableRow(value, observed);
-    if (parsed.providerId) recognized.add(parsed.providerId);
     if (parsed.future && !parsed.invalid) {
       future++;
       continue;
@@ -244,13 +275,16 @@ export function compileCapabilityGapAlphaCompiler(
     if (parsed.invalid) {
       invalid++;
       if (parsed.providerId) {
+        recognized.add(parsed.providerId);
         invalidByProvider.set(
           parsed.providerId,
           (invalidByProvider.get(parsed.providerId) ?? 0) + 1,
         );
       }
-    } else if (parsed.row) valid.push(parsed.row);
-    else invalid++;
+    } else if (parsed.row) {
+      recognized.add(parsed.row.providerId);
+      valid.push(parsed.row);
+    } else invalid++;
   }
   report.futureTelemetry.futureEvidenceCount = future;
   report.invalidEvidenceCount = invalid;
@@ -265,9 +299,14 @@ export function compileCapabilityGapAlphaCompiler(
   const seen = new Map<string, string>();
   for (const row of valid) {
     const key = `${row.providerId}|${row.completedAt}`;
-    const identity = `${row.rowId}|${row.health}|${row.status}|${
-      JSON.stringify(row.failures)
-    }`;
+    const identity = JSON.stringify({
+      rowId: row.rowId,
+      health: row.health,
+      status: row.status,
+      failures: [...row.failures].sort((a, b) =>
+        a.id.localeCompare(b.id) || a.message.localeCompare(b.message)
+      ),
+    });
     const prior = seen.get(key);
     if (prior && prior !== identity) conflicts.add(key);
     else seen.set(key, identity);
@@ -307,7 +346,12 @@ export function compileCapabilityGapAlphaCompiler(
       if (LEASE_STATUSES.has(row.status)) leaseSkippedCount++;
       for (const failure of row.failures) {
         failures.set(
-          `${row.providerId}|${row.rowId}|${failure.id}`,
+          JSON.stringify({
+            providerId: row.providerId,
+            rowId: row.rowId,
+            id: failure.id,
+            message: failure.message,
+          }),
           failure.message,
         );
       }

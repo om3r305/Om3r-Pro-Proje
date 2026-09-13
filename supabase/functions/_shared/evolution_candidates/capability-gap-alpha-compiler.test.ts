@@ -47,6 +47,46 @@ Deno.test("future rows are excluded without consuming decision capacity", () => 
   ) throw new Error(JSON.stringify(result));
 });
 
+Deno.test("future freshness and future-only providers are isolated", () => {
+  const result = compileCapabilityGapAlphaCompiler([
+    row(),
+    row({
+      providerId: "futureonly",
+      rowId: "future-freshness",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    }),
+  ], { observedAt: now, maxProviders: 1 });
+  if (
+    result.providers.some((provider) => provider.providerId === "futureonly") ||
+    result.futureTelemetry.futureEvidenceCount !== 1 ||
+    result.providers[0]?.freshnessAt !== "2026-09-13T12:00:00Z"
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("malformed freshness and unsupported status fail closed", () => {
+  const result = compileCapabilityGapAlphaCompiler([
+    row({ freshnessAt: "2026-09-13T12:00:00+01:00" }),
+    row({ rowId: "unsupported", status: "UNKNOWN_STATUS" }),
+  ], { observedAt: now });
+  if (
+    result.invalidEvidenceCount !== 2 ||
+    result.providers[0]?.invalidEvidenceCount !== 2 ||
+    !result.blockers.includes("invalid evidence present")
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("malformed nested failures are invalid evidence", () => {
+  const result = compileCapabilityGapAlphaCompiler([
+    row({ failures: [null, { id: "missing-message" }] }),
+    row({ rowId: "primitive-failures", failures: "not-an-array" }),
+  ], { observedAt: now });
+  if (
+    result.invalidEvidenceCount !== 2 ||
+    result.providers[0]?.invalidEvidenceCount !== 2 ||
+    result.classification !== "BLOCKED"
+  ) throw new Error(JSON.stringify(result));
+});
+
 Deno.test("conflicts and malformed rows are found before maxRows truncation", () => {
   const result = compileCapabilityGapAlphaCompiler([
     row(),
@@ -71,6 +111,33 @@ Deno.test("lease skips and exact duplicate failures are accounted once", () => {
   ) throw new Error(JSON.stringify(result));
 });
 
+Deno.test("failure messages are part of deterministic identities", () => {
+  const result = compileCapabilityGapAlphaCompiler([
+    row({
+      failures: [
+        { id: "same", message: "z-message" },
+        { id: "same", message: "a-message" },
+        { id: "same", message: "z-message" },
+      ],
+    }),
+  ], { observedAt: now });
+  if (
+    result.providers[0]?.failedCount !== 2 ||
+    JSON.stringify(result.providers[0]?.recentFailures) !==
+      JSON.stringify(["a-message", "z-message"])
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("non-finite limits use bounded defaults", () => {
+  const result = compileCapabilityGapAlphaCompiler(
+    [row(), row({ rowId: "second" })],
+    { observedAt: now, maxRows: Number.NaN, maxProviders: Infinity },
+  );
+  if (result.processedDecisionRowCount !== 2 || result.providers.length !== 1) {
+    throw new Error(JSON.stringify(result));
+  }
+});
+
 Deno.test("overflow remains bounded and separate from invalid evidence", () => {
   const result = compileCapabilityGapAlphaCompiler(
     Array.from(
@@ -81,6 +148,11 @@ Deno.test("overflow remains bounded and separate from invalid evidence", () => {
   );
   if (
     result.processedDecisionRowCount > 2 || result.providers.length > 2 ||
-    !result.rowsExceeded || result.invalidEvidenceCount !== 0
+    !result.rowsExceeded || result.invalidEvidenceCount !== 0 ||
+    !result.blockers.includes(
+      "missing prospective multi-window shadow A/B evidence",
+    ) ||
+    result.shadow_only !== true || result.live_execution !== false ||
+    result.promotionReady !== false
   ) throw new Error(JSON.stringify(result));
 });
