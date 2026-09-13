@@ -128,6 +128,63 @@ Deno.test("failure messages are part of deterministic identities", () => {
   ) throw new Error(JSON.stringify(result));
 });
 
+Deno.test("canonical instants detect equivalent-spelling conflicts deterministically", () => {
+  const equivalent = [
+    row({ completedAt: "2026-09-13T12:00:00Z" }),
+    row({ completedAt: "2026-09-13T12:00:00.0Z" }),
+  ];
+  const collapsed = compileCapabilityGapAlphaCompiler(equivalent, {
+    observedAt: now,
+  });
+  if (
+    collapsed.invalidEvidenceCount !== 0 ||
+    collapsed.processedDecisionRowCount !== 1
+  ) throw new Error(JSON.stringify(collapsed));
+
+  const conflicting = [
+    row({
+      completedAt: "2026-09-13T12:00:00Z",
+      freshnessAt: "2026-09-13T11:00:00Z",
+    }),
+    row({
+      completedAt: "2026-09-13T12:00:00.0Z",
+      freshnessAt: "2026-09-13T12:00:00Z",
+    }),
+  ];
+  for (const input of [conflicting, [...conflicting].reverse()]) {
+    const result = compileCapabilityGapAlphaCompiler(input, {
+      observedAt: now,
+    });
+    if (
+      !result.blockers.includes(
+        "ambiguous conflicting equal-timestamp evidence",
+      )
+    ) throw new Error(JSON.stringify(result));
+  }
+});
+
+Deno.test("future-only providers do not consume provider diagnostics or truncation", () => {
+  const baseline = compileCapabilityGapAlphaCompiler([row()], {
+    observedAt: now,
+    maxProviders: 1,
+  });
+  const withFutureProvider = compileCapabilityGapAlphaCompiler([
+    row(),
+    row({
+      providerId: "futureonly",
+      rowId: "future-provider",
+      completedAt: "2026-09-14T00:00:00Z",
+      freshnessAt: "2026-09-14T00:00:00Z",
+    }),
+  ], { observedAt: now, maxProviders: 1 });
+  if (
+    JSON.stringify(baseline.providers) !==
+      JSON.stringify(withFutureProvider.providers) ||
+    baseline.providerDiagnosticsTruncated !==
+      withFutureProvider.providerDiagnosticsTruncated
+  ) throw new Error(JSON.stringify(withFutureProvider));
+});
+
 Deno.test("non-finite limits use bounded defaults", () => {
   const result = compileCapabilityGapAlphaCompiler(
     [row(), row({ rowId: "second" })],

@@ -35,6 +35,10 @@ const projection = (
     promotionReady: result.promotionReady,
   });
 
+const futureTelemetry = (
+  result: ReturnType<typeof compileCapabilityGapAlphaCompiler>,
+) => result.futureTelemetry;
+
 Deno.test("immutable replay keeps every decision field isolated from future permutations", () => {
   const baseline = compileCapabilityGapAlphaCompiler([base], {
     observedAt: "2026-09-13T13:00:00Z",
@@ -63,6 +67,11 @@ Deno.test("immutable replay keeps every decision field isolated from future perm
     }
     if (result.futureTelemetry.futureEvidenceCount !== 3) {
       throw new Error("future telemetry missing");
+    }
+    if (
+      JSON.stringify(futureTelemetry(result)) !== '{"futureEvidenceCount":3}'
+    ) {
+      throw new Error("future telemetry changed unexpectedly");
     }
     if (
       result.providers.some((provider) => provider.providerId === "futureonly")

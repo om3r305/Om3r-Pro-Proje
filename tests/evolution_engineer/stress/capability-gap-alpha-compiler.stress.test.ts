@@ -66,3 +66,39 @@ Deno.test("stress bounds oversized evidence and deduplicates named failures", ()
     result.promotionReady !== false
   ) throw new Error("hard bound or future isolation failed");
 });
+
+Deno.test("stress malformed future evidence remains invalid and order invariant", () => {
+  const malformedFuture = make("malformed-future", "future-valid", {
+    completedAt: "2026-09-14T00:00:00Z",
+    freshnessAt: "not-a-timestamp",
+    failures: [{ id: "bad" }],
+  });
+  const ordinaryMalformed = make("malformed-now", "validonly", {
+    freshnessAt: "2026-09-13T12:00:00+01:00",
+  });
+  const inputs = [
+    [malformedFuture, ordinaryMalformed],
+    [ordinaryMalformed, malformedFuture],
+  ];
+  const results = inputs.map((input) =>
+    compileCapabilityGapAlphaCompiler(input, {
+      observedAt: "2026-09-13T13:00:00Z",
+    })
+  );
+  if (
+    results.some((result) =>
+      result.invalidEvidenceCount !== 2 ||
+      result.futureTelemetry.futureEvidenceCount !== 0 ||
+      result.providers.find((provider) => provider.providerId === "validonly")
+          ?.invalidEvidenceCount !== 1 ||
+      result.providers.find((provider) =>
+          provider.providerId === "future-valid"
+        )
+          ?.invalidEvidenceCount !== 1
+    )
+  ) {
+    throw new Error(
+      `malformed future handling failed: ${JSON.stringify(results)}`,
+    );
+  }
+});

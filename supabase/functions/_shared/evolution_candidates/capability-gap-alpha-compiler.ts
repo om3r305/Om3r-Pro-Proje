@@ -105,7 +105,20 @@ function strictUtc(value: unknown): { text: string; ms: number } | null {
     match[5]
   }:${match[6]}.${fraction}Z`;
   if (new Date(ms).toISOString() !== normalized) return null;
-  return { text: value, ms };
+  return { text: normalized, ms };
+}
+
+function classificationFingerprint(row: ValidRow): string {
+  return JSON.stringify({
+    rowId: row.rowId,
+    health: row.health,
+    freshnessAt: row.freshnessAt,
+    freshnessMs: row.freshnessMs,
+    status: row.status,
+    failures: [...row.failures].sort((a, b) =>
+      a.id.localeCompare(b.id) || a.message.localeCompare(b.message)
+    ),
+  });
 }
 
 function providerId(value: unknown): string | null {
@@ -297,19 +310,16 @@ export function compileCapabilityGapAlphaCompiler(
 
   const conflicts = new Set<string>();
   const seen = new Map<string, string>();
+  const uniqueValid: ValidRow[] = [];
   for (const row of valid) {
-    const key = `${row.providerId}|${row.completedAt}`;
-    const identity = JSON.stringify({
-      rowId: row.rowId,
-      health: row.health,
-      status: row.status,
-      failures: [...row.failures].sort((a, b) =>
-        a.id.localeCompare(b.id) || a.message.localeCompare(b.message)
-      ),
-    });
+    const key = JSON.stringify([row.providerId, row.completionMs]);
+    const identity = classificationFingerprint(row);
     const prior = seen.get(key);
     if (prior && prior !== identity) conflicts.add(key);
-    else seen.set(key, identity);
+    else if (!prior) {
+      seen.set(key, identity);
+      uniqueValid.push(row);
+    }
   }
   if (conflicts.size) {
     report.blockers.push("ambiguous conflicting equal-timestamp evidence");
@@ -320,13 +330,15 @@ export function compileCapabilityGapAlphaCompiler(
       "input envelope limit prevents complete evidence inspection",
     );
   }
-  valid.sort((a, b) =>
+  uniqueValid.sort((a, b) =>
     b.completionMs - a.completionMs ||
-    a.providerId.localeCompare(b.providerId) || a.rowId.localeCompare(b.rowId)
+    a.providerId.localeCompare(b.providerId) ||
+    a.rowId.localeCompare(b.rowId) ||
+    classificationFingerprint(a).localeCompare(classificationFingerprint(b))
   );
-  const selected = valid.slice(0, maxRows);
+  const selected = uniqueValid.slice(0, maxRows);
   report.processedDecisionRowCount = selected.length;
-  report.rowsExceeded = valid.length > maxRows;
+  report.rowsExceeded = uniqueValid.length > maxRows;
   report.decisionTruncated = report.rowsExceeded;
 
   const providerIds = new Set<string>(selected.map((row) => row.providerId));
