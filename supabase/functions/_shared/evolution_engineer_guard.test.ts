@@ -49,11 +49,34 @@ Deno.test("manual infrastructure review may opt into control-plane files but nev
   assertEquals(protectedResult.valid, false);
 });
 
-Deno.test("engineer guard blocks live execution surface", () => {
+Deno.test("engineer guard blocks enabled live execution surface", () => {
+  for (const addedText of [
+    "const live_execution = true;",
+    "const config = { liveExecution: true };",
+    "const config = { \"live_execution\": true };",
+  ]) {
+    const result = validateEngineerChangeSet({
+      changedPaths: ["supabase/functions/_shared/example.ts"],
+      patchBytes: 100,
+      addedText,
+    });
+    assertEquals(result.valid, false, addedText);
+  }
+});
+
+Deno.test("engineer guard allows explicit disabled live execution declarations", () => {
   const result = validateEngineerChangeSet({
-    changedPaths: ["supabase/functions/_shared/example.ts"],
-    patchBytes: 100,
-    addedText: "const live_execution = true;",
+    changedPaths: [
+      "supabase/functions/_shared/evolution_candidates/example.ts",
+      "supabase/functions/_shared/evolution_candidates/example.test.ts",
+    ],
+    patchBytes: 200,
+    addedText: [
+      "const live_execution = false;",
+      "const result = { liveExecution: false };",
+      "// shadow-only candidate; live execution remains disabled",
+    ].join("\n"),
   });
-  assertEquals(result.valid, false);
+  assertEquals(result.valid, true);
+  assertEquals(result.reasons, []);
 });
