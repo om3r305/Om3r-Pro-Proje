@@ -101,7 +101,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          copilot -p "$(cat /tmp/brian-engineer-analysis-prompt.txt)" -s --effort=high --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-analysis.txt
+          copilot -p "$(cat /tmp/brian-engineer-analysis-prompt.txt)" -s --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-analysis.txt
           grep -Eq '^UNDERSTAND([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
           grep -Eq '^PLAN([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
           test -z "$(git status --porcelain)" || { echo 'Read-only analysis mutated the worktree'; exit 1; }
@@ -129,7 +129,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
         run: |
           set -euo pipefail
-          copilot -p "$(cat /tmp/brian-engineer-code-prompt.txt)" -s --agent=brian-engineer --effort=high --allow-tool='write' --disable-builtin-mcps | tee /tmp/brian-engineer-agent.txt
+          copilot -p "$(cat /tmp/brian-engineer-code-prompt.txt)" -s --agent=brian-engineer --allow-tool='write' --disable-builtin-mcps | tee /tmp/brian-engineer-agent.txt
           grep -Eq '^CODE([[:space:]:]|$)' /tmp/brian-engineer-agent.txt
           git add -N .
 
@@ -268,7 +268,7 @@ jobs:
           set -euo pipefail
           git diff "$BASE_SHA...HEAD" > /tmp/brian-engineer.diff
           python scripts/brian_engineer_prompt.py review > /tmp/brian-review-prompt.txt
-          copilot -p "$(cat /tmp/brian-review-prompt.txt)" -s --effort=high --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-review.txt
+          copilot -p "$(cat /tmp/brian-review-prompt.txt)" -s --available-tools='view,grep,glob' --disable-builtin-mcps | tee /tmp/brian-engineer-review.txt
           test "$(tail -n 1 /tmp/brian-engineer-review.txt)" = 'ENGINEER_REVIEW_VERDICT=PASS'
           test -z "$(git status --porcelain)" || { echo 'Read-only review mutated candidate'; exit 1; }
 
