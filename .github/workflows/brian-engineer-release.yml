@@ -1,0 +1,163 @@
+name: Brian Engineer Human Release
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  deployments: read
+  id-token: write
+
+env:
+  ENGINEERING_GATEWAY: https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-evolution-engineering-gateway
+  ENGINEERING_AUDIENCE: brian-evolution-engineering-v1
+  SUPABASE_PROJECT_ID: qbcjuxhvhwagvqbjyemo
+
+jobs:
+  release:
+    if: >-
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'brian-2026' &&
+      startsWith(github.event.pull_request.head.ref, 'brian-engineer/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Check out exact approved candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Re-run protected-scope guard on approved SHA
+        env:
+          BRIAN_ENGINEER_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          deno run --allow-env --allow-run scripts/brian_engineer_guard.ts
+          if git diff --name-only "$BRIAN_ENGINEER_BASE_SHA...HEAD" | grep -Eqi '(^|/)(dip|brian[-_]dip)([-_./]|$)'; then
+            echo 'Protected DIP scope detected at release gate.'
+            exit 1
+          fi
+
+      - name: Verify deployment prerequisites before accepting human approval
+        id: deploy_plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE_SHA...HEAD" > /tmp/changed.txt
+          needs_supabase=false
+          if grep -Eq '^supabase/functions/' /tmp/changed.txt; then needs_supabase=true; fi
+          if grep -Eq '^supabase/migrations/' /tmp/changed.txt; then
+            echo 'Autonomous engineering PRs may not contain database migrations.'
+            exit 1
+          fi
+          if [ "$needs_supabase" = true ] && [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo 'SUPABASE_ACCESS_TOKEN is required for a real backend deploy; release stays blocked.'
+            exit 1
+          fi
+          echo "needs_supabase=$needs_supabase" >> "$GITHUB_OUTPUT"
+
+      - name: Register explicit human approval and verify all evidence gates
+        id: gate
+        env:
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          oidc_json="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ENGINEERING_AUDIENCE}")"
+          token="$(printf '%s' "$oidc_json" | jq -r .value)"
+          approve="$(jq -nc --arg action human_approve --arg branch_name "$BRANCH_NAME" --arg head_sha "$HEAD_SHA" '{action:$action,branch_name:$branch_name,head_sha:$head_sha}')"
+          curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data "$approve" | tee /tmp/approval.json
+          test "$(jq -r .status /tmp/approval.json)" = 'APPROVED'
+          gate="$(jq -nc --arg action release_gate --arg branch_name "$BRANCH_NAME" '{action:$action,branch_name:$branch_name}')"
+          curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data "$gate" | tee /tmp/release-gate.json
+          test "$(jq -r .status /tmp/release-gate.json)" = 'READY'
+          echo "run_id=$(jq -r .run.run_id /tmp/release-gate.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Merge only the measured and human-approved SHA
+        id: merge
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash --match-head-commit "$HEAD_SHA"
+          git fetch origin brian-2026
+          MERGED_SHA="$(git rev-parse origin/brian-2026)"
+          echo "sha=$MERGED_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy only non-protected changed Supabase functions
+        if: steps.deploy_plan.outputs.needs_supabase == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGED_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          set -euo pipefail
+          uses_shared=false
+          if grep -Eq '^supabase/functions/_shared/' /tmp/changed.txt; then uses_shared=true; fi
+          mapfile -t direct_functions < <(sed -nE 's#^supabase/functions/([^/]+)/.*#\1#p' /tmp/changed.txt | grep -Ev '^(_shared|.*dip.*)$' | sort -u)
+          if [ "$uses_shared" = true ]; then
+            mapfile -t shared_consumers < <(find supabase/functions -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -E '^(brian-evolution-|brian-world-)' | grep -Evi 'dip' | sort)
+          else
+            shared_consumers=()
+          fi
+          printf '%s\n' "${direct_functions[@]}" "${shared_consumers[@]}" | sed '/^$/d' | sort -u > /tmp/functions-to-deploy.txt
+          test -s /tmp/functions-to-deploy.txt || { echo 'No Edge Function deployment required.'; exit 0; }
+          if grep -Eqi 'dip' /tmp/functions-to-deploy.txt; then echo 'Protected function reached deployment plan'; exit 1; fi
+          git checkout "$MERGED_SHA"
+          npm install -g supabase@latest
+          while IFS= read -r fn; do
+            echo "Deploying non-protected function: $fn"
+            supabase functions deploy "$fn" --use-api --project-ref "$SUPABASE_PROJECT_ID"
+          done < /tmp/functions-to-deploy.txt
+
+      - name: Wait for production Vercel deployment when web files changed
+        id: monitor_web
+        env:
+          MERGED_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! grep -Eq '^monster-coins-pro/' /tmp/changed.txt; then echo 'web_required=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo 'web_required=true' >> "$GITHUB_OUTPUT"
+          success=false
+          for _ in $(seq 1 60); do
+            statuses="$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGED_SHA/status" 2>/dev/null || echo '{}')"
+            printf '%s' "$statuses" > /tmp/prod-status.json
+            if printf '%s' "$statuses" | jq -e '[.statuses[]? | select((.context|ascii_downcase|contains("vercel")) and .state=="success")] | length > 0' >/dev/null; then success=true; break; fi
+            if printf '%s' "$statuses" | jq -e '[.statuses[]? | select((.context|ascii_downcase|contains("vercel")) and (.state=="failure" or .state=="error"))] | length > 0' >/dev/null; then break; fi
+            sleep 10
+          done
+          $success || { echo 'Production Vercel evidence failed or timed out.'; exit 1; }
+
+      - name: Record deployment success
+        env:
+          RUN_ID: ${{ steps.gate.outputs.run_id }}
+          MERGED_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          set -euo pipefail
+          oidc_json="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ENGINEERING_AUDIENCE}")"
+          token="$(printf '%s' "$oidc_json" | jq -r .value)"
+          body="$(jq -nc --arg action event --arg run_id "$RUN_ID" --arg phase DEPLOY --arg event_kind DEPLOYED --arg commit_sha "$MERGED_SHA" '{action:$action,run_id:$run_id,phase:$phase,event_kind:$event_kind,commit_sha:$commit_sha,passed:true,payload:{source:"human-approved-release"}}')"
+          curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data "$body" >/dev/null
+
+      - name: Fail-closed rollback instructions
+        if: failure() && steps.merge.outputs.sha != ''
+        env:
+          MERGED_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          echo 'A post-merge deployment/monitor gate failed.'
+          echo "Merged SHA requiring rollback review: $MERGED_SHA"
+          echo 'The workflow intentionally does not perform a blind database rollback. Autonomous engineering migrations are forbidden, and code rollback must restore the last measured good SHA.'
+          exit 1
