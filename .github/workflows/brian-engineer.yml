@@ -133,11 +133,24 @@ jobs:
           grep -Eq '^CODE([[:space:]:]|$)' /tmp/brian-engineer-agent.txt
           git add -N .
 
+      - name: Normalize generated candidate formatting before evidence commit
+        if: steps.claim.outputs.has_task == 'true'
+        env:
+          BASE_SHA: ${{ steps.claim.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t format_files < <(git diff --name-only "$BASE_SHA" | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
+          if [ "${#format_files[@]}" -gt 0 ]; then deno fmt "${format_files[@]}"; fi
+          git add -N .
+
       - name: Enforce immutable protected scope including transitive DIP dependencies
         if: steps.claim.outputs.has_task == 'true'
         env:
           BRIAN_ENGINEER_BASE_SHA: ${{ steps.claim.outputs.base_sha }}
-        run: deno run --allow-env --allow-run --allow-read scripts/brian_engineer_guard.ts | tee /tmp/brian-engineer-guard.json
+        run: |
+          set -euo pipefail
+          deno run --allow-env --allow-run --allow-read scripts/brian_engineer_guard.ts | tee /tmp/brian-engineer-guard.json
+          jq -e '.status == "PASS"' /tmp/brian-engineer-guard.json >/dev/null
 
       - name: Create isolated local branch and exact candidate commit
         if: steps.claim.outputs.has_task == 'true'
