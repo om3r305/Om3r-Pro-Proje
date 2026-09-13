@@ -13,37 +13,43 @@ const LEASE_SECONDS = 240;
 const GDELT_BASE = "https://api.gdeltproject.org/api/v2/doc/doc";
 const GOOGLE_NEWS_RSS = "https://news.google.com/rss/search";
 
-type Theme = { id: string; query: string; fallbackQuery: string };
+type Theme = { id: string; query: string; fallbackQuery: string; feeds: string[] };
 const THEMES: Theme[] = [
   {
     id: "technology_ai",
     query: '("artificial intelligence" OR NVIDIA OR Apple OR Microsoft OR Alphabet OR Google OR Amazon OR OpenAI OR TSMC OR semiconductor OR GPU OR HBM OR datacenter OR robotics)',
     fallbackQuery: 'AI OR NVIDIA OR OpenAI OR semiconductor OR GPU',
+    feeds: ["https://feeds.bbci.co.uk/news/technology/rss.xml", "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml"],
   },
   {
     id: "macro_rates",
     query: '("Federal Reserve" OR FOMC OR ECB OR inflation OR CPI OR PCE OR "Treasury yield" OR "interest rate" OR recession OR unemployment OR payrolls)',
     fallbackQuery: 'Federal Reserve OR ECB OR inflation OR interest rates',
+    feeds: ["https://feeds.bbci.co.uk/news/business/rss.xml", "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml"],
   },
   {
     id: "commodities_energy",
     query: '(gold OR silver OR oil OR Brent OR WTI OR OPEC OR natural gas OR copper OR uranium OR "energy supply" OR refinery OR pipeline)',
     fallbackQuery: 'oil OR gold OR OPEC OR natural gas OR copper',
+    feeds: ["https://feeds.bbci.co.uk/news/business/rss.xml", "https://rss.nytimes.com/services/xml/rss/nyt/EnergyEnvironment.xml"],
   },
   {
     id: "geopolitics",
     query: '(war OR sanctions OR ceasefire OR invasion OR missile OR tariff OR trade war OR shipping OR "supply chain" OR Red Sea OR Taiwan)',
     fallbackQuery: 'sanctions OR ceasefire OR tariffs OR Red Sea OR Taiwan',
+    feeds: ["https://feeds.bbci.co.uk/news/world/rss.xml", "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"],
   },
   {
     id: "corporate_product",
     query: '(earnings OR guidance OR "product launch" OR acquisition OR merger OR buyback OR supplier OR partnership OR "investor day" OR "capital expenditure")',
     fallbackQuery: 'earnings OR guidance OR acquisition OR product launch',
+    feeds: ["https://feeds.bbci.co.uk/news/business/rss.xml", "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"],
   },
   {
     id: "crypto_regulation",
     query: '(bitcoin OR ethereum OR cryptocurrency OR stablecoin OR Binance OR Coinbase OR "crypto ETF" OR "token unlock" OR airdrop OR "crypto regulation" OR SEC)',
     fallbackQuery: 'bitcoin OR ethereum OR Coinbase OR crypto regulation OR ETF',
+    feeds: ["https://www.coindesk.com/arc/outboundfeeds/rss/", "https://feeds.bbci.co.uk/news/business/rss.xml"],
   },
 ];
 
@@ -61,7 +67,7 @@ type ThemeResult = {
   articles: Article[];
   captureId: string;
   observedAt: string;
-  provider: "gdelt_doc2" | "google_news_rss";
+  provider: "gdelt_doc2" | "google_news_rss" | "public_rss";
   fallbackUsed: boolean;
   primaryError?: string;
 };
@@ -112,28 +118,29 @@ function xmlTag(block: string, tag: string): string {
   return m ? decodeXml(m[1].trim()) : "";
 }
 
-function parseGoogleNews(xml: string): Article[] {
+function parseRss(xml: string, defaultDomain = "rss"): Article[] {
   const out: Article[] = [];
-  const items = xml.matchAll(/<item>([\s\S]*?)<\/item>/gi);
+  const items = xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi);
   for (const match of items) {
     const block = match[1];
     const title = xmlTag(block, "title").replace(/<[^>]+>/g, "").trim();
-    const url = xmlTag(block, "link").trim();
-    const pubDate = xmlTag(block, "pubDate").trim();
+    const url = xmlTag(block, "link").trim() || xmlTag(block, "guid").trim();
+    const pubDate = xmlTag(block, "pubDate").trim() || xmlTag(block, "dc:date").trim();
     const sourceMatch = block.match(/<source(?:\s+url="([^"]+)")?[^>]*>([\s\S]*?)<\/source>/i);
     const sourceUrl = sourceMatch?.[1] || "";
-    const sourceName = sourceMatch ? decodeXml(sourceMatch[2].replace(/<[^>]+>/g, "").trim()) : "google-news";
+    const sourceName = sourceMatch ? decodeXml(sourceMatch[2].replace(/<[^>]+>/g, "").trim()) : "";
     let publishedAt: string | null = null;
     if (pubDate) {
       const d = new Date(pubDate);
       if (Number.isFinite(d.getTime())) publishedAt = d.toISOString();
     }
     if (!title || !url) continue;
-    let domain = sourceName || "google-news";
+    let domain = sourceName || defaultDomain;
     try {
       if (sourceUrl) domain = new URL(sourceUrl).hostname.replace(/^www\./, "") || domain;
+      else domain = new URL(url).hostname.replace(/^www\./, "") || domain;
     } catch (_) {}
-    out.push({ url, title, publishedAt, domain, language: "en", sourcecountry: "US" });
+    out.push({ url, title, publishedAt, domain, language: "en", sourcecountry: "" });
     if (out.length >= 75) break;
   }
   return out;
@@ -222,21 +229,48 @@ async function fetchGoogleNews(theme: Theme): Promise<Omit<ThemeResult, "fallbac
   const response = await fetch(requestUrl, {
     headers: {
       accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
-      "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.1)",
+      "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.2)",
     },
-    signal: AbortSignal.timeout(14000),
+    signal: AbortSignal.timeout(12000),
   });
   if (!response.ok) throw new Error(`GOOGLE_NEWS:${theme.id}:${response.status}`);
   const xml = await response.text();
-  const articles = parseGoogleNews(xml);
+  const articles = parseRss(xml, "news.google.com");
   if (!articles.length) throw new Error(`GOOGLE_NEWS:${theme.id}:EMPTY`);
   const observedAt = new Date().toISOString();
   const captureId = await rawCapture(theme, xml, observedAt, "google_news_rss", requestUrl, "application/rss+xml");
   return { articles, captureId, observedAt, provider: "google_news_rss" };
 }
 
+async function fetchPublicRss(theme: Theme): Promise<Omit<ThemeResult, "fallbackUsed" | "primaryError">> {
+  const errors: string[] = [];
+  for (const feed of theme.feeds) {
+    try {
+      const response = await fetch(feed, {
+        headers: {
+          accept: "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+          "user-agent": "Mozilla/5.0 (compatible; BrianWorldDiscovery/1.2)",
+        },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const xml = await response.text();
+      let fallbackDomain = "public-rss";
+      try { fallbackDomain = new URL(feed).hostname.replace(/^www\./, ""); } catch (_) {}
+      const articles = parseRss(xml, fallbackDomain);
+      if (!articles.length) throw new Error("EMPTY");
+      const observedAt = new Date().toISOString();
+      const captureId = await rawCapture(theme, xml, observedAt, "public_rss", feed, "application/rss+xml");
+      return { articles, captureId, observedAt, provider: "public_rss" };
+    } catch (error) {
+      errors.push(`${feed}:${errorText(error)}`);
+    }
+  }
+  throw new Error(`PUBLIC_RSS:${theme.id}:${errors.join(" | ")}`);
+}
+
 async function fetchTheme(theme: Theme): Promise<ThemeResult> {
-  const primaryErrors: string[] = [];
+  const errors: string[] = [];
   const attempts = [
     { query: theme.query, timespan: "2h" },
     { query: theme.fallbackQuery, timespan: "6h" },
@@ -244,14 +278,25 @@ async function fetchTheme(theme: Theme): Promise<ThemeResult> {
   for (let i = 0; i < attempts.length; i++) {
     try {
       const result = await fetchGdelt(theme, attempts[i].query, attempts[i].timespan);
-      return { ...result, fallbackUsed: i > 0, primaryError: primaryErrors.join(" | ") || undefined };
+      return { ...result, fallbackUsed: i > 0, primaryError: errors.join(" | ") || undefined };
     } catch (error) {
-      primaryErrors.push(errorText(error));
-      if (i < attempts.length - 1) await sleep(700);
+      errors.push(errorText(error));
+      if (i < attempts.length - 1) await sleep(500);
     }
   }
-  const fallback = await fetchGoogleNews(theme);
-  return { ...fallback, fallbackUsed: true, primaryError: primaryErrors.join(" | ") };
+  try {
+    const result = await fetchGoogleNews(theme);
+    return { ...result, fallbackUsed: true, primaryError: errors.join(" | ") };
+  } catch (error) {
+    errors.push(errorText(error));
+  }
+  try {
+    const result = await fetchPublicRss(theme);
+    return { ...result, fallbackUsed: true, primaryError: errors.join(" | ") };
+  } catch (error) {
+    errors.push(errorText(error));
+  }
+  throw new Error(errors.join(" || "));
 }
 
 async function recordRun(
@@ -308,7 +353,7 @@ Deno.serve(async (req: Request) => {
           const result = await fetchTheme(theme);
           providerByTheme[theme.id] = result.provider;
           if (result.fallbackUsed) providerFallbacks.push(theme.id);
-          if (result.primaryError) themeErrors[theme.id] = result.primaryError.slice(0, 500);
+          if (result.primaryError) themeErrors[theme.id] = result.primaryError.slice(0, 900);
           observed += result.articles.length;
           for (const article of result.articles) {
             const url = String(article.url ?? "").trim();
@@ -321,7 +366,7 @@ Deno.serve(async (req: Request) => {
               event_id: eventId,
               asset: "GLOBAL_WORLD",
               event_kind: "WORLD_DISCOVERY",
-              source_kind: result.provider === "gdelt_doc2" ? "GDELT_DISCOVERY" : "GOOGLE_NEWS_DISCOVERY",
+              source_kind: result.provider === "gdelt_doc2" ? "GDELT_DISCOVERY" : result.provider === "google_news_rss" ? "GOOGLE_NEWS_DISCOVERY" : "PUBLIC_RSS_DISCOVERY",
               source_id: String(article.domain ?? result.provider),
               published_at: publishedAt,
               first_observed_at: result.observedAt,
@@ -352,7 +397,7 @@ Deno.serve(async (req: Request) => {
           }
         } catch (error) {
           failedThemes.push(theme.id);
-          themeErrors[theme.id] = errorText(error).slice(0, 500);
+          themeErrors[theme.id] = errorText(error).slice(0, 900);
           console.error("world discovery theme", theme.id, error);
         }
       }
