@@ -71,7 +71,11 @@ export function validateEngineerChangeSet(input: EngineerGuardInput): EngineerGu
 
   const addedText = String(input.addedText ?? "");
   if (/\bbrian[_-]dip\b/i.test(addedText)) reasons.push("patch text references protected DIP identifiers");
-  if (/\b(live[_-]?execution|place[_-]?order|withdraw|exchange[_-]?secret)\b/i.test(addedText)) {
+
+  const enablesLiveExecution = /\blive[_-]?execution\b["']?\s*[:=]\s*true\b/i.test(addedText) ||
+    /\bliveExecution\b["']?\s*[:=]\s*true\b/i.test(addedText);
+  const introducesAuthenticatedExecution = /\b(place[_-]?order|withdraw|exchange[_-]?secret)\b/i.test(addedText);
+  if (enablesLiveExecution || introducesAuthenticatedExecution) {
     reasons.push("patch introduces live-execution or authenticated exchange surface");
   }
 
