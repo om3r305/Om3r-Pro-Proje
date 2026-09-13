@@ -349,12 +349,23 @@ export function compileExpectedEdgeAlphaCandidate(
     )
     : null;
   const fillability = cost ? boundedNumber(cost.fillability, 1) : null;
+  const validatedCostParts = costParts?.reduce<number[] | null>(
+    (parts, part) =>
+      parts === null || part == null || !Number.isFinite(part) || part < 0
+        ? null
+        : [...parts, part],
+    [],
+  );
+  const validatedFillability = fillability != null &&
+      Number.isFinite(fillability) && fillability > 0 && fillability <= 1
+    ? fillability
+    : null;
   if (
     !cost || !costAsOf || costAsOf.ms > decision.ms || !costSource ||
     costCadence == null ||
-    !costParts || costParts.some((part) => part == null || part < 0) ||
-    fillability == null || fillability <= 0 || fillability > 1 ||
-    costParts.every((part) => part === 0) ||
+    !validatedCostParts || validatedCostParts.length !== 3 ||
+    !validatedFillability ||
+    validatedCostParts.every((part) => part === 0) ||
     decision.ms - costAsOf.ms >
       Math.min(7 * 86_400_000, costCadence * 2 * 1000 + 300_000)
   ) {
@@ -363,7 +374,8 @@ export function compileExpectedEdgeAlphaCandidate(
     return report;
   }
   report.estimatedRoundTripCostBps =
-    costParts.reduce((sum, part) => sum + part!, 0) / fillability;
+    validatedCostParts.reduce((sum, part) => sum + part, 0) /
+    validatedFillability;
   const eventAt = instant(input.eventAt);
   const eventCadence = cadence(input.eventCadenceSeconds);
   if (eventAt && eventAt.ms > decision.ms) {
