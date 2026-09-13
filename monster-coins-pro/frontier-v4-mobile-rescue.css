@@ -1,0 +1,100 @@
+/* Frontier V4 iOS/mobile interaction rescue — UI only. */
+@media (max-width: 900px) {
+  html, body {
+    min-height: 100%;
+    height: auto;
+    max-width: 100%;
+    overflow-x: hidden;
+    touch-action: pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body:not(.frontier-overlay-open) {
+    overflow-y: auto !important;
+    position: relative !important;
+  }
+
+  .app {
+    min-height: 100dvh;
+    height: auto !important;
+    overflow: visible !important;
+    padding-bottom: calc(132px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .shell,
+  .controls,
+  .metrics,
+  .grid2,
+  .section,
+  main,
+  section {
+    height: auto;
+    max-height: none;
+  }
+
+  /* Animated full-size SVG is decorative; never steal taps/scroll gestures. */
+  .hero .flow-map,
+  .hero .brain-core,
+  .hero .brain-orbit,
+  .hero .brain-svg,
+  .hero::before {
+    pointer-events: none !important;
+    touch-action: none !important;
+  }
+
+  .hero .node,
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  [role="button"] {
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+
+  /* Hidden full-screen layers must be truly inert on iOS Safari. */
+  .unlock:not(.show),
+  .modal:not(.show),
+  #brianAnatomyLive:not(.bal-show) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  .unlock.show,
+  .modal.show,
+  #brianAnatomyLive.bal-show {
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
+  /* Bottom selector stays reachable but no longer masks the last content. */
+  .bottom-nav {
+    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+    width: calc(100vw - 28px) !important;
+    max-width: 560px !important;
+    z-index: 80 !important;
+    pointer-events: none;
+  }
+  .bottom-nav a {
+    pointer-events: auto;
+    min-height: 48px;
+  }
+
+  /* Let every dashboard block participate in normal document flow. */
+  #worldPanel,
+  #autonomyRow,
+  #developmentLaunch,
+  #chatPanel,
+  .card,
+  .grid2 > * {
+    position: relative;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 430px) {
+  .app { padding-bottom: calc(122px + env(safe-area-inset-bottom)) !important; }
+  .bottom-nav { width: calc(100vw - 20px) !important; }
+}
