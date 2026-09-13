@@ -9,6 +9,8 @@ on:
       - '.github/workflows/brian-engineer-release.yml'
       - '.github/workflows/brian-engineer-ci.yml'
       - 'scripts/brian_engineer_guard.ts'
+      - 'scripts/brian_engineer_gateway.sh'
+      - 'scripts/brian_engineer_prompt.py'
       - 'supabase/functions/_shared/evolution_engineer_guard.ts'
       - 'supabase/functions/_shared/evolution_engineer_guard.test.ts'
       - 'supabase/functions/brian-evolution-engineering-gateway/**'
@@ -41,6 +43,19 @@ jobs:
           supabase/functions/_shared/evolution_engineer_guard.test.ts
           scripts/brian_engineer_guard.ts
           supabase/functions/brian-evolution-engineering-gateway/index.ts
+
+      - name: Validate engineering runtime helpers
+        run: |
+          set -euo pipefail
+          bash -n scripts/brian_engineer_gateway.sh
+          python3 -m py_compile scripts/brian_engineer_prompt.py
+          grep -Fq 'payload="${6:-}"' scripts/brian_engineer_gateway.sh
+          if grep -Fq 'payload="${6:-{}}"' scripts/brian_engineer_gateway.sh; then
+            echo 'Broken Bash JSON default reintroduced.'
+            exit 1
+          fi
+          grep -Fq 'first non-empty output line must be exactly UNDERSTAND at column 1' scripts/brian_engineer_prompt.py
+          grep -Fq 'first non-empty output line must be exactly CODE at column 1' scripts/brian_engineer_prompt.py
 
       - name: Run engineering guard behavioral tests
         run: deno test supabase/functions/_shared/evolution_engineer_guard.test.ts

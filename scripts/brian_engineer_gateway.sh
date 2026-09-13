@@ -16,7 +16,8 @@ case "$mode" in
     event_kind="${3:?event_kind required}"
     phase="${4:?phase required}"
     commit_sha="${5:-}"
-    payload="${6:-{}}"
+    payload="${6:-}"
+    if [ -z "$payload" ]; then payload='{}'; fi
     printf '%s' "$payload" | jq -e 'type=="object"' >/dev/null
     body="$(jq -nc \
       --arg action event \
