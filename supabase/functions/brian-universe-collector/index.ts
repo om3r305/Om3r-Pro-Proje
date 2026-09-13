@@ -11,7 +11,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const RAW_BUCKET = "brian-intelligence-raw";
 const PROVIDER = "binance_public";
 const COLLECTOR_ID = "brian-universe-collector";
-const MIN_INTERVAL_SECONDS = 780;
+const MIN_INTERVAL_SECONDS = 240;
 const LEASE_SECONDS = 420;
 const CONFIG = {
   quote_asset: "USDT",
@@ -256,7 +256,7 @@ Deno.serve(async (req: Request) => {
 
     const snapshotPayload = {
       schema_version: "brian.universe-snapshot.v1",
-      collector_version: "2",
+      collector_version: "3-fast-radar",
       source: PROVIDER,
       config: CONFIG,
       eligible_symbols: eligibleSymbols,
