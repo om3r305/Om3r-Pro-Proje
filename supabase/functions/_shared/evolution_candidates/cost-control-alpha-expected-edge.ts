@@ -339,6 +339,31 @@ export function compileCostControlAlphaCandidate(
   }>();
   const reliabilityConflicts = new Set<string>();
   const lineageBindings = new Map<string, string>();
+  const reliabilityClaimFingerprints = new Map<string, string>();
+  for (const value of pointInTimeReliability) {
+    if (!record(value)) continue;
+    const opportunityId = identifier(value.opportunityId);
+    const groupId = identifier(value.groupId);
+    const snapshotAt = parseInstant(value.snapshotAt);
+    if (!opportunityId || !groupId || !snapshotAt) continue;
+    const claimKey = `${opportunityId}|${
+      canonicalIndependentGroup(groupId)
+    }|${snapshotAt.ms}`;
+    const claimFingerprint = fingerprint({
+      opportunityId,
+      canonicalGroupId: canonicalIndependentGroup(groupId),
+      snapshotAt: snapshotAt.ms,
+      reliability: value.reliability,
+      mature: value.mature,
+      provenance: value.provenance,
+    });
+    const priorFingerprint = reliabilityClaimFingerprints.get(claimKey);
+    if (priorFingerprint && priorFingerprint !== claimFingerprint) {
+      reliabilityConflicts.add(claimKey);
+    } else if (!priorFingerprint) {
+      reliabilityClaimFingerprints.set(claimKey, claimFingerprint);
+    }
+  }
   for (const value of selectedReliability) {
     if (!record(value)) {
       invalid();

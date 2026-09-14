@@ -213,9 +213,18 @@ Deno.test("large provenance conflicts fail closed without duplicate public rows"
     decisionAt: "2026-09-13T13:00:00Z",
     maxInputRows: 600,
   });
+  const permuted = compileCostControlAlphaCandidate({
+    ...conflicting,
+    reliabilitySnapshots: [...conflicting.reliabilitySnapshots].reverse(),
+  }, {
+    decisionAt: "2026-09-13T13:00:00Z",
+    maxInputRows: 600,
+  });
   if (
     result.recommendation !== "CONTAMINATED_EVIDENCE" ||
     result.rankedOpportunities.length !== 0 ||
+    !result.reasons.includes("conflicting reliability snapshots") ||
+    JSON.stringify(result) !== JSON.stringify(permuted) ||
     new Set(result.rankedOpportunities.map((row) => row.opportunityId)).size !==
       result.rankedOpportunities.length ||
     result.shadow_only !== true || result.live_execution !== false

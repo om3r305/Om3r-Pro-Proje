@@ -195,7 +195,7 @@ Deno.test("future evidence cannot consume bounded decision capacity", () => {
 
 Deno.test("rejects unverifiable and conflicting provenance without duplicate opportunities", () => {
   const base = input();
-  const result = compileCostControlAlphaCandidate({
+  const evidence = {
     ...base,
     reliabilitySnapshots: [
       ...base.reliabilitySnapshots,
@@ -215,12 +215,18 @@ Deno.test("rejects unverifiable and conflicting provenance without duplicate opp
         },
       },
     ],
+  };
+  const result = compileCostControlAlphaCandidate(evidence, { decisionAt });
+  const permuted = compileCostControlAlphaCandidate({
+    ...evidence,
+    reliabilitySnapshots: [...evidence.reliabilitySnapshots].reverse(),
   }, { decisionAt });
   if (
     result.recommendation !== "CONTAMINATED_EVIDENCE" ||
     result.rankedOpportunities.length !== 0 ||
     result.matureIndependentGroupCount !== 2 ||
-    !result.reasons.includes("conflicting reliability snapshots")
+    !result.reasons.includes("conflicting reliability snapshots") ||
+    JSON.stringify(result) !== JSON.stringify(permuted)
   ) throw new Error(JSON.stringify(result));
 });
 

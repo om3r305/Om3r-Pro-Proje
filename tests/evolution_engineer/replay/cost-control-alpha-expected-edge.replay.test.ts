@@ -102,7 +102,7 @@ Deno.test("immutable point-in-time replay is invariant to future telemetry", () 
       grossEdgeBps: 999,
       observedAt: "2026-09-14T00:00:00Z",
     }),
-    reliabilitySnapshots: [...envelope.reliabilitySnapshots, {
+    reliabilitySnapshots: [...envelope.reliabilitySnapshots].reverse().concat({
       opportunityId: "o1",
       groupId: "g1",
       provenance: {
@@ -120,7 +120,7 @@ Deno.test("immutable point-in-time replay is invariant to future telemetry", () 
       reliability: 1,
       snapshotAt: "2026-09-14T00:00:00Z",
       mature: true,
-    }],
+    }),
   }, options);
   const project = (
     value: ReturnType<typeof compileCostControlAlphaCandidate>,
