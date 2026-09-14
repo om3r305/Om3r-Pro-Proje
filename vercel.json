@@ -5,5 +5,11 @@
   "buildCommand": "rm -rf .vercel-static && mkdir -p .vercel-static && cp -R monster-coins-pro/. .vercel-static/",
   "outputDirectory": ".vercel-static",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/api/brian/:path*",
+      "destination": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/:path*"
+    }
+  ]
 }
