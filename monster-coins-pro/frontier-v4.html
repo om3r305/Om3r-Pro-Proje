@@ -34,9 +34,10 @@
       if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
       const isDevelopment=url.includes('/brian-development-status');
       const isHeartbeat=url.includes('/brian-frontier-heartbeat');
+      const isEngineering=url.includes('/brian-frontier-engineering-status');
       const controller=new AbortController();
-      const timeout=isDevelopment?35000:isHeartbeat?15000:8500;
-      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
+      const timeout=isDevelopment?35000:isHeartbeat?15000:isEngineering?15000:8500;
+      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':isEngineering?'BRIAN_ENGINEERING_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
       return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
@@ -45,12 +46,13 @@
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
     await load('/frontier-v3.js?v=20260912-u3');
     await load('/frontier-v4.js?v=20260912-a1');
-    await load('/frontier-engineer-console.js?v=20260914-e1');
+    await load('/frontier-engineer-console.js?v=20260914-e2');
+    await load('/frontier-engineering-room-v2.js?v=20260914-r1');
     await load('/frontier-stability.js?v=20260913-s1');
     await load('/frontier-status-truth.js?v=20260913-t1');
     await load('/brain-anatomy-v2.js?v=20260913-rich1');
     await load('/frontier-v4-mobile-rescue.js?v=20260913-r3');
-    await load('/brain-anatomy-visual-fix.js?v=20260913-v3');
+    await load('/brain-anatomy-visual-fix.js?v=20260914-v4');
     await load('/frontier-meeting-v5.js?v=20260914-m1');
   }catch(e){
     document.body.innerHTML='<div style="padding:24px;color:#ff8d99;background:#020712;font-family:system-ui"><h2>Brian V4 yüklenemedi</h2><pre style="white-space:pre-wrap">'+String(e)+'</pre></div>';
