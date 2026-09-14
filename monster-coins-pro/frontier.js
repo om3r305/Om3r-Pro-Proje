@@ -1,6 +1,6 @@
 'use strict';
 
-const ROOT = 'https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1';
+const ROOT = '/api/brian';
 const CONTROL = `${ROOT}/brian-control-center`;
 const KEY_STORAGE = 'mcp-dashboard-key-v1';
 const EP = {
