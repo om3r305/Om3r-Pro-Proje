@@ -23,10 +23,10 @@
 
   const originalFrontierPost=typeof frontierPost==='function'?frontierPost:null;
   if(originalFrontierPost){
-    frontierPost=async function(url,body={},timeoutMs=7500){
+    frontierPost=async function(url,body={},timeoutMs=20000){
       const isHB=String(url||'').includes('/brian-frontier-heartbeat');
       try{
-        const data=await originalFrontierPost(url,body,isHB?Math.max(12000,timeoutMs):timeoutMs);
+        const data=await originalFrontierPost(url,body,isHB?Math.max(25000,timeoutMs):timeoutMs);
         if(isHB&&data?.status==='OK'){save(data);setHB(data)}
         return data;
       }catch(e){
@@ -43,7 +43,7 @@
     };
   }
 
-  async function publicHeartbeat(timeoutMs=12000){
+  async function publicHeartbeat(timeoutMs=25000){
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
@@ -139,7 +139,7 @@
 
   async function directHeartbeat(){
     try{
-      const hb=await publicHeartbeat(12000);
+      const hb=await publicHeartbeat(25000);
       if(hb?.status==='OK'){
         save(hb);setHB(hb);
         try{applyHeartbeat(hb)}catch{}
