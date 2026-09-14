@@ -15,7 +15,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
       TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      DEPLOYMENT_ID: dpl_8bdgbeDyTasvdriqaLm8ZSKrQHjz
+      DEPLOYMENT_ID: dpl_7r1XJwWC1bjjidSd5Xp3VqNcj9dD
     steps:
       - name: Check deployment credential
         run: |
