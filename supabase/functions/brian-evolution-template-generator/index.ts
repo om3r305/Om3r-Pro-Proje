@@ -26,15 +26,18 @@ async function hasGenerated(candidateId:string){const q=await db.from("brian_evo
 async function generatePending(){
   const q=await db.from("brian_evolution_codegen_requests").select("request_id,candidate_id,hypothesis_id,requested_at,parent_commit,branch_name,changed_paths,evidence_refs").order("requested_at",{ascending:false}).limit(100);
   if(q.error)throw new Error(`codegen_requests:${q.error.message}`);
-  const results:Record<string,unknown>[]=[];let generated=0,unsupported=0,skippedExisting=0;
+  const results:Record<string,unknown>[]=[];const contractMismatches:Record<string,unknown>[]=[];let generated=0,unsupported=0,skippedExisting=0,skippedContractMismatch=0;
   for(const request of q.data??[]){
     const candidateId=String(request.candidate_id);if(await hasGenerated(candidateId)){skippedExisting++;continue;}
     const h=await loadHypothesis(String(request.hypothesis_id));if(!h||!canGenerateBuiltIn(h)){unsupported++;continue;}
     const artifact=generateBuiltInArtifact(h,String(request.parent_commit));
     const expectedPaths=Array.isArray(request.changed_paths)?request.changed_paths.map(String):[];
-    if(artifact.brief.candidateId!==candidateId)throw new Error(`CANDIDATE_ID_MISMATCH:${candidateId}`);
-    if(JSON.stringify(artifact.brief.changedPaths)!==JSON.stringify(expectedPaths))throw new Error(`CANDIDATE_PATH_MISMATCH:${candidateId}`);
-    if(artifact.brief.branchName!==String(request.branch_name))throw new Error(`CANDIDATE_BRANCH_MISMATCH:${candidateId}`);
+    const mismatch=artifact.brief.candidateId!==candidateId?"candidate_id":JSON.stringify(artifact.brief.changedPaths)!==JSON.stringify(expectedPaths)?"changed_paths":artifact.brief.branchName!==String(request.branch_name)?"branch_name":null;
+    if(mismatch){
+      skippedContractMismatch++;
+      if(contractMismatches.length<12)contractMismatches.push({candidate_id:candidateId,request_id:String(request.request_id),reason:mismatch});
+      continue;
+    }
     const canonical=JSON.stringify(artifact.files);const artifactSha=await sha(canonical);const patchBytes=new TextEncoder().encode(canonical).length;
     if(patchBytes<=0||patchBytes>250000)throw new Error(`GENERATED_ARTIFACT_SIZE:${patchBytes}`);
     const observedAt=new Date().toISOString(),receiptId=await sha(`builtin-generated|${candidateId}|${artifactSha}`);
@@ -47,7 +50,7 @@ async function generatePending(){
     },{onConflict:"receipt_id",ignoreDuplicates:true});
     if(ins.error)throw new Error(`persist_generated:${ins.error.message}`);generated++;results.push({candidate_id:candidateId,hypothesis_kind:h.hypothesisKind,artifact_sha256:artifactSha,patch_bytes:patchBytes,files:artifact.files.map(f=>f.path)});
   }
-  return{requests:q.data?.length??0,generated,unsupported,skipped_existing:skippedExisting,results};
+  return{requests:q.data?.length??0,generated,unsupported,skipped_existing:skippedExisting,skipped_contract_mismatch:skippedContractMismatch,contract_mismatches:contractMismatches,results};
 }
 
 async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown){const finishedAt=new Date().toISOString(),runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_TEMPLATE_GENERATOR_ERROR":null,error_message:error?String(error).slice(0,1200):null,metadata:{generator_version:EVOLUTION_CODEGEN_VERSION,branch_materialized:false,canonical_mutation:false,autonomous_apply_allowed:false},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});if(q.error)console.error("template generator receipt",q.error.message);}
