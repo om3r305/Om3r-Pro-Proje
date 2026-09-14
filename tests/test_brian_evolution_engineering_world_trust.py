@@ -59,6 +59,18 @@ def reset_control(cur):
         where status in ('RUNNING','WAITING') and phase not in ('HUMAN_APPROVAL','COMPLETE','BLOCKED','ROLLBACK')
         """
     )
+    # This CI database is intentionally shared across the engineering test files.
+    # Remove only requests that have never been claimed so an earlier fixture
+    # cannot become the scheduler's next task and mask the request under test.
+    cur.execute(
+        """
+        delete from public.brian_evolution_codegen_requests r
+        where not exists (
+          select 1 from public.brian_evolution_engineering_runs er
+          where er.request_id=r.request_id
+        )
+        """
+    )
 
 
 def insert_candidate(cur, source_id, candidate_id, discovered_at="2026-09-14T08:00:00Z", stage="VERIFYING"):
