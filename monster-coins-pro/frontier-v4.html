@@ -31,6 +31,12 @@
     const nativeFetch=window.fetch.bind(window);
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
+      const publicHeartbeatPath='/api/brian/brian-frontier-heartbeat-public';
+      if(url===publicHeartbeatPath || url.endsWith(publicHeartbeatPath)){
+        const direct='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-frontier-heartbeat-public';
+        const heartbeatInit={...init,method:'GET',headers:{accept:'application/json'},body:undefined,cache:'no-store'};
+        return nativeFetch(publicHeartbeatPath,heartbeatInit).catch(()=>nativeFetch(direct,heartbeatInit));
+      }
       const marker='.supabase.co/functions/v1/';
       if(!url.includes(marker)) return nativeFetch(input,init);
       const isDevelopment=url.includes('/brian-development-status');
@@ -52,7 +58,7 @@
     await load('/frontier-engineer-console.js?v=20260914-e3');
     await load('/frontier-engineering-room-v2.js?v=20260914-r1');
     await load('/frontier-stability.js?v=20260913-s1');
-    await load('/frontier-status-truth.js?v=20260914-t2');
+    await load('/frontier-status-truth.js?v=20260914-t3');
     await load('/brain-anatomy-v2.js?v=20260913-rich1');
     await load('/frontier-v4-mobile-rescue.js?v=20260913-r3');
     await load('/brain-anatomy-visual-fix.js?v=20260914-v4');
