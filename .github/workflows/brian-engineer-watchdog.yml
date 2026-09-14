@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '11,26,41,56 * * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - '.github/workflows/brian-engineer-watchdog.yml'
 
 permissions:
   actions: write
