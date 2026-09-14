@@ -9,11 +9,17 @@ const opportunity = (opportunityId: string, grossEdgeBps = 100) => ({
 const reliability = (opportunityId: string, groupId: string, value = 0.8) => ({
   opportunityId,
   groupId,
+  provenance: {
+    sourceId: `source-${groupId}`,
+    lineageId: `lineage-${groupId}`,
+    independent: true,
+  },
   reliability: value,
   snapshotAt: "2026-09-13T12:58:00Z",
   mature: true,
 });
 const cost = (extra: Record<string, unknown> = {}) => ({
+  costConvention: "ONE_WAY_COMPONENTS_BPS",
   asOf: "2026-09-13T12:59:00Z",
   sourceId: "book-a",
   cadenceSeconds: 300,
@@ -36,6 +42,8 @@ Deno.test("ranks net edge after dynamic round-trip cost", () => {
     result.recommendation !== "ALLOW_EDGE" ||
     result.selectedOpportunityId !== "o1" ||
     result.roundTripCostBps !== 40 ||
+    JSON.stringify(result.costComponentsBps) !==
+      JSON.stringify({ spread: 20, fee: 10, depth: 10 }) ||
     result.rankedOpportunities[0].netEdgeBps !== 40
   ) {
     throw new Error(JSON.stringify(result));
@@ -110,4 +118,43 @@ Deno.test("future and contradictory reliability remain telemetry or contaminatio
   ) {
     throw new Error(JSON.stringify(result));
   }
+});
+
+Deno.test("future evidence cannot consume bounded decision capacity", () => {
+  const baseline = compileCostControlAlphaCandidate(
+    input({ opportunities: [opportunity("o1")] }),
+    { decisionAt, maxInputRows: 1 },
+  );
+  const withFuture = compileCostControlAlphaCandidate(
+    input({
+      opportunities: [{
+        ...opportunity("future", 999),
+        observedAt: "2026-09-14T00:00:00Z",
+      }, opportunity("o1")],
+      reliabilitySnapshots: [
+        {
+          ...reliability("o1", "g1"),
+        },
+        {
+          ...reliability("o1", "future-group", 1),
+          snapshotAt: "2026-09-14T00:00:00Z",
+        },
+      ],
+    }),
+    { decisionAt, maxInputRows: 1 },
+  );
+  const project = (
+    value: ReturnType<typeof compileCostControlAlphaCandidate>,
+  ) =>
+    JSON.stringify({
+      recommendation: value.recommendation,
+      eligible: value.eligible,
+      selectedOpportunityId: value.selectedOpportunityId,
+      rankedOpportunities: value.rankedOpportunities,
+      roundTripCostBps: value.roundTripCostBps,
+    });
+  if (
+    project(baseline) !== project(withFuture) ||
+    withFuture.futureTelemetry.futureEvidenceCount !== 2
+  ) throw new Error(JSON.stringify(withFuture));
 });

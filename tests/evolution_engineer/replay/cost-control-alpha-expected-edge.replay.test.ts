@@ -17,6 +17,11 @@ const envelope = {
     {
       opportunityId: "o1",
       groupId: "g1",
+      provenance: {
+        sourceId: "source-g1",
+        lineageId: "lineage-g1",
+        independent: true,
+      },
       reliability: .8,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
@@ -24,6 +29,11 @@ const envelope = {
     {
       opportunityId: "o2",
       groupId: "g2",
+      provenance: {
+        sourceId: "source-g2",
+        lineageId: "lineage-g2",
+        independent: true,
+      },
       reliability: .8,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
@@ -31,6 +41,7 @@ const envelope = {
   ],
   cost: {
     asOf: "2026-09-13T12:59:00Z",
+    costConvention: "ONE_WAY_COMPONENTS_BPS",
     sourceId: "book-a",
     cadenceSeconds: 300,
     spreadBps: 10,

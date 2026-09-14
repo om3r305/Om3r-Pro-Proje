@@ -33,6 +33,7 @@ export interface CostControlReport {
   selectedOpportunityId: string | null;
   roundTripCostBps: number | null;
   costComponentsBps: { spread: number; fee: number; depth: number };
+  costConvention: "ROUND_TRIP_COMPONENTS_BPS";
   matureIndependentGroupCount: number;
   invalidEvidenceCount: number;
   truncated: boolean;
@@ -102,6 +103,14 @@ function positiveLimit(value: unknown, fallback: number, maximum: number) {
 }
 
 function fingerprint(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(fingerprint).join(",")}]`;
+  if (record(value)) {
+    return `{${
+      Object.keys(value).sort().map((key) =>
+        `${JSON.stringify(key)}:${fingerprint(value[key])}`
+      ).join(",")
+    }}`;
+  }
   return JSON.stringify(value) ?? "";
 }
 
@@ -120,6 +129,7 @@ function report(decisionAt: string | null): CostControlReport {
     selectedOpportunityId: null,
     roundTripCostBps: null,
     costComponentsBps: { spread: 0, fee: 0, depth: 0 },
+    costConvention: "ROUND_TRIP_COMPONENTS_BPS",
     matureIndependentGroupCount: 0,
     invalidEvidenceCount: 0,
     truncated: false,
@@ -166,13 +176,27 @@ export function compileCostControlAlphaCandidate(
     MAX_RANKED,
     MAX_RANKED,
   );
-  result.truncated = opportunities.length > maxRows ||
-    reliabilitySnapshots.length > maxRows;
   const invalid = () => result.invalidEvidenceCount++;
-  const selectedOpportunities = [...opportunities]
+  const pointInTimeOpportunities = opportunities.filter((value) => {
+    if (record(value) && futureRow(value, decision)) {
+      result.futureTelemetry.futureEvidenceCount++;
+      return false;
+    }
+    return true;
+  });
+  const pointInTimeReliability = reliabilitySnapshots.filter((value) => {
+    if (record(value) && futureRow(value, decision)) {
+      result.futureTelemetry.futureEvidenceCount++;
+      return false;
+    }
+    return true;
+  });
+  result.truncated = pointInTimeOpportunities.length > maxRows ||
+    pointInTimeReliability.length > maxRows;
+  const selectedOpportunities = pointInTimeOpportunities
     .sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)))
     .slice(0, maxRows);
-  const selectedReliability = [...reliabilitySnapshots]
+  const selectedReliability = pointInTimeReliability
     .sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)))
     .slice(0, maxRows);
 
@@ -185,10 +209,6 @@ export function compileCostControlAlphaCandidate(
   for (const value of selectedOpportunities) {
     if (!record(value)) {
       invalid();
-      continue;
-    }
-    if (futureRow(value, decision)) {
-      result.futureTelemetry.futureEvidenceCount++;
       continue;
     }
     const id = identifier(value.opportunityId);
@@ -219,6 +239,7 @@ export function compileCostControlAlphaCandidate(
     groupId: string;
     reliability: number;
     snapshotAt: Instant;
+    provenance: { sourceId: string; lineageId: string };
   }>();
   const reliabilityConflicts = new Set<string>();
   for (const value of selectedReliability) {
@@ -226,27 +247,34 @@ export function compileCostControlAlphaCandidate(
       invalid();
       continue;
     }
-    if (futureRow(value, decision)) {
-      result.futureTelemetry.futureEvidenceCount++;
-      continue;
-    }
     const opportunityId = identifier(value.opportunityId);
     const groupId = identifier(value.groupId);
     const snapshotAt = parseInstant(value.snapshotAt);
     const reliability = finite(value.reliability, 1);
-    const key = opportunityId && groupId && snapshotAt
-      ? `${opportunityId}|${groupId}|${snapshotAt.ms}`
+    const provenance = record(value.provenance) ? value.provenance : null;
+    const sourceId = provenance ? identifier(provenance.sourceId) : null;
+    const lineageId = provenance ? identifier(provenance.lineageId) : null;
+    const independent = provenance?.independent === true;
+    const key = opportunityId && groupId && snapshotAt && sourceId && lineageId
+      ? `${opportunityId}|${groupId}|${snapshotAt.ms}|${sourceId}|${lineageId}`
       : null;
     if (
       !opportunityId || !parsedOpportunities.has(opportunityId) ||
       !groupId || !snapshotAt || snapshotAt.ms > decision.ms ||
       reliability == null || reliability <= 0 || reliability > 1 ||
-      value.mature !== true || decision.ms - snapshotAt.ms > 7 * 86_400_000
+      value.mature !== true || !sourceId || !lineageId || !independent ||
+      decision.ms - snapshotAt.ms > 7 * 86_400_000
     ) {
       invalid();
       continue;
     }
-    const parsed = { opportunityId, groupId, reliability, snapshotAt };
+    const parsed = {
+      opportunityId,
+      groupId,
+      reliability,
+      snapshotAt,
+      provenance: { sourceId, lineageId },
+    };
     const prior = reliabilities.get(key!);
     if (prior && fingerprint(prior) !== fingerprint(parsed)) {
       reliabilityConflicts.add(key!);
@@ -275,7 +303,9 @@ export function compileCostControlAlphaCandidate(
   const fillability = cost ? finite(cost.fillability, 1) : null;
   const cadence = cost ? finite(cost.cadenceSeconds, 7 * 86_400) : null;
   const sourceId = cost ? identifier(cost.sourceId) : null;
-  const validCost = cost !== null && costAsOf !== null &&
+  const validCost = cost !== null && cost.costConvention ===
+      "ONE_WAY_COMPONENTS_BPS" &&
+    costAsOf !== null &&
     costAsOf.ms <= decision.ms && spread !== null && spread >= 0 &&
     fee !== null && fee >= 0 && depth !== null && depth >= 0 &&
     fillability !== null && fillability > 0 && fillability <= 1 &&
@@ -296,7 +326,12 @@ export function compileCostControlAlphaCandidate(
     return result;
   }
   result.roundTripCostBps = roundTrip;
-  result.costComponentsBps = { spread: spread!, fee: fee!, depth: depth! };
+  const costScale = 2 / fillability!;
+  result.costComponentsBps = {
+    spread: spread! * costScale,
+    fee: fee! * costScale,
+    depth: depth! * costScale,
+  };
 
   const candidates = [...reliabilities.values()]
     .map((value) => {

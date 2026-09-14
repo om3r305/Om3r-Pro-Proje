@@ -17,6 +17,11 @@ const valid = {
     {
       opportunityId: "o0",
       groupId: "g0",
+      provenance: {
+        sourceId: "source-g0",
+        lineageId: "lineage-g0",
+        independent: true,
+      },
       reliability: 1,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
@@ -24,6 +29,11 @@ const valid = {
     {
       opportunityId: "o1",
       groupId: "g1",
+      provenance: {
+        sourceId: "source-g1",
+        lineageId: "lineage-g1",
+        independent: true,
+      },
       reliability: 1,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
@@ -31,6 +41,7 @@ const valid = {
   ],
   cost: {
     asOf: "2026-09-13T12:59:00Z",
+    costConvention: "ONE_WAY_COMPONENTS_BPS",
     sourceId: "book",
     cadenceSeconds: 300,
     spreadBps: 1,
@@ -53,6 +64,7 @@ Deno.test("bounded stress inputs never emit non-finite edge or unsafe execution 
     decisionAt: "2026-09-13T13:00:00Z",
     maxInputRows: 100,
   });
+
   if (
     !result.truncated || result.eligible ||
     (result.roundTripCostBps !== null &&
@@ -87,6 +99,7 @@ Deno.test("bounded stress inputs never emit non-finite edge or unsafe execution 
     const value = compileCostControlAlphaCandidate(mutation, {
       decisionAt: "2026-09-13T13:00:00Z",
     });
+
     if (
       value.roundTripCostBps !== null &&
         !Number.isFinite(value.roundTripCostBps) ||
@@ -96,4 +109,49 @@ Deno.test("bounded stress inputs never emit non-finite edge or unsafe execution 
       throw new Error(JSON.stringify(value));
     }
   }
+});
+
+Deno.test("adversarial future evidence cannot change the bounded projection", () => {
+  const options = { decisionAt: "2026-09-13T13:00:00Z", maxInputRows: 2 };
+  const baseline = compileCostControlAlphaCandidate(valid, options);
+  const future = compileCostControlAlphaCandidate({
+    ...valid,
+    opportunities: [
+      ...valid.opportunities,
+      {
+        opportunityId: "future-high-edge",
+        grossEdgeBps: 1_000_000,
+        observedAt: "2026-09-14T00:00:00Z",
+      },
+    ],
+    reliabilitySnapshots: [
+      ...valid.reliabilitySnapshots,
+      {
+        opportunityId: "future-high-edge",
+        groupId: "future-group",
+        provenance: {
+          sourceId: "future-source",
+          lineageId: "future-lineage",
+          independent: true,
+        },
+        reliability: 1,
+        snapshotAt: "2026-09-14T00:00:00Z",
+        mature: true,
+      },
+    ],
+  }, options);
+  const project = (
+    value: ReturnType<typeof compileCostControlAlphaCandidate>,
+  ) =>
+    JSON.stringify({
+      recommendation: value.recommendation,
+      eligible: value.eligible,
+      selectedOpportunityId: value.selectedOpportunityId,
+      rankedOpportunities: value.rankedOpportunities,
+    });
+  if (
+    project(baseline) !== project(future) ||
+    future.futureTelemetry.futureEvidenceCount !== 2 ||
+    future.selectedOpportunityId !== "o0"
+  ) throw new Error(JSON.stringify(future));
 });

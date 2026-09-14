@@ -12,20 +12,27 @@ For each opportunity, the projection is:
 
 `net edge = weighted gross edge - round-trip cost`
 
-Spread, fee, and depth/slippage are expressed in basis points for the same round
-trip convention. Fillability is a bounded fraction in `(0, 1]`; it increases the
-estimated cost rather than creating an unbounded value. An opportunity is
-eligible only when net edge and the explicit `net edge / round-trip cost` margin
-are both strictly above their configured thresholds. Results are ranked by net
-edge, then stable opportunity identity.
+The input cost snapshot must declare `costConvention:
+"ONE_WAY_COMPONENTS_BPS"`.
+Its spread, fee, and depth/slippage values are one-way basis-point components.
+The report exposes each normalized component as round-trip basis points
+(`2 * component / fillability`), and their sum is exactly `roundTripCostBps`;
+all edge and margin calculations use that same round-trip value. Fillability is
+a bounded fraction in `(0, 1]`; it increases the estimated cost rather than
+creating an unbounded value. An opportunity is eligible only when net edge and
+the explicit `net edge / round-trip cost` margin are both strictly above their
+configured thresholds. Results are ranked by net edge, then stable opportunity
+identity.
 
 Only observations and cost snapshots at or before `decisionAt` are decision
 features. Reliability must be mature, positive, bound to an observed
-opportunity, and from a lagged independent group. Future rows are counted as
-telemetry and cannot consume decision features. Missing, stale, contradictory,
-negative, non-finite, zero, or over-bounded evidence fails closed. Inputs are
-canonicalized before bounded selection so equivalent permutations produce the
-same report.
+opportunity, and from a lagged independent group. Each reliability row must also
+carry `provenance: { sourceId, lineageId, independent: true }`; the provenance
+is part of the deterministic evidence identity. Future rows are filtered before
+bounded selection, counted as telemetry, and cannot consume decision capacity.
+Missing, stale, contradictory, negative, non-finite, zero, or over-bounded
+evidence fails closed. Inputs are canonicalized before bounded selection so
+equivalent permutations produce the same report.
 
 Replay and adversarial stress tests are separate evidence classes. Neither
 establishes profitability or prospective performance. Before any promotion
