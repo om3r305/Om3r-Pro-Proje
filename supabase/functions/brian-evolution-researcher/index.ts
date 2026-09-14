@@ -5,6 +5,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 import { EVOLUTION_ALPHA_INTELLIGENCE_VERSION } from "../_shared/evolution_alpha_intelligence.ts";
 import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 import {
+  buildCurrentWorldSourceSignals,
   buildExperimentPlan,
   EVOLUTION_RESEARCH_VERSION,
   generateResearchHypotheses,
@@ -14,6 +15,8 @@ import {
   type OutcomeSignal,
   type ReliabilitySignal,
   type ResearchInputs,
+  type WorldSourceAssessmentRecord,
+  type WorldSourceCandidateRecord,
   type WorldSourceSignal,
 } from "../_shared/evolution_research.ts";
 
@@ -23,6 +26,8 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefre
 const COLLECTOR_ID = "brian-evolution-researcher-v1";
 const LEASE_SECONDS = 240;
 const ACTION_GATE_CHALLENGER_VERSION = "brian-alpha-calibration-challenger-v1";
+
+type WorldEngineeringPolicy = { enabled:boolean; trustFloor:number };
 
 function out(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -43,6 +48,18 @@ const challengerVersionFor = (kind: HypothesisCandidate["hypothesisKind"]): stri
   if (kind === "EXPECTED_EDGE" || kind === "RELIABILITY_FEEDBACK" || kind === "COST_CONTROL") return EVOLUTION_ALPHA_INTELLIGENCE_VERSION;
   return `${EVOLUTION_RESEARCH_VERSION}:${kind.toLowerCase()}`;
 };
+
+async function loadWorldEngineeringPolicy(): Promise<WorldEngineeringPolicy> {
+  const q = await db.from("brian_evolution_engineering_control")
+    .select("metadata")
+    .eq("control_id", "default")
+    .maybeSingle();
+  if (q.error) throw new Error(`world_engineering_control:${q.error.message}`);
+  const metadata = (q.data?.metadata ?? {}) as Record<string, unknown>;
+  const configured = nullableFinite(metadata.world_source_trust_floor);
+  const trustFloor = configured == null ? 0.72 : Math.max(0, Math.min(1, configured));
+  return { enabled: metadata.world_to_engineering_enabled === true, trustFloor };
+}
 
 async function loadGaps(): Promise<GapSignal[]> {
   const q = await db.from("brian_evolution_latest_gaps")
@@ -152,66 +169,38 @@ async function loadReliability(observedAt: string): Promise<ReliabilitySignal[]>
   }));
 }
 
-async function loadWorldSources(): Promise<WorldSourceSignal[]> {
+async function loadWorldSources(trustFloor:number): Promise<WorldSourceSignal[]> {
   const assessmentsQ = await db.from("brian_world_source_assessments")
     .select("source_id,assessed_at,trust_score,eligible_for_research")
-    .eq("eligible_for_research", true)
-    .gte("trust_score", 0.72)
     .order("assessed_at", { ascending: false })
-    .limit(500);
+    .limit(1000);
   if (assessmentsQ.error) throw new Error(`world_source_assessments:${assessmentsQ.error.message}`);
 
-  const latestAssessment = new Map<string, Record<string, unknown>>();
-  for (const raw of assessmentsQ.data ?? []) {
-    const row = raw as Record<string, unknown>;
-    const sourceId = String(row.source_id ?? "");
-    if (sourceId && !latestAssessment.has(sourceId)) latestAssessment.set(sourceId, row);
-    if (latestAssessment.size >= 100) break;
-  }
-  const ids = [...latestAssessment.keys()];
-  if (!ids.length) return [];
+  const assessmentRecords:WorldSourceAssessmentRecord[]=(assessmentsQ.data??[]).map((row)=>({
+    sourceId:String(row.source_id??""),
+    assessedAt:String(row.assessed_at??""),
+    trustScore:finite(row.trust_score,-1),
+    eligibleForResearch:row.eligible_for_research===true,
+  }));
+  const ids=[...new Set(assessmentRecords.map(row=>row.sourceId).filter(Boolean))].slice(0,200);
+  if(!ids.length)return[];
 
   const candidatesQ = await db.from("brian_world_source_candidates")
-    .select("source_id,canonical_uri,authority_class,access_mode,stage,discovered_at")
+    .select("candidate_id,source_id,canonical_uri,authority_class,access_mode,stage,discovered_at")
     .in("source_id", ids)
     .order("discovered_at", { ascending: false })
-    .limit(1000);
+    .limit(2000);
   if (candidatesQ.error) throw new Error(`world_source_candidates:${candidatesQ.error.message}`);
-
-  const latestCandidate = new Map<string, Record<string, unknown>>();
-  for (const raw of candidatesQ.data ?? []) {
-    const row = raw as Record<string, unknown>;
-    const sourceId = String(row.source_id ?? "");
-    if (sourceId && !latestCandidate.has(sourceId)) latestCandidate.set(sourceId, row);
-  }
-
-  const result: WorldSourceSignal[] = [];
-  for (const sourceId of ids) {
-    const assessment = latestAssessment.get(sourceId);
-    const candidate = latestCandidate.get(sourceId);
-    if (!assessment || !candidate) continue;
-    const trustScore = nullableFinite(assessment.trust_score);
-    if (trustScore == null) continue;
-    const assessedAt = String(assessment.assessed_at ?? "");
-    const canonicalUri = String(candidate.canonical_uri ?? "");
-    if (!assessedAt || !canonicalUri) continue;
-    result.push({
-      sourceId,
-      canonicalUri,
-      authorityClass: String(candidate.authority_class ?? "UNKNOWN"),
-      accessMode: String(candidate.access_mode ?? "UNAVAILABLE"),
-      stage: String(candidate.stage ?? "DISCOVERED"),
-      trustScore,
-      eligibleForResearch: assessment.eligible_for_research === true,
-      assessedAt,
-      evidenceRefs: [
-        `world_source:${sourceId}`,
-        `world_source_assessment:${sourceId}:${assessedAt}`,
-        `world_source_uri:${canonicalUri}`,
-      ],
-    });
-  }
-  return result;
+  const candidateRecords:WorldSourceCandidateRecord[]=(candidatesQ.data??[]).map((row)=>({
+    candidateId:String(row.candidate_id??""),
+    sourceId:String(row.source_id??""),
+    discoveredAt:String(row.discovered_at??""),
+    canonicalUri:String(row.canonical_uri??""),
+    authorityClass:String(row.authority_class??"UNKNOWN"),
+    accessMode:String(row.access_mode??"UNAVAILABLE"),
+    stage:String(row.stage??"DISCOVERED"),
+  }));
+  return buildCurrentWorldSourceSignals(assessmentRecords,candidateRecords,trustFloor).slice(0,100);
 }
 
 async function persistHypotheses(inputs: ResearchInputs): Promise<{ hypotheses: number; experiments: number }> {
@@ -261,11 +250,18 @@ Deno.serve(async(req:Request)=>{
   try{
     const lease=await withCollectorLease(db,COLLECTOR_ID,LEASE_SECONDS,async()=>{
       const observedAt=new Date().toISOString();
-      const [gaps,challenger,outcomes,reliability,worldSources]=await Promise.all([loadGaps(),loadChallenger(observedAt),loadOutcomes(observedAt),loadReliability(observedAt),loadWorldSources()]);
-      const inputs:ResearchInputs={gaps,challenger,outcomes,reliability,worldSources,observedAt};
+      const worldPolicy=await loadWorldEngineeringPolicy();
+      const [gaps,challenger,outcomes,reliability,worldSources]=await Promise.all([
+        loadGaps(),
+        loadChallenger(observedAt),
+        loadOutcomes(observedAt),
+        loadReliability(observedAt),
+        worldPolicy.enabled?loadWorldSources(worldPolicy.trustFloor):Promise.resolve([] as WorldSourceSignal[]),
+      ]);
+      const inputs:ResearchInputs={gaps,challenger,outcomes,reliability,worldSources,worldSourceTrustFloor:worldPolicy.trustFloor,observedAt};
       const persisted=await persistHypotheses(inputs);const observed=gaps.length+(challenger?1:0)+outcomes.length+reliability.length+worldSources.length;
       await receipt(startedAt,"SUCCESS",observed,persisted.hypotheses+persisted.experiments);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length,world_sources:worldSources.length},...persisted,stable_experiment_identity:true,world_source_metadata_only:true,external_content_used_as_instruction:false,control_version:ALPHA_COMPILER_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
+      return{status:"SUCCESS",collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length,world_sources:worldSources.length},...persisted,world_to_engineering_enabled:worldPolicy.enabled,world_source_trust_floor:worldPolicy.trustFloor,stable_experiment_identity:true,world_source_metadata_only:true,external_content_used_as_instruction:false,control_version:ALPHA_COMPILER_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);
