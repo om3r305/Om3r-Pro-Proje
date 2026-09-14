@@ -103,16 +103,24 @@ begin
 
   select r.* into req
   from public.brian_evolution_codegen_requests r
-  join public.brian_evolution_code_candidates c on c.candidate_id=r.candidate_id
+  left join public.brian_evolution_code_candidates c on c.candidate_id=r.candidate_id
   left join public.brian_evolution_engineering_runs er on er.request_id=r.request_id
   where er.request_id is null
     and r.required_human_review is true
     and r.shadow_only is true
     and r.live_execution is false
     and r.autonomous_apply_allowed is false
-    and c.shadow_only is true
-    and c.live_execution is false
-    and c.autonomous_apply_allowed is false
+    -- Normal legacy-safe requests remain claimable even if a test/fixture does
+    -- not materialize a separate candidate row. If a candidate row exists it
+    -- must independently satisfy the same SHADOW/no-live/no-auto-apply fences.
+    and (
+      c.candidate_id is null
+      or (
+        c.shadow_only is true
+        and c.live_execution is false
+        and c.autonomous_apply_allowed is false
+      )
+    )
     and (p_request_id is null or r.request_id=p_request_id)
     -- Stable world-source adapters do not consume another autonomous model run
     -- after one version of the same hypothesis already reached independent review.
