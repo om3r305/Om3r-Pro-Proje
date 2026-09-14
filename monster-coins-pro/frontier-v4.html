@@ -35,7 +35,9 @@
       if(url===publicHeartbeatPath || url.endsWith(publicHeartbeatPath)){
         const direct='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-frontier-heartbeat-public';
         const heartbeatInit={...init,method:'GET',headers:{accept:'application/json'},body:undefined,cache:'no-store'};
-        return nativeFetch(publicHeartbeatPath,heartbeatInit).catch(()=>nativeFetch(direct,heartbeatInit));
+        return nativeFetch(publicHeartbeatPath,heartbeatInit)
+          .then(response=>response.ok?response:nativeFetch(direct,heartbeatInit))
+          .catch(()=>nativeFetch(direct,heartbeatInit));
       }
       const marker='.supabase.co/functions/v1/';
       if(!url.includes(marker)) return nativeFetch(input,init);
@@ -43,7 +45,7 @@
       const isHeartbeat=url.includes('/brian-frontier-heartbeat');
       const isEngineering=url.includes('/brian-frontier-engineering-status');
       const controller=new AbortController();
-      const timeout=isDevelopment?35000:isHeartbeat?15000:isEngineering?15000:8500;
+      const timeout=isDevelopment?45000:isHeartbeat?30000:isEngineering?30000:20000;
       const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':isEngineering?'BRIAN_ENGINEERING_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
@@ -57,8 +59,8 @@
     await load('/frontier-v4.js?v=20260912-a1');
     await load('/frontier-engineer-console.js?v=20260914-e3');
     await load('/frontier-engineering-room-v2.js?v=20260914-r1');
-    await load('/frontier-stability.js?v=20260913-s1');
-    await load('/frontier-status-truth.js?v=20260914-t3');
+    await load('/frontier-stability.js?v=20260914-s2');
+    await load('/frontier-status-truth.js?v=20260914-t4');
     await load('/brain-anatomy-v2.js?v=20260913-rich1');
     await load('/frontier-v4-mobile-rescue.js?v=20260913-r3');
     await load('/brain-anatomy-visual-fix.js?v=20260914-v4');
