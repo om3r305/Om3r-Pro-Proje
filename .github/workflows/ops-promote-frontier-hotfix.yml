@@ -1,0 +1,40 @@
+name: Ops Promote Frontier Hotfix
+
+on:
+  push:
+    branches:
+      - ops/vercel-promote-frontier-hotfix-20260914
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
+      TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
+      DEPLOYMENT_ID: dpl_FmXHJDqHq5by65SietYBazyjPGpS
+    steps:
+      - name: Check deployment credential
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo 'VERCEL_TOKEN secret is not configured.'
+            exit 78
+          fi
+
+      - name: Promote tested Brian deployment
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/promote.out -w '%{http_code}' \
+            -X POST \
+            "https://api.vercel.com/v10/projects/${PROJECT_ID}/promote/${DEPLOYMENT_ID}?teamId=${TEAM_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json')
+          cat /tmp/promote.out
+          if [ "$code" != "201" ] && [ "$code" != "202" ] && [ "$code" != "200" ]; then
+            echo "Promotion failed with HTTP $code"
+            exit 1
+          fi
+          echo "Promotion accepted with HTTP $code"
