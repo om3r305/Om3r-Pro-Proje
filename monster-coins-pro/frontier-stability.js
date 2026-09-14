@@ -5,7 +5,7 @@
 const HEARTBEAT_ENDPOINT = `${ROOT}/brian-frontier-heartbeat`;
 const STABILITY = { heartbeat:null, error:null, slowCursor:0, lastSlow:0, lastAutonomyFetch:0 };
 
-async function frontierPost(url,body={},timeoutMs=7500){
+async function frontierPost(url,body={},timeoutMs=20000){
   const k=key();
   if(!k) throw new Error('UNAUTHORIZED_DASHBOARD');
   const controller=new AbortController();
@@ -131,7 +131,7 @@ refresh=async function(){
   if(!key()){unlock(true);return}
   $('syncText').textContent='Brian heartbeat doğrulanıyor…';
   try{
-    const hb=await frontierPost(HEARTBEAT_ENDPOINT,{},7000);
+    const hb=await frontierPost(HEARTBEAT_ENDPOINT,{},25000);
     STABILITY.heartbeat=hb;STABILITY.error=null;delete S.errors.systemControl;applyHeartbeat(hb);
   }catch(e){
     STABILITY.error=String(e?.message||e);S.errors.systemControl=STABILITY.error;
@@ -141,7 +141,7 @@ refresh=async function(){
   if(now-STABILITY.lastSlow>=12000){
     const [name,url,body]=slowServices[STABILITY.slowCursor++%slowServices.length];
     STABILITY.lastSlow=now;
-    await safe(name,frontierPost(url,body,7000));
+    await safe(name,frontierPost(url,body,20000));
   }
   S.lastSync=new Date();
   const c=sysControl(),target=num(c.treasury_target_equity_usd)??num(c.treasury?.starting_equity_usd);
