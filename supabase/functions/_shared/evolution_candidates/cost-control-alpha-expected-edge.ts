@@ -567,4 +567,3 @@ export function compileCostControlAlphaCandidate(
 
 export const compileCostControlAlphaExpectedEdgeCandidate =
   compileCostControlAlphaCandidate;
-import { canonicalIndependentGroup } from "../alpha_decision.ts";
