@@ -1,0 +1,43 @@
+name: Ops Vercel Standard Protection
+
+on:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - '.github/workflows/ops-vercel-standard-protection.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
+    steps:
+      - name: Check Vercel token
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo 'VERCEL_TOKEN secret is not configured.'
+            exit 78
+          fi
+
+      - name: Set Standard Protection
+        run: |
+          set -euo pipefail
+          body='{"ssoProtection":{"deploymentType":"prod_deployment_urls_and_all_previews"}}'
+          code=$(curl -sS -o /tmp/project.out -w '%{http_code}' \
+            -X PATCH \
+            "https://api.vercel.com/v9/projects/${PROJECT_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            --data "$body")
+          cat /tmp/project.out | jq '{id,name,ssoProtection}'
+          if [ "$code" != "200" ]; then
+            echo "Vercel project update failed with HTTP $code"
+            exit 1
+          fi
+          jq -e '.ssoProtection.deploymentType == "prod_deployment_urls_and_all_previews"' /tmp/project.out >/dev/null
+          echo 'Standard Protection is active; production domains stay public.'
