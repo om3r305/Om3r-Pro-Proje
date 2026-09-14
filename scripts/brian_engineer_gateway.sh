@@ -30,6 +30,19 @@ case "$mode" in
     payload="${6:-}"
     if [ -z "$payload" ]; then payload='{}'; fi
     printf '%s' "$payload" | jq -e 'type=="object"' >/dev/null
+
+    # When an independent review blocks a candidate, preserve the reviewer text
+    # so the gateway can create a bounded retry from the exact checkpoint.
+    if [ "$event_kind" = "BLOCKED" ] && [ -s /tmp/brian-engineer-review.txt ]; then
+      review_text="$(python - <<'PY'
+from pathlib import Path
+p=Path('/tmp/brian-engineer-review.txt')
+print(p.read_text(errors='replace')[:30000] if p.exists() else '')
+PY
+)"
+      payload="$(printf '%s' "$payload" | jq -c --arg review_text "$review_text" '. + {review_text:$review_text, retry_requested:true}')"
+    fi
+
     body="$(jq -nc \
       --arg action event \
       --arg run_id "$run_id" \
