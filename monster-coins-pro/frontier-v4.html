@@ -31,7 +31,8 @@
     const nativeFetch=window.fetch.bind(window);
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
-      if(!url.includes('.supabase.co/functions/v1/')) return nativeFetch(input,init);
+      const marker='.supabase.co/functions/v1/';
+      if(!url.includes(marker)) return nativeFetch(input,init);
       const isDevelopment=url.includes('/brian-development-status');
       const isHeartbeat=url.includes('/brian-frontier-heartbeat');
       const isEngineering=url.includes('/brian-frontier-engineering-status');
@@ -40,7 +41,9 @@
       const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':isEngineering?'BRIAN_ENGINEERING_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
       let signal=controller.signal;
       if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
-      return nativeFetch(input,{...init,signal}).finally(()=>clearTimeout(timer));
+      const suffix=url.slice(url.indexOf(marker)+marker.length);
+      const proxyUrl=`/api/brian/${suffix}`;
+      return nativeFetch(proxyUrl,{...init,signal}).finally(()=>clearTimeout(timer));
     };
 
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
