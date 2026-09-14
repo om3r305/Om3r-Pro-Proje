@@ -26,13 +26,28 @@ identity.
 
 Only observations and cost snapshots at or before `decisionAt` are decision
 features. Reliability must be mature, positive, bound to an observed
-opportunity, and from a lagged independent group. Each reliability row must also
-carry `provenance: { sourceId, lineageId, independent: true }`; the provenance
-is part of the deterministic evidence identity. Future rows are filtered before
-bounded selection, counted as telemetry, and cannot consume decision capacity.
-Missing, stale, contradictory, negative, non-finite, zero, or over-bounded
-evidence fails closed. Inputs are canonicalized before bounded selection so
-equivalent permutations produce the same report.
+opportunity, and from a lagged independent group. Reliability is accepted only
+when its provenance binds to an exact `sourceObservationId` in the same
+decision-time envelope. The binding verifies the source and lineage IDs,
+opportunity, raw independent group, sensor family, sensor horizon, direction,
+snapshot window end, and snapshot generation time. `independent: true` is
+diagnostic metadata and never establishes independence by itself. Raw micro
+groups are canonicalized through the ALPHA `intrabar_tape` mapping before
+independent-group counting.
+
+Evidence is checked for conflicts at `opportunity/canonical-group/snapshot`
+before provenance deduplication. Conflicting reliability, source, lineage, or
+group bindings contaminate the report rather than allowing the highest-valued
+variant to win. A single opportunity is emitted at most once; when several
+verified groups support it, its reliability is the deterministic mean of the
+selected group snapshots and the report retains the selected canonical groups
+and source observation IDs.
+
+Future rows are filtered before bounded selection, counted as telemetry, and
+cannot consume decision capacity. Missing, stale, contradictory, negative,
+non-finite, zero, or unverifiable evidence fails closed. Inputs are
+canonicalized before bounded selection so equivalent permutations produce the
+same report. `grossEdgeBps` is the sole opportunity gross-edge field.
 
 Replay and adversarial stress tests are separate evidence classes. Neither
 establishes profitability or prospective performance. Before any promotion

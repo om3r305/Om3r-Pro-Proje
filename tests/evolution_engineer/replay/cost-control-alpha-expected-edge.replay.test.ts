@@ -18,6 +18,13 @@ const envelope = {
       opportunityId: "o1",
       groupId: "g1",
       provenance: {
+        sourceObservationId: "observation-g1",
+        rawIndependentGroup: "g1",
+        sensorFamily: "family-g1",
+        sensorHorizon: "FAST_5_30M",
+        direction: 1,
+        snapshotWindowEnd: "2026-09-13T12:58:00Z",
+        snapshotGeneratedAt: "2026-09-13T12:58:00Z",
         sourceId: "source-g1",
         lineageId: "lineage-g1",
         independent: true,
@@ -30,6 +37,13 @@ const envelope = {
       opportunityId: "o2",
       groupId: "g2",
       provenance: {
+        sourceObservationId: "observation-g2",
+        rawIndependentGroup: "g2",
+        sensorFamily: "family-g2",
+        sensorHorizon: "FAST_5_30M",
+        direction: 1,
+        snapshotWindowEnd: "2026-09-13T12:58:00Z",
+        snapshotGeneratedAt: "2026-09-13T12:58:00Z",
         sourceId: "source-g2",
         lineageId: "lineage-g2",
         independent: true,
@@ -37,6 +51,32 @@ const envelope = {
       reliability: .8,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
+    },
+  ],
+  sourceObservations: [
+    {
+      observationId: "observation-g1",
+      opportunityId: "o1",
+      providerId: "provider-g1",
+      sourceId: "source-g1",
+      lineageId: "lineage-g1",
+      independentGroup: "g1",
+      sensorFamily: "family-g1",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
+    },
+    {
+      observationId: "observation-g2",
+      opportunityId: "o2",
+      providerId: "provider-g2",
+      sourceId: "source-g2",
+      lineageId: "lineage-g2",
+      independentGroup: "g2",
+      sensorFamily: "family-g2",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
     },
   ],
   cost: {
@@ -62,19 +102,41 @@ Deno.test("immutable point-in-time replay is invariant to future telemetry", () 
       grossEdgeBps: 999,
       observedAt: "2026-09-14T00:00:00Z",
     }),
+    reliabilitySnapshots: [...envelope.reliabilitySnapshots, {
+      opportunityId: "o1",
+      groupId: "g1",
+      provenance: {
+        sourceObservationId: "observation-g1",
+        sourceId: "future-source",
+        lineageId: "future-lineage",
+        rawIndependentGroup: "g1",
+        sensorFamily: "family-g1",
+        sensorHorizon: "FAST_5_30M",
+        direction: 1,
+        snapshotWindowEnd: "2026-09-14T00:00:00Z",
+        snapshotGeneratedAt: "2026-09-14T00:00:00Z",
+        independent: true,
+      },
+      reliability: 1,
+      snapshotAt: "2026-09-14T00:00:00Z",
+      mature: true,
+    }],
   }, options);
   const project = (
     value: ReturnType<typeof compileCostControlAlphaCandidate>,
   ) =>
     JSON.stringify({
       recommendation: value.recommendation,
+      eligible: value.eligible,
       selectedOpportunityId: value.selectedOpportunityId,
       rankedOpportunities: value.rankedOpportunities,
       roundTripCostBps: value.roundTripCostBps,
+      costComponentsBps: value.costComponentsBps,
+      provenance: value.provenance,
     });
   if (
     project(baseline) !== project(replay) ||
-    replay.futureTelemetry.futureEvidenceCount !== 1 ||
+    replay.futureTelemetry.futureEvidenceCount !== 2 ||
     baseline.recommendation !== "ALLOW_EDGE"
   ) {
     throw new Error("replay projection changed");

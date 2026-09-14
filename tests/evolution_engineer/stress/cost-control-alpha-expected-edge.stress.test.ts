@@ -18,6 +18,13 @@ const valid = {
       opportunityId: "o0",
       groupId: "g0",
       provenance: {
+        sourceObservationId: "observation-g0",
+        rawIndependentGroup: "g0",
+        sensorFamily: "family-g0",
+        sensorHorizon: "FAST_5_30M",
+        direction: 1,
+        snapshotWindowEnd: "2026-09-13T12:58:00Z",
+        snapshotGeneratedAt: "2026-09-13T12:58:00Z",
         sourceId: "source-g0",
         lineageId: "lineage-g0",
         independent: true,
@@ -30,6 +37,13 @@ const valid = {
       opportunityId: "o1",
       groupId: "g1",
       provenance: {
+        sourceObservationId: "observation-g1",
+        rawIndependentGroup: "g1",
+        sensorFamily: "family-g1",
+        sensorHorizon: "FAST_5_30M",
+        direction: 1,
+        snapshotWindowEnd: "2026-09-13T12:58:00Z",
+        snapshotGeneratedAt: "2026-09-13T12:58:00Z",
         sourceId: "source-g1",
         lineageId: "lineage-g1",
         independent: true,
@@ -37,6 +51,32 @@ const valid = {
       reliability: 1,
       snapshotAt: "2026-09-13T12:58:00Z",
       mature: true,
+    },
+  ],
+  sourceObservations: [
+    {
+      observationId: "observation-g0",
+      opportunityId: "o0",
+      providerId: "provider-g0",
+      sourceId: "source-g0",
+      lineageId: "lineage-g0",
+      independentGroup: "g0",
+      sensorFamily: "family-g0",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
+    },
+    {
+      observationId: "observation-g1",
+      opportunityId: "o1",
+      providerId: "provider-g1",
+      sourceId: "source-g1",
+      lineageId: "lineage-g1",
+      independentGroup: "g1",
+      sensorFamily: "family-g1",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
     },
   ],
   cost: {
@@ -139,6 +179,7 @@ Deno.test("adversarial future evidence cannot change the bounded projection", ()
         mature: true,
       },
     ],
+    sourceObservations: valid.sourceObservations,
   }, options);
   const project = (
     value: ReturnType<typeof compileCostControlAlphaCandidate>,
@@ -154,4 +195,29 @@ Deno.test("adversarial future evidence cannot change the bounded projection", ()
     future.futureTelemetry.futureEvidenceCount !== 2 ||
     future.selectedOpportunityId !== "o0"
   ) throw new Error(JSON.stringify(future));
+});
+
+Deno.test("large provenance conflicts fail closed without duplicate public rows", () => {
+  const conflicting = {
+    ...valid,
+    reliabilitySnapshots: Array.from({ length: 500 }, (_, index) => ({
+      ...valid.reliabilitySnapshots[0],
+      reliability: index % 2 ? 0.2 : 1,
+      provenance: {
+        ...valid.reliabilitySnapshots[0].provenance,
+        lineageId: `lineage-conflict-${index}`,
+      },
+    })).concat(valid.reliabilitySnapshots[1]),
+  };
+  const result = compileCostControlAlphaCandidate(conflicting, {
+    decisionAt: "2026-09-13T13:00:00Z",
+    maxInputRows: 600,
+  });
+  if (
+    result.recommendation !== "CONTAMINATED_EVIDENCE" ||
+    result.rankedOpportunities.length !== 0 ||
+    new Set(result.rankedOpportunities.map((row) => row.opportunityId)).size !==
+      result.rankedOpportunities.length ||
+    result.shadow_only !== true || result.live_execution !== false
+  ) throw new Error(JSON.stringify(result));
 });

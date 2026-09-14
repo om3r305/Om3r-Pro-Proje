@@ -1,3 +1,5 @@
+import { canonicalIndependentGroup } from "../alpha_decision.ts";
+
 export type CostControlRecommendation =
   | "ALLOW_EDGE"
   | "DOWNGRADE_TO_WAIT"
@@ -24,6 +26,8 @@ export interface CostControlRankedOpportunity {
   costBps: number;
   observationAt: string;
   reliabilityAsOf: string;
+  reliabilityGroups: string[];
+  reliabilitySourceObservationIds: string[];
 }
 
 export interface CostControlReport {
@@ -143,6 +147,23 @@ function report(decisionAt: string | null): CostControlReport {
   };
 }
 
+type ParsedSourceObservation = {
+  observationId: string;
+  opportunityId: string;
+  providerId: string;
+  sourceId: string;
+  lineageId: string;
+  independentGroup: string;
+  sensorFamily: string;
+  sensorHorizon: string;
+  direction: -1 | 1;
+  observedAt: Instant;
+};
+
+function direction(value: unknown): -1 | 1 | null {
+  return value === -1 || value === 1 ? value : null;
+}
+
 /**
  * Compiles a bounded, decision-time-only cost-control projection.
  * This function has no execution or persistence side effects.
@@ -166,6 +187,9 @@ export function compileCostControlAlphaCandidate(
 
   const opportunities = Array.isArray(input.opportunities)
     ? input.opportunities
+    : [];
+  const sourceObservations = Array.isArray(input.sourceObservations)
+    ? input.sourceObservations
     : [];
   const reliabilitySnapshots = Array.isArray(input.reliabilitySnapshots)
     ? input.reliabilitySnapshots
@@ -191,7 +215,15 @@ export function compileCostControlAlphaCandidate(
     }
     return true;
   });
+  const pointInTimeSources = sourceObservations.filter((value) => {
+    if (record(value) && futureRow(value, decision)) {
+      result.futureTelemetry.futureEvidenceCount++;
+      return false;
+    }
+    return true;
+  });
   result.truncated = pointInTimeOpportunities.length > maxRows ||
+    pointInTimeSources.length > maxRows ||
     pointInTimeReliability.length > maxRows;
   const selectedOpportunities = pointInTimeOpportunities
     .sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)))
@@ -234,14 +266,79 @@ export function compileCostControlAlphaCandidate(
     result.reasons.push("conflicting opportunities");
   }
 
+  const parsedSources = new Map<string, ParsedSourceObservation>();
+  const sourceConflicts = new Set<string>();
+  const selectedSources = pointInTimeSources
+    .sort((a, b) => fingerprint(a).localeCompare(fingerprint(b)))
+    .slice(0, maxRows);
+  for (const value of selectedSources) {
+    if (!record(value)) {
+      invalid();
+      continue;
+    }
+    const observationId = identifier(value.observationId);
+    const opportunityId = identifier(value.opportunityId);
+    const providerId = identifier(value.providerId);
+    const sourceId = identifier(value.sourceId);
+    const lineageId = identifier(value.lineageId);
+    const independentGroup = identifier(value.independentGroup);
+    const sensorFamily = identifier(value.sensorFamily);
+    const sensorHorizon = identifier(value.sensorHorizon);
+    const observedAt = parseInstant(value.observedAt);
+    const parsedDirection = direction(value.direction);
+    const opportunity = opportunityId
+      ? parsedOpportunities.get(opportunityId)
+      : undefined;
+    const parsed = observationId && opportunityId && providerId && sourceId &&
+        lineageId &&
+        independentGroup && sensorFamily && sensorHorizon && observedAt &&
+        parsedDirection
+      ? {
+        observationId,
+        opportunityId,
+        providerId,
+        sourceId,
+        lineageId,
+        independentGroup,
+        sensorFamily,
+        sensorHorizon,
+        direction: parsedDirection,
+        observedAt,
+      }
+      : null;
+    if (
+      !parsed || !opportunity ||
+      parsed.observedAt.ms !== opportunity.observedAt.ms ||
+      parsed.observedAt.ms > decision.ms ||
+      decision.ms - parsed.observedAt.ms > 7 * 86_400_000
+    ) {
+      invalid();
+      continue;
+    }
+    const prior = parsedSources.get(parsed.observationId);
+    if (prior && fingerprint(prior) !== fingerprint(parsed)) {
+      sourceConflicts.add(parsed.observationId);
+    }
+    if (!prior || fingerprint(parsed).localeCompare(fingerprint(prior)) < 0) {
+      parsedSources.set(parsed.observationId, parsed);
+    }
+  }
+  if (sourceConflicts.size) {
+    result.reasons.push("conflicting source observations");
+  }
+
   const reliabilities = new Map<string, {
     opportunityId: string;
     groupId: string;
+    canonicalGroupId: string;
     reliability: number;
     snapshotAt: Instant;
-    provenance: { sourceId: string; lineageId: string };
+    sourceObservationId: string;
+    sourceId: string;
+    lineageId: string;
   }>();
   const reliabilityConflicts = new Set<string>();
+  const lineageBindings = new Map<string, string>();
   for (const value of selectedReliability) {
     if (!record(value)) {
       invalid();
@@ -252,17 +349,74 @@ export function compileCostControlAlphaCandidate(
     const snapshotAt = parseInstant(value.snapshotAt);
     const reliability = finite(value.reliability, 1);
     const provenance = record(value.provenance) ? value.provenance : null;
+    const sourceObservationId = provenance
+      ? identifier(provenance.sourceObservationId)
+      : null;
     const sourceId = provenance ? identifier(provenance.sourceId) : null;
     const lineageId = provenance ? identifier(provenance.lineageId) : null;
+    const source = sourceObservationId
+      ? parsedSources.get(sourceObservationId)
+      : undefined;
     const independent = provenance?.independent === true;
-    const key = opportunityId && groupId && snapshotAt && sourceId && lineageId
-      ? `${opportunityId}|${groupId}|${snapshotAt.ms}|${sourceId}|${lineageId}`
+    const rawGroup = provenance
+      ? identifier(provenance.rawIndependentGroup)
       : null;
+    const sensorFamily = provenance
+      ? identifier(provenance.sensorFamily)
+      : null;
+    const sensorHorizon = provenance
+      ? identifier(provenance.sensorHorizon)
+      : null;
+    const provenanceDirection = provenance
+      ? direction(provenance.direction)
+      : null;
+    const snapshotWindowEnd = provenance
+      ? parseInstant(provenance.snapshotWindowEnd)
+      : null;
+    const snapshotGeneratedAt = provenance
+      ? parseInstant(provenance.snapshotGeneratedAt)
+      : null;
+    const key = opportunityId && groupId && snapshotAt
+      ? `${opportunityId}|${
+        canonicalIndependentGroup(groupId)
+      }|${snapshotAt.ms}`
+      : null;
+    const lineageKey = sourceId && lineageId
+      ? `${sourceId}|${lineageId}`
+      : null;
+    const lineageBinding = lineageKey && opportunityId && groupId
+      ? `${opportunityId}|${groupId}`
+      : null;
+    const priorLineageBinding = lineageKey
+      ? lineageBindings.get(lineageKey)
+      : undefined;
+    if (
+      lineageKey && lineageBinding &&
+      priorLineageBinding && priorLineageBinding !== lineageBinding
+    ) {
+      reliabilityConflicts.add(lineageKey);
+    } else if (lineageKey && lineageBinding) {
+      lineageBindings.set(lineageKey, lineageBinding);
+    }
     if (
       !opportunityId || !parsedOpportunities.has(opportunityId) ||
       !groupId || !snapshotAt || snapshotAt.ms > decision.ms ||
       reliability == null || reliability <= 0 || reliability > 1 ||
-      value.mature !== true || !sourceId || !lineageId || !independent ||
+      value.mature !== true || !source ||
+      source.opportunityId !== opportunityId ||
+      source.independentGroup !== groupId ||
+      source.independentGroup !== rawGroup ||
+      source.sourceId !== sourceId ||
+      source.lineageId !== lineageId ||
+      source.sensorFamily !== sensorFamily ||
+      source.sensorHorizon !== sensorHorizon ||
+      source.direction !== provenanceDirection ||
+      !sourceObservationId || !sourceId || !lineageId || !independent ||
+      !snapshotWindowEnd || !snapshotGeneratedAt ||
+      (lineageKey !== null && priorLineageBinding !== undefined &&
+        priorLineageBinding !== lineageBinding) ||
+      snapshotWindowEnd.ms !== snapshotAt.ms ||
+      snapshotGeneratedAt.ms !== snapshotAt.ms ||
       decision.ms - snapshotAt.ms > 7 * 86_400_000
     ) {
       invalid();
@@ -271,9 +425,12 @@ export function compileCostControlAlphaCandidate(
     const parsed = {
       opportunityId,
       groupId,
+      canonicalGroupId: canonicalIndependentGroup(groupId),
       reliability,
       snapshotAt,
-      provenance: { sourceId, lineageId },
+      sourceObservationId,
+      sourceId,
+      lineageId,
     };
     const prior = reliabilities.get(key!);
     if (prior && fingerprint(prior) !== fingerprint(parsed)) {
@@ -287,7 +444,7 @@ export function compileCostControlAlphaCandidate(
     result.reasons.push("conflicting reliability snapshots");
   }
   result.matureIndependentGroupCount = new Set(
-    [...reliabilities.values()].map((value) => value.groupId),
+    [...reliabilities.values()].map((value) => value.canonicalGroupId),
   ).size;
 
   const cost = record(input.cost) ? input.cost : null;
@@ -333,28 +490,45 @@ export function compileCostControlAlphaCandidate(
     depth: depth! * costScale,
   };
 
-  const candidates = [...reliabilities.values()]
-    .map((value) => {
-      const opportunity = parsedOpportunities.get(value.opportunityId)!;
-      const weightedGross = opportunity.gross * value.reliability;
+  const verifiedReliability = [...reliabilities.values()];
+  const candidates = [
+    ...new Set(verifiedReliability.map((value) => value.opportunityId)),
+  ]
+    .map((opportunityId) => {
+      const opportunity = parsedOpportunities.get(opportunityId)!;
+      const evidence = verifiedReliability.filter((value) =>
+        value.opportunityId === opportunityId
+      );
+      const reliability = evidence.reduce((sum, value) =>
+        sum + value.reliability, 0) / evidence.length;
+      const weightedGross = opportunity.gross * reliability;
       const net = weightedGross - roundTrip!;
       return {
         opportunityId: opportunity.id,
         grossEdgeBps: opportunity.gross,
-        reliability: value.reliability,
+        reliability,
         weightedGrossEdgeBps: weightedGross,
         netEdgeBps: net,
         edgeToCostMargin: net / roundTrip!,
         costBps: roundTrip!,
         observationAt: opportunity.observedAt.text,
-        reliabilityAsOf: value.snapshotAt.text,
-        groupId: value.groupId,
+        reliabilityAsOf: [...evidence].sort((a, b) =>
+          b.snapshotAt.ms - a.snapshotAt.ms ||
+          a.sourceObservationId.localeCompare(b.sourceObservationId)
+        )[0].snapshotAt.text,
+        reliabilityGroups: [
+          ...new Set(evidence.map((value) =>
+            value.canonicalGroupId
+          )),
+        ].sort(),
+        reliabilitySourceObservationIds: evidence.map((value) =>
+          value.sourceObservationId
+        ).sort(),
       };
     })
     .sort((a, b) =>
       b.netEdgeBps - a.netEdgeBps ||
-      a.opportunityId.localeCompare(b.opportunityId) ||
-      a.groupId.localeCompare(b.groupId)
+      a.opportunityId.localeCompare(b.opportunityId)
     );
   if (result.truncated) result.reasons.push("incomplete bounded evidence");
   const minimumGroups = positiveLimit(options.minimumMatureGroups, 2, 100);
@@ -372,9 +546,7 @@ export function compileCostControlAlphaCandidate(
       : "INSUFFICIENT_LAGGED_EVIDENCE";
     return result;
   }
-  result.rankedOpportunities = candidates.slice(0, maxRanked).map(
-    ({ groupId: _groupId, ...candidate }) => candidate,
-  );
+  result.rankedOpportunities = candidates.slice(0, maxRanked);
   const top = candidates[0];
   if (!top) {
     result.reasons.push("no opportunity has mature lagged reliability");
@@ -395,3 +567,4 @@ export function compileCostControlAlphaCandidate(
 
 export const compileCostControlAlphaExpectedEdgeCandidate =
   compileCostControlAlphaCandidate;
+import { canonicalIndependentGroup } from "../alpha_decision.ts";

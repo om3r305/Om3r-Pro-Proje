@@ -10,8 +10,15 @@ const reliability = (opportunityId: string, groupId: string, value = 0.8) => ({
   opportunityId,
   groupId,
   provenance: {
+    sourceObservationId: `observation-${groupId}`,
     sourceId: `source-${groupId}`,
     lineageId: `lineage-${groupId}`,
+    rawIndependentGroup: groupId,
+    sensorFamily: `family-${groupId}`,
+    sensorHorizon: "FAST_5_30M",
+    direction: 1,
+    snapshotWindowEnd: "2026-09-13T12:58:00Z",
+    snapshotGeneratedAt: "2026-09-13T12:58:00Z",
     independent: true,
   },
   reliability: value,
@@ -32,6 +39,32 @@ const cost = (extra: Record<string, unknown> = {}) => ({
 const input = (extra: Record<string, unknown> = {}) => ({
   opportunities: [opportunity("o1"), opportunity("o2", 80)],
   reliabilitySnapshots: [reliability("o1", "g1"), reliability("o2", "g2")],
+  sourceObservations: [
+    {
+      observationId: "observation-g1",
+      opportunityId: "o1",
+      providerId: "provider-g1",
+      sourceId: "source-g1",
+      lineageId: "lineage-g1",
+      independentGroup: "g1",
+      sensorFamily: "family-g1",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
+    },
+    {
+      observationId: "observation-g2",
+      opportunityId: "o2",
+      providerId: "provider-g2",
+      sourceId: "source-g2",
+      lineageId: "lineage-g2",
+      independentGroup: "g2",
+      sensorFamily: "family-g2",
+      sensorHorizon: "FAST_5_30M",
+      direction: 1,
+      observedAt: "2026-09-13T12:55:00Z",
+    },
+  ],
   cost: cost(),
   ...extra,
 });
@@ -153,8 +186,88 @@ Deno.test("future evidence cannot consume bounded decision capacity", () => {
       rankedOpportunities: value.rankedOpportunities,
       roundTripCostBps: value.roundTripCostBps,
     });
+
   if (
     project(baseline) !== project(withFuture) ||
     withFuture.futureTelemetry.futureEvidenceCount !== 2
   ) throw new Error(JSON.stringify(withFuture));
+});
+
+Deno.test("rejects unverifiable and conflicting provenance without duplicate opportunities", () => {
+  const base = input();
+  const result = compileCostControlAlphaCandidate({
+    ...base,
+    reliabilitySnapshots: [
+      ...base.reliabilitySnapshots,
+      {
+        ...reliability("o1", "g1", 0.1),
+        provenance: {
+          ...reliability("o1", "g1").provenance,
+          lineageId: "contradictory-lineage",
+        },
+      },
+      {
+        ...reliability("o2", "alias", 1),
+        provenance: {
+          ...reliability("o2", "g2").provenance,
+          rawIndependentGroup: "g2",
+          sourceObservationId: "observation-g2",
+        },
+      },
+    ],
+  }, { decisionAt });
+  if (
+    result.recommendation !== "CONTAMINATED_EVIDENCE" ||
+    result.rankedOpportunities.length !== 0 ||
+    result.matureIndependentGroupCount !== 2 ||
+    !result.reasons.includes("conflicting reliability snapshots")
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("caller independence cannot replace exact source lineage binding", () => {
+  const value = input();
+  const result = compileCostControlAlphaCandidate({
+    ...value,
+    reliabilitySnapshots: [{
+      ...value.reliabilitySnapshots[0],
+      provenance: {
+        ...value.reliabilitySnapshots[0].provenance,
+        sourceObservationId: "unregistered-observation",
+      },
+    }, value.reliabilitySnapshots[1]],
+  }, { decisionAt });
+  if (
+    result.recommendation !== "INSUFFICIENT_LAGGED_EVIDENCE" ||
+    result.invalidEvidenceCount !== 1 ||
+    result.matureIndependentGroupCount !== 1
+  ) throw new Error(JSON.stringify(result));
+});
+
+Deno.test("canonical micro aliases cannot inflate independent group maturity", () => {
+  const value = input();
+  const aliases = ["micro_velocity", "micro_volume"];
+  const aliased = {
+    ...value,
+    sourceObservations: value.sourceObservations.map((source, index) => ({
+      ...source,
+      observationId: `observation-${aliases[index]}`,
+      independentGroup: aliases[index],
+      sensorFamily: `family-${aliases[index]}`,
+    })),
+    reliabilitySnapshots: value.reliabilitySnapshots.map((row, index) => ({
+      ...row,
+      groupId: aliases[index],
+      provenance: {
+        ...row.provenance,
+        sourceObservationId: `observation-${aliases[index]}`,
+        rawIndependentGroup: aliases[index],
+        sensorFamily: `family-${aliases[index]}`,
+      },
+    })),
+  };
+  const result = compileCostControlAlphaCandidate(aliased, { decisionAt });
+  if (
+    result.matureIndependentGroupCount !== 1 ||
+    result.recommendation !== "INSUFFICIENT_LAGGED_EVIDENCE"
+  ) throw new Error(JSON.stringify(result));
 });
