@@ -10,7 +10,7 @@ function cors(origin: string | null) {
   return {
     "access-control-allow-origin": origin || "*",
     "access-control-allow-headers": "content-type",
-    "access-control-allow-methods": "POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,OPTIONS",
     "cache-control": "no-store",
     "vary": "Origin",
   };
@@ -46,7 +46,7 @@ function sanitizeCollector(value: unknown) {
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("origin");
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
-  if (req.method !== "POST") return out({ error: "POST required" }, 405, origin);
+  if (req.method !== "GET" && req.method !== "POST") return out({ error: "GET or POST required" }, 405, origin);
 
   try {
     const snapshot = await db.rpc("brian_frontier_heartbeat_snapshot");
