@@ -180,24 +180,22 @@ begin
           )
       )
     )
-    -- Exact manual request_id is an owner/workflow override. Newest-request
-    -- suppression applies only to the autonomous scheduler.
-    and (
-      p_request_id is not null
-      or not exists (
-        select 1
-        from public.brian_evolution_codegen_requests newer
-        where newer.hypothesis_id=r.hypothesis_id
-          and (
-            newer.requested_at > r.requested_at
-            or (newer.requested_at = r.requested_at and newer.created_at > r.created_at)
-            or (
-              newer.requested_at = r.requested_at
-              and newer.created_at = r.created_at
-              and newer.request_id > r.request_id
-            )
+    -- Preserve the existing deterministic newest-request contract even for an
+    -- explicit request_id. Manual requests bypass autonomous credit/world
+    -- gates, but cannot resurrect a superseded request for the same hypothesis.
+    and not exists (
+      select 1
+      from public.brian_evolution_codegen_requests newer
+      where newer.hypothesis_id=r.hypothesis_id
+        and (
+          newer.requested_at > r.requested_at
+          or (newer.requested_at = r.requested_at and newer.created_at > r.created_at)
+          or (
+            newer.requested_at = r.requested_at
+            and newer.created_at = r.created_at
+            and newer.request_id > r.request_id
           )
-      )
+        )
     )
   order by case
              when jsonb_typeof(r.metadata->'priority') = 'number' then (r.metadata->>'priority')::numeric
