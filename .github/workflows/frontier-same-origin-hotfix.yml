@@ -1,0 +1,63 @@
+name: Frontier Same-Origin Hotfix
+
+on:
+  push:
+    branches:
+      - fix/frontier-same-origin-brian-api-20260914
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/frontier-same-origin-brian-api-20260914
+
+      - name: Patch Frontier API transport
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          frontier = Path('monster-coins-pro/frontier.js')
+          text = frontier.read_text(encoding='utf-8')
+          old = "const ROOT = 'https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1';"
+          new = "const ROOT = '/api/brian';"
+          if old not in text and new not in text:
+              raise SystemExit('frontier ROOT contract not found')
+          if old in text:
+              frontier.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          vercel = Path('vercel.json')
+          cfg = json.loads(vercel.read_text(encoding='utf-8'))
+          rewrite = {
+              'source': '/api/brian/:path*',
+              'destination': 'https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/:path*',
+          }
+          rewrites = [r for r in cfg.get('rewrites', []) if r.get('source') != rewrite['source']]
+          cfg['rewrites'] = [rewrite, *rewrites]
+          vercel.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+          PY
+
+      - name: Verify hotfix scope
+        run: |
+          grep -F "const ROOT = '/api/brian';" monster-coins-pro/frontier.js
+          grep -F '"source": "/api/brian/:path*"' vercel.json
+          grep -F 'https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/:path*' vercel.json
+          git diff --check
+
+      - name: Commit hotfix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add monster-coins-pro/frontier.js vercel.json
+          if git diff --cached --quiet; then
+            echo 'No patch needed.'
+            exit 0
+          fi
+          git commit -m 'fix(frontier): route Brian API through same-origin Vercel proxy'
+          git push origin HEAD:fix/frontier-same-origin-brian-api-20260914
