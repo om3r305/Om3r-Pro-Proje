@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = (ROOT / "supabase/migrations/202609141215_brian_world_engineer_autonomy.sql").read_text(encoding="utf-8")
+MIGRATION = (ROOT / "supabase/migrations/202609141215_brian_evolution_engineering_world_autonomy.sql").read_text(encoding="utf-8")
 RESEARCHER = (ROOT / "supabase/functions/brian-evolution-researcher/index.ts").read_text(encoding="utf-8")
 RESEARCH = (ROOT / "supabase/functions/_shared/evolution_research.ts").read_text(encoding="utf-8")
 SANDBOX = (ROOT / "supabase/functions/_shared/evolution_sandbox.ts").read_text(encoding="utf-8")
