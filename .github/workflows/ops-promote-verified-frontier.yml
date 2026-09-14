@@ -15,9 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
-      TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      DEPLOYMENT_ID: dpl_7r1XJwWC1bjjidSd5Xp3VqNcj9dD
+      DEPLOYMENT_URL: https://monster-coins-leq6ldkpw-oemer-yildirim.vercel.app
     steps:
       - name: Check deployment credential
         run: |
@@ -28,14 +26,4 @@ jobs:
       - name: Promote verified canonical Frontier deployment
         run: |
           set -euo pipefail
-          code=$(curl -sS -o /tmp/promote.out -w '%{http_code}' \
-            -X POST \
-            "https://api.vercel.com/v10/projects/${PROJECT_ID}/promote/${DEPLOYMENT_ID}?teamId=${TEAM_ID}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H 'Content-Type: application/json')
-          cat /tmp/promote.out
-          if [ "$code" != "201" ] && [ "$code" != "202" ] && [ "$code" != "200" ]; then
-            echo "Promotion failed with HTTP $code"
-            exit 1
-          fi
-          echo "Promotion accepted with HTTP $code"
+          npx --yes vercel@latest promote "$DEPLOYMENT_URL" --yes --token "$VERCEL_TOKEN" --scope oemer-yildirim
