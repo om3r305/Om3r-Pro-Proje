@@ -38,7 +38,7 @@ Deno.test("community, unavailable, or low-trust sources cannot trigger engineeri
 Deno.test("world-source engineering identity is stable and never embeds fetched content",()=>{
   const a=inputs("2026-09-11T13:00:00Z");
   const b=inputs("2026-09-11T17:00:00Z");
-  const source={sourceId:"world:ecb.europa.eu",canonicalUri:"https://ecb.europa.eu/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.9,eligibleForResearch:true,assessedAt:"2026-09-11T12:58:00Z",evidenceRefs:["world_source:world:ecb.europa.eu"]} as const;
+  const source={sourceId:"world:ecb.europa.eu",canonicalUri:"https://ecb.europa.eu/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.9,eligibleForResearch:true,assessedAt:"2026-09-11T12:58:00Z",evidenceRefs:["world_source:world:ecb.europa.eu"]};
   a.worldSources=[source];b.worldSources=[{...source,assessedAt:"2026-09-11T16:58:00Z"}];
   const first=generateResearchHypotheses(a).find(row=>row.metadata.world_source_id===source.sourceId);
   const later=generateResearchHypotheses(b).find(row=>row.metadata.world_source_id===source.sourceId);
