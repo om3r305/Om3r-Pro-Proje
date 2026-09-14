@@ -37,5 +37,5 @@ jobs:
             echo "Brian Engineer has $recent_healthy active/successful run(s) in the last 12 minutes; watchdog stays idle."
             exit 0
           fi
-          echo "No recent active/successful Brian Engineer run detected; dispatching the canonical workflow so queued retries continue."
+          echo "No recent active/successful Brian Engineer run detected; dispatching the canonical workflow so failed autonomous retries continue immediately."
           gh workflow run brian-engineer.yml --repo "$REPO" --ref brian-2026
