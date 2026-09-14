@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const DEFAULT_AUTH_ID = "control-v3";
+const DEFAULT_CRON_KEY_SHA256_FALLBACK = "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab";
 
 function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
@@ -15,11 +16,26 @@ async function sha256Hex(value: string): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function isTransientAuthLookupFailure(message: string): boolean {
+  const text = message.toLowerCase();
+  return text.includes("schema cache") ||
+    text.includes("could not query the database") ||
+    text.includes("connection to the database timed out") ||
+    text.includes("upstream request timeout") ||
+    text.includes("pgrst002") ||
+    text.includes("pgrst000");
+}
+
 /**
  * Require the current hashed cron key used by Brian Control Center before a service-role Edge
  * Function can perform any write. This is intentionally independent of Supabase gateway JWT
  * verification: production keeps verify_jwt enabled as an outer gate, while this secret remains
  * the application-level cron authorization boundary.
+ *
+ * The default control-v3 hash has a compile-time fail-safe copy so a transient PostgREST/schema
+ * cache outage cannot lock every recovery worker out of the system. The raw key is never embedded.
+ * The fallback is used only for known transient lookup failures; missing rows or custom auth ids
+ * still fail closed.
  */
 export async function requireCronAuth(
   req: Request,
@@ -33,11 +49,20 @@ export async function requireCronAuth(
     .select("cron_key_sha256")
     .eq("auth_id", authId)
     .single();
-  if (result.error || !result.data) {
+
+  let expected = "";
+  if (!result.error && result.data) {
+    expected = String(result.data.cron_key_sha256 ?? "");
+  } else if (
+    authId === DEFAULT_AUTH_ID &&
+    result.error &&
+    isTransientAuthLookupFailure(String(result.error.message ?? result.error))
+  ) {
+    expected = DEFAULT_CRON_KEY_SHA256_FALLBACK;
+  } else {
     throw new Error(`CRON_AUTH_UNAVAILABLE:${result.error?.message ?? "missing auth row"}`);
   }
 
-  const expected = String(result.data.cron_key_sha256 ?? "");
   if (!expected || !constantTimeEqual(await sha256Hex(supplied), expected)) {
     throw new Error("UNAUTHORIZED_CRON");
   }
