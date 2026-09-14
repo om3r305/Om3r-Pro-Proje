@@ -97,7 +97,7 @@ def test_control_center_status_overlay_preserves_core_response_and_fail_safe_bou
     assert 'x-brian-dip-overlay' in src
     assert 'cache-control' in src
     assert 'no-store' in src
-    assert 'console.error("control-center-v8-overlay"' in src
+    assert 'console.error("control-center-v8-radar-overlay"' in src
 
 
 def test_dashboard_keeps_existing_control_actions_and_shadow_boundary():
