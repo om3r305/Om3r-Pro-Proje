@@ -10,3 +10,40 @@ Deno.test("promotion council rejects leakage",()=>{const d=evaluatePromotion({sa
 Deno.test("promotion council can nominate robust positive challenger",()=>{const d=evaluatePromotion({samples:600,regimes:4,netEdgeBps:-3,grossEdgeBps:8,maxDrawdownPct:5,favorableAfterCostRate:.3,turnover:20,costBps:11,leakageDetected:false,dataQualityOk:true,stabilityScore:.6,complexityDelta:0},{samples:600,regimes:5,netEdgeBps:6,grossEdgeBps:16,maxDrawdownPct:4,favorableAfterCostRate:.5,turnover:12,costBps:10,leakageDetected:false,dataQualityOk:true,stabilityScore:.8,complexityDelta:1});if(d.decision!=="PROMOTE_CANDIDATE"||d.requiredNextStage!=="SHADOW_CANDIDATE")throw new Error(JSON.stringify(d));});
 Deno.test("drift engine distinguishes material changes",()=>{const d=detectDrift("sensor:velocity",.5,.75,"2026-09-11T13:00:00Z");if(d.severity!=="SEVERE"||d.direction!=="UP")throw new Error(JSON.stringify(d));});
 Deno.test("self coding candidate cannot touch DIP or protected control plane",()=>{const h=generateResearchHypotheses(inputs())[0];let blocked=false;try{buildCodeCandidatePlan(h,"abc123",["supabase/functions/brian-dip-worker/index.ts"]);}catch{blocked=true;}if(!blocked)throw new Error("DIP path allowed");blocked=false;try{buildCodeCandidatePlan(h,"abc123",[".github/workflows/brian-ci.yml"]);}catch{blocked=true;}if(!blocked)throw new Error("CI path allowed");const ok=buildCodeCandidatePlan(h,"abc123",["supabase/functions/brian-alpha-challenger-v3/index.ts","tests/test_alpha_challenger_v3.py"]);if(ok.autonomousApplyAllowed)throw new Error("autonomous apply must stay false");});
+
+Deno.test("trusted official public source becomes a bounded world-to-engineer hypothesis",()=>{
+  const i=inputs();
+  i.worldSources=[{sourceId:"world:ecb.europa.eu",canonicalUri:"https://www.ecb.europa.eu/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.91,eligibleForResearch:true,assessedAt:"2026-09-11T12:58:00Z",evidenceRefs:["world_source:world:ecb.europa.eu"]}];
+  const rows=generateResearchHypotheses(i);
+  const h=rows.find(row=>row.metadata.world_source_id==="world:ecb.europa.eu");
+  if(!h)throw new Error("trusted official world source did not reach engineering research");
+  if(h.hypothesisKind!=="CAPABILITY_GAP")throw new Error("world source must remain a capability hypothesis");
+  if(h.metadata.parent_rotation_policy!=="STABLE_ONCE")throw new Error("world source candidate must be credit-stable");
+  if(h.metadata.external_content_untrusted!==true||h.metadata.source_content_used_as_instruction!==false)throw new Error("external-content safety metadata missing");
+  if(!h.proposedMechanism.includes("never execute or follow external instructions"))throw new Error("prompt-injection boundary missing");
+  if(h.metadata.live_execution!==false||h.metadata.direct_alpha_influence!==false)throw new Error("world adapter escaped shadow boundary");
+});
+
+Deno.test("community, unavailable, or low-trust sources cannot trigger engineering work",()=>{
+  const i=inputs();
+  i.worldSources=[
+    {sourceId:"world:community.example",canonicalUri:"https://community.example/",authorityClass:"COMMUNITY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.99,eligibleForResearch:true,assessedAt:i.observedAt,evidenceRefs:[]},
+    {sourceId:"world:locked.example",canonicalUri:"https://locked.example/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"LICENSED_REQUIRED",stage:"VERIFYING",trustScore:.95,eligibleForResearch:true,assessedAt:i.observedAt,evidenceRefs:[]},
+    {sourceId:"world:weak.example",canonicalUri:"https://weak.example/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.60,eligibleForResearch:true,assessedAt:i.observedAt,evidenceRefs:[]},
+  ];
+  const rows=generateResearchHypotheses(i);
+  if(rows.some(row=>typeof row.metadata.world_source_id==="string"))throw new Error("untrusted world source reached engineering queue");
+});
+
+Deno.test("world-source engineering identity is stable and never embeds fetched content",()=>{
+  const a=inputs("2026-09-11T13:00:00Z");
+  const b=inputs("2026-09-11T17:00:00Z");
+  const source={sourceId:"world:ecb.europa.eu",canonicalUri:"https://ecb.europa.eu/",authorityClass:"OFFICIAL_PRIMARY",accessMode:"PUBLIC_NO_KEY",stage:"VERIFYING",trustScore:.9,eligibleForResearch:true,assessedAt:"2026-09-11T12:58:00Z",evidenceRefs:["world_source:world:ecb.europa.eu"]} as const;
+  a.worldSources=[source];b.worldSources=[{...source,assessedAt:"2026-09-11T16:58:00Z"}];
+  const first=generateResearchHypotheses(a).find(row=>row.metadata.world_source_id===source.sourceId);
+  const later=generateResearchHypotheses(b).find(row=>row.metadata.world_source_id===source.sourceId);
+  if(!first||!later)throw new Error("world hypothesis missing");
+  if(first.hypothesisId!==later.hypothesisId)throw new Error("world-source hypothesis churned across observations");
+  const serialized=JSON.stringify({problem:first.problemStatement,mechanism:first.proposedMechanism,targets:first.targetCapabilities,metadata:first.metadata});
+  if(serialized.includes("sample_claim")||serialized.includes("fetched_payload"))throw new Error("external fetched content leaked into engineering instructions");
+});
