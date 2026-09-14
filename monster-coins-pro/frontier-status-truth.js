@@ -2,10 +2,12 @@
 (()=>{
   const CACHE_KEY='brian-frontier-heartbeat-lkg-v3';
   const CACHE_MAX_MS=30*60*1000;
+  const PUBLIC_HEARTBEAT_ENDPOINT='/api/brian/brian-frontier-heartbeat-public';
   const now=()=>Date.now();
   const parseAge=(v)=>{const t=Date.parse(String(v||''));return Number.isFinite(t)?Math.max(0,(now()-t)/1000):Infinity};
   const fmtAge=(v)=>{const s=parseAge(v);return !Number.isFinite(s)?'bilinmiyor':s<60?`${Math.round(s)} sn`:s<3600?`${Math.round(s/60)} dk`:`${Math.round(s/3600)} sa`};
   const okStatus=(r)=>['SUCCESS','ONLINE','OK'].includes(String(r?.status||'').toUpperCase());
+  const liveCycleStatus=(r)=>['SUCCESS','ONLINE','OK','SKIPPED'].includes(String(r?.status||'').toUpperCase());
   const cached=()=>{try{const x=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');return x?.hb&&now()-Number(x.saved_at||0)<=CACHE_MAX_MS?x:null}catch{return null}};
   const save=(hb)=>{try{localStorage.setItem(CACHE_KEY,JSON.stringify({saved_at:now(),hb}))}catch{}};
   const getHB=()=>{try{return typeof STABILITY!=='undefined'?STABILITY.heartbeat:null}catch{return null}};
@@ -39,6 +41,20 @@
         throw e;
       }
     };
+  }
+
+  async function publicHeartbeat(timeoutMs=12000){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+      const r=await fetch(PUBLIC_HEARTBEAT_ENDPOINT,{method:'POST',headers:{'content-type':'application/json'},body:'{}',cache:'no-store',signal:controller.signal});
+      let data={};try{data=await r.json()}catch{}
+      if(!r.ok){const e=new Error(data.error||data.status||`HTTP ${r.status}`);e.status=r.status;e.payload=data;throw e}
+      return data;
+    }catch(e){
+      if(e?.name==='AbortError')throw new Error('HEARTBEAT_READONLY_TIMEOUT');
+      throw e;
+    }finally{clearTimeout(timer)}
   }
 
   function truthRows(){
@@ -75,25 +91,33 @@
 
     const alphaAge=parseAge(hb.alpha?.observed_at);
     const alphaRun=latestRun(hb,'brian-alpha-decision-compiler-v2');
-    let alpha=alphaAge<=420?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`):alphaAge<=1200?withEvidence('warn',`ALPHA kararı ${fmtAge(hb.alpha?.observed_at)} önce`):withEvidence(okStatus(alphaRun)?'warn':'bad',alphaRun?.error_message||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
+    let alpha=alphaAge<=420?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`):alphaAge<=1200?withEvidence('warn',`ALPHA kararı ${fmtAge(hb.alpha?.observed_at)} önce`):withEvidence(okStatus(alphaRun)?'warn':'bad',alphaRun?.error_class||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
 
     const wr=hb.world_run||{};
     const wrAge=parseAge(wr.finished_at||wr.started_at);
     const worldRun=latestRun(hb,'brian-world-brain-v1');
-    let world=String(wr.status)==='SUCCESS'&&wrAge<=1200?withEvidence('ok',`Dünya çekirdeği canlı · ${fmtAge(wr.finished_at||wr.started_at)} önce`):wrAge<=2400?withEvidence('warn',`World Brain kanıtı ${fmtAge(wr.finished_at||wr.started_at)} önce`):withEvidence(okStatus(worldRun)?'warn':'bad',worldRun?.error_message||'World Brain taze kanıt bekliyor');
+    let world=String(wr.status)==='SUCCESS'&&wrAge<=1200?withEvidence('ok',`Dünya çekirdeği canlı · ${fmtAge(wr.finished_at||wr.started_at)} önce`):wrAge<=2400?withEvidence('warn',`World Brain kanıtı ${fmtAge(wr.finished_at||wr.started_at)} önce`):withEvidence(okStatus(worldRun)?'warn':'bad',worldRun?.error_class||'World Brain taze kanıt bekliyor');
 
     const t=c.treasury||{};
     const tAge=parseAge(t.observed_at);
     const tr=latestRun(hb,'brian-evolution-treasury-v1');
-    let treasury=t.equity_usd!=null&&tAge<=600?withEvidence('ok',`Gerçek kasa $${Number(t.equity_usd).toLocaleString('tr-TR')} · ${fmtAge(t.observed_at)} önce`):t.equity_usd!=null&&tAge<=1800?withEvidence('warn',`Kasa son kanıt ${fmtAge(t.observed_at)} önce`):withEvidence(okStatus(tr)?'warn':'bad',tr?.error_message||'Hazine taze kanıt bekliyor');
+    const trAge=parseAge(tr?.finished_at||tr?.started_at);
+    const treasuryCycleLive=liveCycleStatus(tr)&&trAge<=900;
+    let treasury=treasuryCycleLive&&t.equity_usd!=null
+      ?withEvidence('ok',`Kasa cycle canlı · $${Number(t.equity_usd).toLocaleString('tr-TR')} · son snapshot ${fmtAge(t.observed_at)} önce`)
+      :t.equity_usd!=null&&tAge<=600
+        ?withEvidence('ok',`Gerçek kasa $${Number(t.equity_usd).toLocaleString('tr-TR')} · ${fmtAge(t.observed_at)} önce`)
+        :t.equity_usd!=null&&tAge<=1800
+          ?withEvidence('warn',`Kasa son kanıt ${fmtAge(t.observed_at)} önce`)
+          :withEvidence(okStatus(tr)?'warn':'bad',tr?.error_class||'Hazine taze kanıt bekliyor');
 
     const evo=latestRun(hb,'brian-evolution-orchestrator-v1')||latestRun(hb,'brian-evolution-sandbox-v1')||latestRun(hb,'brian-evolution-researcher-v1');
     const evoAge=parseAge(evo?.finished_at||evo?.started_at);
-    let research=okStatus(evo)&&evoAge<=2400?withEvidence('ok',`Evolution / Lab canlı · ${fmtAge(evo.finished_at||evo.started_at)} önce`):evoAge<=3600?withEvidence('warn',`Araştırma hattı ${fmtAge(evo?.finished_at||evo?.started_at)} önce`):withEvidence('warn',evo?.error_message||'Araştırma hattı yeni cycle bekliyor');
+    let research=okStatus(evo)&&evoAge<=2400?withEvidence('ok',`Evolution / Lab canlı · ${fmtAge(evo.finished_at||evo.started_at)} önce`):evoAge<=3600?withEvidence('warn',`Araştırma hattı ${fmtAge(evo?.finished_at||evo?.started_at)} önce`):withEvidence('warn',evo?.error_class||'Araştırma hattı yeni cycle bekliyor');
 
     const oceanRun=latestRun(hb,'brian-evolution-ocean-worker-v1');
     const oceanAge=parseAge(oceanRun?.finished_at||oceanRun?.started_at);
-    let ocean=okStatus(oceanRun)&&oceanAge<=2400?withEvidence('ok',`Ocean worker canlı · ${fmtAge(oceanRun.finished_at||oceanRun.started_at)} önce`):withEvidence('warn',oceanRun?.error_message||'Ocean yeni cycle bekliyor');
+    let ocean=okStatus(oceanRun)&&oceanAge<=2400?withEvidence('ok',`Ocean worker canlı · ${fmtAge(oceanRun.finished_at||oceanRun.started_at)} önce`):withEvidence('warn',oceanRun?.error_class||'Ocean yeni cycle bekliyor');
 
     let behavior=(world.state==='ok'&&alpha.state==='ok')?withEvidence('ok','World + ALPHA davranış kanıt zinciri canlı'):(world.state==='bad'||alpha.state==='bad')?withEvidence('warn','Davranış kanıt zinciri tazeleniyor'):withEvidence('warn','Davranış kanıt zinciri tazeleniyor');
 
@@ -114,19 +138,24 @@
   try{moduleRows=truthRows}catch{}
 
   async function directHeartbeat(){
-    if(typeof key!=='function'||!key()||typeof frontierPost!=='function')return;
     try{
-      const hb=await frontierPost(HEARTBEAT_ENDPOINT,{},12000);
-      if(hb?.status==='OK'||hb?.__cached){
-        setHB(hb);
-        try{if(!hb.__cached)applyHeartbeat(hb)}catch{}
+      const hb=await publicHeartbeat(12000);
+      if(hb?.status==='OK'){
+        save(hb);setHB(hb);
+        try{applyHeartbeat(hb)}catch{}
         try{if(typeof render==='function')render()}catch{}
         const el=document.getElementById('syncText');
-        if(el)el.textContent=hb.__cached?'Canlı bağlantı yenileniyor · son sağlam kanıt gösteriliyor':'Brian heartbeat doğrulandı';
+        if(el)el.textContent='Brian heartbeat doğrulandı';
       }
     }catch(e){
+      const c=cached();
+      if(c?.hb){
+        const stale={...c.hb,__cached:true,__cached_saved_at:c.saved_at,__live_error:String(e?.message||e)};
+        setHB(stale);
+        try{applyHeartbeat(c.hb)}catch{}
+      }
       const el=document.getElementById('syncText');
-      if(el)el.textContent=`Heartbeat gecikti · son sağlam kanıt korunuyor`;
+      if(el)el.textContent=c?.hb?'Canlı bağlantı yenileniyor · son sağlam kanıt gösteriliyor':'Heartbeat gecikti · canlı kanıt bekleniyor';
       try{if(typeof render==='function')render()}catch{}
     }
   }
