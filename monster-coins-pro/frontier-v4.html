@@ -29,29 +29,32 @@
     document.body.innerHTML=doc.body.innerHTML;
 
     const nativeFetch=window.fetch.bind(window);
+    const timedFetch=(url,init,timeoutMs,reason)=>{
+      const controller=new AbortController();
+      let signal=controller.signal;
+      if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
+      const timer=setTimeout(()=>controller.abort(reason),timeoutMs);
+      return nativeFetch(url,{...init,signal}).finally(()=>clearTimeout(timer));
+    };
     window.fetch=(input,init={})=>{
       const url=typeof input==='string'?input:String(input?.url||'');
       const publicHeartbeatPath='/api/brian/brian-frontier-heartbeat-public';
       if(url===publicHeartbeatPath || url.endsWith(publicHeartbeatPath)){
         const direct='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-frontier-heartbeat-public';
         const heartbeatInit={...init,method:'GET',headers:{accept:'application/json'},body:undefined,cache:'no-store'};
-        return nativeFetch(publicHeartbeatPath,heartbeatInit)
-          .then(response=>response.ok?response:nativeFetch(direct,heartbeatInit))
-          .catch(()=>nativeFetch(direct,heartbeatInit));
+        return timedFetch(direct,heartbeatInit,12000,'BRIAN_HEARTBEAT_DIRECT_TIMEOUT')
+          .catch(()=>timedFetch(publicHeartbeatPath,heartbeatInit,8000,'BRIAN_HEARTBEAT_PROXY_TIMEOUT'));
       }
       const marker='.supabase.co/functions/v1/';
       if(!url.includes(marker)) return nativeFetch(input,init);
       const isDevelopment=url.includes('/brian-development-status');
       const isHeartbeat=url.includes('/brian-frontier-heartbeat');
       const isEngineering=url.includes('/brian-frontier-engineering-status');
-      const controller=new AbortController();
-      const timeout=isDevelopment?45000:isHeartbeat?30000:isEngineering?30000:20000;
-      const timer=setTimeout(()=>controller.abort(isDevelopment?'BRIAN_DEVELOPMENT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_TIMEOUT':isEngineering?'BRIAN_ENGINEERING_TIMEOUT':'BRIAN_API_TIMEOUT'),timeout);
-      let signal=controller.signal;
-      if(init?.signal && typeof AbortSignal.any==='function') signal=AbortSignal.any([init.signal,controller.signal]);
+      const directTimeout=isDevelopment?45000:isHeartbeat?30000:isEngineering?30000:20000;
       const suffix=url.slice(url.indexOf(marker)+marker.length);
       const proxyUrl=`/api/brian/${suffix}`;
-      return nativeFetch(proxyUrl,{...init,signal}).finally(()=>clearTimeout(timer));
+      return timedFetch(input,init,directTimeout,isDevelopment?'BRIAN_DEVELOPMENT_DIRECT_TIMEOUT':isHeartbeat?'BRIAN_HEARTBEAT_DIRECT_TIMEOUT':isEngineering?'BRIAN_ENGINEERING_DIRECT_TIMEOUT':'BRIAN_API_DIRECT_TIMEOUT')
+        .catch((directError)=>timedFetch(proxyUrl,init,8000,'BRIAN_PROXY_TIMEOUT').catch(()=>{throw directError}));
     };
 
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
