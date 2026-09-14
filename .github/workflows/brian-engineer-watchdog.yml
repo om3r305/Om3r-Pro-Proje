@@ -1,0 +1,35 @@
+name: Brian Engineer Watchdog
+
+on:
+  schedule:
+    - cron: '11,26,41,56 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: brian-engineer-watchdog
+  cancel-in-progress: true
+
+jobs:
+  ensure-engineer-running:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch Brian Engineer only when recent cadence is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '12 minutes ago' +%s)"
+          recent="$({ gh api "repos/$REPO/actions/workflows/brian-engineer.yml/runs?branch=brian-2026&per_page=10" || true; } | jq --argjson cutoff "$cutoff" '[.workflow_runs[]? | select((.created_at | fromdateiso8601) >= $cutoff)] | length')"
+          recent="${recent:-0}"
+          if [ "$recent" -gt 0 ]; then
+            echo "Brian Engineer has $recent run(s) in the last 12 minutes; watchdog stays idle."
+            exit 0
+          fi
+          echo "No recent Brian Engineer run detected; dispatching the canonical workflow."
+          gh workflow run brian-engineer.yml --repo "$REPO" --ref brian-2026
