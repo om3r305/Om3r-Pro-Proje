@@ -38,7 +38,8 @@ def test_world_claim_revalidates_latest_source_and_candidate_state():
     assert "world_to_engineering_enabled" in lower
     assert "world_claim_revalidated" in lower
     assert "jsonb_typeof(r.metadata->'priority') = 'number'" in lower
-    assert "p_request_id is not null\n      or not exists" in lower
+    assert "preserve the existing deterministic newest-request contract" in lower
+    assert "and not exists (\n      select 1\n      from public.brian_evolution_codegen_requests newer" in lower
 
 
 def test_reviewed_world_source_work_uses_explicit_request_metadata_not_evidence_prefix():
