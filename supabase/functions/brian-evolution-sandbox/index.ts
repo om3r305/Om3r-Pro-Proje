@@ -71,6 +71,16 @@ async function parentCommit(): Promise<string> {
   return value.toLowerCase();
 }
 
+async function worldEngineeringEnabled(): Promise<boolean> {
+  const q = await db.from("brian_evolution_engineering_control")
+    .select("metadata")
+    .eq("control_id", "default")
+    .maybeSingle();
+  if (q.error) throw new Error(`world_engineering_control:${q.error.message}`);
+  const meta = (q.data?.metadata ?? {}) as Record<string, unknown>;
+  return meta.world_to_engineering_enabled === true;
+}
+
 async function latestHypotheses(): Promise<HypothesisCandidate[]> {
   const q = await db.from("brian_evolution_hypothesis_snapshots")
     .select("hypothesis_id,observed_at,problem_statement,proposed_mechanism,target_capabilities,evidence_refs,counter_evidence_refs,measurable_success_criteria,stage,uncertainty,metadata,created_at")
@@ -92,7 +102,7 @@ async function latestHypotheses(): Promise<HypothesisCandidate[]> {
 async function planCandidates(): Promise<{ planned: number; skippedExisting: number; rotatedParents: number; candidateIds: string[] }> {
   const hypotheses = await latestHypotheses();
   if (!hypotheses.length) return { planned: 0, skippedExisting: 0, rotatedParents: 0, candidateIds: [] };
-  const canonicalParent = await parentCommit();
+  const [canonicalParent, worldEnabled] = await Promise.all([parentCommit(), worldEngineeringEnabled()]);
   const existingQ = await db.from("brian_evolution_codegen_requests")
     .select("hypothesis_id,candidate_id,parent_commit,requested_at")
     .order("requested_at", { ascending: false })
@@ -117,13 +127,34 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
   let rotatedParents = 0;
 
   for (const h of hypotheses.slice(0, 20)) {
-    if (existingPairs.has(`${h.hypothesisId}|${canonicalParent}`)) {
+    const worldLinked = typeof h.metadata.world_source_id === "string";
+    const previous = latestCandidateByHypothesis.get(h.hypothesisId) ?? null;
+    const stableOnce = h.metadata.parent_rotation_policy === "STABLE_ONCE";
+    if (worldLinked && !worldEnabled) {
       skippedExisting++;
       continue;
     }
-    const previous = latestCandidateByHypothesis.get(h.hypothesisId) ?? null;
+    if ((stableOnce && previous) || existingPairs.has(`${h.hypothesisId}|${canonicalParent}`)) {
+      skippedExisting++;
+      continue;
+    }
     if (previous && previous.parentCommit !== canonicalParent) rotatedParents++;
     const brief = buildSandboxGenerationBrief(h, canonicalParent);
+    const worldRequestMetadata = worldLinked ? {
+      world_engineering: true,
+      world_source_id: brief.metadata.world_source_id,
+      world_source_candidate_id: brief.metadata.world_source_candidate_id,
+      world_source_candidate_discovered_at: brief.metadata.world_source_candidate_discovered_at,
+      world_source_host: brief.metadata.world_source_host,
+      world_source_trust_score: brief.metadata.world_source_trust_score,
+      world_source_authority_class: brief.metadata.world_source_authority_class,
+      world_source_access_mode: brief.metadata.world_source_access_mode,
+      world_source_assessed_at: brief.metadata.world_source_assessed_at,
+      world_source_trust_floor: brief.metadata.world_source_trust_floor,
+      parent_rotation_policy: brief.metadata.parent_rotation_policy,
+      external_content_untrusted: true,
+      external_content_used_as_instruction: false,
+    } : { world_engineering: false };
     candidateIds.push(brief.candidateId);
     candidateRows.push({
       candidate_id: brief.candidateId,
@@ -174,6 +205,7 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
         test_plan: brief.testPlan,
         hypothesis_kind: h.hypothesisKind,
         priority: h.priority,
+        ...worldRequestMetadata,
         supersedes_candidate_id: previous?.candidateId ?? null,
         canonical_parent_rotated: Boolean(previous && previous.parentCommit !== canonicalParent),
       },

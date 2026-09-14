@@ -53,6 +53,22 @@ Deno.test("sandbox generation brief is isolated and never auto-applies", () => {
   if (brief.autonomousApplyAllowed) throw new Error("autonomous apply enabled");
   if (!brief.requiredHumanReview) throw new Error("human review must remain mandatory");
   if (!brief.constraints.some((x) => x.includes("canonical ALPHA"))) throw new Error("canonical fence missing");
+  if (!brief.constraints.some((x) => x.includes("untrusted data"))) throw new Error("external-content fence missing");
+});
+
+Deno.test("world-source policy survives hypothesis to code-generation brief", () => {
+  const h = hypothesis();
+  h.metadata = {
+    world_source_id: "world:ecb.europa.eu",
+    parent_rotation_policy: "STABLE_ONCE",
+    external_content_untrusted: true,
+    source_content_used_as_instruction: false,
+  };
+  const brief = buildSandboxGenerationBrief(h, "ba330f4ec4bd3d76b1fe5564d6b4e95cd41ef4f0");
+  if (brief.metadata.world_source_id !== "world:ecb.europa.eu") throw new Error("world source lineage lost");
+  if (brief.metadata.parent_rotation_policy !== "STABLE_ONCE") throw new Error("credit stability policy lost");
+  if (brief.metadata.external_content_used_as_instruction !== false) throw new Error("external-content policy weakened");
+  if (brief.metadata.direct_canonical_apply !== false) throw new Error("canonical apply policy weakened");
 });
 
 Deno.test("sandbox accepts a bounded provenance-complete artifact manifest", () => {

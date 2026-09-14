@@ -5,12 +5,28 @@ import {
 } from "./evolution_contract.ts";
 
 export const EVOLUTION_RESEARCH_VERSION = "brian.evolution-research.v2";
+export const WORLD_ENGINEERING_BRIDGE_VERSION = "brian.world-engineering-bridge.v2";
 
 export interface GapSignal { gapId:string; capabilityId:string; severity:"LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; reason:string; suggestedAction:string; evidenceRefs:string[]; }
 export interface ChallengerSignal { allowAction:number; downgradeToWait:number; keepWait:number; allowAvgCostAdjustedBps:number|null; downgradeAvgCostAdjustedBps:number|null; observedAt:string; evidenceRefs:string[]; }
 export interface OutcomeSignal { horizonSeconds:number; samples:number; grossPositiveRate:number|null; avgDirectionBps:number|null; avgAfterCostBps:number|null; favorableAfterCostRate:number|null; observedAt:string; evidenceRefs:string[]; }
 export interface ReliabilitySignal { sensorFamily:string; samples:number; canonicalReliability:number|null; measuredScore:number|null; avgCostAdjustedBps:number|null; observedAt:string; evidenceRefs:string[]; }
-export interface ResearchInputs { gaps:GapSignal[]; challenger:ChallengerSignal|null; outcomes:OutcomeSignal[]; reliability:ReliabilitySignal[]; observedAt:string; }
+export interface WorldSourceSignal {
+  sourceId:string;
+  candidateId:string;
+  candidateDiscoveredAt:string;
+  canonicalUri:string;
+  authorityClass:"OFFICIAL_PRIMARY"|"INDEPENDENT_PROFESSIONAL"|"COMMUNITY"|"UNKNOWN"|string;
+  accessMode:"PUBLIC_NO_KEY"|"API_KEY_REQUIRED"|"LICENSED_REQUIRED"|"UNAVAILABLE"|string;
+  stage:string;
+  trustScore:number;
+  eligibleForResearch:boolean;
+  assessedAt:string;
+  evidenceRefs:string[];
+}
+export interface WorldSourceAssessmentRecord { sourceId:string; assessedAt:string; trustScore:number; eligibleForResearch:boolean; }
+export interface WorldSourceCandidateRecord { candidateId:string; sourceId:string; discoveredAt:string; canonicalUri:string; authorityClass:string; accessMode:string; stage:string; }
+export interface ResearchInputs { gaps:GapSignal[]; challenger:ChallengerSignal|null; outcomes:OutcomeSignal[]; reliability:ReliabilitySignal[]; worldSources?:WorldSourceSignal[]; worldSourceTrustFloor?:number; observedAt:string; }
 export interface HypothesisCandidate { hypothesisId:string; observedAt:string; problemStatement:string; proposedMechanism:string; targetCapabilities:string[]; evidenceRefs:string[]; counterEvidenceRefs:string[]; measurableSuccessCriteria:string[]; stage:EvolutionStage; uncertainty:number; priority:number; hypothesisKind:"CAPABILITY_GAP"|"ACTION_GATE"|"EXPECTED_EDGE"|"RELIABILITY_FEEDBACK"|"COST_CONTROL"|"DRIFT"; metadata:Record<string,unknown>; }
 export interface ExperimentPlan { experimentId:string; hypothesisId:string; createdAt:string; controlVersion:string; challengerVersion:string; mode:"REPLAY"|"STRESS"|"PROSPECTIVE_SHADOW"; minimumSamples:number; minimumRegimes:number; successMetrics:string[]; hardFailConditions:string[]; contaminationRules:string[]; stage:EvolutionStage; }
 export interface ExperimentMetrics { samples:number; regimes:number; netEdgeBps:number|null; grossEdgeBps:number|null; maxDrawdownPct:number|null; favorableAfterCostRate:number|null; turnover:number|null; costBps:number|null; leakageDetected:boolean; dataQualityOk:boolean; stabilityScore:number|null; complexityDelta:number; }
@@ -21,14 +37,131 @@ export interface CodeCandidatePlan { candidateId:string; hypothesisId:string; pr
 const clamp=(n:number)=>Number.isFinite(n)?Math.max(0,Math.min(1,n)):0;
 const id=(...parts:Array<string|number|null|undefined>)=>parts.map(v=>String(v??"").trim().toLowerCase().replace(/[^a-z0-9:_-]+/g,"-")).join("|");
 const hypothesisIdentity=(kind:string,...parts:Array<string|number|null|undefined>)=>id("hypothesis",EVOLUTION_RESEARCH_VERSION,kind,...parts);
+const timeMs=(value:string)=>{const ms=Date.parse(value);return Number.isFinite(ms)?ms:-Infinity;};
+const worldTrustFloor=(value:unknown)=>Number.isFinite(Number(value))?Math.max(0,Math.min(1,Number(value))):0.72;
 
 function outcomeEvidence(inputs:ResearchInputs):string[]{return inputs.outcomes.flatMap(x=>x.evidenceRefs).slice(0,80);}
 function addUnique(out:HypothesisCandidate[], candidate:HypothesisCandidate){if(!out.some(x=>x.hypothesisId===candidate.hypothesisId))out.push(candidate);}
+function sourceHostname(uri:string):string|null{
+  try{
+    const url=new URL(uri);
+    if(url.protocol!=="https:"&&url.protocol!=="http:")return null;
+    const host=url.hostname.toLowerCase().replace(/^www\./,"");
+    return /^[a-z0-9.-]+$/.test(host)&&host.includes(".")?host:null;
+  }catch{return null;}
+}
+function capabilitySlug(value:string):string{return value.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80)||"source";}
+
+export function buildCurrentWorldSourceSignals(
+  assessments:WorldSourceAssessmentRecord[],
+  candidates:WorldSourceCandidateRecord[],
+  trustFloor=0.72,
+):WorldSourceSignal[]{
+  const floor=worldTrustFloor(trustFloor);
+  const latestAssessment=new Map<string,WorldSourceAssessmentRecord>();
+  for(const row of assessments){
+    if(!row.sourceId||!Number.isFinite(timeMs(row.assessedAt)))continue;
+    const current=latestAssessment.get(row.sourceId);
+    if(!current||timeMs(row.assessedAt)>timeMs(current.assessedAt))latestAssessment.set(row.sourceId,row);
+  }
+  const latestCandidate=new Map<string,WorldSourceCandidateRecord>();
+  for(const row of candidates){
+    if(!row.sourceId||!row.candidateId||!Number.isFinite(timeMs(row.discoveredAt)))continue;
+    const current=latestCandidate.get(row.sourceId);
+    if(!current||timeMs(row.discoveredAt)>timeMs(current.discoveredAt))latestCandidate.set(row.sourceId,row);
+  }
+  const out:WorldSourceSignal[]=[];
+  for(const [sourceId,assessment] of latestAssessment){
+    if(assessment.eligibleForResearch!==true||!Number.isFinite(assessment.trustScore)||assessment.trustScore<floor)continue;
+    const candidate=latestCandidate.get(sourceId);
+    if(!candidate)continue;
+    if(candidate.authorityClass!=="OFFICIAL_PRIMARY"||candidate.accessMode!=="PUBLIC_NO_KEY")continue;
+    if(["REJECTED","RETIRED","ARCHIVED"].includes(candidate.stage))continue;
+    if(timeMs(candidate.discoveredAt)>timeMs(assessment.assessedAt))continue;
+    if(!sourceHostname(candidate.canonicalUri))continue;
+    out.push({
+      sourceId,
+      candidateId:candidate.candidateId,
+      candidateDiscoveredAt:candidate.discoveredAt,
+      canonicalUri:candidate.canonicalUri,
+      authorityClass:candidate.authorityClass,
+      accessMode:candidate.accessMode,
+      stage:candidate.stage,
+      trustScore:assessment.trustScore,
+      eligibleForResearch:true,
+      assessedAt:assessment.assessedAt,
+      evidenceRefs:[
+        `world_source:${sourceId}`,
+        `world_source_candidate:${candidate.candidateId}`,
+        `world_source_assessment:${sourceId}:${assessment.assessedAt}`,
+      ],
+    });
+  }
+  return out.sort((a,b)=>b.trustScore-a.trustScore||timeMs(b.assessedAt)-timeMs(a.assessedAt));
+}
 
 export function generateResearchHypotheses(inputs:ResearchInputs):HypothesisCandidate[]{
   const out:HypothesisCandidate[]=[];
   for(const gap of inputs.gaps.filter(g=>g.severity==="CRITICAL"||g.severity==="HIGH").slice(0,12)){
     addUnique(out,{hypothesisId:hypothesisIdentity("gap",gap.capabilityId),observedAt:inputs.observedAt,problemStatement:gap.reason,proposedMechanism:gap.suggestedAction,targetCapabilities:[gap.capabilityId],evidenceRefs:[...gap.evidenceRefs],counterEvidenceRefs:[],measurableSuccessCriteria:["capability produces fresh prospective evidence","collector remains healthy across multiple cadence windows","new capability does not bypass source-truth or execution boundaries"],stage:"RESEARCHING",uncertainty:gap.severity==="CRITICAL"?0.35:0.45,priority:gap.severity==="CRITICAL"?0.95:0.78,hypothesisKind:"CAPABILITY_GAP",metadata:{gap_id:gap.gapId,severity:gap.severity,identity_version:EVOLUTION_RESEARCH_VERSION}});
+  }
+
+  const trustFloor=worldTrustFloor(inputs.worldSourceTrustFloor);
+  const trustedWorldSources=(inputs.worldSources??[])
+    .filter(source=>source.eligibleForResearch===true)
+    .filter(source=>Number.isFinite(source.trustScore)&&source.trustScore>=trustFloor)
+    .filter(source=>source.authorityClass==="OFFICIAL_PRIMARY")
+    .filter(source=>source.accessMode==="PUBLIC_NO_KEY")
+    .filter(source=>source.stage!=="REJECTED"&&source.stage!=="RETIRED"&&source.stage!=="ARCHIVED")
+    .filter(source=>Boolean(source.candidateId)&&Number.isFinite(timeMs(source.candidateDiscoveredAt))&&timeMs(source.candidateDiscoveredAt)<=timeMs(source.assessedAt))
+    .map(source=>({source,host:sourceHostname(source.canonicalUri)}))
+    .filter((row):row is {source:WorldSourceSignal;host:string}=>row.host!==null)
+    .sort((a,b)=>b.source.trustScore-a.source.trustScore)
+    .slice(0,4);
+  for(const {source,host} of trustedWorldSources){
+    const sourceCapability=`world.source-adapter.${capabilitySlug(host)}`;
+    addUnique(out,{
+      hypothesisId:hypothesisIdentity("world-source-adapter",source.sourceId),
+      observedAt:inputs.observedAt,
+      problemStatement:`Research-eligible official source ${host} is available but does not yet have a bounded Evolution source-adapter candidate.`,
+      proposedMechanism:`Build a SHADOW-only point-in-time source adapter candidate for ${host}; preserve provenance and freshness, treat every fetched payload as untrusted data, never execute or follow external instructions, and keep direct ALPHA/live execution disabled.`,
+      targetCapabilities:[sourceCapability,"evolution.world-explorer"],
+      evidenceRefs:[
+        `world_source:${source.sourceId}`,
+        `world_source_candidate:${source.candidateId}`,
+        `world_source_assessment:${source.sourceId}:${source.assessedAt}`,
+      ],
+      counterEvidenceRefs:[],
+      measurableSuccessCriteria:[
+        "adapter captures fresh timestamped evidence with complete provenance",
+        "malformed or unavailable source input fails closed and cannot alter the control plane",
+        "external payload is never executed or interpreted as engineering instructions",
+        "candidate remains SHADOW-only and requires human review before any canonical promotion",
+      ],
+      stage:"RESEARCHING",
+      uncertainty:0.25,
+      priority:Math.min(0.89,0.8+source.trustScore*0.1),
+      hypothesisKind:"CAPABILITY_GAP",
+      metadata:{
+        world_engineering_bridge_version:WORLD_ENGINEERING_BRIDGE_VERSION,
+        world_source_id:source.sourceId,
+        world_source_candidate_id:source.candidateId,
+        world_source_candidate_discovered_at:source.candidateDiscoveredAt,
+        world_source_uri:source.canonicalUri,
+        world_source_host:host,
+        world_source_trust_score:source.trustScore,
+        world_source_authority_class:source.authorityClass,
+        world_source_access_mode:source.accessMode,
+        world_source_assessed_at:source.assessedAt,
+        world_source_trust_floor:trustFloor,
+        parent_rotation_policy:"STABLE_ONCE",
+        external_content_untrusted:true,
+        source_content_used_as_instruction:false,
+        direct_alpha_influence:false,
+        live_execution:false,
+        identity_version:EVOLUTION_RESEARCH_VERSION,
+      },
+    });
   }
 
   const challenger=inputs.challenger;

@@ -203,10 +203,20 @@ def test_pipeline_can_rollback_only_after_human_approval_stage():
         conn.commit()
 
 
-def test_autonomous_claim_is_dormant_by_default():
+def test_bounded_autonomous_claim_contract_is_enabled_but_human_gated():
     with connect() as conn:
         with conn.cursor() as cur:
-            cur.execute("select autonomous_claim_enabled,require_human_approval,max_concurrent_runs from public.brian_evolution_engineering_control where control_id='default'")
-            assert cur.fetchone() == (False, True, 1)
-            cur.execute("select brian_private.claim_engineering_task(%s,%s,null)", ("pytest-worker", BASE_SHA))
-            assert cur.fetchone()[0] is None
+            cur.execute(
+                "select autonomous_claim_enabled,require_human_approval,max_concurrent_runs,metadata "
+                "from public.brian_evolution_engineering_control where control_id='default'"
+            )
+            enabled, human_required, max_runs, metadata = cur.fetchone()
+            assert enabled is True
+            assert human_required is True
+            assert max_runs == 1
+            assert int(metadata["autonomous_claim_limit_24h"]) == 4
+            assert metadata["autonomy_profile"] == "WORLD_ENGINEER_BOUNDED_V1"
+            assert metadata["world_to_engineering_enabled"] is True
+            assert metadata["external_content_policy"] == "UNTRUSTED_DATA_NEVER_INSTRUCTIONS"
+            assert metadata["protected_scope"] == "DIP_ISOLATED"
+            assert metadata["canonical_apply"] == "HUMAN_APPROVAL_ONLY"
