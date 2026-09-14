@@ -5,10 +5,10 @@ const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const ENGINE_ID = "dip-multiasset-v1";
-const POLICY_VERSION = "dip-multiasset-reentry-guard-20260914.2";
-const RUN_HOURS = 8;
+const POLICY_VERSION = "dip-profit-router-20260914.3";
+const RUN_HOURS = 18;
 const MAX_POSITIONS = 3;
-const MAX_SCAN = 7;
+const MAX_SCAN = 12;
 const FEE_BPS = 10;
 const LOSS_COOLDOWN_MS = 35 * 60_000;
 const TARGET_COOLDOWN_MS = 25 * 60_000;
@@ -16,13 +16,15 @@ const PROFIT_COOLDOWN_MS = 20 * 60_000;
 const BASE_COOLDOWN_MS = 15 * 60_000;
 const GUARD_MAX_AGE_MS = 3 * 60 * 60_000;
 const HOSTS = ["https://api.binance.com", "https://api1.binance.com", "https://api2.binance.com"];
+// ETH stays on the existing V8.4.4 core lane. This router owns the rest of the DIP universe.
 const EXCLUDED = new Set(["ETHUSDT","USDTUSDT","USDCUSDT","FDUSDUSDT","TUSDUSDT","DAIUSDT","BUSDUSDT","EURUSDT","TRYUSDT","USD1USDT"]);
 
 type J = Record<string, unknown>;
 type Position = {
   symbol:string; entry:number; qty:number; opened_at:string; stop:number; target:number;
   trail:number|null; max_price:number; open_fee:number; cost_basis:number; atr:number;
-  radar_score:number; entry_spread_bps:number; entry_reason:string;
+  radar_score:number; opportunity_score?:number; forecast_edge_bps?:number;
+  entry_spread_bps:number; entry_reason:string;
 };
 type ReentryGuard = {
   until:number; reason:string; exit_price:number; exit_at:number; pnl:number;
@@ -45,13 +47,15 @@ type Market = {
   lastClose:number; prevClose:number; recovery:boolean; trendOk:boolean;
 };
 type EntryEval = {
-  ok:boolean; score:number; costBps:number; requiredPull:number; requiredBounce:number;
-  gates:Record<string,boolean>; reason:string;
+  ok:boolean; score:number; opportunity:number; costBps:number; forecastGrossBps:number; forecastNetBps:number;
+  requiredPull:number; requiredBounce:number; gates:Record<string,boolean>; reason:string;
 };
 type GuardCheck = { blocked:boolean; reason:string; clear:boolean; metrics:J };
+type Ready = { c:Candidate; m:Market; ev:EntryEval; guard:GuardCheck };
 
 function num(v:unknown,fallback=0):number{const n=Number(v);return Number.isFinite(n)?n:fallback;}
 function clip(v:number,lo=0,hi=1):number{return Math.max(lo,Math.min(hi,v));}
+function nowIso(){return new Date().toISOString();}
 async function sha256Hex(value:string):Promise<string>{const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,"0")).join("");}
 function same(a:string,b:string):boolean{if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
 async function requireCron(req:Request){
@@ -64,7 +68,7 @@ async function marketJson(path:string):Promise<unknown>{
   let last="MARKET_UNAVAILABLE";
   for(const host of HOSTS){
     try{
-      const r=await fetch(host+path,{headers:{accept:"application/json","user-agent":"Brian-DIP-MultiAsset-Shadow/2.0"},signal:AbortSignal.timeout(5000)});
+      const r=await fetch(host+path,{headers:{accept:"application/json","user-agent":"Brian-DIP-Profit-Router/3.0"},signal:AbortSignal.timeout(5000)});
       if(!r.ok){last=`HTTP_${r.status}`;if(r.status===418||r.status===429)break;continue;}
       return await r.json();
     }catch(e){last=e instanceof Error?e.message:String(e);}
@@ -79,9 +83,9 @@ async function loadMarket(symbol:string):Promise<Market>{
     marketJson(`/api/v3/ticker/bookTicker?symbol=${encodeURIComponent(symbol)}`),
   ]);
   if(!Array.isArray(rawBars)||rawBars.length<35)throw Error("INSUFFICIENT_BARS");
-  const now=Date.now();
+  const t=Date.now();
   const parsed:Bar[]=rawBars.map(x=>{if(!Array.isArray(x)||x.length<7)throw Error("BAD_BAR");return{o:num(x[1]),h:num(x[2]),l:num(x[3]),c:num(x[4]),v:num(x[5]),openTime:num(x[0]),closeTime:num(x[6])};});
-  const bars=parsed.filter(b=>b.closeTime<now-250).slice(-60);if(bars.length<30)throw Error("INSUFFICIENT_CLOSED_BARS");
+  const bars=parsed.filter(b=>b.closeTime<t-250).slice(-60);if(bars.length<30)throw Error("INSUFFICIENT_CLOSED_BARS");
   const book=rawBook as J,bid=num(book.bidPrice),ask=num(book.askPrice);if(!(bid>0&&ask>bid))throw Error("BAD_BOOK");
   const mid=(bid+ask)/2,spreadBps=(ask-bid)/mid*10000;if(!Number.isFinite(spreadBps)||spreadBps>40)throw Error("WIDE_BOOK");
   const closes=bars.map(b=>b.c),a=atr(bars,14);if(!(a>0))throw Error("BAD_ATR");
@@ -101,7 +105,7 @@ async function releaseLease(lease:{owner:string;generation:number}|null){if(!lea
 async function loadOrCreateState():Promise<State>{
   const q=await db.from("brian_dip_multiasset_state").select("*").eq("engine_id",ENGINE_ID).maybeSingle();if(q.error)throw q.error;if(q.data)return q.data as State;
   const now=new Date(),runUntil=new Date(now.getTime()+RUN_HOURS*3600_000);
-  const row={engine_id:ENGINE_ID,started_at:now.toISOString(),run_until:runUntil.toISOString(),starting_equity:1000,cash:1000,realized_pnl:0,trade_count:0,win_count:0,loss_count:0,positions:{},cooldowns:{},last_scan:{status:"BOOT",policy_version:POLICY_VERSION},last_eval_minute:null,updated_at:now.toISOString(),enabled:true,shadow_only:true,live_execution:false};
+  const row={engine_id:ENGINE_ID,started_at:now.toISOString(),run_until:runUntil.toISOString(),starting_equity:1000,cash:1000,realized_pnl:0,trade_count:0,win_count:0,loss_count:0,positions:{},cooldowns:{},last_scan:{status:"BOOT",policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS"},last_eval_minute:null,updated_at:now.toISOString(),enabled:true,shadow_only:true,live_execution:false};
   const ins=await db.from("brian_dip_multiasset_state").insert(row).select("*").single();if(ins.error)throw ins.error;return ins.data as State;
 }
 async function latestCandidates():Promise<{observedAt:string;rows:Candidate[]}>{
@@ -110,19 +114,39 @@ async function latestCandidates():Promise<{observedAt:string;rows:Candidate[]}>{
   const payload=(q.data.candidates??{}) as J,raw=Array.isArray(payload.candidates)?payload.candidates:[];
   const rows:Candidate[]=raw.map(v=>{const r=(v??{}) as J;return{symbol:String(r.symbol||"").toUpperCase(),base_asset:String(r.base_asset||"").toUpperCase(),radar_score:num(r.radar_score),price_change_pct:num(r.price_change_pct),range_pct:num(r.range_pct),spread_bps:num(r.spread_bps,999),quote_volume:num(r.quote_volume),trades_24h:num(r.trades_24h),momentum_score:num(r.momentum_score),volatility_score:num(r.volatility_score)}})
     .filter(r=>/^[A-Z0-9]{2,20}USDT$/.test(r.symbol)&&!EXCLUDED.has(r.symbol)&&r.radar_score>=.66&&r.quote_volume>=5_000_000&&r.trades_24h>=25_000&&r.spread_bps<=35&&Math.abs(r.price_change_pct)<=190)
-    .sort((a,b)=>b.radar_score-a.radar_score).slice(0,MAX_SCAN);
+    .sort((a,b)=>{
+      const pa=a.radar_score*.62+clip(a.momentum_score)*.20+clip(a.volatility_score)*.13+clip(Math.abs(a.price_change_pct)/80)*.05;
+      const pb=b.radar_score*.62+clip(b.momentum_score)*.20+clip(b.volatility_score)*.13+clip(Math.abs(b.price_change_pct)/80)*.05;
+      return pb-pa;
+    }).slice(0,MAX_SCAN);
   return{observedAt,rows};
 }
 function equity(state:State,markets:Map<string,Market>):number{let e=state.cash;for(const p of Object.values(state.positions||{})){const m=markets.get(p.symbol);e+=p.qty*(m?.bid??p.entry);}return e;}
 function evaluateEntry(c:Candidate,m:Market):EntryEval{
   const huge=Math.abs(c.price_change_pct)>=80;
-  const requiredPull=Math.max(huge?1.35:.55,m.atrPct*(huge?.9:.55));
-  const requiredBounce=Math.max(.18,m.atrPct*.14);
-  const costBps=2*FEE_BPS+m.spreadBps+Math.max(4,m.spreadBps);
-  const score=clip(c.radar_score*.42+clip(m.pullbackPct/Math.max(requiredPull*1.8,.5))*.20+clip(m.bouncePct/Math.max(requiredBounce*3,.2))*.16+(m.recovery?.11:0)+(m.trendOk?.11:0));
-  const gates={radar:c.radar_score>=.72,spread:m.spreadBps<=28,pullback:m.pullbackPct>=requiredPull,bounce:m.bouncePct>=requiredBounce,recovery:m.recovery,trend:m.trendOk,not_chasing:m.mid<=m.recentHigh*(1-Math.max(.0015,m.atrPct*.10/100)),economics:Math.max(1.2,m.atrPct*1.6)>=costBps/100};
-  const ok=score>=.66&&Object.values(gates).every(Boolean),failed=Object.entries(gates).filter(([,v])=>!v).map(([k])=>k);
-  return{ok,score,costBps,requiredPull,requiredBounce,gates,reason:ok?"DIP_RECLAIM_READY":`WAIT_${failed.join("+")||"SCORE"}`};
+  const strongMove=Math.abs(c.price_change_pct)>=25;
+  const requiredPull=Math.max(huge?1.35:strongMove?.72:.48,m.atrPct*(huge?.90:strongMove?.62:.50));
+  const requiredBounce=Math.max(strongMove?.20:.16,m.atrPct*.15);
+  const slippageBps=Math.max(4,m.spreadBps);
+  const costBps=2*FEE_BPS+m.spreadBps+slippageBps;
+  const structuralGross=Math.max(0,(m.recentHigh-m.ask)/m.ask*10000);
+  const volatilityGross=Math.max(0,m.atrPct*100*(strongMove?1.85:1.55));
+  const forecastGrossBps=Math.max(structuralGross,volatilityGross);
+  const forecastNetBps=forecastGrossBps-costBps;
+  const score=clip(c.radar_score*.38+clip(m.pullbackPct/Math.max(requiredPull*1.8,.5))*.20+clip(m.bouncePct/Math.max(requiredBounce*3,.2))*.15+(m.recovery?.10:0)+(m.trendOk?.09:0)+clip(forecastNetBps/180)*.08);
+  const opportunity=clip(score*.56+c.radar_score*.20+clip(c.momentum_score)*.09+clip(c.volatility_score)*.08+clip(forecastNetBps/180)*.07);
+  const gates={
+    radar:c.radar_score>=.72,
+    spread:m.spreadBps<=28,
+    pullback:m.pullbackPct>=requiredPull,
+    bounce:m.bouncePct>=requiredBounce,
+    recovery:m.recovery,
+    trend:m.trendOk,
+    not_chasing:m.mid<=m.recentHigh*(1-Math.max(.0015,m.atrPct*.10/100)),
+    economics:forecastNetBps>=35,
+  };
+  const ok=score>=.66&&opportunity>=.69&&Object.values(gates).every(Boolean),failed=Object.entries(gates).filter(([,v])=>!v).map(([k])=>k);
+  return{ok,score,opportunity,costBps,forecastGrossBps,forecastNetBps,requiredPull,requiredBounce,gates,reason:ok?"BRIAN_PROFIT_RECLAIM_READY":`WAIT_${failed.join("+")||"SCORE"}`};
 }
 function readGuard(raw:unknown):ReentryGuard|null{
   if(typeof raw==="number"&&Number.isFinite(raw))return{until:raw,reason:"LEGACY",exit_price:0,exit_at:raw-8*60_000,pnl:0,peak_price:0,atr_pct:0};
@@ -144,24 +168,29 @@ function reentryCheck(raw:unknown,c:Candidate,m:Market,ev:EntryEval,now:number):
   const loss=g.pnl<0||g.reason==="STOP"||g.reason==="MOMENTUM_BREAK";
   if(loss){
     const needPull=Math.max(.80,ev.requiredPull*1.35,m.atrPct*.85),needBounce=Math.max(.26,ev.requiredBounce*1.50,m.atrPct*.20);
-    const strong=ev.score>=.80&&c.radar_score>=.78&&m.pullbackPct>=needPull&&m.bouncePct>=needBounce&&m.recovery&&m.trendOk;
+    const strong=ev.score>=.80&&ev.opportunity>=.80&&c.radar_score>=.78&&m.pullbackPct>=needPull&&m.bouncePct>=needBounce&&m.recovery&&m.trendOk;
     return strong?{blocked:false,reason:"",clear:true,metrics:{...base,guard_reset:"STRONG_RECLAIM_AFTER_LOSS",need_pullback_pct:needPull,need_bounce_pct:needBounce,min_score:.80,min_radar:.78}}:{blocked:true,reason:"LOSS_REENTRY_GUARD",clear:false,metrics:{...base,need_pullback_pct:needPull,need_bounce_pct:needBounce,min_score:.80,min_radar:.78}};
   }
   const needPull=Math.max(.65,ev.requiredPull*1.10,m.atrPct*.70),needBounce=Math.max(.20,ev.requiredBounce*1.15);
-  const fresh=ev.score>=.72&&c.radar_score>=.74&&m.pullbackPct>=needPull&&m.bouncePct>=needBounce&&m.recovery&&m.trendOk;
+  const fresh=ev.score>=.72&&ev.opportunity>=.73&&c.radar_score>=.74&&m.pullbackPct>=needPull&&m.bouncePct>=needBounce&&m.recovery&&m.trendOk;
   return fresh?{blocked:false,reason:"",clear:true,metrics:{...base,guard_reset:"FRESH_PULLBACK_AFTER_PROFIT",need_pullback_pct:needPull,need_bounce_pct:needBounce}}:{blocked:true,reason:"PROFIT_REENTRY_GUARD",clear:false,metrics:{...base,need_pullback_pct:needPull,need_bounce_pct:needBounce,min_score:.72,min_radar:.74}};
 }
 function cooldownMs(reason:string,pnl:number):number{if(reason==="TARGET")return TARGET_COOLDOWN_MS;if(pnl<0||reason==="STOP"||reason==="MOMENTUM_BREAK")return LOSS_COOLDOWN_MS;if(reason==="TRAIL"||pnl>0)return PROFIT_COOLDOWN_MS;return BASE_COOLDOWN_MS;}
+function allocationFraction(ev:EntryEval,c:Candidate):number{
+  if(ev.opportunity>=.86&&c.radar_score>=.84&&ev.forecastNetBps>=90)return .44;
+  if(ev.opportunity>=.79&&ev.forecastNetBps>=65)return .32;
+  return .22;
+}
 async function insertEvent(row:J){const q=await db.from("brian_dip_multiasset_events").insert(row);if(q.error)throw q.error;}
 
 async function run():Promise<J>{
   const state=await loadOrCreateState(),now=Date.now();
   if(!state.enabled||now>=Date.parse(state.run_until)){
-    await db.from("brian_dip_multiasset_state").update({enabled:false,updated_at:new Date().toISOString(),last_scan:{status:"WINDOW_COMPLETE",run_until:state.run_until,policy_version:POLICY_VERSION}}).eq("engine_id",ENGINE_ID);
+    await db.from("brian_dip_multiasset_state").update({enabled:false,updated_at:nowIso(),last_scan:{status:"WINDOW_COMPLETE",run_until:state.run_until,policy_version:POLICY_VERSION}}).eq("engine_id",ENGINE_ID);
     return{status:"WINDOW_COMPLETE",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,run_until:state.run_until,shadow_only:true,live_execution:false};
   }
   const radar=await latestCandidates();
-  const symbols=[...new Set([...Object.keys(state.positions||{}),...radar.rows.map(r=>r.symbol)])].slice(0,10);
+  const symbols=[...new Set([...Object.keys(state.positions||{}),...radar.rows.map(r=>r.symbol)])].slice(0,MAX_SCAN+MAX_POSITIONS);
   const marketPairs=await Promise.all(symbols.map(async s=>{try{return[s,await loadMarket(s)] as const;}catch(e){return[s,{error:e instanceof Error?e.message:String(e)}] as const;}}));
   const markets=new Map<string,Market>(),errors:J={};for(const[s,v]of marketPairs){if("error" in v)errors[s]=v.error;else markets.set(s,v);}
   const positions={...(state.positions||{})},cooldowns={...(state.cooldowns||{})};
@@ -171,39 +200,49 @@ async function run():Promise<J>{
   for(const[symbol,p]of Object.entries(positions)){
     const m=markets.get(symbol);if(!m)continue;
     const heldMs=now-Date.parse(p.opened_at),gainPct=(m.bid-p.entry)/p.entry*100;p.max_price=Math.max(num(p.max_price,p.entry),m.bid);
-    if(gainPct>=Math.max(.9,m.atrPct*.75)){const candidate=m.bid-Math.max(m.atr*.75,p.entry*.006);p.trail=Math.max(num(p.trail,0),candidate);}
+    if(gainPct>=Math.max(.75,m.atrPct*.65)){const candidate=m.bid-Math.max(m.atr*.68,p.entry*.0055);p.trail=Math.max(num(p.trail,0),candidate);}
     const momentumBreak=heldMs>5*60_000&&m.bid<m.ema8*.994&&m.lastClose<m.prevClose*.997;
-    let reason="";if(m.bid<=p.stop)reason="STOP";else if(p.trail&&m.bid<=p.trail)reason="TRAIL";else if(m.bid>=p.target)reason="TARGET";else if(momentumBreak)reason="MOMENTUM_BREAK";else if(heldMs>=35*60_000)reason="MAX_HOLD";
+    let reason="";if(m.bid<=p.stop)reason="STOP";else if(p.trail&&m.bid<=p.trail)reason="TRAIL";else if(m.bid>=p.target)reason="TARGET";else if(momentumBreak)reason="MOMENTUM_BREAK";else if(heldMs>=40*60_000)reason="MAX_HOLD";
     if(!reason)continue;
     const slipBps=Math.max(2,m.spreadBps/2),exitPrice=m.bid*(1-slipBps/10000),gross=p.qty*exitPrice,exitFee=gross*FEE_BPS/10000,pnl=gross-exitFee-p.cost_basis;
     cash+=gross-exitFee;realized+=pnl;tradeCount++;if(pnl>=0)wins++;else losses++;delete positions[symbol];
     const cdMs=cooldownMs(reason,pnl);cooldowns[symbol]={until:now+cdMs,reason,exit_price:exitPrice,exit_at:now,pnl,peak_price:p.max_price,atr_pct:m.atrPct};
-    const ev={engine_id:ENGINE_ID,observed_at:new Date().toISOString(),symbol,action:"SELL",price:exitPrice,qty:p.qty,notional:gross,pnl,reason,metadata:{policy_version:POLICY_VERSION,entry:p.entry,opened_at:p.opened_at,hold_seconds:Math.round(heldMs/1000),target:p.target,stop:p.stop,trail:p.trail,max_price:p.max_price,spread_bps:m.spreadBps,cooldown_minutes:Math.round(cdMs/60000),reentry_policy:reason==="TARGET"?"NEW_DIP_REQUIRED":pnl<0?"STRONG_RECLAIM_REQUIRED":"FRESH_PULLBACK_REQUIRED",shadow_only:true,live_execution:false}};
+    const ev={engine_id:ENGINE_ID,observed_at:nowIso(),symbol,action:"SELL",price:exitPrice,qty:p.qty,notional:gross,pnl,reason,metadata:{policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS",entry:p.entry,opened_at:p.opened_at,hold_seconds:Math.round(heldMs/1000),target:p.target,stop:p.stop,trail:p.trail,max_price:p.max_price,spread_bps:m.spreadBps,opportunity_score:p.opportunity_score??null,forecast_edge_bps:p.forecast_edge_bps??null,cooldown_minutes:Math.round(cdMs/60000),reentry_policy:reason==="TARGET"?"NEW_DIP_REQUIRED":pnl<0?"STRONG_RECLAIM_REQUIRED":"FRESH_PULLBACK_REQUIRED",shadow_only:true,live_execution:false}};
     await insertEvent(ev);actions.push(ev);
   }
 
-  const evals:J[]=[];
-  const candidatesWithMarkets=radar.rows.map(c=>({c,m:markets.get(c.symbol)})).filter((x):x is {c:Candidate;m:Market}=>!!x.m);
-  const currentEquity=equity({...state,cash,positions} as State,markets);
-  for(const{c,m}of candidatesWithMarkets){
+  const evals:J[]=[],readyRows:Ready[]=[];
+  for(const c of radar.rows){
+    const m=markets.get(c.symbol);if(!m)continue;
     const ev=evaluateEntry(c,m),guard=reentryCheck(cooldowns[c.symbol],c,m,ev,now),already=!!positions[c.symbol];if(guard.clear)delete cooldowns[c.symbol];
     const blocked=guard.blocked,reason=already?"POSITION_OPEN":blocked?guard.reason:ev.reason,ready=ev.ok&&!blocked&&!already;
-    evals.push({symbol:c.symbol,price:m.mid,radar_score:c.radar_score,change_pct:c.price_change_pct,range_pct:c.range_pct,spread_bps:m.spreadBps,atr_pct:m.atrPct,pullback_pct:m.pullbackPct,bounce_pct:m.bouncePct,signal_score:ev.score,ready,reason,gates:ev.gates,reentry_guard:guard.metrics,policy_version:POLICY_VERSION});
-    if(!ready||Object.keys(positions).length>=MAX_POSITIONS)continue;
-    const eq=Math.max(0,currentEquity),budget=Math.min(cash*.34,eq*.22);if(budget<20)continue;
+    evals.push({symbol:c.symbol,price:m.mid,radar_score:c.radar_score,change_pct:c.price_change_pct,range_pct:c.range_pct,spread_bps:m.spreadBps,atr_pct:m.atrPct,pullback_pct:m.pullbackPct,bounce_pct:m.bouncePct,signal_score:ev.score,opportunity_score:ev.opportunity,forecast_gross_bps:ev.forecastGrossBps,forecast_net_bps:ev.forecastNetBps,ready,reason,gates:ev.gates,reentry_guard:guard.metrics,policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS"});
+    if(ready)readyRows.push({c,m,ev,guard});
+  }
+  readyRows.sort((a,b)=>b.ev.opportunity-a.ev.opportunity||b.ev.forecastNetBps-a.ev.forecastNetBps||b.c.radar_score-a.c.radar_score);
+
+  for(const row of readyRows){
+    if(Object.keys(positions).length>=MAX_POSITIONS)break;
+    const {c,m,ev,guard}=row;
+    const liveEq=Math.max(0,equity({...state,cash,positions} as State,markets));
+    const reserve=liveEq*.12,available=Math.max(0,cash-reserve),fraction=allocationFraction(ev,c),budget=Math.min(available,liveEq*fraction);
+    if(budget<20)continue;
     const slipBps=Math.max(2,m.spreadBps/2),entry=m.ask*(1+slipBps/10000),grossBudget=budget/(1+FEE_BPS/10000),qty=grossBudget/entry,openFee=grossBudget*FEE_BPS/10000,costBasis=grossBudget+openFee;
-    const stopDistance=Math.min(entry*.045,Math.max(m.atr*1.25,entry*.010));let targetDistance=Math.max(m.atr*1.75,entry*.012,entry*(ev.costBps*3.0/10000));if(targetDistance/stopDistance<1.35)targetDistance=stopDistance*1.35;
-    const p:Position={symbol:c.symbol,entry,qty,opened_at:new Date().toISOString(),stop:entry-stopDistance,target:entry+targetDistance,trail:null,max_price:entry,open_fee:openFee,cost_basis:costBasis,atr:m.atr,radar_score:c.radar_score,entry_spread_bps:m.spreadBps,entry_reason:guard.metrics.guard_reset?`DIP_RECLAIM_READY_${String(guard.metrics.guard_reset)}`:ev.reason};
+    const stopDistance=Math.min(entry*.040,Math.max(m.atr*1.20,entry*.009));
+    let targetDistance=Math.max(m.atr*1.75,entry*.011,entry*(ev.costBps*3.2/10000));
+    if(targetDistance/stopDistance<1.45)targetDistance=stopDistance*1.45;
+    const p:Position={symbol:c.symbol,entry,qty,opened_at:nowIso(),stop:entry-stopDistance,target:entry+targetDistance,trail:null,max_price:entry,open_fee:openFee,cost_basis:costBasis,atr:m.atr,radar_score:c.radar_score,opportunity_score:ev.opportunity,forecast_edge_bps:ev.forecastNetBps,entry_spread_bps:m.spreadBps,entry_reason:guard.metrics.guard_reset?`BRIAN_PROFIT_RECLAIM_${String(guard.metrics.guard_reset)}`:ev.reason};
     positions[c.symbol]=p;cash-=costBasis;
-    const action={engine_id:ENGINE_ID,observed_at:new Date().toISOString(),symbol:c.symbol,action:"BUY",price:entry,qty,notional:grossBudget,pnl:null,reason:p.entry_reason,metadata:{policy_version:POLICY_VERSION,signal_score:ev.score,radar_score:c.radar_score,change_pct:c.price_change_pct,range_pct:c.range_pct,atr_pct:m.atrPct,pullback_pct:m.pullbackPct,bounce_pct:m.bouncePct,spread_bps:m.spreadBps,target:p.target,stop:p.stop,fee_bps:FEE_BPS,slippage_bps:slipBps,reentry_guard:guard.metrics,shadow_only:true,live_execution:false}};
+    const action={engine_id:ENGINE_ID,observed_at:nowIso(),symbol:c.symbol,action:"BUY",price:entry,qty,notional:grossBudget,pnl:null,reason:p.entry_reason,metadata:{policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS",allocation_fraction:fraction,signal_score:ev.score,opportunity_score:ev.opportunity,forecast_gross_bps:ev.forecastGrossBps,forecast_net_bps:ev.forecastNetBps,radar_score:c.radar_score,change_pct:c.price_change_pct,range_pct:c.range_pct,momentum_score:c.momentum_score,volatility_score:c.volatility_score,atr_pct:m.atrPct,pullback_pct:m.pullbackPct,bounce_pct:m.bouncePct,spread_bps:m.spreadBps,target:p.target,stop:p.stop,fee_bps:FEE_BPS,slippage_bps:slipBps,reentry_guard:guard.metrics,shadow_only:true,live_execution:false}};
     await insertEvent(action);actions.push(action);
   }
 
   const minute=new Date(Math.floor(now/60000)*60000).toISOString();
-  if(state.last_eval_minute!==minute&&evals.length){const rows=evals.map(e=>({engine_id:ENGINE_ID,observed_at:new Date().toISOString(),symbol:e.symbol,price:e.price,radar_score:e.radar_score,signal_score:e.signal_score,action:e.ready?"READY":"WAIT",reason:e.reason,metadata:e}));const q=await db.from("brian_dip_multiasset_evaluations").insert(rows);if(q.error)throw q.error;}
-  const finalState={cash,realized_pnl:realized,trade_count:tradeCount,win_count:wins,loss_count:losses,positions,cooldowns,last_eval_minute:minute,last_scan:{status:"RUNNING",policy_version:POLICY_VERSION,radar_observed_at:radar.observedAt,scanned:evals.slice(0,MAX_SCAN),actions,market_errors:errors,equity:equity({...state,cash,positions} as State,markets),position_count:Object.keys(positions).length},updated_at:new Date().toISOString(),enabled:true,shadow_only:true,live_execution:false};
+  if(state.last_eval_minute!==minute&&evals.length){const rows=evals.map(e=>({engine_id:ENGINE_ID,observed_at:nowIso(),symbol:e.symbol,price:e.price,radar_score:e.radar_score,signal_score:e.signal_score,action:e.ready?"READY":"WAIT",reason:e.reason,metadata:e}));const q=await db.from("brian_dip_multiasset_evaluations").insert(rows);if(q.error)throw q.error;}
+  const finalEquity=equity({...state,cash,positions} as State,markets);
+  const finalState={cash,realized_pnl:realized,trade_count:tradeCount,win_count:wins,loss_count:losses,positions,cooldowns,last_eval_minute:minute,last_scan:{status:"RUNNING",policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS",radar_observed_at:radar.observedAt,scanned:evals.slice(0,MAX_SCAN),ranked_ready:readyRows.slice(0,5).map(x=>({symbol:x.c.symbol,opportunity_score:x.ev.opportunity,forecast_net_bps:x.ev.forecastNetBps,radar_score:x.c.radar_score})),actions,market_errors:errors,equity:finalEquity,position_count:Object.keys(positions).length,reserve_fraction:.12,max_positions:MAX_POSITIONS},updated_at:nowIso(),enabled:true,shadow_only:true,live_execution:false};
   const uq=await db.from("brian_dip_multiasset_state").update(finalState).eq("engine_id",ENGINE_ID);if(uq.error)throw uq.error;
-  return{status:"RUNNING",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,run_until:state.run_until,equity:(finalState.last_scan as J).equity,cash,realized_pnl:realized,trade_count:tradeCount,positions:Object.keys(positions),scanned:evals.slice(0,MAX_SCAN),actions,shadow_only:true,live_execution:false};
+  return{status:"RUNNING",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,router_mode:"PROFIT_FOCUS",run_until:state.run_until,equity:finalEquity,cash,realized_pnl:realized,trade_count:tradeCount,positions:Object.keys(positions),ranked_ready:(finalState.last_scan as J).ranked_ready,scanned:evals.slice(0,MAX_SCAN),actions,shadow_only:true,live_execution:false};
 }
 
 Deno.serve(async(req:Request)=>{
@@ -212,6 +251,6 @@ Deno.serve(async(req:Request)=>{
   try{
     await requireCron(req);lease=await acquireLease();if(!lease)return Response.json({status:"WAIT_LEASE",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false});
     const out=await run();return Response.json(out,{headers:{"cache-control":"no-store"}});
-  }catch(e){const message=e instanceof Error?e.message:String(e);console.error("dip-multiasset",message);return Response.json({status:"FAILED_CLOSED",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,error:message,shadow_only:true,live_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});}
+  }catch(e){const message=e instanceof Error?e.message:String(e);console.error("dip-profit-router",message);return Response.json({status:"FAILED_CLOSED",engine_id:ENGINE_ID,policy_version:POLICY_VERSION,error:message,shadow_only:true,live_execution:false},{status:message.includes("UNAUTHORIZED")?401:500,headers:{"cache-control":"no-store"}});}
   finally{await releaseLease(lease);}
 });
