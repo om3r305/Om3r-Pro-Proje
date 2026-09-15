@@ -27,29 +27,29 @@
     }
   }
 
+  function setTextIfChanged(el,value){
+    if(el&&el.textContent!==value)el.textContent=value;
+  }
+
   function compactMainEngineerCard(){
     const card=document.getElementById('developerBrian');
     if(!card)return;
 
-    const title=card.querySelector('.section-title');
-    const sub=card.querySelector('.section-sub');
-    if(title)title.textContent='👨‍💻 Yazılımcı Brian';
-    if(sub)sub.textContent='Ayrıntılı kod, test, review ve GPT karar akışı Mühendislik Odası’nda.';
+    setTextIfChanged(card.querySelector('.section-title'),'👨‍💻 Yazılımcı Brian');
+    setTextIfChanged(card.querySelector('.section-sub'),'Ayrıntılı kod, test, review ve GPT karar akışı Mühendislik Odası’nda.');
 
-    // Main dashboard stays executive-level. Detailed engineering truth remains in the room.
     for(const id of ['autonomySummary','autonomyGovernance','codeStream']){
       const el=document.getElementById(id);
-      if(el)el.style.setProperty('display','none','important');
+      if(el&&el.style.display!=='none')el.style.setProperty('display','none','important');
     }
 
     const launch=document.getElementById('berLaunch');
     if(launch){
-      launch.textContent='👨‍💻 MÜHENDİSLİK ODASINI AÇ →';
-      launch.style.removeProperty('display');
-      // The room button is the boundary: hide lower engineering detail/source blocks on the main card.
+      setTextIfChanged(launch,'👨‍💻 MÜHENDİSLİK ODASINI AÇ →');
+      if(launch.style.display==='none')launch.style.removeProperty('display');
       let sibling=launch.nextElementSibling;
       while(sibling){
-        sibling.style.setProperty('display','none','important');
+        if(sibling.style.display!=='none')sibling.style.setProperty('display','none','important');
         sibling=sibling.nextElementSibling;
       }
     }
@@ -62,15 +62,10 @@
     compactMainEngineerCard();
   }
 
-  let queued=false;
-  const scheduleApply=()=>{
-    if(queued)return;
-    queued=true;
-    queueMicrotask(()=>{queued=false;apply();});
-  };
-  const observer=new MutationObserver(scheduleApply);
-  observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
+  // Deliberately no MutationObserver here. The previous observer could observe its own
+  // textContent writes and starve the browser event loop. A small bounded timer is enough
+  // because the underlying engineering console refreshes on a 15-second cadence.
   document.addEventListener('click',()=>setTimeout(apply,0),true);
-  setInterval(apply,3000);
-  apply();
+  setInterval(apply,2000);
+  setTimeout(apply,0);
 })();
