@@ -15,12 +15,12 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.bounded-queue";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.bounded-queue-36h";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
 const PENDING_BATCH = 120;
-const LOOKBACK = "12 hours";
+const LOOKBACK = "36 hours";
 
 type Decision = {
   decision_id: string;
@@ -118,7 +118,7 @@ Deno.serve(async (req: Request) => {
       const nowIso = new Date(nowMs).toISOString();
 
       // DB-side NOT EXISTS keeps the queue bounded and prevents repeatedly loading hundreds of
-      // already-resolved decisions. The 12h lookback also catches overnight outages gradually.
+      // already-resolved decisions. The 36h recovery window catches accumulated evidence debt.
       const pendingResp = await supabase.rpc("brian_alpha_pending_audit_decisions", {
         p_now: nowIso,
         p_lookback: LOOKBACK,

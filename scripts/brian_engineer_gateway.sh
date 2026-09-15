@@ -31,7 +31,7 @@ case "$mode" in
     if [ -z "$payload" ]; then payload='{}'; fi
     printf '%s' "$payload" | jq -e 'type=="object"' >/dev/null
 
-    # When an independent review blocks a candidate, preserve the reviewer text
+    # When an independent/GPT review blocks a candidate, preserve reviewer text
     # so the gateway can create a bounded retry from the exact checkpoint.
     if [ "$event_kind" = "BLOCKED" ] && [ -s /tmp/brian-engineer-review.txt ]; then
       review_text="$(python - <<'PY'
@@ -70,9 +70,27 @@ PY
     printf '%s\n' "$response"
     test "$(printf '%s' "$response" | jq -r '.status')" = 'MEASURED'
     ;;
+  gpt_approve)
+    run_id="${2:?run_id required}"
+    branch_name="${3:?branch_name required}"
+    head_sha="${4:?head_sha required}"
+    review="${5:?review JSON required}"
+    printf '%s' "$review" | jq -e 'type=="object"' >/dev/null
+    body="$(jq -nc \
+      --arg action gpt_approve \
+      --arg run_id "$run_id" \
+      --arg branch_name "$branch_name" \
+      --arg head_sha "$head_sha" \
+      --argjson review "$review" \
+      '{action:$action,run_id:$run_id,branch_name:$branch_name,head_sha:$head_sha,review:$review}')"
+    response="$(curl_retry -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data "$body")"
+    printf '%s\n' "$response"
+    test "$(printf '%s' "$response" | jq -r '.status')" = 'APPROVED'
+    ;;
   *)
     echo 'usage: brian_engineer_gateway.sh event <run_id> <event_kind> <phase> [commit_sha] [payload_json]' >&2
     echo '   or: brian_engineer_gateway.sh measure <run_id> <commit_sha> <measurement_json>' >&2
+    echo '   or: brian_engineer_gateway.sh gpt_approve <run_id> <branch_name> <head_sha> <review_json>' >&2
     exit 2
     ;;
 esac

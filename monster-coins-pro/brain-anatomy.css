@@ -105,3 +105,5 @@
 @media(prefers-reduced-motion:reduce){#brianAnatomyLive *{animation:none!important;transition:none!important}}
 
 #brianAnatomyLive .an-bottom-hud p{text-transform:none;letter-spacing:0;font-weight:400}
+
+#brianAnatomyLive .an-lab-compat{grid-column:1/-1}#brianAnatomyLive .an-lab-compat:empty{display:none}#brianAnatomyLive #labReadinessLiveV1{background:var(--glass);border-color:var(--line);padding:20px}#brianAnatomyLive .lrv1h b{font-size:15px}#brianAnatomyLive .lrv1k span,#brianAnatomyLive .lrv1cand,#brianAnatomyLive .lrv1badge{font-size:11px}
