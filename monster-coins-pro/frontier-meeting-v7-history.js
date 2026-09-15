@@ -18,7 +18,7 @@
   const clock=v=>{const t=stamp(v);return t?new Intl.DateTimeFormat('tr-TR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}).format(new Date(t)):'—'};
   const ageLabel=v=>{const t=stamp(v);if(!t)return'—';const s=Math.max(0,(Date.now()-t)/1000);return s<60?`${Math.round(s)} sn`:s<3600?`${Math.round(s/60)} dk`:s<86400?`${Math.round(s/3600)} sa`:`${Math.round(s/86400)} gün`};
   const normalizeAsset=v=>text(v,'').replace(/^crypto:/i,'').replace(/[^A-Z0-9]/gi,'').toUpperCase();
-  const urgency=v=>['CRITICAL','HIGH'].includes(String(v||'').toUpperCase())?String(v).toUpperCase():'HIGH';
+  const urgency=v=>['CRITICAL','HIGH'].includes(String(v||'').toUpperCase())?String(v).toUpperCase():'MEDIUM';
 
   function canonicalUrl(value){
     try{
