@@ -1,0 +1,40 @@
+name: ChatGPT Promote GPT Approval UI Hotfix
+
+on:
+  push:
+    branches:
+      - chatgpt/gpt-approval-ui-prod-hotfix
+    paths:
+      - .github/workflows/chatgpt-promote-gpt-ui-hotfix.yml
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN || secrets.VERCEL_ACCESS_TOKEN || secrets.VERCEL_API_TOKEN }}
+      VERCEL_PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
+      VERCEL_TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
+      VERCEL_DEPLOYMENT_ID: dpl_7qBc5t9ZkX75Fbe5uqkAyKJmSRQN
+    steps:
+      - name: Promote exact verified preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo 'VERCEL_PROMOTE_RESULT=TOKEN_MISSING'
+            exit 2
+          fi
+          status="$(curl --silent --show-error --output /tmp/vercel-promote-response --write-out '%{http_code}' \
+            --request POST \
+            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/promote/${VERCEL_DEPLOYMENT_ID}?teamId=${VERCEL_TEAM_ID}" \
+            --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+            --header 'Content-Type: application/json')"
+          echo "VERCEL_PROMOTE_HTTP_STATUS=${status}"
+          case "$status" in
+            201|202) echo 'VERCEL_PROMOTE_RESULT=SUCCESS' ;;
+            *) echo 'VERCEL_PROMOTE_RESULT=FAILED'; exit 1 ;;
+          esac
