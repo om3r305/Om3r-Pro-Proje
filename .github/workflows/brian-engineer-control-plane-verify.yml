@@ -1,0 +1,36 @@
+name: Brian Engineer Control Plane Verify
+
+on:
+  push:
+    branches: [brian-2026]
+    paths:
+      - '.github/workflows/brian-engineer-control-plane-verify.yml'
+      - '.github/workflows/brian-engineer.yml'
+      - '.github/workflows/brian-engineer-gpt-release.yml'
+      - 'scripts/brian_engineer_runner.sh'
+      - 'scripts/brian_engineer_gateway.sh'
+      - 'supabase/functions/brian-evolution-engineering-gateway/index.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-control-plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          bash -n scripts/brian_engineer_runner.sh
+          bash -n scripts/brian_engineer_gateway.sh
+      - name: Verify fail-closed GPT controls are present
+        run: |
+          set -euo pipefail
+          grep -q 'GPT_APPROVAL_JSON' scripts/brian_engineer_runner.sh
+          grep -q 'gpt_approve' scripts/brian_engineer_gateway.sh
+          grep -q 'gpt-evidence-gate' supabase/functions/brian-evolution-engineering-gateway/index.ts
+          grep -q 'Protected DIP scope detected' .github/workflows/brian-engineer-gpt-release.yml
+          grep -q 'Autonomous web release is fail-closed' .github/workflows/brian-engineer-gpt-release.yml
+          grep -q 'actions: write' .github/workflows/brian-engineer.yml
