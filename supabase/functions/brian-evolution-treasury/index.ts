@@ -414,7 +414,7 @@ async function commitCycle(input: {
       capital_usd: action.capitalUsd,
       reference_price: action.referencePrice,
       cost_usd: action.costUsd,
-      expected_net_edge_bps: canonicalAlphaShadow ? null : action.expectedNetEdgeBps,
+      expected_net_edge_bps: action.expectedNetEdgeBps,
       source_decision_id: action.sourceDecisionId,
       reason: action.reason,
       position_id: action.positionId,
@@ -422,6 +422,7 @@ async function commitCycle(input: {
         treasury_version: BRIAN_TREASURY_VERSION,
         gate_version: BRIAN_TREASURY_GATE_VERSION,
         canonical_alpha_shadow: canonicalAlphaShadow,
+        expected_edge_semantics: canonicalAlphaShadow ? "UNAVAILABLE_CANONICAL_ALPHA_SHADOW" : "EXPECTED_NET_EDGE_BPS",
       },
     });
   }
