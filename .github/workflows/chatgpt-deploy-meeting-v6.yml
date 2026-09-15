@@ -17,7 +17,7 @@ jobs:
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN || secrets.VERCEL_ACCESS_TOKEN || secrets.VERCEL_API_TOKEN }}
       VERCEL_TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      HOTFIX_SHA: ff417089ca38f93fc885a71583a0f8339405c347
+      HOTFIX_SHA: a856083e143c80fb3e948787d25c8c18b4f7f981
     steps:
       - name: Create exact production deployment
         shell: bash
