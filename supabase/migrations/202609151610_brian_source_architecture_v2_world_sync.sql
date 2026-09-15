@@ -21,7 +21,7 @@ begin
       )
   where candidate_id='source-arch-v2:'||e.endpoint_id;
 
-  aid := encode(digest('source-arch-v2|'||e.source_id||'|'||new.score_id,'sha256'),'hex');
+  aid := 'source-v2:' || new.score_id;
   insert into public.brian_world_source_assessments(
     assessment_id,source_id,assessed_at,authority_score,freshness_score,manipulation_penalty,
     corroboration_penalty,access_penalty,trust_score,eligible_for_research,
