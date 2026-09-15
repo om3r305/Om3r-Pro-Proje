@@ -107,3 +107,19 @@
 #brianAnatomyLive .an-bottom-hud p{text-transform:none;letter-spacing:0;font-weight:400}
 
 #brianAnatomyLive .an-lab-compat{grid-column:1/-1}#brianAnatomyLive .an-lab-compat:empty{display:none}#brianAnatomyLive #labReadinessLiveV1{background:var(--glass);border-color:var(--line);padding:20px}#brianAnatomyLive .lrv1h b{font-size:15px}#brianAnatomyLive .lrv1k span,#brianAnatomyLive .lrv1cand,#brianAnatomyLive .lrv1badge{font-size:11px}
+
+/* Keep anatomy controls reachable inside its own scrolling dialog. */
+@media(max-width:900px){
+ #brianAnatomyLive{overscroll-behavior:contain;scroll-padding-top:calc(88px + env(safe-area-inset-top,0px))}
+ #brianAnatomyLive .an-header{position:sticky;top:0;z-index:20;background:#090b17f5;backdrop-filter:blur(16px);padding:calc(10px + env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) 10px max(12px,env(safe-area-inset-left,0px));gap:8px}
+ #brianAnatomyLive .an-brand{min-width:0;gap:8px}
+ #brianAnatomyLive .an-brand>div:last-child{min-width:0}
+ #brianAnatomyLive .an-brand .an-eyebrow{font-size:8px;letter-spacing:.08em}
+ #brianAnatomyLive .an-header h1{font-size:16px!important;line-height:1.2}
+ #brianAnatomyLive .an-status{display:none}
+ #brianAnatomyLive .an-actions{flex-shrink:0;gap:6px}
+ #brianAnatomyLive .an-button{min-width:44px;min-height:44px;padding:8px;touch-action:manipulation}
+ #brianAnatomyLive .an-motion-label{display:none}
+ #brianAnatomyLive .an-footer{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:380px){#brianAnatomyLive .an-logo{display:none}#brianAnatomyLive .an-header h1{font-size:14px!important}}

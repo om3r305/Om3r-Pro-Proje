@@ -40,7 +40,7 @@
     return `<svg viewBox="0 0 110 110" aria-hidden="true"><defs><radialGradient id="an-gold" cx="35%" cy="25%"><stop stop-color="#eccc8e"/><stop offset=".6" stop-color="#765635"/><stop offset="1" stop-color="#2c2330"/></radialGradient></defs><ellipse cx="55" cy="78" rx="49" ry="14" fill="none" stroke="#d4b17d" opacity=".3"/><circle cx="55" cy="50" r="37" fill="url(#an-gold)" stroke="#ecd3a2" stroke-width="2"/><circle cx="55" cy="50" r="31" fill="none" stroke="#f4d394" stroke-dasharray="1 3"/><path d="M51 28V72M59 28V72M43 34H59C75 34 75 49 59 49H45H61C78 49 76 66 59 66H43" fill="none" stroke="#f2d4a1" stroke-width="4"/><ellipse cx="55" cy="95" rx="25" ry="4" fill="#e0ad6333"/></svg>`;
   }
   function ensure(){
-    const link=document.createElement('link');link.rel='stylesheet';link.href='/brain-anatomy.css?v=20260915-living1';document.head.appendChild(link);
+    const link=document.createElement('link');link.rel='stylesheet';link.href='/brain-anatomy.css?v=20260916-mobile3';document.head.appendChild(link);
     document.querySelectorAll('#brianAnatomyLive,#developmentLaunch,#developmentLaunchClean,#developmentLaunchV2').forEach(e=>e.remove());
     const anchor=$('#autonomyRow')||$('#chatPanel')?.closest('section')||$('.metrics');
     if(anchor?.parentNode){const launch=document.createElement('section');launch.id='developmentLaunchV2';launch.className='card card-pad';launch.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><b>🧬 Brian Gelişim Anatomisi</b><div style="color:#7f9bab;font-size:10px;margin-top:4px">Canlı durum + detaylı gelişim analizi.</div></div><button class="btn primary" id="ba2open">ANALİZİ AÇ →</button></div>';anchor.before(launch);}
