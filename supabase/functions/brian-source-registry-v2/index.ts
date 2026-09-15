@@ -2,9 +2,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 
-const URL=Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
+const db=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
 const COLLECTOR_ID="brian-source-registry-v2";
 const EVIDENCE="PROSPECTIVE_EVOLUTION_SHADOW";
 const LEASE_SECONDS=180;
@@ -26,12 +26,12 @@ async function probe(endpoint:any){
   const started=Date.now();const observedAt=new Date().toISOString();let status:number|null=null,ctype="",bytes=0,hash:string|null=null,reachable=false,pars=false,origin=false,change=false,errorClass:string|null=null,errorMessage:string|null=null,resolvedUrl=endpoint.endpoint_url;
   try{
     const r=await fetch(endpoint.endpoint_url,{redirect:"follow",headers:{accept:endpoint.expected_content==="json"?"application/json,*/*;q=0.1":"application/rss+xml,application/atom+xml,application/xml,text/html,application/json;q=0.8,*/*;q=0.1","user-agent":"Brian-Market-OS/2.0 source-registry owner=operator"},signal:AbortSignal.timeout(9000)});
-    status=r.status;ctype=r.headers.get("content-type")||"";resolvedUrl=r.url||endpoint.endpoint_url;let resolvedHost="";try{resolvedHost=new URL(resolvedUrl).hostname}catch{}
+    status=r.status;ctype=r.headers.get("content-type")||"";resolvedUrl=r.url||endpoint.endpoint_url;let resolvedHost="";try{resolvedHost=new globalThis.URL(resolvedUrl).hostname}catch{}
     origin=hostMatches(resolvedHost,endpoint.canonical_domain);
     const raw=await readPrefix(r);bytes=raw.length;hash=raw.length?await sha(raw):null;const text=new TextDecoder("utf-8",{fatal:false}).decode(raw);pars=r.ok&&parseable(endpoint.endpoint_kind,ctype,text);reachable=r.ok&&origin&&bytes>0;
     const prev=await db.from("brian_source_endpoint_health_v2").select("content_hash").eq("endpoint_id",endpoint.endpoint_id).not("content_hash","is",null).order("observed_at",{ascending:false}).limit(1).maybeSingle();
     change=Boolean(hash&&prev.data?.content_hash&&prev.data.content_hash!==hash);
-    if(!r.ok){errorClass="HTTP";errorMessage=`HTTP ${r.status}`}else if(!origin){errorClass="ORIGIN_MISMATCH";errorMessage=`redirected to ${resolvedHost}`}else if(!pars){errorClass="UNPARSEABLE";errorMessage=`kind=${endpoint.endpoint_kind} content-type=${ctype}`}
+    if(!r.ok){errorClass="HTTP";errorMessage=`HTTP ${r.status}`}else if(!origin){errorClass="ORIGIN_MISMATCH";errorMessage=`redirected to ${resolvedHost||'unresolved-host'}`}else if(!pars){errorClass="UNPARSEABLE";errorMessage=`kind=${endpoint.endpoint_kind} content-type=${ctype}`}
   }catch(e){errorClass="FETCH";errorMessage=err(e).slice(0,800)}
   const latency=Date.now()-started;const healthId=await sha(`${endpoint.endpoint_id}|${observedAt}|${status}|${hash||errorClass||""}`);
   const ins=await db.from("brian_source_endpoint_health_v2").insert({health_id:healthId,endpoint_id:endpoint.endpoint_id,observed_at:observedAt,reachable,parseable:pars,origin_match:origin,http_status:status,latency_ms:latency,content_type:ctype||null,payload_bytes:bytes,content_hash:hash,change_detected:change,error_class:errorClass,error_message:errorMessage,metadata:{resolved_url:resolvedUrl,source_arch_version:"V2"},shadow_only:true,live_execution:false});if(ins.error)throw ins.error;
@@ -50,7 +50,7 @@ async function probe(endpoint:any){
   const cq=await db.from("brian_world_source_candidates").update({stage:researchEligible?"RESEARCHING":"VERIFYING",metadata:{...(endpoint.metadata||{}),source_arch_version:"V2",endpoint_id:endpoint.endpoint_id,tier:endpoint.tier,category:endpoint.category,region:endpoint.region,official_origin:endpoint.official_origin,origin_verification_pending:!researchEligible,decision_evidence_locked:true,health_streak:streak,composite_score:composite}}).eq("candidate_id",`source-arch-v2:${endpoint.endpoint_id}`);if(cq.error)throw cq.error;
 
   const assessmentId=await sha(`source-arch-v2|${endpoint.source_id}|${observedAt}|${composite.toFixed(6)}`);
-  const aq=await db.from("brian_world_source_assessments").insert({assessment_id:assessmentId,source_id:endpoint.source_id,assessed_at:observedAt,authority_score:authority,freshness_score:healthScore,manipulation_penalty:manipulation,corroboration_penalty:endpoint.corroboration_required?.10:0,access_penalty:endpoint.access_mode==="PUBLIC_NO_KEY"?0:.25,trust_score:composite,eligible_for_research:researchEligible,eligible_for_decision_evidence:false,reasons,metadata:{source_arch_version:"V2",endpoint_id:endpoint.endpoint_id,tier:endpoint.tier,lead_time_score:lead,originality_score:originality,market_relevance_score:relevance,historical_precision_score:precision,health_score:healthScore,decision_evidence_locked:true},evidence_class:EVIDENCE,shadow_only:true,live_execution:false});if(aq.error)throw aq.error;
+  const aq=await db.from("brian_world_source_assessments").insert({assessment_id:assessmentId,source_id:endpoint.source_id,assessed_at:observedAt,authority_score:authority,freshness_score:healthScore,manipulation_penalty:manipulation,corroboration_penalty:endpoint.corroboration_required ? .10 : 0,access_penalty:endpoint.access_mode==="PUBLIC_NO_KEY"?0:.25,trust_score:composite,eligible_for_research:researchEligible,eligible_for_decision_evidence:false,reasons,metadata:{source_arch_version:"V2",endpoint_id:endpoint.endpoint_id,tier:endpoint.tier,lead_time_score:lead,originality_score:originality,market_relevance_score:relevance,historical_precision_score:precision,health_score:healthScore,decision_evidence_locked:true},evidence_class:EVIDENCE,shadow_only:true,live_execution:false});if(aq.error)throw aq.error;
   return {endpoint_id:endpoint.endpoint_id,reachable,parseable:pars,origin_match:origin,http_status:status,latency_ms:latency,health_streak:streak,composite_score:composite,research_eligible:researchEligible,lifecycle,error:errorMessage};
 }
 
