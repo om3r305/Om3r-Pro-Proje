@@ -1,0 +1,41 @@
+create table if not exists public.brian_meeting_shadow_ledger (
+  event_key text primary key,
+  event_time timestamptz not null,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  urgency text not null default 'HIGH' check (urgency in ('CRITICAL','HIGH','MEDIUM','LOW')),
+  importance double precision,
+  title text not null,
+  summary text,
+  original_claim text,
+  event_kind text,
+  source text,
+  publisher text,
+  source_uri text,
+  source_trust text,
+  source_verified boolean not null default false,
+  asset text,
+  alpha_asset text,
+  alpha_action text,
+  alpha_evidence double precision,
+  council_decision text,
+  treasury_gate boolean,
+  treasury_reason text,
+  status text not null default 'GÖZLEMLENİYOR',
+  trade_kind text,
+  trade_action_id text,
+  trade_observed_at timestamptz,
+  trade_reference_price numeric,
+  trade_capital_usd numeric,
+  trade_reason text,
+  payload jsonb not null default '{}'::jsonb,
+  evidence_class text not null default 'PROSPECTIVE_MEETING_SHADOW',
+  shadow_only boolean not null default true check (shadow_only = true),
+  live_execution boolean not null default false check (live_execution = false),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists brian_meeting_shadow_ledger_event_time_idx on public.brian_meeting_shadow_ledger(event_time desc);
+create index if not exists brian_meeting_shadow_ledger_status_idx on public.brian_meeting_shadow_ledger(status, event_time desc);
+alter table public.brian_meeting_shadow_ledger enable row level security;
+comment on table public.brian_meeting_shadow_ledger is 'Durable SHADOW-only ledger linking major news events to Brian council, Alpha, Treasury gate, and observed shadow trade evidence.';
