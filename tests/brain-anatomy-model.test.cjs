@@ -1,0 +1,12 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const M=require('../monster-coins-pro/brain-anatomy-model.js');
+const now=Date.parse('2026-09-15T12:00:00Z'),at=new Date(now).toISOString();
+const data={observed_at:at,overall:{},components:[{id:'alpha',maturity_pct:1,quality_pct:20,evidence_pct:5,samples:12}]};
+const hb={observed_at:at,collectors:{'brian-alpha-decision-compiler-v2':{status:'SUCCESS',finished_at:at},'brian-dip-eye':{status:'SUCCESS',finished_at:at}}};
+test('missing percentages stay unknown, one percent stays one percent',()=>{for(const v of [null,undefined,'',true,NaN])assert.equal(M.pct(v),null);assert.equal(M.pct(1),1);assert.equal(M.pct(0),0);assert.equal(M.pct(101),null);});
+test('no data cannot create maturity or live state',()=>{const v=M.project(null,null,now);assert.equal(v.reportFresh,false);for(const o of v.organs){assert.equal(o.maturity,null);assert.equal(o.state,'unknown');}});
+test('only actual report scores; heartbeat does not manufacture development',()=>{const v=M.project(data,hb,now);assert.equal(v.organs[0].maturity,1);assert.equal(v.organs[0].state,'live');assert.equal(v.organs[1].maturity,null);assert.equal(v.runs.length,1);});
+test('stale heartbeat and future timestamps cannot animate live',()=>{assert.equal(M.project(data,hb,now+91000).organs[0].state,'unknown');assert.equal(M.project(data,{...hb,observed_at:new Date(now+1000).toISOString()},now).heartbeatFresh,false);});
+test('report and heartbeat errors retain data but revoke freshness',()=>{const v=M.project(data,hb,now,'timeout','offline');assert.equal(v.reportFresh,false);assert.equal(v.heartbeatFresh,false);assert.equal(v.organs[0].maturity,1);});
+test('zero evidence never displays maturity as proven',()=>{const d={...data,components:[{...data.components[0],evidence_pct:0}]};assert.equal(M.project(d,hb,now).organs[0].maturity,null);});
+test('failed collector cannot be labeled live',()=>{const h={...hb,collectors:{'brian-alpha-decision-compiler-v2':{status:'FAILED',finished_at:at}}};assert.equal(M.project(data,h,now).organs[0].state,'error');});

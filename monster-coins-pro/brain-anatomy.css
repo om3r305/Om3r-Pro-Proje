@@ -1,0 +1,107 @@
+#brianAnatomyLive{--ink:#efebff;--muted:#a1a0b9;--line:#c4b6ef26;--glass:#131427ad;position:fixed;inset:0;z-index:12000;display:none;overflow:auto;background:#070915;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,sans-serif;isolation:isolate;color-scheme:dark}
+#brianAnatomyLive.show{display:block!important;pointer-events:auto!important}
+#brianAnatomyLive *{box-sizing:border-box}
+#brianAnatomyLive button{font:inherit;color:inherit;cursor:pointer}
+#brianAnatomyLive button:focus-visible{outline:2px solid #e6c5ff;outline-offset:5px}
+#brianAnatomyLive [hidden]{display:none!important}
+#brianAnatomyLive .an-shell{max-width:1800px;margin:auto;min-height:100dvh;background:radial-gradient(ellipse at 43% 43%,#65488727,transparent 48%),radial-gradient(ellipse at 5% 55%,#15364940,transparent 35%)}
+#brianAnatomyLive .an-header{display:flex;align-items:center;justify-content:space-between;padding:24px 34px 18px;gap:20px;border-bottom:1px solid var(--line);position:relative;z-index:4;background:#090b17cc}
+#brianAnatomyLive .an-brand{display:flex;gap:15px;align-items:center}
+#brianAnatomyLive .an-logo{width:42px;height:42px;border:1px solid #bba0ee66;border-radius:14px;display:grid;place-items:center;color:#d7b8fb;font-size:26px;box-shadow:inset 0 0 20px #a470d81a}
+#brianAnatomyLive .an-eyebrow{font-size:10px;letter-spacing:.19em;text-transform:uppercase;color:#b1a3c8;font-weight:600}
+#brianAnatomyLive h1{font-size:23px;letter-spacing:-.6px;margin:4px 0 0;font-weight:550}
+#brianAnatomyLive .an-actions{display:flex;gap:10px;align-items:center}
+#brianAnatomyLive .an-button{min-height:38px;border:1px solid var(--line);background:#c4b6ef09;border-radius:9px;padding:8px 12px;font-size:12px;white-space:nowrap}
+#brianAnatomyLive .an-button:hover{background:#c4b6ef1b}
+#brianAnatomyLive .an-button:disabled{opacity:.45;cursor:wait}
+#brianAnatomyLive .an-close{font-size:22px;width:40px;padding:2px}
+#brianAnatomyLive .an-status{font-size:10px;letter-spacing:.12em;color:#b1a3c8;display:flex;gap:8px;align-items:center;padding:0 10px}
+#brianAnatomyLive .an-status:before{content:'';height:6px;width:6px;border-radius:50%;background:currentColor}
+#brianAnatomyLive .an-status[data-live=true]{color:#94e3bd}
+#brianAnatomyLive .an-intro{display:flex;justify-content:space-between;gap:20px;align-items:end;padding:24px 34px 8px}
+#brianAnatomyLive .an-intro h2{font-weight:450;font-size:30px;letter-spacing:-1px;margin:7px 0}
+#brianAnatomyLive .an-intro p{font-size:12px;line-height:1.6;color:var(--muted);margin:0;max-width:500px}
+#brianAnatomyLive .an-intro .an-meta{text-align:right;font-size:11px;line-height:1.9;color:var(--muted)}
+#brianAnatomyLive .an-layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:20px;padding:10px 34px 20px}
+#brianAnatomyLive .an-stage{position:relative;min-height:640px;overflow:hidden;border-radius:22px;border:1px solid #bcb6ef1b;background:radial-gradient(ellipse at 52% 42%,#69386624,transparent 55%),radial-gradient(ellipse at 70% 18%,#5868be1b,transparent 32%),#080b19}
+#brianAnatomyLive .an-stage:after{content:'';position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 75px 20px #080b19b0;border-radius:inherit}
+#brianAnatomyLive .an-cosmos{position:absolute;inset:0;width:100%;height:100%;opacity:.85;pointer-events:none}
+#brianAnatomyLive .an-stage-label{position:absolute;top:22px;left:24px;font-size:10px;letter-spacing:.15em;color:#acacc3;z-index:2}
+#brianAnatomyLive .an-stage-label span{display:block;color:#686c89;margin-top:7px;font-size:9px;letter-spacing:.06em}
+#brianAnatomyLive .an-orbit{position:absolute;left:50%;top:48%;width:72%;height:65%;border:1px solid #d6adf11a;border-radius:50%;transform:translate(-50%,-50%) rotate(-20deg);pointer-events:none}
+#brianAnatomyLive .an-orbit.second{width:85%;height:78%;transform:translate(-50%,-50%) rotate(20deg);border-style:dashed;border-color:#a89bd211}
+#brianAnatomyLive .an-wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+#brianAnatomyLive .an-wire{fill:none;stroke:var(--organ);stroke-width:1;opacity:.19;transition:opacity 1s}
+#brianAnatomyLive .an-wire.active{opacity:.6}
+#brianAnatomyLive .an-flow{fill:none;stroke:var(--organ);stroke-width:2;stroke-dasharray:2 130;stroke-linecap:round;opacity:0}
+#brianAnatomyLive .an-flow.active{opacity:.85;animation:an-transmit 6s linear infinite}
+@keyframes an-transmit{to{stroke-dashoffset:-264}}
+#brianAnatomyLive .an-organ{position:absolute;z-index:3;border:0;background:none;padding:0;text-align:center;transform:translate(-50%,-50%);display:flex;align-items:center;flex-direction:column;gap:9px;width:175px;--organ:#c4a0ff}
+#brianAnatomyLive .an-organ[data-id=alpha]{left:50%;top:43%;width:43%;max-width:450px}
+#brianAnatomyLive .an-organ[data-id=world]{left:26%;top:25%}
+#brianAnatomyLive .an-organ[data-id=sensors]{left:79%;top:28%}
+#brianAnatomyLive .an-organ[data-id=lab]{left:22%;top:66%}
+#brianAnatomyLive .an-organ[data-id=treasury]{left:78%;top:69%}
+#brianAnatomyLive .an-organ svg{display:block;width:100%;height:100%;overflow:visible}
+#brianAnatomyLive .an-glyph{height:89px;width:89px;transition:filter .4s,transform .4s;filter:drop-shadow(0 0 16px color-mix(in srgb,var(--organ) 18%,transparent))}
+#brianAnatomyLive .an-organ[data-id=alpha] .an-glyph{height:auto;width:100%;aspect-ratio:1.5;filter:drop-shadow(0 0 30px #a681ff36)}
+#brianAnatomyLive .an-organ:hover .an-glyph,#brianAnatomyLive .an-organ[aria-pressed=true] .an-glyph{filter:drop-shadow(0 0 24px color-mix(in srgb,var(--organ) 48%,transparent));transform:translateY(-4px)}
+#brianAnatomyLive .an-organ-label{min-width:132px;padding:9px 12px;border:1px solid #c5b6e429;border-radius:10px;background:#0b101cd9;backdrop-filter:blur(12px);box-shadow:0 5px 25px #0003}
+#brianAnatomyLive .an-organ[aria-pressed=true] .an-organ-label{border-color:color-mix(in srgb,var(--organ) 65%,transparent);background:#1a152cdb}
+#brianAnatomyLive .an-organ-label b{display:block;font-size:12px;font-weight:550}
+#brianAnatomyLive .an-organ-label small{font-size:9px;color:#9a97b0;display:block;margin-top:4px;letter-spacing:.03em}
+#brianAnatomyLive .an-organ-score{font-size:19px!important;line-height:1.25;margin-top:3px;color:var(--organ);font-variant-numeric:tabular-nums}
+#brianAnatomyLive .an-organ-state{position:absolute;top:2px;right:36px;width:6px;height:6px;background:#77778c;border-radius:50%;box-shadow:0 0 0 4px #9090aa12}
+#brianAnatomyLive .an-organ[data-state=live] .an-organ-state{background:#90e6b9;box-shadow:0 0 12px #90e6b9aa}
+#brianAnatomyLive .an-organ[data-state=error] .an-organ-state{background:#f592a7}
+#brianAnatomyLive .an-organ[data-state=degraded] .an-organ-state{background:#f0bf76}
+#brianAnatomyLive .an-organ.firing .an-glyph{animation:an-signal 1.7s ease-out}
+@keyframes an-signal{30%{filter:drop-shadow(0 0 38px var(--organ));transform:translateY(-5px)}100%{transform:translateY(0)}}
+#brianAnatomyLive .an-bottom-hud{position:absolute;bottom:22px;left:24px;right:24px;display:flex;align-items:end;justify-content:space-between;gap:10px;z-index:3}
+#brianAnatomyLive .an-bottom-hud p{margin:4px 0 0;font-size:10px;color:#8e91ac;line-height:1.65}
+#brianAnatomyLive .an-legend{display:flex;gap:12px;font-size:9px;color:#a8a2ba}
+#brianAnatomyLive .an-legend i{display:inline-block;width:5px;height:5px;background:#91dfb7;border-radius:50%;margin-right:5px}
+#brianAnatomyLive .an-legend span:nth-child(2) i{background:#e5bb83}#brianAnatomyLive .an-legend span:nth-child(3) i{background:#7e7e97}
+#brianAnatomyLive .an-sidebar{display:flex;flex-direction:column;gap:14px}
+#brianAnatomyLive .an-card{border:1px solid var(--line);background:linear-gradient(150deg,#1b1a2ca6,#111421bd);border-radius:16px;padding:20px;backdrop-filter:blur(12px)}
+#brianAnatomyLive .an-card h3{font-size:16px;font-weight:550;margin:6px 0;color:#eee6fc}
+#brianAnatomyLive .an-card p{font-size:11px;line-height:1.7;color:var(--muted)}
+#brianAnatomyLive .an-card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}
+#brianAnatomyLive .an-chip{font-size:9px;padding:5px 7px;background:#c3a5ee0c;border:1px solid #c4b6ef26;border-radius:5px;color:#c7afd9;letter-spacing:.06em}
+#brianAnatomyLive .an-selected-score{font-size:43px;letter-spacing:-2px;color:var(--selected,#c4a0ff);font-weight:350;font-variant-numeric:tabular-nums}
+#brianAnatomyLive .an-score-row{display:flex;align-items:center;gap:15px;margin:18px 0}
+#brianAnatomyLive .an-score-row small{font-size:10px;line-height:1.7;color:#9c95b0}
+#brianAnatomyLive .an-bar{margin:13px 0}
+#brianAnatomyLive .an-bar div{display:flex;justify-content:space-between;font-size:11px;color:#aea5c0;margin-bottom:7px}
+#brianAnatomyLive .an-bar i{height:4px;background:#d3bbff0e;border-radius:10px;display:block;overflow:hidden}
+#brianAnatomyLive .an-bar em{display:block;height:100%;background:linear-gradient(90deg,#8863b5,var(--selected,#c4a0ff));border-radius:10px;transition:width 1.3s ease}
+#brianAnatomyLive .an-source{font-size:9px;color:#827e9b;border-top:1px solid var(--line);padding-top:12px;margin-top:14px;line-height:1.8;overflow-wrap:anywhere}
+#brianAnatomyLive .an-detail-list{margin:16px 0 0;display:grid;gap:10px}
+#brianAnatomyLive .an-detail-list div{display:flex;justify-content:space-between;gap:12px;font-size:11px}
+#brianAnatomyLive .an-detail-list dt{color:#aaa3ba}#brianAnatomyLive .an-detail-list dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+#brianAnatomyLive .an-alert{padding:10px 12px;border:1px solid #dfa96838;background:#c4843510;border-radius:8px;color:#d8b38f;font-size:11px;line-height:1.6;margin:0 34px 14px}
+#brianAnatomyLive .an-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0 34px 20px}
+#brianAnatomyLive .an-stat{padding:18px 20px;border:1px solid var(--line);border-radius:13px;background:#16152575}
+#brianAnatomyLive .an-stat label{display:block;font-size:10px;color:#aaa1bb;margin-bottom:10px}
+#brianAnatomyLive .an-stat strong{font-size:24px;font-weight:450;letter-spacing:-.6px}
+#brianAnatomyLive .an-stat small{display:block;font-size:9px;color:#7e7894;margin-top:7px}
+#brianAnatomyLive .an-lower{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:15px;padding:0 34px 28px}
+#brianAnatomyLive .an-list{display:grid;gap:0;margin-top:12px}
+#brianAnatomyLive .an-row{padding:12px 0;border-bottom:1px solid #c4b6ef12;font-size:11px;line-height:1.5}
+#brianAnatomyLive .an-row:last-child{border-bottom:0}
+#brianAnatomyLive .an-row small{display:block;color:#8e879f;font-size:10px;margin-top:4px;overflow-wrap:anywhere}
+#brianAnatomyLive .an-row-head{display:flex;gap:12px;justify-content:space-between;align-items:baseline}
+#brianAnatomyLive .an-row-head b{font-weight:500;overflow-wrap:anywhere}
+#brianAnatomyLive .an-row-head time{white-space:nowrap;font-size:9px;color:#8e879f}
+#brianAnatomyLive .an-empty{color:#928ba5;font-size:11px;line-height:1.8;padding:18px 0}
+#brianAnatomyLive .an-disclosure{font-size:10px;color:#9d93ae;margin-top:15px;line-height:1.7}
+#brianAnatomyLive .an-disclosure summary{cursor:pointer;color:#c8b6df;min-height:28px}
+#brianAnatomyLive .an-footer{padding:0 34px 24px;color:#736c86;font-size:10px;display:flex;justify-content:space-between;gap:20px;line-height:1.6}
+#brianAnatomyLive.an-paused *,#brianAnatomyLive:not(.show) *{animation-play-state:paused!important}
+@media(min-width:1600px){#brianAnatomyLive .an-stage{min-height:730px}#brianAnatomyLive .an-layout{grid-template-columns:minmax(0,1fr) 340px}#brianAnatomyLive .an-glyph{height:110px;width:110px}}
+@media(max-width:1100px){#brianAnatomyLive .an-layout{grid-template-columns:minmax(0,1fr) 275px;padding-left:20px;padding-right:20px;gap:12px}#brianAnatomyLive .an-stage{min-height:640px}#brianAnatomyLive .an-organ{width:140px}#brianAnatomyLive .an-organ[data-id=world]{left:23%}#brianAnatomyLive .an-organ[data-id=alpha]{top:45%;width:47%}#brianAnatomyLive .an-lower{grid-template-columns:1fr 1fr}#brianAnatomyLive .an-lower>.an-card:last-child{grid-column:1/-1}#brianAnatomyLive .an-legend{display:none}}
+@media(max-width:800px){#brianAnatomyLive .an-layout{grid-template-columns:1fr}#brianAnatomyLive .an-sidebar{display:grid;grid-template-columns:1fr 1fr}#brianAnatomyLive .an-stage{min-height:610px}#brianAnatomyLive .an-intro{padding:20px 20px 12px}#brianAnatomyLive .an-intro h2{font-size:26px}#brianAnatomyLive .an-intro .an-meta{display:none}#brianAnatomyLive .an-header{padding:16px 20px}#brianAnatomyLive .an-header h1{font-size:19px}#brianAnatomyLive .an-status{display:none}#brianAnatomyLive .an-strip,#brianAnatomyLive .an-lower{padding-left:20px;padding-right:20px}#brianAnatomyLive .an-alert{margin-left:20px;margin-right:20px}}
+@media(max-width:520px){#brianAnatomyLive .an-header{padding:14px;gap:7px}#brianAnatomyLive .an-brand{gap:9px}#brianAnatomyLive .an-logo{width:34px;height:36px;font-size:23px}#brianAnatomyLive h1{font-size:16px!important}#brianAnatomyLive .an-eyebrow{font-size:8px}#brianAnatomyLive .an-actions{gap:5px}#brianAnatomyLive .an-button{padding:7px 9px}#brianAnatomyLive .an-motion-label{display:none}#brianAnatomyLive .an-layout{padding:6px 10px 16px}#brianAnatomyLive .an-stage{min-height:640px;border-radius:15px}#brianAnatomyLive .an-stage-label{left:16px;top:17px;font-size:8px}#brianAnatomyLive .an-organ{width:120px;gap:7px}#brianAnatomyLive .an-glyph{height:66px;width:66px}#brianAnatomyLive .an-organ-label{min-width:110px;padding:8px}#brianAnatomyLive .an-organ-label b{font-size:10px}#brianAnatomyLive .an-organ-label small{font-size:8px}#brianAnatomyLive .an-organ-score{font-size:17px!important}#brianAnatomyLive .an-organ[data-id=alpha]{top:46%;width:55%;z-index:4}#brianAnatomyLive .an-organ[data-id=world]{left:24%;top:19%}#brianAnatomyLive .an-organ[data-id=sensors]{left:77%;top:19%}#brianAnatomyLive .an-organ[data-id=lab]{left:23%;top:76%}#brianAnatomyLive .an-organ[data-id=treasury]{left:77%;top:76%}#brianAnatomyLive .an-sidebar{grid-template-columns:1fr}#brianAnatomyLive .an-strip{grid-template-columns:1fr 1fr;gap:8px;padding:0 10px 16px}#brianAnatomyLive .an-stat{padding:15px}#brianAnatomyLive .an-lower{grid-template-columns:1fr;padding:0 10px 20px}#brianAnatomyLive .an-lower>.an-card:last-child{grid-column:auto}#brianAnatomyLive .an-bottom-hud{left:16px;bottom:15px}#brianAnatomyLive .an-bottom-hud p{font-size:8px}#brianAnatomyLive .an-intro{padding:18px 15px 10px}#brianAnatomyLive .an-intro h2{font-size:25px}#brianAnatomyLive .an-intro p{font-size:11px}#brianAnatomyLive .an-footer{padding:0 15px 24px;display:block}#brianAnatomyLive .an-alert{margin:0 10px 12px}}
+@media(prefers-reduced-motion:reduce){#brianAnatomyLive *{animation:none!important;transition:none!important}}
+
+#brianAnatomyLive .an-bottom-hud p{text-transform:none;letter-spacing:0;font-weight:400}
