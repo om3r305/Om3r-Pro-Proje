@@ -10,88 +10,22 @@
   const set=(node,text)=>{if(node&&node.textContent!==String(text))node.textContent=String(text);};
   let lastGood=null,lastGoodAt=0,misses=0,busy=false,firstAltChosen=false;
 
-  const labels={
-    spread:'spread uygun değil',recovery:'dönüş onayı yok',trend:'trend onayı yok',day_move:'24s hareket aşırı',
-    pullback:'dip derinliği yetersiz',bounce:'tepki henüz yok',economics:'net edge yetersiz',radar:'radar eşiği altında',
-    score:'kalite eşiği altında',not_chasing:'fiyat tepede',position_open:'pozisyon açık'
-  };
-  function humanReason(raw){
-    let s=String(raw||'').trim();if(!s)return 'FIRSAT TARANIYOR';
-    if(s==='POSITION_OPEN')return 'POZİSYON AÇIK';
-    if(s.startsWith('RISK_FROZEN_'))return `RİSK DONDURULDU · ${s.slice(12).replaceAll('_',' ')}`;
-    if(s.startsWith('COOLDOWN_'))return `COOLDOWN · ${s.slice(9).replaceAll('_',' ')}`;
-    if(s.startsWith('WAIT_')){const parts=s.slice(5).split('+').filter(Boolean);return `İZLE · ${parts.map(x=>labels[x]||x.replaceAll('_',' ')).join(' · ')}`;}
-    if(/^V8?55?_/.test(s)||s.startsWith('V85_'))return s.replaceAll('_',' ');
-    return s.replaceAll('_',' ');
-  }
-  function humanizeText(text){
-    return String(text||'').replace(/WAIT_[A-Za-z0-9_+]+/g,m=>humanReason(m)).replace(/RISK_FROZEN_[A-Za-z0-9_+]+/g,m=>humanReason(m)).replace(/COOLDOWN_[A-Za-z0-9_+]+/g,m=>humanReason(m));
-  }
-  function versionOf(d){const scan=d?.last_scan||{};return String(d?.engine_version||scan.engine_version||'V8.5.5').replace(/^V(?=\d)/,'V');}
-  function radarLabel(d){const scan=d?.last_scan||{},source=String(d?.radar_source||scan.radar_source||'').toUpperCase();if(source==='BINANCE_LIVE_FALLBACK')return 'Binance canlı radar';if(source==='SHARED_RADAR')return 'paylaşılan canlı radar';if(source==='SHARED_RADAR_STALE_FALLBACK')return 'korumalı stale radar';return 'radar';}
+  const labels={spread:'spread uygun değil',recovery:'dönüş onayı yok',trend:'trend onayı yok',day_move:'24s hareket aşırı',pullback:'dip derinliği yetersiz',bounce:'tepki henüz yok',economics:'net edge yetersiz',radar:'radar eşiği altında',score:'kalite eşiği altında',not_chasing:'fiyat tepede',position_open:'pozisyon açık'};
+  function humanReason(raw){let s=String(raw||'').trim();if(!s)return 'FIRSAT TARANIYOR';if(s==='POSITION_OPEN')return 'POZİSYON AÇIK';if(s.startsWith('RISK_FROZEN_'))return `RİSK DONDURULDU · ${s.slice(12).replaceAll('_',' ')}`;if(s.startsWith('COOLDOWN_'))return `COOLDOWN · ${s.slice(9).replaceAll('_',' ')}`;if(s.startsWith('WAIT_')){const parts=s.slice(5).split('+').filter(Boolean);return `İZLE · ${parts.map(x=>labels[x]||x.replaceAll('_',' ')).join(' · ')}`;}if(s.startsWith('V860_'))return s.replace('V860_','').replaceAll('_',' ');if(/^V8?55?_/.test(s)||s.startsWith('V85_'))return s.replaceAll('_',' ');return s.replaceAll('_',' ');}
+  function humanizeText(text){return String(text||'').replace(/WAIT_[A-Za-z0-9_+]+/g,m=>humanReason(m)).replace(/RISK_FROZEN_[A-Za-z0-9_+]+/g,m=>humanReason(m)).replace(/COOLDOWN_[A-Za-z0-9_+]+/g,m=>humanReason(m)).replace(/V860_[A-Za-z0-9_+]+/g,m=>humanReason(m));}
+  function versionOf(d){const scan=d?.last_scan||{};return String(d?.engine_version||scan.engine_version||'V8.6.0').replace(/^V(?=\d)/,'V');}
+  function radarLabel(d){const scan=d?.last_scan||{},source=String(d?.radar_source||scan.radar_source||'').toUpperCase();if(source==='HYBRID_LIVE_RADAR')return 'hibrit canlı radar';if(source==='BINANCE_LIVE_FALLBACK')return 'Binance canlı radar';if(source==='SHARED_RADAR')return 'paylaşılan canlı radar';if(source==='SHARED_RADAR_STALE_FALLBACK')return 'korumalı stale radar';return 'radar';}
 
-  async function fetchStatus(){
-    if(busy||document.hidden)return;const key=localStorage.getItem(KEY)||'';if(!key)return;
-    busy=true;
-    try{
-      const r=await fetch(API,{method:'POST',cache:'no-store',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'})});
-      const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||`HTTP ${r.status}`),{status:r.status});
-      if(!d||!d.engine_id)throw new Error('STATUS_PAYLOAD_INVALID');
-      lastGood=d;lastGoodAt=Date.now();misses=0;window.__DIP_GUARDIAN_STATE__=d;patch(d,false);
-      window.dispatchEvent(new CustomEvent('dip:guardian-status',{detail:d}));
-    }catch(e){misses++;if(e?.status===401){localStorage.removeItem(KEY);el('unlock')?.classList.add('show');}patch(lastGood,true);}
-    finally{busy=false;}
-  }
+  async function fetchStatus(){if(busy||document.hidden)return;const key=localStorage.getItem(KEY)||'';if(!key)return;busy=true;try{const r=await fetch(API,{method:'POST',cache:'no-store',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||`HTTP ${r.status}`),{status:r.status});if(!d||!d.engine_id)throw new Error('STATUS_PAYLOAD_INVALID');lastGood=d;lastGoodAt=Date.now();misses=0;window.__DIP_GUARDIAN_STATE__=d;patch(d,false);window.dispatchEvent(new CustomEvent('dip:guardian-status',{detail:d}));}catch(e){misses++;if(e?.status===401){localStorage.removeItem(KEY);el('unlock')?.classList.add('show');}patch(lastGood,true);}finally{busy=false;}}
 
-  function patchHeader(d,reconnecting){
-    const age=d?Math.max(0,n(d.age_seconds,(Date.now()-lastGoodAt)/1000)):null,scan=d?.last_scan||{},mode=String(d?.risk_mode||scan.risk_mode||'COLD').toUpperCase(),status=String(d?.status||'CONNECTING').toUpperCase(),version=versionOf(d);
-    const healthy=Boolean(d&&age!==null&&age<120&&!['FAILED_CLOSED','STOPPED','ERROR'].includes(status)),live=healthy&&status==='RUNNING',hasRecent=Boolean(d&&Date.now()-lastGoodAt<90000),top=el('topStatus');
-    if(top){
-      if(reconnecting&&hasRecent){set(top,`${version} ${mode} · SYNC`);top.className='pill warn';}
-      else if(live){set(top,`${version} ${mode} · LIVE`);top.className='pill good';}
-      else if(healthy){set(top,`${version} ${mode} · SYNC`);top.className='pill warn';}
-      else{set(top,`${version} ${status}`);top.className='pill warn';}
-    }
-    const engine=el('kpiEngine');if(engine){set(engine,d?`${version} ${mode}`:`${version} CONNECT`);engine.className=`value ${live?'pos':'amber'}`;}
-    set(el('kpiEngineMeta'),`Guardian · live-radar · after-cost edge · max ${n(d?.max_positions??scan.max_positions,2)} poz · SHADOW`);
-    const liveNode=el('multiDipState');if(liveNode){
-      if(d&&hasRecent){set(liveNode,reconnecting?`GUARDIAN SYNC · son sağlam veri ${Math.round((Date.now()-lastGoodAt)/1000)} sn`:`GUARDIAN ${live?'CANLI':'SYNC'} · ${mode} · worker ${Math.round(age||0)} sn`);liveNode.style.color=live?'#35f0ae':'#f3c969';}
-      else if(misses>2){set(liveNode,'BAĞLANTI YENİLENİYOR');liveNode.style.color='#f3c969';}
-    }
-  }
+  function patchHeader(d,reconnecting){const age=d?Math.max(0,n(d.age_seconds,(Date.now()-lastGoodAt)/1000)):null,scan=d?.last_scan||{},mode=String(d?.risk_mode||scan.risk_mode||'COLD').toUpperCase(),status=String(d?.status||'CONNECTING').toUpperCase(),version=versionOf(d),healthy=Boolean(d&&age!==null&&age<120&&!['FAILED_CLOSED','STOPPED','ERROR'].includes(status)),live=healthy&&status==='RUNNING',hasRecent=Boolean(d&&Date.now()-lastGoodAt<90000),top=el('topStatus');if(top){if(reconnecting&&hasRecent){set(top,`${version} ${mode} · SYNC`);top.className='pill warn';}else if(live){set(top,`${version} ${mode} · LIVE`);top.className='pill good';}else if(healthy){set(top,`${version} ${mode} · SYNC`);top.className='pill warn';}else{set(top,`${version} ${status}`);top.className='pill warn';}}const engine=el('kpiEngine');if(engine){set(engine,d?`${version} ${mode}`:`${version} CONNECT`);engine.className=`value ${live?'pos':'amber'}`;}set(el('kpiEngineMeta'),`Hunter + Harvest · multi-horizon · dinamik kasa · max ${n(d?.max_positions??scan.max_positions,3)} poz · SHADOW`);const liveNode=el('multiDipState');if(liveNode){if(d&&hasRecent){set(liveNode,reconnecting?`GUARDIAN SYNC · son sağlam veri ${Math.round((Date.now()-lastGoodAt)/1000)} sn`:`GUARDIAN ${live?'CANLI':'SYNC'} · ${mode} · worker ${Math.round(age||0)} sn`);liveNode.style.color=live?'#35f0ae':'#f3c969';}else if(misses>2){set(liveNode,'BAĞLANTI YENİLENİYOR');liveNode.style.color='#f3c969';}}}
 
-  function patchKpis(d){if(!d)return;const positions=Array.isArray(d.positions)?d.positions:[],wins=n(d.win_count),losses=n(d.loss_count),closed=wins+losses;
-    set(el('kpiEquity'),usd(d.equity));set(el('kpiPnl'),money(d.realized_pnl));
-    const pnlNode=el('kpiPnl');if(pnlNode)pnlNode.className=`value ${n(d.realized_pnl)>0?'pos':n(d.realized_pnl)<0?'neg':''}`;
-    set(el('kpiOpen'),positions.length);set(el('kpiWin'),closed?`${(wins/closed*100).toFixed(1)}%`:'—');set(el('kpiTrades'),n(d.trade_count));
-    set(el('kpiEquityMeta'),`Cash ${usd(d.cash)} · başlangıç ${usd(d.starting_equity)}`);set(el('kpiPnlMeta'),'Fee + spread + slippage sonrası gerçekleşen sonuç');
-    set(el('kpiOpenMeta'),positions.length?positions.map(p=>p.symbol).join(' · '):'Pozisyon yok · Guardian fırsat tarıyor');set(el('kpiWinMeta'),`${wins} win / ${losses} loss`);set(el('kpiTradesMeta'),'Kapalı Guardian SHADOW round trip');
-  }
+  function patchKpis(d){if(!d)return;const positions=Array.isArray(d.positions)?d.positions:[],wins=n(d.win_count),losses=n(d.loss_count),closed=wins+losses;set(el('kpiEquity'),usd(d.equity));set(el('kpiPnl'),money(d.realized_pnl));const pnlNode=el('kpiPnl');if(pnlNode)pnlNode.className=`value ${n(d.realized_pnl)>0?'pos':n(d.realized_pnl)<0?'neg':''}`;set(el('kpiOpen'),positions.length);set(el('kpiWin'),closed?`${(wins/closed*100).toFixed(1)}%`:'—');set(el('kpiTrades'),n(d.trade_count));set(el('kpiEquityMeta'),`Cash ${usd(d.cash)} · başlangıç ${usd(d.starting_equity)}`);set(el('kpiPnlMeta'),'Fee + spread + slippage sonrası gerçekleşen sonuç');set(el('kpiOpenMeta'),positions.length?positions.map(p=>`${p.symbol}${p.runner_mode?' · RUNNER':''}`).join(' · '):'Pozisyon yok · Hunter fırsat tarıyor');set(el('kpiWinMeta'),`${wins} win / ${losses} loss`);set(el('kpiTradesMeta'),'Kapalı Guardian SHADOW round trip');}
 
-  function patchTelemetry(d){if(!d)return;const scan=d.last_scan||{},mode=String(d.risk_mode||scan.risk_mode||'COLD').toUpperCase(),reason=String(d.risk_reason||scan.risk_reason||'CALIBRATING').replaceAll('_',' '),radarAge=n(d.radar_age_seconds??scan.radar_age_seconds),soft=Boolean(d.radar_soft_stale??scan.radar_soft_stale),dd=n(d.drawdown_pct??scan.drawdown_pct),gross=n(d.gross_cap_pct??scan.gross_cap_pct),risk=n(d.risk_cap_pct??scan.risk_cap_pct),policy=String(d.policy_version||scan.policy_version||'dip-v855-guardian'),radar=radarLabel(d),version=versionOf(d);
-    set(el('releaseMeta'),`${policy} · ${version} · ${String(d.status||'WAIT')}`);
-    set(el('evidenceMeta'),`Risk ${mode} · ${reason} · ${radar} ${Math.round(radarAge)} sn${soft?' · korumalı stale modu':''} · DD ${(dd*100).toFixed(2)}%`);
-    const strip=el('guardianStrip');if(strip){const pos=Array.isArray(d.positions)?d.positions.length:0,age=Math.round(n(d.age_seconds));set(strip,`${version} · ${String(d.status||'WAIT')} · worker ${age} sn · ${radar} ${Math.round(radarAge)} sn · pozisyon tavanı ${(gross*100).toFixed(2)}% equity · stop-risk ${(risk*100).toFixed(2)}% · ${pos}/${n(d.max_positions??scan.max_positions,2)} açık pozisyon · gerçek emir KAPALI`);strip.className=String(d.status)==='RUNNING'&&age<120?'guardian-live':'guardian-warn';}
-    const session=el('multiDipSession');if(session){const sid=String(d.source_session_id||'Guardian standalone');set(session,`${sid} · ${policy} · ${mode} · ${radar} · SHADOW ONLY · gerçek emir KAPALI`);}
-  }
+  function patchTelemetry(d){if(!d)return;const scan=d.last_scan||{},mode=String(d.risk_mode||scan.risk_mode||'COLD').toUpperCase(),reason=String(d.risk_reason||scan.risk_reason||'CALIBRATING').replaceAll('_',' '),radarAge=n(d.radar_age_seconds??scan.radar_age_seconds),soft=Boolean(d.radar_soft_stale??scan.radar_soft_stale),dd=n(d.drawdown_pct??scan.drawdown_pct),gross=n(d.gross_cap_pct??scan.gross_cap_pct),risk=n(d.risk_cap_pct??scan.risk_cap_pct),maxTotal=n(d.max_total_gross_pct??scan.max_total_gross_pct,.35),policy=String(d.policy_version||scan.policy_version||'dip-v860-hunter-harvest'),radar=radarLabel(d),version=versionOf(d),learn=d.learning_summary||scan.learning_summary||{};set(el('releaseMeta'),`${policy} · ${version} · ${String(d.status||'WAIT')}`);set(el('evidenceMeta'),`Risk ${mode} · ${reason} · ${radar} ${Math.round(radarAge)} sn${soft?' · korumalı stale modu':''} · DD ${(dd*100).toFixed(2)}% · kaçan A+ ${n(learn.missed_a_plus)}`);const strip=el('guardianStrip');if(strip){const pos=Array.isArray(d.positions)?d.positions.length:0,age=Math.round(n(d.age_seconds));set(strip,`${version} · ${String(d.status||'WAIT')} · worker ${age} sn · ${radar} ${Math.round(radarAge)} sn · temel gross ${(gross*100).toFixed(1)}% · dinamik toplam tavan ${(maxTotal*100).toFixed(0)}% · stop-risk ${(risk*100).toFixed(2)}% · ${pos}/${n(d.max_positions??scan.max_positions,3)} açık · gerçek emir KAPALI`);strip.className=String(d.status)==='RUNNING'&&age<120?'guardian-live':'guardian-warn';}const session=el('multiDipSession');if(session){const sid=String(d.source_session_id||'Guardian standalone');set(session,`${sid} · ${policy} · ${mode} · ${radar} · SHADOW ONLY · gerçek emir KAPALI`);}}
 
-  function patchWorkspace(){
-    const panel=el('multiDipPanel');if(!panel)return;
-    const title=panel.querySelector('.md-title');if(title)set(title,'⚡ Guardian DIP Çalışma Alanı');
-    const sub=panel.querySelector('.md-sub');if(sub)set(sub,'Guardian canlı Binance radarını ve likit altcoinleri tarar; gerçek DIP + dönüş onayı + maliyet sonrası edge oluşursa SHADOW giriş planı açar.');
-    panel.querySelectorAll('[data-symbol="ETHUSDT"]').forEach(x=>x.style.display='none');
-    const note=panel.querySelector('.md-note');if(note)set(note,'Grafik Binance Spot 1s akışıdır. Entry / stop / hedef yalnız Guardian SHADOW planıdır; gerçek emir gönderilmez.');
-    const alt=[...panel.querySelectorAll('#multiDipTabs [data-symbol]')].find(x=>x.dataset.symbol&&x.dataset.symbol!=='ETHUSDT');
-    if(!firstAltChosen&&alt){firstAltChosen=true;alt.click();}
-    panel.querySelectorAll('.md-meta,.md-value').forEach(node=>{const h=humanizeText(node.textContent);if(h!==node.textContent)set(node,h);});
-    const chartMeta=el('mdChartMeta');if(chartMeta)set(chartMeta,humanizeText(chartMeta.textContent));
-    const plan=el('mdPlan');if(plan&&/ETH çekirdeği|V8\.4\.4/i.test(plan.textContent||''))plan.innerHTML='<div class="md-plan-row"><div class="md-label">Guardian</div><div class="md-value">Uygun altcoin DIP fırsatı bekleniyor. İşlem açmak zorunlu değil.</div></div>';
-  }
+  function patchWorkspace(){const panel=el('multiDipPanel');if(!panel)return;const title=panel.querySelector('.md-title');if(title)set(title,'⚡ V8.6 Hunter + Harvest Çalışma Alanı');const sub=panel.querySelector('.md-sub');if(sub)set(sub,'Hunter dipten güçlü dönüşü arar; multi-horizon forecast ile A+/A fırsatları büyütür. Yeşil hedef çizgisi artık satış değil HARVEST tetikleyicisidir; yükseliş sürerse RUNNER taşınır ve tepe dönüşünde çıkılır.');panel.querySelectorAll('[data-symbol="ETHUSDT"]').forEach(x=>x.style.display='none');const note=panel.querySelector('.md-note');if(note)set(note,'Grafik Binance Spot 1s akışıdır. Yeşil HEDEF çizgisi V8.6’da HARVEST başlangıcıdır; fiyat güçlü yükselmeye devam ederse satış yapılmaz. Gerçek emir gönderilmez.');const alt=[...panel.querySelectorAll('#multiDipTabs [data-symbol]')].find(x=>x.dataset.symbol&&x.dataset.symbol!=='ETHUSDT');if(!firstAltChosen&&alt){firstAltChosen=true;alt.click();}panel.querySelectorAll('.md-meta,.md-value').forEach(node=>{let h=humanizeText(node.textContent);h=h.replace(/Hedef /g,'Harvest ');if(h!==node.textContent)set(node,h);});const chartMeta=el('mdChartMeta');if(chartMeta)set(chartMeta,humanizeText(chartMeta.textContent));const plan=el('mdPlan');if(plan&&/ETH çekirdeği|V8\.4\.4/i.test(plan.textContent||''))plan.innerHTML='<div class="md-plan-row"><div class="md-label">Hunter + Harvest</div><div class="md-value">Uygun altcoin DIP fırsatı bekleniyor. Hedef çizgisi satış emri değil, runner/harvest yönetiminin başladığı seviyedir.</div></div>';const titleText=String(el('mdChartTitle')?.textContent||''),symbol=(titleText.match(/^([A-Z0-9]+USDT)/)||[])[1],pos=Array.isArray(lastGood?.positions)?lastGood.positions.find(p=>p.symbol===symbol):null;if(pos&&plan&&!plan.querySelector('[data-v860-runner]')){const row=document.createElement('div');row.className='md-plan-row';row.dataset.v860Runner='1';row.innerHTML=`<div class="md-label">V8.6 Yönetim</div><div class="md-value">${pos.opportunity_tier||'B'} · ${pos.entry_style||'CORE'} · ${pos.runner_mode?'RUNNER AKTİF':'HARVEST BEKLİYOR'} · devam olasılığı %${Math.round(n(pos.continuation_prob)*100)} · kasa payı %${(n(pos.capital_fraction)*100).toFixed(1)}</div>`;plan.appendChild(row);}}
 
   function patch(d=lastGood,reconnecting=false){patchHeader(d,reconnecting);patchKpis(d);patchTelemetry(d);patchWorkspace();}
-
-  window.addEventListener('load',()=>{fetchStatus();setInterval(()=>patch(lastGood,misses>0),750);setInterval(fetchStatus,5000);});
-  window.addEventListener('dip:guardian-refresh',fetchStatus);
-  window.addEventListener('dip:guardian-status',e=>{if(e?.detail?.engine_id){lastGood=e.detail;lastGoodAt=Date.now();misses=0;patch(lastGood,false);}});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)fetchStatus();});
+  window.addEventListener('load',()=>{fetchStatus();setInterval(()=>patch(lastGood,misses>0),750);setInterval(fetchStatus,5000);});window.addEventListener('dip:guardian-refresh',fetchStatus);window.addEventListener('dip:guardian-status',e=>{if(e?.detail?.engine_id){lastGood=e.detail;lastGoodAt=Date.now();misses=0;patch(lastGood,false);}});document.addEventListener('visibilitychange',()=>{if(!document.hidden)fetchStatus();});
 })();
