@@ -53,7 +53,7 @@ jobs:
         env:
           EXTERNAL_OPENAI_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY }}
           OLLAMA_VERSION: v0.34.0
-          OLLAMA_INSTALL_SHA256: 25f64b810b947145095956533e1bdf56eacea2673c55a7e586be4515fc882c9f
+          OLLAMA_ARCHIVE_SHA256: cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804
           OLLAMA_HOST: 127.0.0.1:11434
           OLLAMA_CONTEXT_LENGTH: '32768'
           OLLAMA_NUM_PARALLEL: '1'
@@ -65,9 +65,12 @@ jobs:
             exit 0
           fi
 
-          curl -fsSLo /tmp/ollama-install.sh "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/install.sh"
-          echo "${OLLAMA_INSTALL_SHA256}  /tmp/ollama-install.sh" | sha256sum -c -
-          sh /tmp/ollama-install.sh
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --output /tmp/ollama-linux-amd64.tar.zst \
+            "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst"
+          echo "${OLLAMA_ARCHIVE_SHA256}  /tmp/ollama-linux-amd64.tar.zst" | sha256sum -c -
+          sudo tar --zstd -xf /tmp/ollama-linux-amd64.tar.zst -C /usr/local
+          ollama --version
 
           mkdir -p "$OLLAMA_MODELS"
           nohup env OLLAMA_HOST="$OLLAMA_HOST" OLLAMA_CONTEXT_LENGTH="$OLLAMA_CONTEXT_LENGTH" OLLAMA_NUM_PARALLEL="$OLLAMA_NUM_PARALLEL" OLLAMA_MODELS="$OLLAMA_MODELS" ollama serve >/tmp/brian-ollama.log 2>&1 &
