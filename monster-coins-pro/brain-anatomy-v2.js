@@ -57,8 +57,8 @@
     reduced.addEventListener('change',motion);
     new ResizeObserver(()=>{resize();draw(performance.now());}).observe($('.an-stage'));
   }
-  function open(){if(D.open)return;D.open=true;D.opener=document.activeElement;D.scroll={body:document.body.style.overflow,html:document.documentElement.style.overflow};const m=$('#brianAnatomyLive');m.classList.add('show');m.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';document.documentElement.style.overflow='hidden';$('#ba2close').focus();render();resize();motion();detail(false);}
-  function close(){D.open=false;const m=$('#brianAnatomyLive');m.classList.remove('show');m.setAttribute('aria-hidden','true');document.body.style.overflow=D.scroll?.body||'';document.documentElement.style.overflow=D.scroll?.html||'';cancelAnimationFrame(D.frame);D.frame=0;D.opener?.focus?.();}
+  function open(){if(D.open)return;D.open=true;D.opener=document.activeElement;D.scroll={body:document.body.style.overflow,html:document.documentElement.style.overflow};const m=$('#brianAnatomyLive');m.classList.add('show','bal-show');m.setAttribute('aria-hidden','false');document.body.style.overflow='hidden';document.documentElement.style.overflow='hidden';$('#ba2close').focus();render();resize();motion();detail(false);}
+  function close(){D.open=false;const m=$('#brianAnatomyLive');m.classList.remove('show','bal-show');m.setAttribute('aria-hidden','true');document.body.style.overflow=D.scroll?.body||'';document.documentElement.style.overflow=D.scroll?.html||'';cancelAnimationFrame(D.frame);D.frame=0;D.opener?.focus?.();}
   async function detail(force=false){
     if(D.busy||!D.open||document.hidden)return;
     if(!force&&Date.now()-D.lastAttempt<60000)return;
