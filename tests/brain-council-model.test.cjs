@@ -1,0 +1,11 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {project}=require('../monster-coins-pro/frontier-meeting-v7-model.js');
+const now=Date.now(),time=new Date(now-1000).toISOString();
+const input={now,event:{event_id:'event-1',asset:'crypto:BTC',time,urgency:'HIGH'},decision:{source_event_ids:['event-1'],asset_id:'crypto:BTC',observed_at:time,action:'OPEN_LONG'},evidence:{verified:true,decisionEligible:true},treasury:{promotion_gate_open:true},rows:[{state:'ok'}]};
+test('linked fresh evidence permits display agreement, never execution',()=>assert.equal(project(input).title,'Kanıtlar uyumlu'));
+test('unrelated event or asset cannot approve',()=>{for(const patch of [{source_event_ids:['other']},{asset_id:'crypto:ETH'}])assert.equal(project({...input,decision:{...input.decision,...patch}}).gates[2].state,'wait')});
+test('old and future ALPHA evidence remain pending',()=>{for(const offset of [-301000,1000])assert.equal(project({...input,decision:{...input.decision,observed_at:new Date(now+offset).toISOString()}}).gates[2].state,'wait')});
+test('source recognized but not decision eligible remains pending',()=>assert.equal(project({...input,evidence:{verified:true,decisionEligible:false}}).gates[1].state,'wait'));
+test('technical alarm blocks even with matching ALPHA',()=>assert.equal(project({...input,rows:[{state:'bad'}]}).blocked,true));
+test('missing data cannot produce agreement',()=>assert.equal(project({now}).ready,0));
+test('future and stale events do not pass',()=>{for(const offset of [-3600001,1000])assert.equal(project({...input,event:{...input.event,time:new Date(now+offset).toISOString()}}).eventFresh,false)});
