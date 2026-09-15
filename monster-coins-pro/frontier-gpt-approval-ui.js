@@ -1,11 +1,12 @@
 'use strict';
 
-/* Presentation-only label adapter for the legacy HUMAN_APPROVAL state.
-   Backend approval authority is gpt-evidence-gate; DB column names remain legacy
-   for state-machine compatibility. No approval action is performed in the browser. */
+/* Presentation-only UI adapter for the legacy HUMAN_APPROVAL state.
+   Backend approval authority is gpt-evidence-gate; DB/state-machine field names stay
+   unchanged for compatibility. This file never performs an approval action. */
 (function(){
   const replacements=[
     ['ÖMER ONAYI','GPT ONAYI'],
+    ['Ömer Onayı','GPT Onayı'],
     ['Ömer Onay Masası','GPT Onay Masası'],
     ['Ömer onayı','GPT onayı'],
     ['İNSAN ONAYI ZORUNLU','GPT KANIT ONAYI'],
@@ -26,8 +27,48 @@
     }
   }
 
-  function apply(){relabel(document.getElementById('brianEngineeringRoomV2'));}
-  const observer=new MutationObserver(()=>queueMicrotask(apply));
+  function compactMainEngineerCard(){
+    const card=document.getElementById('developerBrian');
+    if(!card)return;
+
+    const title=card.querySelector('.section-title');
+    const sub=card.querySelector('.section-sub');
+    if(title)title.textContent='👨‍💻 Yazılımcı Brian';
+    if(sub)sub.textContent='Ayrıntılı kod, test, review ve GPT karar akışı Mühendislik Odası’nda.';
+
+    // Main dashboard stays executive-level. Detailed engineering truth remains in the room.
+    for(const id of ['autonomySummary','autonomyGovernance','codeStream']){
+      const el=document.getElementById(id);
+      if(el)el.style.setProperty('display','none','important');
+    }
+
+    const launch=document.getElementById('berLaunch');
+    if(launch){
+      launch.textContent='👨‍💻 MÜHENDİSLİK ODASINI AÇ →';
+      launch.style.removeProperty('display');
+      // The room button is the boundary: hide lower engineering detail/source blocks on the main card.
+      let sibling=launch.nextElementSibling;
+      while(sibling){
+        sibling.style.setProperty('display','none','important');
+        sibling=sibling.nextElementSibling;
+      }
+    }
+
+    relabel(card);
+  }
+
+  function apply(){
+    relabel(document.getElementById('brianEngineeringRoomV2'));
+    compactMainEngineerCard();
+  }
+
+  let queued=false;
+  const scheduleApply=()=>{
+    if(queued)return;
+    queued=true;
+    queueMicrotask(()=>{queued=false;apply();});
+  };
+  const observer=new MutationObserver(scheduleApply);
   observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
   document.addEventListener('click',()=>setTimeout(apply,0),true);
   setInterval(apply,3000);
