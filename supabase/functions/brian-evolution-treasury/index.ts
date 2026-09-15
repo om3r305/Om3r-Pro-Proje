@@ -8,6 +8,13 @@ import {
   type PromotionGateState,
 } from "../_shared/evolution_treasury_gate.ts";
 import {
+  CANONICAL_ALPHA_SHADOW_MAINTENANCE_MAX_AGE_SECONDS,
+  CANONICAL_ALPHA_SHADOW_POSITION_PREFIX,
+  buildCanonicalAlphaShadowOpportunities,
+  type CanonicalAlphaDecisionRow,
+  type CanonicalAlphaShadowOpportunity,
+} from "../_shared/evolution_treasury_alpha_shadow.ts";
+import {
   assessTreasuryRuntimeEvidence,
   missingTreasuryPositionEdgeAssets,
 } from "../_shared/evolution_treasury_runtime.ts";
@@ -30,6 +37,7 @@ const MAX_EDGE_ROWS = 100;
 const MARK_LOOKBACK_MS = 5 * 60_000;
 const DEGRADED_MARK_LOOKBACK_MS = 60 * 60_000;
 const EDGE_SELECT = "decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear";
+const ALPHA_SHADOW_SELECT = "decision_id,observed_at,asset_id,observed_reference_price,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,veto_reason,evidence_class,shadow_only,live_execution,metadata";
 
 type SnapshotRow = {
   snapshot_id: string;
@@ -348,6 +356,41 @@ async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<
   return opportunities;
 }
 
+async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIso: string): Promise<CanonicalAlphaShadowOpportunity[]> {
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(nowMs)) throw new Error("treasury_alpha_shadow: invalid cycle timestamp");
+  const since = new Date(nowMs - CANONICAL_ALPHA_SHADOW_MAINTENANCE_MAX_AGE_SECONDS * 1000).toISOString();
+  const future = new Date(nowMs + 5_000).toISOString();
+  const q = await db.from("brian_alpha_decisions")
+    .select(ALPHA_SHADOW_SELECT)
+    .gte("observed_at", since).lte("observed_at", future)
+    .order("observed_at", { ascending: false }).limit(1200);
+  if (q.error) throw new Error(`treasury_alpha_shadow:${q.error.message}`);
+
+  const rows: CanonicalAlphaDecisionRow[] = (q.data ?? []).map((row) => {
+    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+    return {
+      decisionId: String(row.decision_id),
+      observedAt: String(row.observed_at),
+      assetId: String(row.asset_id),
+      referencePrice: finite(row.observed_reference_price),
+      action: String(row.action ?? "WAIT"),
+      direction: Number(row.direction ?? 0),
+      evidenceScore: finite(row.evidence_score),
+      independentGroupCount: Math.max(0, Math.trunc(Number(row.independent_group_count ?? 0))),
+      requestedVirtualNotionalUsd: finite(row.requested_virtual_notional_usd),
+      estimatedRoundTripCostBps: finite(row.estimated_round_trip_cost_bps),
+      vetoReason: row.veto_reason == null ? null : String(row.veto_reason),
+      evidenceClass: String(row.evidence_class ?? ""),
+      shadowOnly: row.shadow_only === true,
+      liveExecution: row.live_execution === true,
+      costQuality: metadata.cost_quality == null ? null : String(metadata.cost_quality),
+      l2RuntimeStatus: metadata.l2_runtime_status == null ? null : String(metadata.l2_runtime_status),
+    };
+  });
+  return buildCanonicalAlphaShadowOpportunities(rows, state.positions, nowIso);
+}
+
 async function commitCycle(input: {
   observedAt: string;
   previousSnapshotId: string | null;
@@ -359,6 +402,9 @@ async function commitCycle(input: {
   const actions: Record<string, unknown>[] = [];
   for (let index = 0; index < input.plan.actions.length; index++) {
     const action = input.plan.actions[index];
+    const canonicalAlphaShadow = String(action.positionId || "").startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX) ||
+      action.reason === "CANONICAL_ALPHA_SHADOW_SIGNAL" || action.reason === "ALPHA_SIGNAL_REVOKED" ||
+      action.reason === "ALPHA_SHADOW_LANE_CLOSED_BY_PROMOTION";
     actions.push({
       action_id: await sha(`treasury-action|${cycleId}|${index}|${action.kind}|${action.assetId}|${action.positionId ?? "none"}`),
       observed_at: input.observedAt,
@@ -368,11 +414,15 @@ async function commitCycle(input: {
       capital_usd: action.capitalUsd,
       reference_price: action.referencePrice,
       cost_usd: action.costUsd,
-      expected_net_edge_bps: action.expectedNetEdgeBps,
+      expected_net_edge_bps: canonicalAlphaShadow ? null : action.expectedNetEdgeBps,
       source_decision_id: action.sourceDecisionId,
       reason: action.reason,
       position_id: action.positionId,
-      metadata: { treasury_version: BRIAN_TREASURY_VERSION, gate_version: BRIAN_TREASURY_GATE_VERSION },
+      metadata: {
+        treasury_version: BRIAN_TREASURY_VERSION,
+        gate_version: BRIAN_TREASURY_GATE_VERSION,
+        canonical_alpha_shadow: canonicalAlphaShadow,
+      },
     });
   }
   const snapshot = {
@@ -398,6 +448,7 @@ async function commitCycle(input: {
     metadata: {
       opportunities_observed: input.opportunities.length,
       promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
+      canonical_alpha_shadow: input.plan.canonicalAlphaShadow,
       point_in_time_execution_marks: true,
       degraded_mark_fallback_enabled: true,
       open_position_edge_supplement_enabled: true,
@@ -461,21 +512,27 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities] = await Promise.all([loadPromotionGate(), loadOpportunities(loaded.state, observedAt)]);
+      const [promotionGate, opportunities, alphaShadowOpportunities] = await Promise.all([
+        loadPromotionGate(),
+        loadOpportunities(loaded.state, observedAt),
+        loadCanonicalAlphaShadowOpportunities(loaded.state, observedAt),
+      ]);
       const plan = planPromotionGatedTreasuryCycle({
         state: loaded.state,
         opportunities,
+        shadowFallbackOpportunities: alphaShadowOpportunities,
         observedAt,
         promotionGate,
         positionIdFor: (opportunity) => `treasury:${opportunity.sourceDecisionId}`,
       });
       const committed = await commitCycle({ observedAt, previousSnapshotId: loaded.previousSnapshotId, plan, opportunities });
-      await recordRun(startedAt, "SUCCESS", opportunities.length, 1 + plan.actions.length, {
+      await recordRun(startedAt, "SUCCESS", opportunities.length + alphaShadowOpportunities.length, 1 + plan.actions.length, {
         cycle_id: committed.cycleId,
         snapshot_id: committed.snapshotId,
         promotion_gate_open: plan.promotionGate.authorized,
         promotion_gate_ref: plan.promotionGate.evidenceRef,
         promotion_gate_decided_at: plan.promotionGate.decidedAt ?? null,
+        canonical_alpha_shadow: plan.canonicalAlphaShadow,
         actions: plan.actions.length,
         positions: plan.state.positions.length,
         equity_usd: plan.afterEquityUsd,
@@ -492,6 +549,8 @@ Deno.serve(async (req: Request) => {
         observed_at: observedAt,
         promotion_gate: plan.promotionGate,
         opportunities: opportunities.length,
+        canonical_alpha_shadow: plan.canonicalAlphaShadow,
+        canonical_alpha_shadow_opportunities: alphaShadowOpportunities.length,
         actions: plan.actions,
         treasury: {
           starting_equity_usd: plan.state.startingEquityUsd,
