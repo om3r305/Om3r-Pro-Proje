@@ -16,29 +16,27 @@ jobs:
     timeout-minutes: 5
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN || secrets.VERCEL_ACCESS_TOKEN || secrets.VERCEL_API_TOKEN }}
-      VERCEL_PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
       VERCEL_TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      VERCEL_DEPLOYMENT_ID: dpl_7qBc5t9ZkX75Fbe5uqkAyKJmSRQN
+      HOTFIX_SHA: b59ea14a2c684db86c9955ad6d7832e878a4f6b4
     steps:
-      - name: Promote exact verified preview via API
+      - name: Create exact production deployment
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${VERCEL_TOKEN:-}" ]; then
-            echo 'VERCEL_PROMOTE_RESULT=TOKEN_MISSING'
+            echo 'VERCEL_DEPLOY_RESULT=TOKEN_MISSING'
             exit 2
           fi
-          status="$(curl --silent --show-error --output /tmp/vercel-promote-response --write-out '%{http_code}' \
+          body="$(jq -nc --arg ref "$HOTFIX_SHA" '{name:"monster-coins-pro",target:"production",gitSource:{type:"github",repo:"Om3r-Pro-Proje",org:"om3r305",ref:$ref}}')"
+          status="$(curl --silent --show-error --output /tmp/vercel-deploy-response --write-out '%{http_code}' \
             --request POST \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/promote/${VERCEL_DEPLOYMENT_ID}?teamId=${VERCEL_TEAM_ID}" \
+            "https://api.vercel.com/v13/deployments?teamId=${VERCEL_TEAM_ID}&forceNew=1" \
             --header "Authorization: Bearer ${VERCEL_TOKEN}" \
-            --header 'Content-Type: application/json')"
-          echo "VERCEL_PROMOTE_HTTP_STATUS=${status}"
-          echo 'VERCEL_PROMOTE_RESPONSE_BEGIN'
-          cat /tmp/vercel-promote-response
-          echo
-          echo 'VERCEL_PROMOTE_RESPONSE_END'
+            --header 'Content-Type: application/json' \
+            --data "$body")"
+          echo "VERCEL_DEPLOY_HTTP_STATUS=${status}"
+          jq '{id,url,status,readyState,target,error}' /tmp/vercel-deploy-response || cat /tmp/vercel-deploy-response
           case "$status" in
-            201|202) echo 'VERCEL_PROMOTE_RESULT=SUCCESS' ;;
-            *) echo 'VERCEL_PROMOTE_RESULT=FAILED'; exit 1 ;;
+            200|201|202) echo 'VERCEL_DEPLOY_RESULT=STARTED' ;;
+            *) echo 'VERCEL_DEPLOY_RESULT=FAILED'; exit 1 ;;
           esac
