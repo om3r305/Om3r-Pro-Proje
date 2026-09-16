@@ -13,10 +13,15 @@ import {
   type CanonicalAlphaShadowOpportunity,
 } from "./evolution_treasury_alpha_shadow.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v3";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v4";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
+// Brian's MAIN Treasury is validating large-move detection, not doing 5-10 minute
+// canonical-ALPHA micro scalps. Keep the fallback evidence flowing, but do not turn
+// those short-lived signals into new Treasury positions while this mode is active.
+// Existing fallback positions are still maintained/flattened fail-closed below.
+const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = false;
 
 export interface PromotionGateState {
   authorized: boolean;
@@ -204,6 +209,7 @@ function applyCanonicalAlphaShadowOpens(
   fallbacks: CanonicalAlphaShadowOpportunity[],
   observedAt: string,
 ): number {
+  if (!CANONICAL_ALPHA_MICRO_ENTRY_ENABLED) return 0;
   const candidates = [...latestCanonicalByAsset(fallbacks).values()]
     .filter((row) => row.actionable && row.pitClear && row.recommendation === "ALLOW_CANONICAL_ALPHA_SHADOW")
     .sort((a, b) => (b.signalScore - a.signalScore) || ((time(b.observedAt) ?? 0) - (time(a.observedAt) ?? 0)));
@@ -298,6 +304,9 @@ export function planPromotionGatedTreasuryCycle(input: {
 
   const blockedReasons = [...planned.blockedReasons];
   if (!promotionGate.authorized) blockedReasons.unshift(`layer4 promotion gate closed: ${promotionGate.reason}`);
+  if (!promotionGate.authorized && !CANONICAL_ALPHA_MICRO_ENTRY_ENABLED) {
+    blockedReasons.unshift("canonical ALPHA micro-entry paused: BIG_MOVE validation mode; evidence/outcome learning remains active");
+  }
 
   return {
     ...planned,
@@ -305,7 +314,7 @@ export function planPromotionGatedTreasuryCycle(input: {
     promotionGate,
     gateVersion: BRIAN_TREASURY_GATE_VERSION,
     canonicalAlphaShadow: {
-      enabled: !promotionGate.authorized,
+      enabled: !promotionGate.authorized && CANONICAL_ALPHA_MICRO_ENTRY_ENABLED,
       candidates: fallbackOpportunities.filter((row) => row.actionable).length,
       actions: Math.max(fallbackActions, fallbackOpens),
     },
