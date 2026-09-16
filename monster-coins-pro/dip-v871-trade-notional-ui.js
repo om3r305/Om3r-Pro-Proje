@@ -31,7 +31,7 @@
       rows.forEach((tr,i)=>{
         const cells=[...tr.children];
         if(cells.length===1){
-          cells[0].setAttribute('colspan','7');
+          if(cells[0].getAttribute('colspan')!=='7')cells[0].setAttribute('colspan','7');
           return;
         }
         const ev=latestEvents[i];
@@ -42,10 +42,12 @@
           td.dataset.notionalCol='1';
           tr.insertBefore(td,tr.children[4]||null);
         }
-        td.textContent=money(ev.notional);
-        td.title=String(ev.action||'').toUpperCase()==='BUY'?'Alım için kullanılan USDT':'Satış işlem tutarı';
-        td.style.fontVariantNumeric='tabular-nums';
-        td.style.fontWeight='800';
+        const value=money(ev.notional);
+        if(td.textContent!==value)td.textContent=value;
+        const title=String(ev.action||'').toUpperCase()==='BUY'?'Alım için kullanılan USDT':'Satış işlem tutarı';
+        if(td.title!==title)td.title=title;
+        if(td.style.fontVariantNumeric!=='tabular-nums')td.style.fontVariantNumeric='tabular-nums';
+        if(td.style.fontWeight!=='800')td.style.fontWeight='800';
       });
     }finally{
       applying=false;
