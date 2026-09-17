@@ -10,6 +10,7 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefre
 const COLLECTOR_ID = "brian-world-brain-v1";
 const LEASE_SECONDS = 300;
 const LOOKBACK_MS = 12 * 60 * 60 * 1000;
+const CLASSIFICATION_GUARD_VERSION = "world-brain-classifier-guard.v1";
 
 function out(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -39,6 +40,67 @@ function fromIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+function narrativeAllowed(event: WorldBrainInputEvent | undefined, narrativeId: string): boolean {
+  if (!event) return false;
+  const claim = String(event.claim ?? "");
+  if (narrativeId === "narrative:GEOPOLITICS") {
+    return /\bwar\b|\barmed conflict\b|\bconflict\b|\bsanctions?\b|\bmissiles?\b|\binvasion\b|\bceasefire\b|\bgeopolit/i.test(claim);
+  }
+  if (narrativeId === "narrative:CRYPTO_REGULATION") {
+    const crypto = /\bcrypto\b|digital asset|\bbitcoin\b|\bethereum\b|\bstablecoin\b|\bblockchain\b|\betf\b|\btoken\b/i.test(claim);
+    const regulation = /crypto regulation|digital asset regulation|securities and exchange commission|\bsec\b|\bregulat(?:e|ed|es|ing|ion|ory)\b|\benforcement\b|\blawsuit\b|securities law|\brulemaking\b|\bapproval\b|\bban\b/i.test(claim);
+    return crypto && regulation;
+  }
+  if (narrativeId === "narrative:PRODUCT_LAUNCH") {
+    return /product launch|product event|\bunveil(?:s|ed|ing)?\b|\bnew iphone\b|\bnew gpu\b|\blaunch(?:es|ed|ing)?\b.{0,48}\b(product|platform|service|device|model|gpu|iphone|token|mainnet)\b/i.test(claim);
+  }
+  return true;
+}
+
+function applyClassificationGuard(batch: ReturnType<typeof buildWorldBrainBatch>, events: WorldBrainInputEvent[]) {
+  const eventById = new Map(events.map((event) => [event.event_id, event]));
+  const eventFrames = batch.eventFrames.map((row) => ({
+    ...row,
+    narrativeIds: row.narrativeIds.filter((id) => narrativeAllowed(eventById.get(row.eventId), id)),
+  }));
+
+  const allowedByNarrative = new Map<string, Set<string>>();
+  for (const frame of eventFrames) {
+    for (const narrativeId of frame.narrativeIds) {
+      const set = allowedByNarrative.get(narrativeId) ?? new Set<string>();
+      set.add(frame.eventId);
+      allowedByNarrative.set(narrativeId, set);
+    }
+  }
+
+  const narrativeSnapshots = batch.narrativeSnapshots.flatMap((row) => {
+    const allowedEvents = allowedByNarrative.get(row.narrativeId);
+    if (!allowedEvents) return [];
+    const eventIds = row.eventIds.filter((eventId) => allowedEvents.has(eventId));
+    if (!eventIds.length) return [];
+    const frameEntities = eventFrames
+      .filter((frame) => eventIds.includes(frame.eventId))
+      .flatMap((frame) => frame.entityIds);
+    return [{ ...row, eventIds, entityIds: [...new Set(frameEntities)] }];
+  });
+
+  const allowedNarratives = new Set(narrativeSnapshots.map((row) => row.narrativeId));
+  const causalMechanisms = batch.causalMechanisms.filter((row) => allowedNarratives.has(row.narrativeId));
+  const allowedMechanisms = new Set(causalMechanisms.map((row) => row.mechanismId));
+  const scenarios = batch.scenarios.filter((row) => allowedMechanisms.has(row.mechanismId));
+  const allowedScenarios = new Set(scenarios.map((row) => row.scenarioId));
+  const assetImpacts = batch.assetImpacts.filter((row) => allowedMechanisms.has(row.mechanismId) && allowedScenarios.has(row.scenarioId));
+
+  return {
+    ...batch,
+    eventFrames,
+    narrativeSnapshots,
+    causalMechanisms,
+    scenarios,
+    assetImpacts,
+  };
+}
+
 async function loadEvents(nowMs: number): Promise<WorldBrainInputEvent[]> {
   const q = await db.from("brian_intel_events")
     .select("event_id,asset,event_kind,source_kind,source_id,published_at,first_observed_at,claim,direction,magnitude,trust_class,entity_confidence,provenance_uri,metadata")
@@ -63,6 +125,7 @@ async function journal(observedAt: string, counts: Record<string, number>): Prom
     evidence_refs: [],
     payload: {
       world_brain_version: WORLD_BRAIN_VERSION,
+      classification_guard_version: CLASSIFICATION_GUARD_VERSION,
       ...counts,
       causal_claims_are_research_hypotheses: true,
       direct_alpha_influence: false,
@@ -104,6 +167,7 @@ async function runReceipt(args: {
     error_message: args.error ? String(args.error).slice(0, 1200) : null,
     metadata: {
       version: WORLD_BRAIN_VERSION,
+      classification_guard_version: CLASSIFICATION_GUARD_VERSION,
       lookback_hours: LOOKBACK_MS / 3600000,
       causal_claims_are_research_hypotheses: true,
       direct_alpha_influence: false,
@@ -131,7 +195,7 @@ async function runReceipt(args: {
     evidence_class: EVOLUTION_EVIDENCE_CLASS,
     shadow_only: true,
     live_execution: false,
-    metadata: { version: WORLD_BRAIN_VERSION, direct_alpha_influence: false },
+    metadata: { version: WORLD_BRAIN_VERSION, classification_guard_version: CLASSIFICATION_GUARD_VERSION, direct_alpha_influence: false },
   });
   if (c.error) console.error("world brain collector receipt", c.error.message);
 }
@@ -150,7 +214,8 @@ Deno.serve(async (req: Request) => {
       const now = Date.now();
       const observedAt = new Date(now).toISOString();
       const events = await loadEvents(now);
-      const batch = buildWorldBrainBatch(events, observedAt);
+      const rawBatch = buildWorldBrainBatch(events, observedAt);
+      const batch = applyClassificationGuard(rawBatch, events);
 
       const eventFrames = batch.eventFrames.map((row) => ({
         frame_id: row.frameId, event_id: row.eventId, observed_at: row.observedAt, published_at: row.publishedAt,
@@ -221,6 +286,7 @@ Deno.serve(async (req: Request) => {
         collector_id: COLLECTOR_ID,
         observed_at: observedAt,
         world_brain_version: WORLD_BRAIN_VERSION,
+        classification_guard_version: CLASSIFICATION_GUARD_VERSION,
         input_events: events.length,
         ...counts,
         causal_claims_are_research_hypotheses: true,
