@@ -28,6 +28,8 @@ const MIN_INTERVAL_SECONDS = 50;
 const LEASE_SECONDS = 55;
 const CORE_ASSETS = ["crypto:BTCUSDT", "crypto:ETHUSDT", "crypto:SOLUSDT", "crypto:BNBUSDT", "crypto:XRPUSDT"];
 const MAX_ASSETS = 25;
+const MAX_ASSETS_PER_CYCLE = 15;
+const ROTATING_RADAR_ASSETS_PER_CYCLE = MAX_ASSETS_PER_CYCLE - CORE_ASSETS.length;
 const FALLBACK_FEE_BPS = 10;
 const FALLBACK_SLIPPAGE_BPS = 1;
 const L2_DEPTH_LIMIT = 100;
@@ -180,6 +182,17 @@ async function latestRadarAssets(): Promise<string[]> {
   return [...out].slice(0, MAX_ASSETS);
 }
 
+function selectCycleAssets(allAssets: string[], nowMs: number): string[] {
+  const core = CORE_ASSETS.filter((asset) => allAssets.includes(asset));
+  const extras = allAssets.filter((asset) => !CORE_ASSETS.includes(asset));
+  if (extras.length <= ROTATING_RADAR_ASSETS_PER_CYCLE) return [...new Set([...core, ...extras])].slice(0, MAX_ASSETS_PER_CYCLE);
+  const slot = Math.floor(nowMs / (5 * 60_000));
+  const offset = (slot * ROTATING_RADAR_ASSETS_PER_CYCLE) % extras.length;
+  const rotated: string[] = [];
+  for (let i = 0; i < ROTATING_RADAR_ASSETS_PER_CYCLE; i++) rotated.push(extras[(offset + i) % extras.length]);
+  return [...new Set([...core, ...rotated])].slice(0, MAX_ASSETS_PER_CYCLE);
+}
+
 async function loadSensorEvidence(assets: string[], nowMs: number): Promise<Map<string, AlphaEvidenceRow[]>> {
   const map = new Map<string, AlphaEvidenceRow[]>();
   const specs = [
@@ -194,7 +207,7 @@ async function loadSensorEvidence(assets: string[], nowMs: number): Promise<Map<
       .select("observation_id,asset_id,sensor_family,horizon,independent_group,observed_at,direction,strength,confidence,reliability,available,reason")
       .in("asset_id", assets).eq("horizon", horizon).gte("observed_at", since).eq("available", true)
       .neq("independent_group", "news_gdelt")
-      .order("observed_at", { ascending: false }).limit(1500);
+      .order("observed_at", { ascending: false }).limit(450);
   }));
   for (const resp of responses) {
     if (resp.error) throw resp.error;
@@ -300,7 +313,7 @@ async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Ma
   const since = new Date(nowMs - 5 * 60_000).toISOString();
   const resp = await supabase.from("brian_intrabar_reaction_events")
     .select("event_id,asset_id,observed_at,direction,status,late_chase,reason")
-    .in("asset_id", assets).gte("observed_at", since).order("observed_at", { ascending: false }).limit(500);
+    .in("asset_id", assets).gte("observed_at", since).order("observed_at", { ascending: false }).limit(250);
   if (resp.error) throw resp.error;
   for (const r of resp.data ?? []) if (!map.has(String(r.asset_id))) {
     const status = String(r.status) as IntrabarVetoContext["status"];
@@ -310,7 +323,7 @@ async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Ma
 }
 
 async function currentBooks(): Promise<Map<string, ReferenceBook>> {
-  const r = await fetch("https://api.binance.com/api/v3/ticker/bookTicker", { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow/1.0" }, signal: AbortSignal.timeout(8_000) });
+  const r = await fetch("https://api.binance.com/api/v3/ticker/bookTicker", { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow/1.0" }, signal: AbortSignal.timeout(5_000) });
   if (!r.ok) throw new Error(`Binance bookTicker HTTP ${r.status}`);
   const payload = await r.json(); if (!Array.isArray(payload)) throw new Error("invalid Binance bookTicker payload");
   const map = new Map<string, ReferenceBook>();
@@ -326,7 +339,7 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   const symbol = asset.includes(":") ? asset.split(":", 2)[1] : asset;
   if (!/^[A-Z0-9]+USDT$/.test(symbol)) throw new Error(`unsupported Binance L2 asset ${asset}`);
   const url = `https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(symbol)}&limit=${L2_DEPTH_LIMIT}`;
-  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(8_000) });
+  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(5_000) });
   if (!response.ok) throw new Error(`Binance depth HTTP ${response.status} for ${symbol}`);
   const raw = await response.text();
   try {
@@ -435,9 +448,10 @@ Deno.serve(async (req: Request) => {
       const evidenceNowMs = Date.now();
       const degradedSources: string[] = [];
       const allAssets = await latestRadarAssets();
+      const cycleAssets = selectCycleAssets(allAssets, evidenceNowMs);
       const assets = shardCount > 1
-        ? allAssets.filter((_, index) => index % shardCount === shardIndex)
-        : allAssets;
+        ? cycleAssets.filter((_, index) => index % shardCount === shardIndex)
+        : cycleAssets;
 
       let evidence = new Map<string, AlphaEvidenceRow[]>();
       try { evidence = await loadSensorEvidence(assets, evidenceNowMs); }
@@ -616,7 +630,7 @@ Deno.serve(async (req: Request) => {
       await insertRowsChunked("brian_alpha_decisions", decisionRows, 5);
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
       await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources, undefined, shardMeta);
-      return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
+      return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, radar_assets_total: allAssets.length, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
     });
     if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
     return lease.value!;
