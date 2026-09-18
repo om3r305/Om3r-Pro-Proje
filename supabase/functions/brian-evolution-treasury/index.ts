@@ -147,70 +147,15 @@ async function loadState(now: string): Promise<{ state: TreasuryState; previousS
 }
 
 async function loadPromotionGate(): Promise<PromotionGateState> {
-  const decisionsQ = await db.from("brian_evolution_promotion_decisions")
-    .select("decision_id,experiment_id,decided_at,decision")
-    .order("decided_at", { ascending: false }).limit(200);
-  if (decisionsQ.error) throw new Error(`promotion_gate_decisions:${decisionsQ.error.message}`);
-  const decisions = decisionsQ.data ?? [];
-  if (!decisions.length) return { authorized: false, reason: "no promotion decisions exist", evidenceRef: null, decidedAt: null };
-
-  const experimentIds = [...new Set(decisions.map((row) => String(row.experiment_id)).filter(Boolean))];
-  const experimentsQ = await db.from("brian_evolution_experiments")
-    .select("experiment_id,hypothesis_id").in("experiment_id", experimentIds).limit(300);
-  if (experimentsQ.error) throw new Error(`promotion_gate_experiments:${experimentsQ.error.message}`);
-  const experimentToHypothesis = new Map((experimentsQ.data ?? []).map((row) => [String(row.experiment_id), String(row.hypothesis_id)]));
-  const hypothesisIds = [...new Set([...experimentToHypothesis.values()].filter(Boolean))];
-  if (!hypothesisIds.length) return { authorized: false, reason: "promotion decisions have no hypothesis lineage", evidenceRef: null, decidedAt: null };
-
-  const hypothesisQ = await db.from("brian_evolution_hypothesis_snapshots")
-    .select("hypothesis_id,observed_at,metadata").in("hypothesis_id", hypothesisIds)
-    .order("observed_at", { ascending: false }).limit(1000);
-  if (hypothesisQ.error) throw new Error(`promotion_gate_hypotheses:${hypothesisQ.error.message}`);
-  const kindByHypothesis = new Map<string, string>();
-  for (const row of hypothesisQ.data ?? []) {
-    const id = String(row.hypothesis_id);
-    if (kindByHypothesis.has(id)) continue;
-    const metadata = (row.metadata ?? {}) as Record<string, unknown>;
-    kindByHypothesis.set(id, String(metadata.hypothesis_kind ?? ""));
-  }
-
-  const seenExperiments = new Set<string>();
-  let newestExpectedEdgeVerdict: { decision: string; decidedAt: string; evidenceRef: string } | null = null;
-  for (const row of decisions) {
-    const experimentId = String(row.experiment_id);
-    if (!experimentId || seenExperiments.has(experimentId)) continue;
-    seenExperiments.add(experimentId);
-    const hypothesisId = experimentToHypothesis.get(experimentId);
-    if (!hypothesisId || kindByHypothesis.get(hypothesisId) !== "EXPECTED_EDGE") continue;
-
-    const decision = String(row.decision);
-    const decidedAt = String(row.decided_at ?? "");
-    const evidenceRef = String(row.decision_id);
-    if (!newestExpectedEdgeVerdict) newestExpectedEdgeVerdict = { decision, decidedAt, evidenceRef };
-
-    // A newer EXPECTED_EDGE experiment that is still KEEP_EXPERIMENTAL must not revoke a
-    // valid promotion earned by another experiment. For each experiment only its newest
-    // verdict is considered, so a later KEEP/REJECT on the same experiment does revoke
-    // that experiment's older PROMOTE. The shared gate then expires any surviving PROMOTE
-    // after six hours unless fresh evidence renews it.
-    if (decision === "PROMOTE_CANDIDATE") {
-      return {
-        authorized: true,
-        reason: `active EXPECTED_EDGE prospective experiment promoted at ${decidedAt}`,
-        evidenceRef,
-        decidedAt,
-      };
-    }
-  }
-  if (newestExpectedEdgeVerdict) {
-    return {
-      authorized: false,
-      reason: `no active EXPECTED_EDGE promotion; newest verdict is ${newestExpectedEdgeVerdict.decision || "UNKNOWN"}`,
-      evidenceRef: newestExpectedEdgeVerdict.evidenceRef,
-      decidedAt: newestExpectedEdgeVerdict.decidedAt,
-    };
-  }
-  return { authorized: false, reason: "no EXPECTED_EDGE promotion decision exists", evidenceRef: null, decidedAt: null };
+  const q = await db.rpc("brian_evolution_current_promotion_gate");
+  if (q.error) throw new Error(`promotion_gate_rpc:${q.error.message}`);
+  const row = q.data && typeof q.data === "object" ? q.data as Record<string, unknown> : {};
+  return {
+    authorized: row.authorized === true,
+    reason: String(row.reason ?? "no EXPECTED_EDGE promotion decision exists"),
+    evidenceRef: row.evidenceRef == null ? null : String(row.evidenceRef),
+    decidedAt: row.decidedAt == null ? null : String(row.decidedAt),
+  };
 }
 
 function averageReliability(value: unknown): number {
