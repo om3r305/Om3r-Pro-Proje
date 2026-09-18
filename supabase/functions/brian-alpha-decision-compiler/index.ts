@@ -36,6 +36,7 @@ const MACRO_CONTEXT_WINDOW_MS = 60 * 60_000;
 const MAX_MACRO_CONTEXT_EVENTS = 24;
 const ENABLE_DIP_DIRECTIONAL_EVIDENCE = false; // MAIN and DIP remain separate brains by default.
 const RADAR_MAX_AGE_MS = 30 * 60_000; // 2x the canonical 15m universe cadence.
+const MAX_SHARD_COUNT = 5;
 
 type OfficialMacroContextEvent = {
   observation_id: string;
@@ -368,9 +369,37 @@ async function insertRowsChunked(table: string, rows: Record<string, unknown>[],
   }
 }
 
-async function recordRun(startedAt: string, status: string, observed: number, stored: number, degradedSources: string[], error?: unknown) {
-  const finishedAt = new Date().toISOString(); const runId = await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: degradedSources, error_class: error ? "ALPHA_COMPILER_ERROR" : null, error_message: error ? errorText(error).slice(0, 1500) : null, evidence_class: EVIDENCE, shadow_only: true, live_execution: false, metadata: { compiler_version: ALPHA_COMPILER_VERSION, frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID } });
+async function recordRun(
+  startedAt: string,
+  status: string,
+  observed: number,
+  stored: number,
+  degradedSources: string[],
+  error?: unknown,
+  shard?: { index: number; count: number },
+) {
+  const finishedAt = new Date().toISOString(); const runId = await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}|${shard?.index ?? 0}|${shard?.count ?? 1}`);
+  await supabase.from("brian_collector_runs").insert({
+    run_id: runId,
+    collector_id: COLLECTOR_ID,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    status,
+    observed_records: observed,
+    stored_records: stored,
+    degraded_sources: degradedSources,
+    error_class: error ? "ALPHA_COMPILER_ERROR" : null,
+    error_message: error ? errorText(error).slice(0, 1500) : null,
+    evidence_class: EVIDENCE,
+    shadow_only: true,
+    live_execution: false,
+    metadata: {
+      compiler_version: ALPHA_COMPILER_VERSION,
+      frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID,
+      shard_index: shard?.index ?? 0,
+      shard_count: shard?.count ?? 1,
+    },
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -383,16 +412,32 @@ Deno.serve(async (req: Request) => {
     return json({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 503);
   }
 
+  const requestBody = await req.json().catch(() => ({}));
+  const requestedShardCount = Math.floor(finite((requestBody as Record<string, unknown>)?.shard_count, 1));
+  const shardCount = Math.max(1, Math.min(MAX_SHARD_COUNT, requestedShardCount));
+  const requestedShardIndex = Math.floor(finite((requestBody as Record<string, unknown>)?.shard_index, 0));
+  const shardIndex = Math.max(0, Math.min(shardCount - 1, requestedShardIndex));
+  const shardMeta = { index: shardIndex, count: shardCount };
+  const leaseCollectorId = shardCount > 1 ? `${COLLECTOR_ID}-shard-${shardIndex}-of-${shardCount}` : COLLECTOR_ID;
+
   const startedAt = new Date().toISOString();
   try {
-    const last = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS","DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
-    if (last.error) throw last.error;
-    if (last.data?.started_at) { const age = (Date.now() - Date.parse(last.data.started_at)) / 1000; if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return json({ status: "SKIPPED_RATE_GUARD", age_seconds: age, shadow_only: true, live_execution: false }); }
+    if (shardCount === 1) {
+      const last = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS","DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (last.error) throw last.error;
+      if (last.data?.started_at) {
+        const age = (Date.now() - Date.parse(last.data.started_at)) / 1000;
+        if (Number.isFinite(age) && age < MIN_INTERVAL_SECONDS) return json({ status: "SKIPPED_RATE_GUARD", age_seconds: age, shadow_only: true, live_execution: false });
+      }
+    }
 
-    const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
+    const lease = await withCollectorLease(supabase, leaseCollectorId, LEASE_SECONDS, async () => {
       const evidenceNowMs = Date.now();
       const degradedSources: string[] = [];
-      const assets = await latestRadarAssets();
+      const allAssets = await latestRadarAssets();
+      const assets = shardCount > 1
+        ? allAssets.filter((_, index) => index % shardCount === shardIndex)
+        : allAssets;
 
       let evidence = new Map<string, AlphaEvidenceRow[]>();
       try { evidence = await loadSensorEvidence(assets, evidenceNowMs); }
@@ -570,14 +615,14 @@ Deno.serve(async (req: Request) => {
       await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 5);
       await insertRowsChunked("brian_alpha_decisions", decisionRows, 5);
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
-      await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources);
-      return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shadow_only: true, live_execution: false });
+      await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources, undefined, shardMeta);
+      return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
     });
-    if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shadow_only: true, live_execution: false });
+    if (lease.contended) return json({ status: "SKIPPED_LEASE_CONTENDED", shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
     return lease.value!;
   } catch (error) {
     console.error("brian-alpha-decision-compiler-v2 failed", errorText(error));
-    try { await recordRun(startedAt, "FAILED", 0, 0, [], error); } catch { /* logging must not mask primary error */ }
-    return json({ status: "FAILED_CLOSED", error: errorText(error), shadow_only: true, live_execution: false }, 500);
+    try { await recordRun(startedAt, "FAILED", 0, 0, [], error, shardMeta); } catch { /* logging must not mask primary error */ }
+    return json({ status: "FAILED_CLOSED", error: errorText(error), shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false }, 500);
   }
 });
