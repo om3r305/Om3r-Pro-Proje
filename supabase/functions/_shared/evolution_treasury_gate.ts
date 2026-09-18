@@ -17,11 +17,10 @@ export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v4";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
-// Brian's MAIN Treasury is validating large-move detection, not doing 5-10 minute
-// canonical-ALPHA micro scalps. Keep the fallback evidence flowing, but do not turn
-// those short-lived signals into new Treasury positions while this mode is active.
-// Existing fallback positions are still maintained/flattened fail-closed below.
-const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = false;
+// Keep the canonical ALPHA fallback active in SHADOW while BIG_MOVE validation runs.
+// This creates only bounded virtual positions; live_execution remains false and the
+// EXPECTED_EDGE promotion gate still controls the ordinary Treasury allocator.
+const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = true;
 
 export interface PromotionGateState {
   authorized: boolean;
