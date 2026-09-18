@@ -39,7 +39,7 @@ function applyHeartbeat(hb){
   if(hb.alpha){
     const seconds=heartbeatAgeSeconds(hb.alpha.observed_at);
     if(!S.control||S.errors.control){
-      S.control={alpha_v2:{online:seconds<=900,decision_age_seconds:seconds,decisions:[hb.alpha]}};
+      S.control={alpha_v2:{online:seconds<=1200,decision_age_seconds:seconds,decisions:[hb.alpha]}};
     }
   }
 
@@ -81,8 +81,8 @@ moduleRows=function(){
   const oceanRun=heartbeatRun('brian-evolution-ocean-worker-v1');
 
   const alphaAge=heartbeatAgeSeconds(hb.alpha?.observed_at);
-  let alphaState=alphaAge<=360?'ok':alphaAge<=900?'warn':'bad';
-  if(String(alphaRun?.status)==='FAILED'&&alphaAge>360)alphaState='bad';
+  let alphaState=alphaAge<=600?'ok':alphaAge<=1200?'warn':'bad';
+  if(String(alphaRun?.status)==='FAILED'&&alphaAge>600)alphaState='bad';
   const alphaMeta=hb.alpha?`Karar ${Math.round(alphaAge)} sn önce · ${hb.alpha.asset_id||'ALPHA'} ${act(hb.alpha.action)}`:(alphaRun?.error_message||'ALPHA karar kanıtı bekleniyor');
 
   let worldState=wr&&String(wr.status)==='SUCCESS'&&heartbeatFresh(wr,1200)?'ok':wr&&String(wr.status)==='FAILED'?'bad':'warn';
