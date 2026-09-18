@@ -55,12 +55,18 @@ function errorText(error: unknown) {
   try { return JSON.stringify(error); } catch { return String(error); }
 }
 
+let lastGoodPayload: Record<string, unknown> | null = null;
+let lastGoodAt = 0;
+
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get("origin");
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
  if(req.method!=="POST")return out({error:"POST required"},405,origin);
  let authKind:"dashboard"|"cron";
  try{authKind=await requireAccountingAuth(req)}catch{return out({error:"UNAUTHORIZED_DASHBOARD"},401,origin)}
+ if(lastGoodPayload && Date.now()-lastGoodAt<30_000){
+  return out({...lastGoodPayload,cache_age_seconds:Math.max(0,(Date.now()-lastGoodAt)/1000)},200,origin);
+ }
  try{
   const snapCols="snapshot_id,cycle_id,observed_at,starting_equity_usd,cash_usd,equity_usd,realized_pnl_usd,cumulative_costs_usd,deployment_usd,positions,treasury_version";
   const actionCols="action_id,position_id,cycle_id,observed_at,kind,asset_id,direction,capital_usd,reference_price,cost_usd,reason,source_decision_id";
@@ -69,8 +75,8 @@ Deno.serve(async(req:Request)=>{
   if(!latest.data)return out({observed_at:new Date().toISOString(),snapshot:null,actions:[],opening_actions:[],history:[],coverage:{actions_truncated:false,history_truncated:false},shadow_only:true},200,origin);
   const cutoff=latest.data.observed_at;
   const [aq,hq]=await Promise.all([
-   db.from("brian_treasury_shadow_actions").select(actionCols).lte("observed_at",cutoff).order("observed_at",{ascending:false}).order("action_id",{ascending:false}).limit(1000),
-   db.from("brian_treasury_shadow_snapshots").select("snapshot_id,observed_at,starting_equity_usd,equity_usd,cash_usd,realized_pnl_usd,cumulative_costs_usd").lte("observed_at",cutoff).order("observed_at",{ascending:false}).limit(1000)
+   db.from("brian_treasury_shadow_actions").select(actionCols).lte("observed_at",cutoff).order("observed_at",{ascending:false}).order("action_id",{ascending:false}).limit(300),
+   db.from("brian_treasury_shadow_snapshots").select("snapshot_id,observed_at,starting_equity_usd,equity_usd,cash_usd,realized_pnl_usd,cumulative_costs_usd").lte("observed_at",cutoff).order("observed_at",{ascending:false}).limit(360)
   ]);
   if(aq.error||hq.error)throw aq.error||hq.error;
   const actions=aq.data||[],history=hq.data||[],known=new Set(actions.filter(a=>a.kind==="OPEN").map(a=>a.position_id));
@@ -81,13 +87,13 @@ Deno.serve(async(req:Request)=>{
 
   const decisionIds=[...new Set([
     ...positions.map((p:any)=>String(p?.sourceDecisionId??p?.source_decision_id??"")),
-    ...actions.slice(0,250).map((a:any)=>String(a?.source_decision_id??"")),
+    ...actions.slice(0,100).map((a:any)=>String(a?.source_decision_id??"")),
     ...openings.map((a:any)=>String(a?.source_decision_id??""))
   ].filter(Boolean))];
   let decisions:any[]=[];
   const decisionCols="decision_id,observed_at,asset_id,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,reason,veto_reason,support_groups,conflict_groups,metadata";
-  for(let i=0;i<Math.min(decisionIds.length,500);i+=40){
-    const ids=decisionIds.slice(i,Math.min(i+40,500));
+  for(let i=0;i<Math.min(decisionIds.length,180);i+=40){
+    const ids=decisionIds.slice(i,Math.min(i+40,180));
     const q=await db.from("brian_alpha_decisions").select(decisionCols).in("decision_id",ids).limit(ids.length);
     if(q.error)throw q.error;
     decisions.push(...(q.data||[]));
@@ -95,7 +101,7 @@ Deno.serve(async(req:Request)=>{
   const decisionById=new Map(decisions.map((d:any)=>[String(d.decision_id),d]));
   const evidenceIds=[...new Set(decisions.flatMap((d:any)=>Array.isArray(d?.metadata?.source_evidence_ids_all)?d.metadata.source_evidence_ids_all.map(String):[]).filter(Boolean))];
   let sensors:any[]=[];
-  for(let i=0;i<evidenceIds.length;i+=40){
+  for(let i=0;i<Math.min(evidenceIds.length,240);i+=40){
     const ids=evidenceIds.slice(i,i+40);
     const q=await db.from("brian_sensor_observations")
       .select("observation_id,asset_id,observed_at,direction,strength,confidence,reliability,independent_group,sensor_family,reason,source_ids,metadata")
@@ -111,7 +117,7 @@ Deno.serve(async(req:Request)=>{
     const q=await db.from("brian_micro_book_ticks")
       .select("asset_id,observed_at,observed_mid_price")
       .in("asset_id",assetIds).gte("observed_at",since)
-      .order("observed_at",{ascending:false}).limit(1500);
+      .order("observed_at",{ascending:false}).limit(Math.max(120,Math.min(360,assetIds.length*90)));
     if(q.error)throw q.error;ticks=q.data||[];
   }
   const markByAsset=new Map<string,any>();
@@ -185,13 +191,18 @@ Deno.serve(async(req:Request)=>{
     };
   });
 
-  return out({
+  const payload={
     observed_at:new Date().toISOString(),snapshot:latest.data,actions,opening_actions:openings,
     history:history.reverse(),position_details,decision_contexts,
-    coverage:{actions_truncated:actions.length===1000,history_truncated:history.length===1000,action_limit:1000,history_limit:1000,as_of:cutoff},
+    coverage:{actions_truncated:actions.length===300,history_truncated:history.length===360,action_limit:300,history_limit:360,as_of:cutoff},
     shadow_only:true,live_execution:false
-  },200,origin);
+  };
+  lastGoodPayload=payload;lastGoodAt=Date.now();
+  return out(payload,200,origin);
  }catch(error){
+   if(lastGoodPayload){
+     return out({...lastGoodPayload,stale:true,refresh_error:authKind==="cron"?errorText(error):"ACCOUNTING_REFRESH_FAILED"},200,origin);
+   }
    const body=authKind==="cron"
      ? {error:"ACCOUNTING_DATA_UNAVAILABLE",detail:errorText(error)}
      : {error:"ACCOUNTING_DATA_UNAVAILABLE"};
