@@ -65,12 +65,9 @@ const evidenceCurve = (samples: number, target: number) => target > 0
   ? clamp(100 * Math.log1p(Math.max(0, samples)) / Math.log1p(target))
   : 0;
 
-async function exactCount(table: string, configure?: (q: any) => any): Promise<number> {
-  let q: any = db.from(table).select("*", { count: "exact", head: true });
-  if (configure) q = configure(q);
-  const result = await q;
-  if (result.error) throw new Error(`${table}: ${result.error.message}`);
-  return Number(result.count ?? 0);
+async function sampleCount(label: string, promise: Promise<any>): Promise<number> {
+  const rows = await safeRows(label, promise, []);
+  return rows.length;
 }
 
 async function safeRows(label: string, promise: Promise<any>, fallback: any[] = []): Promise<any[]> {
@@ -106,6 +103,9 @@ function maturityTier(score: number) {
   return "OLGUN";
 }
 
+let cachedPayload: Record<string, unknown> | null = null;
+let cachedAt = 0;
+
 function component(
   id: string,
   anatomy: string,
@@ -138,6 +138,10 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return out({ error: "POST required" }, 405, origin);
   try { await auth(req); } catch (error) { return out({ error: String(error) }, 401, origin); }
 
+  if (cachedPayload && Date.now() - cachedAt < 60_000) {
+    return out({ ...cachedPayload, cache_age_seconds: Math.max(0, (Date.now() - cachedAt) / 1000) }, 200, origin);
+  }
+
   try {
     const now = Date.now();
     const dayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
@@ -165,26 +169,26 @@ Deno.serve(async (req: Request) => {
         .gte("resolved_at", weekAgo)
         .in("brian_alpha_decisions.action", ["OPEN_LONG", "OPEN_SHORT"])
         .order("resolved_at", { ascending: false })
-        .limit(1000)),
+        .limit(300)),
       safeRows("collector-runs", db.from("brian_collector_runs")
         .select("collector_id,status,started_at,finished_at,observed_records,stored_records,degraded_sources,error_class")
         .gte("started_at", dayAgo)
         .not("collector_id", "ilike", "%dip%")
         .order("started_at", { ascending: false })
-        .limit(1000)),
+        .limit(400)),
       safeRows("world-assessments", db.from("brian_world_source_assessments")
         .select("source_id,assessed_at,trust_score,eligible_for_research,eligible_for_decision_evidence")
         .order("assessed_at", { ascending: false })
-        .limit(500)),
+        .limit(150)),
       safeRows("world-runs", db.from("brian_world_brain_runs")
         .select("status,started_at,finished_at,input_events,event_frames,entity_observations,narrative_snapshots,asset_impacts")
         .gte("started_at", weekAgo)
         .order("started_at", { ascending: false })
-        .limit(500)),
+        .limit(120)),
       safeRows("experiment-results", db.from("brian_evolution_experiment_results")
         .select("result_id,experiment_id,measured_at,role,samples,regimes,net_edge_bps,favorable_after_cost_rate,leakage_detected,data_quality_ok,stability_score,complexity_delta")
         .order("measured_at", { ascending: false })
-        .limit(200)),
+        .limit(50)),
       safeRows("promotions", db.from("brian_evolution_promotion_decisions")
         .select("decision_id,experiment_id,decided_at,decision,score,reasons,required_next_stage")
         .order("decided_at", { ascending: false })
@@ -196,18 +200,25 @@ Deno.serve(async (req: Request) => {
       safeRows("gaps", db.from("brian_evolution_gap_snapshots")
         .select("gap_id,observed_at,capability_id,domain,severity,reason,suggested_action,evidence_refs")
         .order("observed_at", { ascending: false })
-        .limit(40)),
+        .limit(30)),
       safeRows("treasury", db.from("brian_treasury_shadow_snapshots")
         .select("snapshot_id,observed_at,starting_equity_usd,cash_usd,equity_usd,realized_pnl_usd,cumulative_costs_usd,deployment_usd,deployment_pct,cash_reserve_pct,positions,promotion_gate_open,blocked_reasons")
         .order("observed_at", { ascending: false }).limit(1)),
       safeRows("treasury-actions", db.from("brian_treasury_shadow_actions")
         .select("action_id,observed_at,kind,asset_id,direction,capital_usd,cost_usd,expected_net_edge_bps,reason")
-        .order("observed_at", { ascending: false }).limit(200)),
-      exactCount("brian_sensor_reliability_prospective_calibration", (q) => q.not("realized_hit", "is", null)),
-      exactCount("brian_sensor_reliability_prospective_calibration", (q) => q.eq("realized_hit", true)),
-      exactCount("brian_world_source_candidates"),
-      exactCount("brian_system_job_registry"),
-      exactCount("brian_evolution_codegen_requests"),
+        .order("observed_at", { ascending: false }).limit(100)),
+      sampleCount("sensor-total", db.from("brian_sensor_reliability_prospective_calibration")
+        .select("calibration_id").not("realized_hit", "is", null)
+        .order("resolved_at", { ascending: false }).limit(2000)),
+      sampleCount("sensor-hits", db.from("brian_sensor_reliability_prospective_calibration")
+        .select("calibration_id").eq("realized_hit", true)
+        .order("resolved_at", { ascending: false }).limit(2000)),
+      sampleCount("source-count", db.from("brian_world_source_candidates")
+        .select("source_id").order("discovered_at", { ascending: false }).limit(2000)),
+      sampleCount("job-count", db.from("brian_system_job_registry")
+        .select("job_name").limit(500)),
+      sampleCount("codegen-count", db.from("brian_evolution_codegen_requests")
+        .select("request_id").order("requested_at", { ascending: false }).limit(1000)),
     ]);
 
     // 1) Brain / ALPHA: quality is actual directional success after decision-time estimated cost.
@@ -452,10 +463,10 @@ Deno.serve(async (req: Request) => {
       reasons: p.reasons ?? [],
     }));
 
-    return out({
+    const payload = {
       status: "ONLINE",
       observed_at: new Date().toISOString(),
-      model: "brian.development-anatomy.v1",
+      model: "brian.development-anatomy.v2-fast",
       score_contract: {
         quality: "Observed behavioral quality only. Service uptime alone is not success.",
         evidence: "Sample depth / coverage. Low evidence prevents false confidence.",
@@ -481,7 +492,10 @@ Deno.serve(async (req: Request) => {
       latest_promotions: promotions.slice(0, 12),
       shadow_only: true,
       live_execution: false,
-    }, 200, origin);
+    };
+    cachedPayload = payload;
+    cachedAt = Date.now();
+    return out(payload, 200, origin);
   } catch (error) {
     return out({
       status: "DEGRADED",
