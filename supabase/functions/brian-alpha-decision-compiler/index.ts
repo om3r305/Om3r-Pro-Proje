@@ -80,7 +80,18 @@ function json(body: unknown, status = 200) {
 }
 function clip(v: number, lo = 0, hi = 1) { return Math.max(lo, Math.min(hi, v)); }
 function finite(v: unknown, fallback = 0) { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
-function errorText(error: unknown): string { return error instanceof Error ? `${error.name}: ${error.message}` : String(error); }
+function errorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  if (error && typeof error === "object") {
+    const row = error as Record<string, unknown>;
+    const fields = ["code","message","details","hint","status","statusText"]
+      .filter((key) => row[key] != null)
+      .map((key) => `${key}=${String(row[key])}`);
+    if (fields.length) return fields.join(" | ");
+    try { return JSON.stringify(error); } catch { /* fall through */ }
+  }
+  return String(error);
+}
 function utf8(s: string) { return new TextEncoder().encode(s); }
 async function sha(s: string) { const d = new Uint8Array(await crypto.subtle.digest("SHA-256", utf8(s))); return [...d].map((b) => b.toString(16).padStart(2, "0")).join(""); }
 
@@ -338,6 +349,25 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   }
 }
 
+async function insertRowsChunked(table: string, rows: Record<string, unknown>[], chunkSize = 5) {
+  if (!rows.length) return;
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const ins = await supabase.from(table).insert(chunk);
+        if (!ins.error) { lastError = null; break; }
+        lastError = ins.error;
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+    if (lastError) throw new Error(`${table} insert chunk ${i / chunkSize + 1} failed: ${errorText(lastError)}`);
+  }
+}
+
 async function recordRun(startedAt: string, status: string, observed: number, stored: number, degradedSources: string[], error?: unknown) {
   const finishedAt = new Date().toISOString(); const runId = await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
   await supabase.from("brian_collector_runs").insert({ run_id: runId, collector_id: COLLECTOR_ID, started_at: startedAt, finished_at: finishedAt, status, observed_records: observed, stored_records: stored, degraded_sources: degradedSources, error_class: error ? "ALPHA_COMPILER_ERROR" : null, error_message: error ? errorText(error).slice(0, 1500) : null, evidence_class: EVIDENCE, shadow_only: true, live_execution: false, metadata: { compiler_version: ALPHA_COMPILER_VERSION, frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID } });
@@ -537,8 +567,8 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      if (costRows.length) { const ins = await supabase.from("brian_dynamic_cost_quotes").insert(costRows); if (ins.error) throw ins.error; }
-      if (decisionRows.length) { const ins = await supabase.from("brian_alpha_decisions").insert(decisionRows); if (ins.error) throw ins.error; }
+      await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 5);
+      await insertRowsChunked("brian_alpha_decisions", decisionRows, 5);
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
       await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources);
       return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shadow_only: true, live_execution: false });
