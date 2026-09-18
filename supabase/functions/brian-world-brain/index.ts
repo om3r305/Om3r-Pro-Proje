@@ -10,6 +10,9 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefre
 const COLLECTOR_ID = "brian-world-brain-v1";
 const LEASE_SECONDS = 300;
 const LOOKBACK_MS = 12 * 60 * 60 * 1000;
+const EVENT_OVERLAP_MS = 15 * 60 * 1000;
+const MAX_INCREMENTAL_EVENTS = 250;
+const WRITE_CHUNK = 25;
 const CLASSIFICATION_GUARD_VERSION = "world-brain-classifier-guard.v1";
 
 function out(payload: unknown, status = 200): Response {
@@ -24,14 +27,29 @@ async function sha256(value: string): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function transientDbError(message: string): boolean {
+  return /statement timeout|connection.*timed out|could not query the database|schema cache|PGRST002|PGRST000|upstream request timeout/i.test(message);
+}
+
+async function persistChunk(table: string, chunk: Record<string, unknown>[], onConflict: string): Promise<number> {
+  if (!chunk.length) return 0;
+  const q = await db.from(table).upsert(chunk, { onConflict, ignoreDuplicates: true });
+  if (!q.error) return chunk.length;
+  const message = String(q.error.message ?? q.error);
+  if (chunk.length > 1 && transientDbError(message)) {
+    const mid = Math.ceil(chunk.length / 2);
+    const left = await persistChunk(table, chunk.slice(0, mid), onConflict);
+    const right = await persistChunk(table, chunk.slice(mid), onConflict);
+    return left + right;
+  }
+  throw new Error(`${table}:${message}`);
+}
+
 async function persistRows(table: string, rows: Record<string, unknown>[], onConflict: string): Promise<number> {
   if (!rows.length) return 0;
   let stored = 0;
-  for (let i = 0; i < rows.length; i += 150) {
-    const chunk = rows.slice(i, i + 150);
-    const q = await db.from(table).upsert(chunk, { onConflict, ignoreDuplicates: true });
-    if (q.error) throw new Error(`${table}:${q.error.message}`);
-    stored += chunk.length;
+  for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
+    stored += await persistChunk(table, rows.slice(i, i + WRITE_CHUNK), onConflict);
   }
   return stored;
 }
@@ -101,13 +119,35 @@ function applyClassificationGuard(batch: ReturnType<typeof buildWorldBrainBatch>
   };
 }
 
-async function loadEvents(nowMs: number): Promise<WorldBrainInputEvent[]> {
+const EVENT_SELECT = "event_id,asset,event_kind,source_kind,source_id,published_at,first_observed_at,claim,direction,magnitude,trust_class,entity_confidence,provenance_uri,metadata";
+
+async function loadContextEvents(nowMs: number): Promise<WorldBrainInputEvent[]> {
   const q = await db.from("brian_intel_events")
-    .select("event_id,asset,event_kind,source_kind,source_id,published_at,first_observed_at,claim,direction,magnitude,trust_class,entity_confidence,provenance_uri,metadata")
+    .select(EVENT_SELECT)
     .gte("first_observed_at", fromIso(nowMs - LOOKBACK_MS))
     .order("first_observed_at", { ascending: false })
     .limit(2500);
-  if (q.error) throw new Error(`intel_events:${q.error.message}`);
+  if (q.error) throw new Error(`intel_events_context:${q.error.message}`);
+  return (q.data ?? []) as WorldBrainInputEvent[];
+}
+
+async function loadIncrementalEvents(nowMs: number): Promise<WorldBrainInputEvent[]> {
+  const watermark = await db.from("brian_world_event_frames")
+    .select("observed_at")
+    .order("observed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (watermark.error) throw new Error(`world_watermark:${watermark.error.message}`);
+  const lastMs = watermark.data?.observed_at ? Date.parse(String(watermark.data.observed_at)) : NaN;
+  const startMs = Number.isFinite(lastMs)
+    ? Math.max(nowMs - LOOKBACK_MS, lastMs - EVENT_OVERLAP_MS)
+    : nowMs - LOOKBACK_MS;
+  const q = await db.from("brian_intel_events")
+    .select(EVENT_SELECT)
+    .gte("first_observed_at", fromIso(startMs))
+    .order("first_observed_at", { ascending: true })
+    .limit(MAX_INCREMENTAL_EVENTS);
+  if (q.error) throw new Error(`intel_events_incremental:${q.error.message}`);
   return (q.data ?? []) as WorldBrainInputEvent[];
 }
 
@@ -213,11 +253,12 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const now = Date.now();
       const observedAt = new Date(now).toISOString();
-      const events = await loadEvents(now);
-      const rawBatch = buildWorldBrainBatch(events, observedAt);
-      const batch = applyClassificationGuard(rawBatch, events);
+      const contextEvents = await loadContextEvents(now);
+      const incrementalEvents = await loadIncrementalEvents(now);
+      const contextBatch = applyClassificationGuard(buildWorldBrainBatch(contextEvents, observedAt), contextEvents);
+      const eventBatch = applyClassificationGuard(buildWorldBrainBatch(incrementalEvents, observedAt), incrementalEvents);
 
-      const eventFrames = batch.eventFrames.map((row) => ({
+      const eventFrames = eventBatch.eventFrames.map((row) => ({
         frame_id: row.frameId, event_id: row.eventId, observed_at: row.observedAt, published_at: row.publishedAt,
         event_kind: row.eventKind, source_id: row.sourceId, claim: row.claim, primary_asset: row.primaryAsset,
         entity_ids: row.entityIds, narrative_ids: row.narrativeIds, direction_hint: row.directionHint,
@@ -225,43 +266,43 @@ Deno.serve(async (req: Request) => {
         evidence_refs: row.evidenceRefs, evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true,
         live_execution: false, direct_alpha_influence: false,
       }));
-      const entityRows = batch.entityObservations.map((row) => ({
+      const entityRows = eventBatch.entityObservations.map((row) => ({
         observation_id: row.observationId, entity_id: row.entityId, canonical_name: row.canonicalName,
         entity_type: row.entityType, observed_at: row.observedAt, event_id: row.eventId, match_kind: row.matchKind,
         confidence: row.confidence, provenance_uri: row.provenanceUri, evidence_refs: row.evidenceRefs,
         evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const relations = batch.relationAssertions.map((row) => ({
+      const relations = eventBatch.relationAssertions.map((row) => ({
         assertion_id: row.assertionId, src_entity_id: row.srcEntityId, dst_entity_id: row.dstEntityId,
         relation: row.relation, observed_at: row.observedAt, event_id: row.eventId, confidence: row.confidence,
         mechanism: row.mechanism, stage: row.stage, evidence_refs: row.evidenceRefs,
         evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const narratives = batch.narrativeSnapshots.map((row) => ({
+      const narratives = contextBatch.narrativeSnapshots.map((row) => ({
         snapshot_id: row.snapshotId, narrative_id: row.narrativeId, label: row.label, observed_at: row.observedAt,
         event_ids: row.eventIds, entity_ids: row.entityIds, strength: row.strength, breadth: row.breadth,
         direction_balance: row.directionBalance, stage: row.stage, evidence_refs: row.evidenceRefs,
         evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const futureEvents = batch.futureEvents.map((row) => ({
+      const futureEvents = eventBatch.futureEvents.map((row) => ({
         future_event_id: row.futureEventId, event_kind: row.eventKind, scheduled_at: row.scheduledAt,
         first_observed_at: row.firstObservedAt, title: row.title, entity_ids: row.entityIds, asset_ids: row.assetIds,
         source_event_id: row.sourceEventId, confidence: row.confidence, stage: row.stage, evidence_refs: row.evidenceRefs,
         evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const mechanisms = batch.causalMechanisms.map((row) => ({
+      const mechanisms = contextBatch.causalMechanisms.map((row) => ({
         mechanism_id: row.mechanismId, narrative_id: row.narrativeId, observed_at: row.observedAt, cause: row.cause,
         transmission: row.transmission, affected_assets: row.affectedAssets, confidence: row.confidence, stage: row.stage,
         evidence_refs: row.evidenceRefs, counter_evidence_required: true, evidence_class: EVOLUTION_EVIDENCE_CLASS,
         shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const scenarios = batch.scenarios.map((row) => ({
+      const scenarios = contextBatch.scenarios.map((row) => ({
         scenario_id: row.scenarioId, mechanism_id: row.mechanismId, observed_at: row.observedAt, branch: row.branch,
         assumptions: row.assumptions, invalidators: row.invalidators, asset_impacts: row.assetImpacts,
         confidence: row.confidence, stage: row.stage, evidence_refs: row.evidenceRefs,
         evidence_class: EVOLUTION_EVIDENCE_CLASS, shadow_only: true, live_execution: false, direct_alpha_influence: false,
       }));
-      const impacts = batch.assetImpacts.map((row) => ({
+      const impacts = contextBatch.assetImpacts.map((row) => ({
         impact_id: row.impactId, asset_id: row.assetId, observed_at: row.observedAt, mechanism_id: row.mechanismId,
         scenario_id: row.scenarioId, conditional_direction: row.conditionalDirection, confidence: row.confidence,
         rationale: row.rationale, stage: row.stage, evidence_refs: row.evidenceRefs,
@@ -280,14 +321,15 @@ Deno.serve(async (req: Request) => {
       };
       await journal(observedAt, counts);
       const finishedAt = new Date().toISOString();
-      await runReceipt({ startedAt, finishedAt, status: "SUCCESS", input: events.length, counts });
+      await runReceipt({ startedAt, finishedAt, status: "SUCCESS", input: contextEvents.length, counts });
       return {
         status: "SUCCESS",
         collector_id: COLLECTOR_ID,
         observed_at: observedAt,
         world_brain_version: WORLD_BRAIN_VERSION,
         classification_guard_version: CLASSIFICATION_GUARD_VERSION,
-        input_events: events.length,
+        input_events: contextEvents.length,
+        incremental_events: incrementalEvents.length,
         ...counts,
         causal_claims_are_research_hypotheses: true,
         direct_alpha_influence: false,
