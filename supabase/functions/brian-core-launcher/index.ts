@@ -37,6 +37,11 @@ Deno.serve(async(req:Request)=>{
   const service=String(body?.service??"").trim();
   const endpoint=SERVICES[service];
   if(!endpoint) return out({status:"UNKNOWN_SERVICE",service},400);
+  const shardCount=service==="alpha"?Math.max(1,Math.min(5,Math.floor(Number(body?.shard_count??1)))):1;
+  const shardIndex=service==="alpha"?Math.max(0,Math.min(shardCount-1,Math.floor(Number(body?.shard_index??0)))):0;
+  const targetBody=service==="alpha"
+    ? {shard_index:shardIndex,shard_count:shardCount}
+    : {};
 
   const downstreamKey=(req.headers.get("x-brian-downstream-key")??req.headers.get("x-brian-cron-key")??"").trim();
   if(!downstreamKey) return out({status:"DOWNSTREAM_KEY_MISSING"},500);
@@ -57,7 +62,7 @@ Deno.serve(async(req:Request)=>{
           "apikey":ANON,
           "x-brian-cron-key":downstreamKey,
         },
-        body:"{}",
+        body:JSON.stringify(targetBody),
       });
       httpStatus=response.status;
       const payload=await response.json().catch(()=>({}));
@@ -67,7 +72,7 @@ Deno.serve(async(req:Request)=>{
       errorText=errText(error).slice(0,1800);
     }
     await logLaunch({
-      launch_id:launchId,service,endpoint,launched_at:launchedAt,finished_at:new Date().toISOString(),
+      launch_id:launchId,service:service==="alpha"?`alpha:${shardIndex}/${shardCount}`:service,endpoint,launched_at:launchedAt,finished_at:new Date().toISOString(),
       http_status:httpStatus,target_status:targetStatus,error_text:errorText
     });
   })();
@@ -78,6 +83,8 @@ Deno.serve(async(req:Request)=>{
     launch_id:launchId,
     service,
     endpoint,
+    shard_index:service==="alpha"?shardIndex:null,
+    shard_count:service==="alpha"?shardCount:null,
     launched_at:launchedAt,
     background:true,
     shadow_only:true,
