@@ -33,7 +33,7 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefre
 const COLLECTOR_ID = "brian-evolution-treasury-v1";
 const LEASE_SECONDS = 55;
 const MIN_INTERVAL_SECONDS = 45;
-const MAX_EDGE_ROWS = 100;
+const MAX_EDGE_ROWS = 40;
 const MARK_LOOKBACK_MS = 5 * 60_000;
 const DEGRADED_MARK_LOOKBACK_MS = 60 * 60_000;
 const EDGE_SELECT = "decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear";
@@ -175,7 +175,7 @@ async function loadMarks(assetIds: string[], nowIso: string, lookbackMs: number)
     .select("decision_id,asset_id,observed_at,observed_reference_price")
     .in("asset_id", assetIds).gte("observed_at", since).lte("observed_at", future)
     .not("observed_reference_price", "is", null)
-    .order("observed_at", { ascending: false }).limit(Math.max(1000, assetIds.length * 120));
+    .order("observed_at", { ascending: false }).limit(Math.max(300, assetIds.length * 20));
   if (q.error) throw new Error(`treasury_marks:${q.error.message}`);
   for (const row of q.data ?? []) {
     const assetId = String(row.asset_id);
@@ -309,7 +309,7 @@ async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIs
   const q = await db.from("brian_alpha_decisions")
     .select(ALPHA_SHADOW_SELECT)
     .gte("observed_at", since).lte("observed_at", future)
-    .order("observed_at", { ascending: false }).limit(1200);
+    .order("observed_at", { ascending: false }).limit(500);
   if (q.error) throw new Error(`treasury_alpha_shadow:${q.error.message}`);
 
   const rows: CanonicalAlphaDecisionRow[] = (q.data ?? []).map((row) => {
