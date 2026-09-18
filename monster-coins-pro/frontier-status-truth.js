@@ -107,7 +107,7 @@
 
     const alphaAge=parseAge(hb.alpha?.observed_at);
     const alphaRun=latestRun(hb,'brian-alpha-decision-compiler-v2');
-    let alpha=alphaAge<=420?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`):alphaAge<=1200?withEvidence('warn',`ALPHA kararı ${fmtAge(hb.alpha?.observed_at)} önce`):withEvidence(okStatus(alphaRun)?'warn':'bad',alphaRun?.error_class||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
+    let alpha=alphaAge<=600?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`):alphaAge<=1200?withEvidence('warn',`ALPHA kararı ${fmtAge(hb.alpha?.observed_at)} önce`):withEvidence(okStatus(alphaRun)?'warn':'bad',alphaRun?.error_class||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
 
     const wr=hb.world_run||{};
     const wrAge=parseAge(wr.finished_at||wr.started_at);
