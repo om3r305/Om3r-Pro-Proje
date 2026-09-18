@@ -40,19 +40,27 @@ function constantTimeEqual(left: string, right: string) {
   for (let index = 0; index < left.length; index++) diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
   return diff === 0;
 }
-async function requireDashboardAuth(req: Request) {
+async function requireAccountingAuth(req: Request): Promise<"dashboard"|"cron"> {
   const supplied = (req.headers.get("x-brian-dashboard-key") ?? "").trim();
   if (!supplied) throw new Error("UNAUTHORIZED_DASHBOARD");
-  const q = await db.from("brian_dashboard_auth").select("dashboard_key_sha256").eq("auth_id", AUTH_ID).single();
+  const q = await db.from("brian_dashboard_auth").select("dashboard_key_sha256,cron_key_sha256").eq("auth_id", AUTH_ID).single();
   if (q.error || !q.data) throw new Error("DASHBOARD_AUTH_UNAVAILABLE");
-  if (!constantTimeEqual(await sha256Hex(supplied), String(q.data.dashboard_key_sha256 ?? ""))) throw new Error("UNAUTHORIZED_DASHBOARD");
+  const digest = await sha256Hex(supplied);
+  if (constantTimeEqual(digest, String(q.data.dashboard_key_sha256 ?? ""))) return "dashboard";
+  if (constantTimeEqual(digest, String(q.data.cron_key_sha256 ?? ""))) return "cron";
+  throw new Error("UNAUTHORIZED_DASHBOARD");
+}
+function errorText(error: unknown) {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  try { return JSON.stringify(error); } catch { return String(error); }
 }
 
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get("origin");
  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
  if(req.method!=="POST")return out({error:"POST required"},405,origin);
- try{await requireDashboardAuth(req)}catch{return out({error:"UNAUTHORIZED_DASHBOARD"},401,origin)}
+ let authKind:"dashboard"|"cron";
+ try{authKind=await requireAccountingAuth(req)}catch{return out({error:"UNAUTHORIZED_DASHBOARD"},401,origin)}
  try{
   const snapCols="snapshot_id,cycle_id,observed_at,starting_equity_usd,cash_usd,equity_usd,realized_pnl_usd,cumulative_costs_usd,deployment_usd,positions,treasury_version";
   const actionCols="action_id,position_id,cycle_id,observed_at,kind,asset_id,direction,capital_usd,reference_price,cost_usd,reason,source_decision_id";
@@ -180,5 +188,10 @@ Deno.serve(async(req:Request)=>{
     coverage:{actions_truncated:actions.length===1000,history_truncated:history.length===1000,action_limit:1000,history_limit:1000,as_of:cutoff},
     shadow_only:true,live_execution:false
   },200,origin);
- }catch{return out({error:"ACCOUNTING_DATA_UNAVAILABLE"},503,origin)}
+ }catch(error){
+   const body=authKind==="cron"
+     ? {error:"ACCOUNTING_DATA_UNAVAILABLE",detail:errorText(error)}
+     : {error:"ACCOUNTING_DATA_UNAVAILABLE"};
+   return out(body,503,origin);
+ }
 });
