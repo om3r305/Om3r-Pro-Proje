@@ -45,7 +45,7 @@ function isoBefore(at: string, deltaMs: number): string {
 async function insertRows(table: string, rows: Record<string, unknown>[]): Promise<number> {
   if (!rows.length) return 0;
   let stored = 0;
-  for (let i = 0; i < rows.length; i += 200) {
+  for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 200);
     const result = await db.from(table).insert(chunk);
     if (result.error) throw new Error(`${table}:${result.error.message}`);
@@ -74,12 +74,12 @@ async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[
       .select("collector_id,started_at,finished_at,status,observed_records,stored_records,degraded_sources,error_class,error_message")
       .gte("started_at", isoBefore(observedAt, RUN_LOOKBACK_MS))
       .order("started_at", { ascending: false })
-      .limit(5000),
+      .limit(1200),
     db.from("brian_intel_events")
       .select("event_id,source_id,provenance_uri,source_kind,trust_class,first_observed_at,published_at,claim,asset")
       .gte("first_observed_at", isoBefore(observedAt, EVENT_LOOKBACK_MS))
       .order("first_observed_at", { ascending: false })
-      .limit(1500),
+      .limit(500),
     db.from("brian_universe_snapshots")
       .select("observed_at")
       .order("observed_at", { ascending: false }).limit(1).maybeSingle(),
