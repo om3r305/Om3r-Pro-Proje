@@ -27,29 +27,36 @@ function out(body: unknown, status = 200, origin: string | null = null) {
   });
 }
 
-async function readCache(timeoutMs = 1800): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort("heartbeat-cache-timeout"), timeoutMs);
-  try {
-    const cached = await db.rpc("brian_frontier_heartbeat_cached").abortSignal(controller.signal);
-    if (cached.error) throw new Error(cached.error.message);
-    const payload = cached.data && typeof cached.data === "object"
-      ? cached.data as Record<string, unknown>
-      : {};
-    lastGood = {
-      ...payload,
-      status: payload.status || "OK",
-      source: "heartbeat_cache",
-      transport_degraded: false,
-      dip_touched: false,
-      shadow_only: true,
-      live_execution: false,
-      read_only: true,
-    };
-    return lastGood;
-  } finally {
-    clearTimeout(timer);
+async function readCache(timeoutMs = 3500): Promise<Record<string, unknown>> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort("heartbeat-cache-timeout"), timeoutMs);
+    try {
+      const cached = await db.rpc("brian_frontier_heartbeat_cached").abortSignal(controller.signal);
+      if (cached.error) throw new Error(cached.error.message);
+      const payload = cached.data && typeof cached.data === "object"
+        ? cached.data as Record<string, unknown>
+        : {};
+      lastGood = {
+        ...payload,
+        status: payload.status || "OK",
+        source: "heartbeat_cache",
+        transport_degraded: false,
+        dip_touched: false,
+        shadow_only: true,
+        live_execution: false,
+        read_only: true,
+      };
+      return lastGood;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 150 * attempt));
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError ?? new Error("heartbeat-cache-unavailable");
 }
 
 Deno.serve(async (req: Request) => {
