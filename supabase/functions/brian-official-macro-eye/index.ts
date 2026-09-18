@@ -51,11 +51,24 @@ function parseItems(xml: string): FeedItem[] {
   return out;
 }
 
-async function persistRaw(feed: typeof FEEDS[number], xml: string, observedAt: string): Promise<string> {
+async function persistRaw(feed: typeof FEEDS[number], xml: string, observedAt: string): Promise<{ captureId: string; storageDegraded: boolean; storageError: string | null }> {
   const raw = utf8(xml), hash = await sha(raw), z = gzip(raw, { level: 6 }); const path = `official_macro/${feed.id}/${observedAt.slice(0,10)}/${hash}.xml.gz`;
+  let storageDegraded = false; let storageError: string | null = null;
   const up = await supabase.storage.from(BUCKET).upload(path, z, { contentType: "application/gzip", upsert: false, cacheControl: "31536000" });
-  if (up.error) { const msg = String(up.error.message ?? "").toLowerCase(); const status = String((up.error as {statusCode?: string|number}).statusCode ?? ""); if (status !== "409" && !msg.includes("exist") && !msg.includes("duplicate")) throw up.error; }
-  const id = await sha(`${feed.id}|${observedAt}|${hash}`); const ins = await supabase.from("brian_raw_captures").insert({ capture_id: id, provider: feed.id, record_type: "official_macro_rss", observed_at: observedAt, captured_at: new Date().toISOString(), provenance_uri: feed.url, payload_hash: hash, payload: { storage_bucket: BUCKET, storage_path: path, content_type: "application/rss+xml", content_encoding: "gzip", official_source: true, organization: feed.org, topic: feed.topic } }); if (ins.error) throw ins.error; return id;
+  if (up.error) {
+    const msg = String(up.error.message ?? "").toLowerCase();
+    const status = String((up.error as {statusCode?: string|number}).statusCode ?? "");
+    const duplicate = status === "409" || msg.includes("exist") || msg.includes("duplicate");
+    if (!duplicate) { storageDegraded = true; storageError = errorText(up.error).slice(0, 700); }
+  }
+  const id = await sha(`${feed.id}|${observedAt}|${hash}`);
+  const ins = await supabase.from("brian_raw_captures").insert({
+    capture_id: id, provider: feed.id, record_type: "official_macro_rss", observed_at: observedAt, captured_at: new Date().toISOString(),
+    provenance_uri: feed.url, payload_hash: hash,
+    payload: { storage_bucket: BUCKET, storage_path: path, content_type: "application/rss+xml", content_encoding: "gzip", official_source: true, organization: feed.org, topic: feed.topic, storage_object_committed: !storageDegraded, storage_degraded: storageDegraded, storage_error: storageError }
+  });
+  if (ins.error) throw ins.error;
+  return { captureId: id, storageDegraded, storageError };
 }
 
 async function fetchFeed(feed: typeof FEEDS[number]) {
@@ -84,7 +97,7 @@ Deno.serve(async (req: Request) => {
       const degraded: string[] = []; const events: Record<string, unknown>[] = []; const observations: Record<string, unknown>[] = []; let observed = 0;
       for (let i = 0; i < results.length; i++) {
         const result = results[i], feed = FEEDS[i]; if (result.status === "rejected") { degraded.push(`${feed.id}:${errorText(result.reason)}`); continue; }
-        const xml = result.value.xml; const captureId = await persistRaw(feed, xml, observedAt); const items = parseItems(xml).slice(0, 30); observed += items.length;
+        const xml = result.value.xml; const rawPersist = await persistRaw(feed, xml, observedAt); const captureId = rawPersist.captureId; if (rawPersist.storageDegraded) degraded.push(`${feed.id}:raw_storage_degraded:${rawPersist.storageError ?? "unknown"}`); const items = parseItems(xml).slice(0, 30); observed += items.length;
         for (const item of items) {
           const eventId = await sha(`official-macro|${feed.id}|${item.guid}|${item.title}`); const fingerprint = await sha(`${feed.id}|${item.title}|${item.link}`);
           events.push({ event_id: eventId, asset: "MACRO", event_kind: "OFFICIAL_MACRO_RELEASE", source_kind: `${feed.org}_OFFICIAL`, source_id: feed.id, published_at: item.publishedAt, first_observed_at: observedAt, captured_at: new Date().toISOString(), claim: item.title, direction: 0, magnitude: 1, trust_class: "OFFICIAL_PRIMARY", entity_confidence: 1, content_fingerprint: fingerprint, corroboration_key: await sha(`${feed.topic}|${item.title.toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}`), provenance_uri: item.link || feed.url, pit_verified: true, raw_capture_id: captureId, metadata: { organization: feed.org, topic: feed.topic, rss_feed: feed.url, direction_not_inferred: true } });
