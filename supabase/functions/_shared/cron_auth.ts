@@ -45,10 +45,31 @@ export async function requireCronAuth(
   const supplied = (req.headers.get("x-brian-cron-key") ?? "").trim();
   if (!supplied) throw new Error("UNAUTHORIZED_CRON");
 
-  const result = await supabase.from("brian_dashboard_auth")
+  let result: any;
+  try {
+    const authQuery: any = supabase.from("brian_dashboard_auth")
     .select("cron_key_sha256")
     .eq("auth_id", authId)
     .single();
+  const result = typeof authQuery.abortSignal === "function"
+    ? await authQuery.abortSignal(AbortSignal.timeout(4_000))
+    : await Promise.race([
+        Promise.resolve(authQuery),
+        new Promise<any>((_, reject) => setTimeout(() => reject(new Error("CRON_AUTH_LOOKUP_TIMEOUT")), 4_000)),
+      ]);
+  } catch (error) {
+    if (authId === DEFAULT_AUTH_ID && isTransientAuthLookupFailure(String(error))) {
+      const expected = DEFAULT_CRON_KEY_SHA256_FALLBACK;
+      if (!constantTimeEqual(await sha256Hex(supplied), expected)) throw new Error("UNAUTHORIZED_CRON");
+      return;
+    }
+    if (authId === DEFAULT_AUTH_ID && String(error).includes("CRON_AUTH_LOOKUP_TIMEOUT")) {
+      const expected = DEFAULT_CRON_KEY_SHA256_FALLBACK;
+      if (!constantTimeEqual(await sha256Hex(supplied), expected)) throw new Error("UNAUTHORIZED_CRON");
+      return;
+    }
+    throw error;
+  }
 
   let expected = "";
   if (!result.error && result.data) {
