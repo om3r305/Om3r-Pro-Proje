@@ -2,7 +2,7 @@
 
 /* Frontier stability layer: one lightweight heartbeat every 15s, one detailed service per cycle.
    Keeps last-known-good evidence during transient DB/API timeouts. DIP is not queried or controlled here. */
-const HEARTBEAT_ENDPOINT = `${ROOT}/brian-frontier-heartbeat`;
+const HEARTBEAT_ENDPOINT = '/api/brian/brian-frontier-heartbeat-public';
 const STABILITY = { heartbeat:null, error:null, slowCursor:0, lastSlow:0, lastAutonomyFetch:0 };
 
 async function frontierPost(url,body={},timeoutMs=20000){
@@ -134,7 +134,13 @@ refresh=async function(){
     const hb=await frontierPost(HEARTBEAT_ENDPOINT,{},25000);
     STABILITY.heartbeat=hb;STABILITY.error=null;delete S.errors.systemControl;applyHeartbeat(hb);
   }catch(e){
-    STABILITY.error=String(e?.message||e);S.errors.systemControl=STABILITY.error;
+    const current=STABILITY.heartbeat;
+    const stillFresh=current?.status==='OK'&&heartbeatAgeSeconds(current.observed_at)<=120;
+    if(stillFresh){
+      STABILITY.error=null;delete S.errors.systemControl;
+    }else{
+      STABILITY.error=String(e?.message||e);S.errors.systemControl=STABILITY.error;
+    }
   }
 
   const now=Date.now();
