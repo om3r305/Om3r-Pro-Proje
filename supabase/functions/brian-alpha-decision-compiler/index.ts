@@ -24,18 +24,18 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistS
 
 const COLLECTOR_ID = "brian-alpha-decision-compiler-v2";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
-const MIN_INTERVAL_SECONDS = 50;
-const LEASE_SECONDS = 55;
+const MIN_INTERVAL_SECONDS = 120;
+const LEASE_SECONDS = 90;
 const CORE_ASSETS = ["crypto:BTCUSDT", "crypto:ETHUSDT", "crypto:SOLUSDT", "crypto:BNBUSDT", "crypto:XRPUSDT"];
 const MAX_ASSETS = 25;
-const MAX_ASSETS_PER_CYCLE = 15;
+const MAX_ASSETS_PER_CYCLE = 8;
 const ROTATING_RADAR_ASSETS_PER_CYCLE = MAX_ASSETS_PER_CYCLE - CORE_ASSETS.length;
 const FALLBACK_FEE_BPS = 10;
 const FALLBACK_SLIPPAGE_BPS = 1;
 const L2_DEPTH_LIMIT = 100;
 const FROZEN_PHASE37_EXPERIMENT_ID = "phase37-prospective-live-20260903";
 const MACRO_CONTEXT_WINDOW_MS = 60 * 60_000;
-const MAX_MACRO_CONTEXT_EVENTS = 24;
+const MAX_MACRO_CONTEXT_EVENTS = 12;
 const ENABLE_DIP_DIRECTIONAL_EVIDENCE = false; // MAIN and DIP remain separate brains by default.
 const RADAR_MAX_AGE_MS = 30 * 60_000; // 2x the canonical 15m universe cadence.
 const MAX_SHARD_COUNT = 5;
@@ -168,7 +168,7 @@ async function latestRadarAssets(): Promise<string[]> {
   const out = new Set<string>(CORE_ASSETS);
   const snapshot = await supabase.from("brian_universe_snapshots")
     .select("observed_at,candidates")
-    .order("observed_at", { ascending: false }).limit(1).maybeSingle();
+    .order("observed_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(6_000));
   if (snapshot.error || !snapshot.data) return [...out];
   const observedMs = Date.parse(String(snapshot.data.observed_at));
   if (!Number.isFinite(observedMs) || Date.now() - observedMs > RADAR_MAX_AGE_MS || observedMs > Date.now() + 5_000) return [...out];
@@ -207,7 +207,7 @@ async function loadSensorEvidence(assets: string[], nowMs: number): Promise<Map<
       .select("observation_id,asset_id,sensor_family,horizon,independent_group,observed_at,direction,strength,confidence,reliability,available,reason")
       .in("asset_id", assets).eq("horizon", horizon).gte("observed_at", since).eq("available", true)
       .neq("independent_group", "news_gdelt")
-      .order("observed_at", { ascending: false }).limit(450);
+      .order("observed_at", { ascending: false }).limit(220).abortSignal(AbortSignal.timeout(8_000));
   }));
   for (const resp of responses) {
     if (resp.error) throw resp.error;
@@ -229,7 +229,7 @@ async function addDipEvidence(map: Map<string, AlphaEvidenceRow[]>, assets: stri
   const since = new Date(nowMs - 5 * 60_000).toISOString();
   const resp = await supabase.from("brian_dip_events")
     .select("event_id,symbol,observed_at,event_kind,metadata")
-    .eq("event_kind", "BUY").gte("observed_at", since).order("observed_at", { ascending: false }).limit(100);
+    .eq("event_kind", "BUY").gte("observed_at", since).order("observed_at", { ascending: false }).limit(60).abortSignal(AbortSignal.timeout(6_000));
   if (resp.error) return; // optional experimental eye: absence cannot fail the compiler
   const allowed = new Set(assets);
   for (const r of resp.data ?? []) {
@@ -249,7 +249,7 @@ async function addFrozenPhase37Evidence(map: Map<string, AlphaEvidenceRow[]>, as
     .eq("experiment_id", FROZEN_PHASE37_EXPERIMENT_ID)
     .in("policy_kind", ["NATIVE", "PROFIT"])
     .lte("observed_at", new Date(nowMs).toISOString())
-    .order("observed_at", { ascending: false }).limit(20);
+    .order("observed_at", { ascending: false }).limit(12).abortSignal(AbortSignal.timeout(6_000));
   if (latest.error) return;
   const allowed = new Set(assets);
   const seenPolicies = new Set<string>();
@@ -281,7 +281,7 @@ async function loadOfficialMacroContext(asOfMs: number, asOf: string): Promise<O
     .gte("observed_at", since)
     .lte("observed_at", asOf)
     .order("observed_at", { ascending: false })
-    .limit(MAX_MACRO_CONTEXT_EVENTS);
+    .limit(MAX_MACRO_CONTEXT_EVENTS).abortSignal(AbortSignal.timeout(6_000));
   if (resp.error) throw resp.error;
   const events: OfficialMacroContextEvent[] = (resp.data ?? []).map((row) => {
     const md = (row.metadata ?? {}) as Record<string, unknown>;
@@ -313,7 +313,7 @@ async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Ma
   const since = new Date(nowMs - 5 * 60_000).toISOString();
   const resp = await supabase.from("brian_intrabar_reaction_events")
     .select("event_id,asset_id,observed_at,direction,status,late_chase,reason")
-    .in("asset_id", assets).gte("observed_at", since).order("observed_at", { ascending: false }).limit(250);
+    .in("asset_id", assets).gte("observed_at", since).order("observed_at", { ascending: false }).limit(120).abortSignal(AbortSignal.timeout(6_000));
   if (resp.error) throw resp.error;
   for (const r of resp.data ?? []) if (!map.has(String(r.asset_id))) {
     const status = String(r.status) as IntrabarVetoContext["status"];
@@ -323,7 +323,7 @@ async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Ma
 }
 
 async function currentBooks(): Promise<Map<string, ReferenceBook>> {
-  const r = await fetch("https://api.binance.com/api/v3/ticker/bookTicker", { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow/1.0" }, signal: AbortSignal.timeout(5_000) });
+  const r = await fetch("https://api.binance.com/api/v3/ticker/bookTicker", { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow/1.0" }, signal: AbortSignal.timeout(4_000) });
   if (!r.ok) throw new Error(`Binance bookTicker HTTP ${r.status}`);
   const payload = await r.json(); if (!Array.isArray(payload)) throw new Error("invalid Binance bookTicker payload");
   const map = new Map<string, ReferenceBook>();
@@ -339,7 +339,7 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   const symbol = asset.includes(":") ? asset.split(":", 2)[1] : asset;
   if (!/^[A-Z0-9]+USDT$/.test(symbol)) throw new Error(`unsupported Binance L2 asset ${asset}`);
   const url = `https://api.binance.com/api/v3/depth?symbol=${encodeURIComponent(symbol)}&limit=${L2_DEPTH_LIMIT}`;
-  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(5_000) });
+  const response = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-ALPHA-v2-Shadow-L2/1.0" }, signal: AbortSignal.timeout(4_000) });
   if (!response.ok) throw new Error(`Binance depth HTTP ${response.status} for ${symbol}`);
   const raw = await response.text();
   try {
@@ -363,20 +363,20 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   }
 }
 
-async function insertRowsChunked(table: string, rows: Record<string, unknown>[], chunkSize = 5) {
+async function insertRowsChunked(table: string, rows: Record<string, unknown>[], chunkSize = 8) {
   if (!rows.length) return;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize);
     let lastError: unknown = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const ins = await supabase.from(table).insert(chunk);
+        const ins = await supabase.from(table).insert(chunk).abortSignal(AbortSignal.timeout(8_000));
         if (!ins.error) { lastError = null; break; }
         lastError = ins.error;
       } catch (error) {
         lastError = error;
       }
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
     }
     if (lastError) throw new Error(`${table} insert chunk ${i / chunkSize + 1} failed: ${errorText(lastError)}`);
   }
@@ -412,7 +412,7 @@ async function recordRun(
       shard_index: shard?.index ?? 0,
       shard_count: shard?.count ?? 1,
     },
-  });
+  }).abortSignal(AbortSignal.timeout(8_000));
 }
 
 Deno.serve(async (req: Request) => {
@@ -436,7 +436,7 @@ Deno.serve(async (req: Request) => {
   const startedAt = new Date().toISOString();
   try {
     if (shardCount === 1) {
-      const last = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS","DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      const last = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS","DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(6_000));
       if (last.error) throw last.error;
       if (last.data?.started_at) {
         const age = (Date.now() - Date.parse(last.data.started_at)) / 1000;
@@ -626,8 +626,8 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 5);
-      await insertRowsChunked("brian_alpha_decisions", decisionRows, 5);
+      await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 8);
+      await insertRowsChunked("brian_alpha_decisions", decisionRows, 8);
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
       await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources, undefined, shardMeta);
       return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, radar_assets_total: allAssets.length, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
