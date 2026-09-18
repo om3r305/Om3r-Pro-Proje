@@ -5,6 +5,7 @@ const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const VERSION = "brian.big-move-hunter.v1";
+const COLLECTOR_ID = "brian-big-move-hunter-v1";
 const EVIDENCE = "PROSPECTIVE_BIG_MOVE_SHADOW";
 const CORE = ["BTC","ETH","SOL","BNB","XRP"];
 const STOP = new Set(["USD","USDT","USDC","API","SEC","ETF","UAE","THE","NEW","CEO","CPI","PCE","FED","ECB","HTTP"]);
@@ -13,6 +14,7 @@ type Sensor = { observation_id:string; asset_id:string; observed_at:string; dire
 type EventRow = { event_id:string; asset:string|null; event_kind:string; source_id:string; first_observed_at:string; published_at:string|null; claim:string; trust_class:string; content_fingerprint:string|null; provenance_uri:string|null };
 
 function out(body: unknown, status=200){ return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}}); }
+function errorText(e:unknown){ return e instanceof Error ? `${e.name}: ${e.message}` : String(e); }
 function clip(n:number){ return Math.max(0,Math.min(1,Number.isFinite(n)?n:0)); }
 async function sha(s:string){ const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s))); return [...d].map(b=>b.toString(16).padStart(2,"0")).join(""); }
 function assetId(base:string){ return `crypto:${base.toUpperCase()}USDT`; }
@@ -97,7 +99,31 @@ async function resolveOutcomes(now:Date){
   } return stored;
 }
 
-Deno.serve(async(req:Request)=>{ if(req.method!=="POST") return out({error:"POST required"},405); try{await requireCronAuth(req,db);}catch(e){return out({error:String(e),shadow_only:true,live_execution:false},401);} try{
-  const now=new Date(); const {eligible,radar,observedAt}=await latestUniverse(); const sensors=await recentSensors(new Date(now.getTime()-35*60_000).toISOString()); const event=await eventLane(now,eligible,radar,sensors); const precursor=await precursorLane(now,radar,sensors); const outcomes=await resolveOutcomes(now);
-  return out({status:"SUCCESS",version:VERSION,universe_observed_at:observedAt,event_opportunities:event.observed,event_confirmed_alpha_evidence:event.confirmed,precursor_opportunities:precursor.observed,outcomes_resolved:outcomes,dip_dependency:false,shadow_only:true,live_execution:false});
- }catch(e){return out({status:"FAILED",error:String(e),version:VERSION,dip_dependency:false,shadow_only:true,live_execution:false},500);} });
+async function recordRun(startedAt:string,status:"SUCCESS"|"FAILED",observed:number,stored:number,error?:unknown){
+  const finishedAt=new Date().toISOString();
+  const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
+  const q=await db.from("brian_collector_runs").insert({
+    run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,
+    observed_records:observed,stored_records:stored,degraded_sources:[],
+    error_class:error?"BIG_MOVE_HUNTER_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,
+    evidence_class:EVIDENCE,shadow_only:true,live_execution:false,
+    metadata:{version:VERSION,dip_dependency:false,shadow_only:true,live_execution:false}
+  });
+  if(q.error) console.error("big-move run receipt",q.error.message);
+}
+
+Deno.serve(async(req:Request)=>{
+  if(req.method!=="POST") return out({error:"POST required"},405);
+  const startedAt=new Date().toISOString();
+  try{await requireCronAuth(req,db);}catch(e){return out({error:errorText(e),shadow_only:true,live_execution:false},401);}
+  try{
+    const now=new Date(); const {eligible,radar,observedAt}=await latestUniverse(); const sensors=await recentSensors(new Date(now.getTime()-35*60_000).toISOString()); const event=await eventLane(now,eligible,radar,sensors); const precursor=await precursorLane(now,radar,sensors); const outcomes=await resolveOutcomes(now);
+    const observed=event.observed+precursor.observed;
+    const stored=event.confirmed+outcomes;
+    await recordRun(startedAt,"SUCCESS",observed,stored);
+    return out({status:"SUCCESS",collector_id:COLLECTOR_ID,version:VERSION,universe_observed_at:observedAt,event_opportunities:event.observed,event_confirmed_alpha_evidence:event.confirmed,precursor_opportunities:precursor.observed,outcomes_resolved:outcomes,dip_dependency:false,shadow_only:true,live_execution:false});
+  }catch(e){
+    await recordRun(startedAt,"FAILED",0,0,e);
+    return out({status:"FAILED",collector_id:COLLECTOR_ID,error:errorText(e),version:VERSION,dip_dependency:false,shadow_only:true,live_execution:false},500);
+  }
+});
