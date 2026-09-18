@@ -24,20 +24,22 @@ const ageSec=(v:unknown)=>{const t=Date.parse(String(v??""));return Number.isFin
 type Row=Record<string,any>;
 function latestBy(rows:Row[],key:(r:Row)=>string){const m=new Map<string,Row>();for(const r of rows){const k=key(r);if(!k)continue;const old=m.get(k);if(!old||Date.parse(String(r.measured_at??r.decided_at??r.started_at))>Date.parse(String(old.measured_at??old.decided_at??old.started_at)))m.set(k,r)}return m}
 function family(id:string){if(id.includes("action-gate"))return"ACTION_GATE";if(id.includes("expected-edge"))return"EXPECTED_EDGE";return"OTHER"}
+let lastGood:Record<string,unknown>|null=null,lastGoodAt=0;
 
 Deno.serve(async(req:Request)=>{
   const origin=req.headers.get("origin");
   if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
   if(req.method!=="POST")return out({error:"POST required"},405,origin);
   try{await auth(req)}catch(e){return out({error:String(e)},401,origin)}
+  if(lastGood&&Date.now()-lastGoodAt<60_000)return out({...lastGood,cache_age_seconds:(Date.now()-lastGoodAt)/1000},200,origin);
   try{
     const dayAgo=new Date(Date.now()-86400000).toISOString();
     const [eq,rq,pq,aq,cq]=await Promise.all([
-      db.from("brian_evolution_experiments").select("experiment_id,hypothesis_id,minimum_samples,minimum_regimes,stage,mode,created_at_source").eq("mode","PROSPECTIVE_SHADOW").in("stage",["EXPERIMENTAL","CANARY","SHADOW_VALIDATED"]).order("created_at_source",{ascending:false}).limit(100),
-      db.from("brian_evolution_experiment_results").select("result_id,experiment_id,measured_at,role,samples,regimes,net_edge_bps,favorable_after_cost_rate,data_quality_ok,leakage_detected,stability_score").order("measured_at",{ascending:false}).limit(500),
-      db.from("brian_evolution_promotion_decisions").select("decision_id,experiment_id,decided_at,decision,score,reasons,required_next_stage,challenger_result_id").order("decided_at",{ascending:false}).limit(200),
-      db.from("brian_evolution_code_artifact_receipts").select("observed_at,passed,protected_scope_clear,leakage_detected").gte("observed_at",dayAgo).order("observed_at",{ascending:false}).limit(200),
-      db.from("brian_collector_runs").select("collector_id,status,started_at,finished_at").in("collector_id",["brian-evolution-experiment-runner-v1","brian-evolution-promotion-council-v1"]).gte("started_at",dayAgo).order("started_at",{ascending:false}).limit(100),
+      db.from("brian_evolution_experiments").select("experiment_id,hypothesis_id,minimum_samples,minimum_regimes,stage,mode,created_at_source").eq("mode","PROSPECTIVE_SHADOW").in("stage",["EXPERIMENTAL","CANARY","SHADOW_VALIDATED"]).order("created_at_source",{ascending:false}).limit(50),
+      db.from("brian_evolution_experiment_results").select("result_id,experiment_id,measured_at,role,samples,regimes,net_edge_bps,favorable_after_cost_rate,data_quality_ok,leakage_detected,stability_score").order("measured_at",{ascending:false}).limit(160),
+      db.from("brian_evolution_promotion_decisions").select("decision_id,experiment_id,decided_at,decision,score,reasons,required_next_stage,challenger_result_id").order("decided_at",{ascending:false}).limit(80),
+      db.from("brian_evolution_code_artifact_receipts").select("observed_at,passed,protected_scope_clear,leakage_detected").gte("observed_at",dayAgo).order("observed_at",{ascending:false}).limit(80),
+      db.from("brian_collector_runs").select("collector_id,status,started_at,finished_at").in("collector_id",["brian-evolution-experiment-runner-v1","brian-evolution-promotion-council-v1"]).gte("started_at",dayAgo).order("started_at",{ascending:false}).limit(50),
     ]);
     const errs=[eq,rq,pq,aq,cq].filter(x=>x.error).map(x=>x.error!.message);if(errs.length)return out({status:"DEGRADED",errors:errs,shadow_only:true,live_execution:false},500,origin);
     const experiments=(eq.data??[]) as Row[],results=(rq.data??[]) as Row[],promos=(pq.data??[]) as Row[],artifacts=(aq.data??[]) as Row[],runs=(cq.data??[]) as Row[];
@@ -63,6 +65,7 @@ Deno.serve(async(req:Request)=>{
     const evidence=R(supported.length?supported.reduce((s,x)=>s+x.evidence_maturity_pct,0)/supported.length:0);
     const ready=supported.filter(x=>x.promotion_ready).length;
     const promotionReadiness=R(supported.length?100*ready/supported.length:0);
-    return out({status:"ONLINE",observed_at:new Date().toISOString(),metrics:{pipeline_health_pct:pipeline,evidence_maturity_pct:evidence,promotion_readiness_pct:promotionReadiness},candidates:supported,research_pockets:[],research_pocket_policy:{status:"NO_ROBUST_POCKET",minimum_days:2,max_single_day_share_pct:60,canonical_authority:false,note:"Thin asset/time pockets are not surfaced as edge until multi-day robustness passes."},governance:{human_promotion_required:true,canonical_mutation:false,thresholds_relaxed:false,shadow_only:true,live_execution:false},pipeline:{runner_healthy:runnerHealthy,council_healthy:councilHealthy,safe_artifact_pass_pct:R(artifactPct),clean_candidate_pct:R(cleanliness)}},200,origin);
-  }catch(e){return out({status:"FAILED_CLOSED",error:e instanceof Error?e.message:String(e),shadow_only:true,live_execution:false},500,origin)}
+    const payload={status:"ONLINE",observed_at:new Date().toISOString(),metrics:{pipeline_health_pct:pipeline,evidence_maturity_pct:evidence,promotion_readiness_pct:promotionReadiness},candidates:supported,research_pockets:[],research_pocket_policy:{status:"NO_ROBUST_POCKET",minimum_days:2,max_single_day_share_pct:60,canonical_authority:false,note:"Thin asset/time pockets are not surfaced as edge until multi-day robustness passes."},governance:{human_promotion_required:true,canonical_mutation:false,thresholds_relaxed:false,shadow_only:true,live_execution:false},pipeline:{runner_healthy:runnerHealthy,council_healthy:councilHealthy,safe_artifact_pass_pct:R(artifactPct),clean_candidate_pct:R(cleanliness)},shadow_only:true,live_execution:false};
+    lastGood=payload;lastGoodAt=Date.now();return out(payload,200,origin);
+  }catch(e){if(lastGood)return out({...lastGood,stale:true,refresh_error:e instanceof Error?e.message:String(e)},200,origin);return out({status:"FAILED_CLOSED",error:e instanceof Error?e.message:String(e),shadow_only:true,live_execution:false},500,origin)}
 });
