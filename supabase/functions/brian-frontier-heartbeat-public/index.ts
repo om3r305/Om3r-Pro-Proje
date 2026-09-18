@@ -68,7 +68,7 @@ function normalizePayload(payload: unknown, source: string): Record<string, unkn
 async function readDirectDb(timeoutMs = 2800): Promise<Record<string, unknown>> {
   if (!sql) throw new Error("SUPABASE_DB_URL_UNAVAILABLE");
   const rows = await withTimeout(
-    sql<{ payload: Record<string, unknown> }[]>\`select public.brian_frontier_heartbeat_cached() as payload\`,
+    sql!.unsafe("select public.brian_frontier_heartbeat_cached() as payload") as Promise<{ payload: Record<string, unknown> }[]>,
     timeoutMs,
     "heartbeat-direct-db-timeout",
   );
