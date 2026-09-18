@@ -19,7 +19,7 @@ function cors(origin?: string | null): Record<string, string> {
     : "https://monster-coins-pro-oemer-yildirim.vercel.app";
   return {
     "access-control-allow-origin": allowed,
-    "access-control-allow-headers": "content-type,x-brian-dashboard-key",
+    "access-control-allow-headers": "content-type,x-brian-dashboard-key,x-brian-cron-key",
     "access-control-allow-methods": "POST,OPTIONS",
     "vary": "Origin",
   };
@@ -41,7 +41,7 @@ function constantTimeEqual(left: string, right: string) {
   return diff === 0;
 }
 async function requireAccountingAuth(req: Request): Promise<"dashboard"|"cron"> {
-  const supplied = (req.headers.get("x-brian-dashboard-key") ?? "").trim();
+  const supplied = (req.headers.get("x-brian-dashboard-key") ?? req.headers.get("x-brian-cron-key") ?? "").trim();
   if (!supplied) throw new Error("UNAUTHORIZED_DASHBOARD");
   const q = await db.from("brian_dashboard_auth").select("dashboard_key_sha256,cron_key_sha256").eq("auth_id", AUTH_ID).single();
   if (q.error || !q.data) throw new Error("DASHBOARD_AUTH_UNAVAILABLE");
