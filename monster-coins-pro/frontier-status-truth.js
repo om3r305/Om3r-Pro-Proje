@@ -3,8 +3,6 @@
   const CACHE_KEY='brian-frontier-heartbeat-lkg-v3';
   const CACHE_MAX_MS=30*60*1000;
   const PUBLIC_HEARTBEAT_ENDPOINT='/api/brian/brian-frontier-heartbeat-public';
-  const HEARTBEAT_RPC='https://qbcjuxhvhwagvqbjyemo.supabase.co/rest/v1/rpc/brian_frontier_heartbeat_cached_public';
-  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_JjqoC-R-oKSXttrzW7rDJQ_1yw6YdR_';
   const now=()=>Date.now();
   const parseAge=(v)=>{const t=Date.parse(String(v||''));return Number.isFinite(t)?Math.max(0,(now()-t)/1000):Infinity};
   const fmtAge=(v)=>{const s=parseAge(v);return !Number.isFinite(s)?'bilinmiyor':s<60?`${Math.round(s)} sn`:s<3600?`${Math.round(s/60)} dk`:`${Math.round(s/3600)} sa`};
@@ -59,19 +57,10 @@
     }finally{clearTimeout(timer)}
   }
 
-  async function publicHeartbeat(timeoutMs=25000){
-    const rpcTimeout=Math.min(9000,timeoutMs);
-    try{
-      const data=await fetchJsonWithTimeout(HEARTBEAT_RPC,{
-        method:'POST',
-        headers:{'content-type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY},
-        body:'{}'
-      },rpcTimeout,'HEARTBEAT_RPC_TIMEOUT');
-      if(data?.status==='OK')return {...data,transport_degraded:false,source:data.source||'heartbeat_cache_rpc'};
-    }catch{}
+  async function publicHeartbeat(timeoutMs=16000){
     return fetchJsonWithTimeout(PUBLIC_HEARTBEAT_ENDPOINT,{
       method:'POST',headers:{'content-type':'application/json'},body:'{}'
-    },Math.max(8000,timeoutMs-rpcTimeout),'HEARTBEAT_READONLY_TIMEOUT');
+    },timeoutMs,'HEARTBEAT_READONLY_TIMEOUT');
   }
 
   function hbObservedMs(hb){
@@ -197,6 +186,7 @@
 
   hydrate();
   try{if(typeof render==='function')render()}catch{}
-  setTimeout(directHeartbeat,150);
-  setInterval(()=>{if(document.visibilityState==='visible')directHeartbeat()},15000);
+  // Single-writer rule: frontier-stability owns heartbeat polling.
+  // This layer only supplies truth semantics and last-known-good hydration.
+  if(!getHB()) setTimeout(directHeartbeat,500);
 })();
