@@ -87,18 +87,29 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker())); return out;
 }
 
-async function persistRaw(payload: unknown, observedAt: string): Promise<string> {
+async function persistRaw(payload: unknown, observedAt: string): Promise<{ captureId: string; storageDegraded: boolean; storageError: string | null }> {
   const canonical = JSON.stringify(payload); const bytes = utf8(canonical); const payloadHash = await sha256(bytes); const compressed = gzip(bytes, { level: 6 });
   const path = `binance_public/phase40_intrabar/${observedAt.slice(0, 10)}/${payloadHash}.json.gz`;
+  let storageDegraded = false; let storageError: string | null = null;
   const upload = await supabase.storage.from(RAW_BUCKET).upload(path, compressed, { contentType: "application/gzip", upsert: false, cacheControl: "31536000" });
-  if (upload.error) { const msg = String(upload.error.message ?? "").toLowerCase(); const status = String((upload.error as {statusCode?: string | number}).statusCode ?? ""); if (status !== "409" && !msg.includes("duplicate") && !msg.includes("exist")) throw upload.error; }
+  if (upload.error) {
+    const msg = String(upload.error.message ?? "").toLowerCase();
+    const status = String((upload.error as {statusCode?: string | number}).statusCode ?? "");
+    const duplicate = status === "409" || msg.includes("duplicate") || msg.includes("exist");
+    if (!duplicate) { storageDegraded = true; storageError = errorText(upload.error).slice(0, 700); }
+  }
   const captureId = await sha256(`binance_public|phase40_intrabar|${observedAt}|${payloadHash}`);
   const ins = await supabase.from("brian_raw_captures").insert({
     capture_id: captureId, provider: "binance_public", record_type: "phase40_intrabar_reaction", observed_at: observedAt, captured_at: new Date().toISOString(),
     provenance_uri: "https://api.binance.com/api/v3/klines?interval=1m + /api/v3/aggTrades + /api/v3/ticker/bookTicker",
-    payload_hash: payloadHash, payload: { storage_bucket: RAW_BUCKET, storage_path: path, content_type: "application/json", content_encoding: "gzip", uncompressed_byte_length: bytes.byteLength, compressed_byte_length: compressed.byteLength },
+    payload_hash: payloadHash, payload: {
+      storage_bucket: RAW_BUCKET, storage_path: path, content_type: "application/json", content_encoding: "gzip",
+      uncompressed_byte_length: bytes.byteLength, compressed_byte_length: compressed.byteLength,
+      storage_object_committed: !storageDegraded, storage_degraded: storageDegraded, storage_error: storageError
+    },
   });
-  if (ins.error) throw ins.error; return captureId;
+  if (ins.error) throw ins.error;
+  return { captureId, storageDegraded, storageError };
 }
 
 async function recordCollectorRun(startedAt: string, status: "SUCCESS" | "DEGRADED" | "FAILED" | "SKIPPED", observed: number, stored: number, degraded: string[], metadata: Record<string, unknown>, error?: unknown) {
@@ -153,7 +164,9 @@ Deno.serve(async (req: Request) => {
       return { candidate, bars, trades, book, degradedAggTrades, sigma, current, baseline, elapsedFraction, medianQuoteVolume, velocityCoverageSeconds, return30s, previous30sReturn, decelerating };
     });
     const usable = fetched.filter((x): x is MarketRow => x !== null); const degradedSources = usable.some((x) => x.degradedAggTrades) ? ["aggTrades_partial"] : [];
-    const rawCaptureId = await persistRaw({ schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, observed_at: observedAt, universe_snapshot_id: latest.data.snapshot_id, selected_symbols: selected.map((x) => x.symbol), market: usable.map((x) => ({ symbol: x.candidate.symbol, candidate: x.candidate, bars: x.bars, agg_trades: x.trades, book: x.book, degraded_agg_trades: x.degradedAggTrades })) }, observedAt);
+    const rawPersist = await persistRaw({ schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, observed_at: observedAt, universe_snapshot_id: latest.data.snapshot_id, selected_symbols: selected.map((x) => x.symbol), market: usable.map((x) => ({ symbol: x.candidate.symbol, candidate: x.candidate, bars: x.bars, agg_trades: x.trades, book: x.book, degraded_agg_trades: x.degradedAggTrades })) }, observedAt);
+    const rawCaptureId = rawPersist.captureId;
+    if (rawPersist.storageDegraded) degradedSources.push(`raw_storage_degraded:${rawPersist.storageError ?? "unknown"}`);
 
     const signalRows: SignalRow[] = [];
     for (const market of usable) {
