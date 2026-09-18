@@ -78,7 +78,7 @@ async function loadChallenger(observedAt: string): Promise<ChallengerSignal | nu
   const since = new Date(Date.parse(observedAt) - 24 * 3600_000).toISOString();
   const q = await db.from("brian_alpha_calibration_challenger")
     .select("challenger_id,challenger_action,avg_support_cost_adjusted_bps,evaluated_at")
-    .gte("evaluated_at", since).order("evaluated_at", { ascending: false }).limit(10000);
+    .gte("evaluated_at", since).order("evaluated_at", { ascending: false }).limit(800);
   if (q.error) throw new Error(`challenger:${q.error.message}`);
   const rows = q.data ?? [];
   if (!rows.length) return null;
@@ -98,7 +98,7 @@ async function loadOutcomes(observedAt: string): Promise<OutcomeSignal[]> {
   const since = new Date(Date.parse(observedAt) - 7 * 24 * 3600_000).toISOString();
   const q = await db.from("brian_alpha_decision_outcomes")
     .select("outcome_id,horizon_seconds,direction_adjusted_return,classification,resolved_at,metadata")
-    .gte("resolved_at", since).order("resolved_at", { ascending: false }).limit(12000);
+    .gte("resolved_at", since).order("resolved_at", { ascending: false }).limit(3000);
   if (q.error) throw new Error(`outcomes:${q.error.message}`);
   const openRows = (q.data ?? []).filter((row) => {
     const action = String((row.metadata as Record<string, unknown> | null)?.original_action ?? "");
@@ -145,7 +145,7 @@ async function loadReliability(observedAt: string): Promise<ReliabilitySignal[]>
     db.from("brian_sensor_observations")
       .select("independent_group,reliability,observed_at")
       .gte("observed_at", new Date(Date.parse(observedAt) - 6 * 3600_000).toISOString())
-      .order("observed_at", { ascending: false }).limit(10000),
+      .order("observed_at", { ascending: false }).limit(3000),
   ]);
   if (measuredQ.error) throw new Error(`measured_reliability:${measuredQ.error.message}`);
   if (canonicalQ.error) throw new Error(`canonical_reliability:${canonicalQ.error.message}`);
