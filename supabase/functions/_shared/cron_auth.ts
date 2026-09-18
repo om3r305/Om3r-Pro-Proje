@@ -51,7 +51,7 @@ export async function requireCronAuth(
     .select("cron_key_sha256")
     .eq("auth_id", authId)
     .single();
-  const result = typeof authQuery.abortSignal === "function"
+  result = typeof authQuery.abortSignal === "function"
     ? await authQuery.abortSignal(AbortSignal.timeout(4_000))
     : await Promise.race([
         Promise.resolve(authQuery),
