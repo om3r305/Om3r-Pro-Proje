@@ -172,6 +172,8 @@
         const incomingIsBest=hb===incoming;
         if(incomingIsBest&&!incoming.transport_degraded)save(incoming);
         setHB(hb);
+        try{if(typeof STABILITY!=='undefined')STABILITY.error=null}catch{}
+        try{if(typeof S!=='undefined'&&S.errors)delete S.errors.systemControl}catch{}
         try{applyHeartbeat(hb)}catch{}
         try{if(typeof render==='function')render()}catch{}
         const el=document.getElementById('syncText');
