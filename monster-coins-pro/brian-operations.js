@@ -3,7 +3,7 @@
  'use strict';
  const $=id=>document.getElementById(id),E=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  if($('brianOperations')||!$('command'))return;
- const css=document.createElement('link');css.rel='stylesheet';css.href='/brian-operations.css?v=20260916-1';document.head.appendChild(css);
+ const css=document.createElement('link');css.rel='stylesheet';css.href='/brian-operations.css?v=20260918-pos1';document.head.appendChild(css);
  const shell=document.createElement('div');shell.id='brianOperations';
  shell.innerHTML=`<nav class="ops-nav" aria-label="Brian ekran bölümleri"><a href="#opsOverview">Özet</a><a href="#opsFlow">Akış</a><a href="#opsRooms">Odalar</a><a href="#opsControl">Kontrol</a></nav>
  <section id="opsOverview" class="ops-section"><header class="ops-heading"><div><span class="ops-kicker">01 / OPERASYON</span><h2>Bir bakışta Brian.</h2></div><span class="ops-mode">SHADOW · USD</span></header><p class="ops-muted" id="opsFresh">Son kayıtlar bekleniyor.</p><div class="ops-stats"><article><span>Hazine değeri</span><strong id="opsEquity">—</strong><small id="opsTreasuryTime">Kasa kaydı bekleniyor</small></article><article id="opsPositionsCard" class="ops-position-card" role="button" tabindex="0" aria-label="Açık pozisyon ayrıntılarını göster"><span>Açık pozisyon</span><strong id="opsPositions">—</strong><small id="opsPositionsMeta">Son hazine kaydına göre · Dokun: varlık, neden ve kâr/zarar</small></article><article><span>Güncel veri hatları</span><strong id="opsHealthy">— / 6</strong><div class="ops-segments" id="opsSegments" aria-hidden="true"></div><small>Karar başarısı veya kâr oranı değildir</small></article></div><div id="opsAlerts"></div></section>
