@@ -17,8 +17,9 @@ export interface LeaseResult<T> {
 
 type RpcResult = { data: unknown; error: unknown };
 
-const RPC_ATTEMPTS = 4;
-const RPC_BACKOFF_MS = [250, 750, 1_500];
+const RPC_ATTEMPTS = 2;
+const RPC_BACKOFF_MS = [250];
+const RPC_TIMEOUT_MS = 5_000;
 
 export function randomOwnerToken(): string {
   return crypto.randomUUID();
@@ -50,7 +51,13 @@ async function rpcWithRetry(
   for (let attempt = 1; attempt <= RPC_ATTEMPTS; attempt++) {
     let result: RpcResult;
     try {
-      result = await client.rpc(fn, params);
+      const request: any = client.rpc(fn, params);
+      result = typeof request?.abortSignal === "function"
+        ? await request.abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS))
+        : await Promise.race([
+            Promise.resolve(request),
+            new Promise<RpcResult>((_, reject) => setTimeout(() => reject(new Error(`${fn} timeout after ${RPC_TIMEOUT_MS}ms`)), RPC_TIMEOUT_MS)),
+          ]);
     } catch (error) {
       lastError = error;
       if (attempt === RPC_ATTEMPTS) break;
