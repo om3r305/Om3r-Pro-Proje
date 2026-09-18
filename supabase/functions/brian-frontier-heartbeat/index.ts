@@ -76,17 +76,17 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const snapshot = await db.rpc("brian_frontier_heartbeat_snapshot");
+    const snapshot = await db.rpc("brian_frontier_heartbeat_cached");
     if (snapshot.error) {
-      throw new Error(`brian_frontier_heartbeat_snapshot:${snapshot.error.message}`);
+      throw new Error(`brian_frontier_heartbeat_cached:${snapshot.error.message}`);
     }
     const data = snapshot.data && typeof snapshot.data === "object"
       ? snapshot.data as Record<string, unknown>
       : {};
     return out({
-      status: "OK",
-      observed_at: new Date().toISOString(),
       ...data,
+      status: data.status || "OK",
+      source: "heartbeat_cache",
       dip_touched: false,
       shadow_only: true,
       live_execution: false,
