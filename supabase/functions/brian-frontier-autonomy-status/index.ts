@@ -51,6 +51,8 @@ async function auth(req: Request) {
 }
 
 type QueryResult = { data: unknown[] | null; error: { message?: string } | null; count?: number | null };
+let lastGoodPayload: Record<string, unknown> | null = null;
+let lastGoodAt = 0;
 function requireOk(name: string, result: QueryResult) {
   if (result.error) throw new Error(`${name}: ${result.error.message ?? "query failed"}`);
   return result.data ?? [];
@@ -61,6 +63,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
   if (req.method !== "POST") return out({ error: "POST required" }, 405, origin);
   try { await auth(req); } catch (error) { return out({ error: String(error) }, 401, origin); }
+
+  if (lastGoodPayload && Date.now() - lastGoodAt < 60_000) {
+    return out({ ...lastGoodPayload, cache_age_seconds: Math.max(0, (Date.now() - lastGoodAt) / 1000) }, 200, origin);
+  }
 
   try {
     const [
@@ -73,10 +79,6 @@ Deno.serve(async (req: Request) => {
       eventsQ,
       treasuryQ,
       actionsQ,
-      codegenCountQ,
-      candidatesCountQ,
-      artifactsCountQ,
-      sourcesCountQ,
     ] = await Promise.all([
       db.from("brian_evolution_codegen_requests")
         .select("request_id,candidate_id,hypothesis_id,requested_at,parent_commit,branch_name,changed_paths,objective,constraints,success_criteria,required_human_review,external_generator_required,autonomous_apply_allowed,metadata")
@@ -105,10 +107,6 @@ Deno.serve(async (req: Request) => {
       db.from("brian_treasury_shadow_actions")
         .select("action_id,cycle_id,observed_at,kind,asset_id,direction,capital_usd,reference_price,cost_usd,expected_net_edge_bps,source_decision_id,reason,position_id")
         .order("observed_at", { ascending: false }).limit(20),
-      db.from("brian_evolution_codegen_requests").select("request_id", { count: "exact", head: true }),
-      db.from("brian_evolution_code_candidates").select("candidate_id", { count: "exact", head: true }),
-      db.from("brian_evolution_code_artifact_receipts").select("receipt_id", { count: "exact", head: true }),
-      db.from("brian_world_source_candidates").select("source_id", { count: "exact", head: true }),
     ]);
 
     const codegen = requireOk("codegen", codegenQ as QueryResult);
@@ -129,7 +127,7 @@ Deno.serve(async (req: Request) => {
       assessment: assessmentBySource.get(String(row.source_id)) ?? null,
     }));
 
-    return out({
+    const payload = {
       status: "ONLINE",
       observed_at: new Date().toISOString(),
       governance: {
@@ -142,12 +140,13 @@ Deno.serve(async (req: Request) => {
         dip_isolated: true,
       },
       summary: {
-        codegen_requests: (codegenCountQ as any).count ?? codegen.length,
-        code_candidates: (candidatesCountQ as any).count ?? candidates.length,
-        artifact_receipts: (artifactsCountQ as any).count ?? artifacts.length,
-        discovered_world_sources: (sourcesCountQ as any).count ?? sources.length,
+        codegen_requests: codegen.length,
+        code_candidates: candidates.length,
+        artifact_receipts: artifacts.length,
+        discovered_world_sources: sources.length,
         hypotheses_visible: hypotheses.length,
         treasury_actions_visible: actions.length,
+        scope: "RECENT_VISIBLE_WINDOW",
       },
       codegen_requests: codegen,
       code_candidates: candidates,
@@ -159,8 +158,12 @@ Deno.serve(async (req: Request) => {
       treasury_actions: actions,
       shadow_only: true,
       live_execution: false,
-    }, 200, origin);
+    };
+    lastGoodPayload = payload;
+    lastGoodAt = Date.now();
+    return out(payload, 200, origin);
   } catch (error) {
+    if (lastGoodPayload) return out({ ...lastGoodPayload, stale: true, refresh_error: String(error) }, 200, origin);
     return out({ status: "DEGRADED", error: String(error), shadow_only: true, live_execution: false }, 500, origin);
   }
 });
