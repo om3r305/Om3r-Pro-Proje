@@ -11,6 +11,10 @@ const SERVICES: Record<string,string> = {
   world: "brian-world-brain",
   treasury: "brian-evolution-treasury",
   discovery: "brian-world-discovery-eye",
+  evolution: "brian-evolution-orchestrator",
+  researcher: "brian-evolution-researcher",
+  sandbox: "brian-evolution-sandbox",
+  ocean: "brian-evolution-ocean-worker",
 };
 
 function out(body: unknown, status=200){
