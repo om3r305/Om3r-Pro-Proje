@@ -77,7 +77,7 @@ Deno.serve(async(req:Request)=>{
   const positions=Array.isArray(latest.data.positions)?latest.data.positions:[];
   const missing=[...new Set(actions.filter(a=>a.kind==="EXIT"&&a.position_id&&!known.has(a.position_id)).map(a=>a.position_id))];
   const openings:any[]=[];
-  for(let i=0;i<missing.length;i+=100){const q=await db.from("brian_treasury_shadow_actions").select(actionCols).eq("kind","OPEN").in("position_id",missing.slice(i,i+100)).lte("observed_at",cutoff).limit(1000);if(q.error)throw q.error;openings.push(...(q.data||[]));}
+  for(let i=0;i<missing.length;i+=40){const ids=missing.slice(i,i+40);const q=await db.from("brian_treasury_shadow_actions").select(actionCols).eq("kind","OPEN").in("position_id",ids).lte("observed_at",cutoff).limit(ids.length);if(q.error)throw q.error;openings.push(...(q.data||[]));}
 
   const decisionIds=[...new Set([
     ...positions.map((p:any)=>String(p?.sourceDecisionId??p?.source_decision_id??"")),
@@ -85,20 +85,23 @@ Deno.serve(async(req:Request)=>{
     ...openings.map((a:any)=>String(a?.source_decision_id??""))
   ].filter(Boolean))];
   let decisions:any[]=[];
-  if(decisionIds.length){
-    const q=await db.from("brian_alpha_decisions")
-      .select("decision_id,observed_at,asset_id,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,reason,veto_reason,support_groups,conflict_groups,metadata")
-      .in("decision_id",decisionIds.slice(0,500)).limit(500);
-    if(q.error)throw q.error;decisions=q.data||[];
+  const decisionCols="decision_id,observed_at,asset_id,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,reason,veto_reason,support_groups,conflict_groups,metadata";
+  for(let i=0;i<Math.min(decisionIds.length,500);i+=40){
+    const ids=decisionIds.slice(i,Math.min(i+40,500));
+    const q=await db.from("brian_alpha_decisions").select(decisionCols).in("decision_id",ids).limit(ids.length);
+    if(q.error)throw q.error;
+    decisions.push(...(q.data||[]));
   }
   const decisionById=new Map(decisions.map((d:any)=>[String(d.decision_id),d]));
   const evidenceIds=[...new Set(decisions.flatMap((d:any)=>Array.isArray(d?.metadata?.source_evidence_ids_all)?d.metadata.source_evidence_ids_all.map(String):[]).filter(Boolean))];
   let sensors:any[]=[];
-  for(let i=0;i<evidenceIds.length;i+=200){
+  for(let i=0;i<evidenceIds.length;i+=40){
+    const ids=evidenceIds.slice(i,i+40);
     const q=await db.from("brian_sensor_observations")
       .select("observation_id,asset_id,observed_at,direction,strength,confidence,reliability,independent_group,sensor_family,reason,source_ids,metadata")
-      .in("observation_id",evidenceIds.slice(i,i+200)).limit(1000);
-    if(q.error)throw q.error;sensors.push(...(q.data||[]));
+      .in("observation_id",ids).limit(ids.length);
+    if(q.error)throw q.error;
+    sensors.push(...(q.data||[]));
   }
   const sensorById=new Map(sensors.map((s:any)=>[String(s.observation_id),s]));
   const assetIds=[...new Set(positions.map((p:any)=>String(p?.assetId??p?.asset_id??"")).filter(Boolean))];
