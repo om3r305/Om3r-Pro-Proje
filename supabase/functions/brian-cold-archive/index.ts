@@ -37,14 +37,14 @@ async function ensureBucket(){
 }
 
 async function healthyEnough(){
-  const queue=await db.schema("net").from("http_request_queue").select("id",{count:"exact",head:true});
-  const queueDepth=Number(queue.count??0);
-  const alpha=await db.from("brian_collector_runs").select("finished_at,status").eq("collector_id","brian-alpha-decision-compiler-v2").eq("status","SUCCESS").order("finished_at",{ascending:false}).limit(1).maybeSingle();
-  const treasury=await db.from("brian_collector_runs").select("finished_at,status").eq("collector_id","brian-evolution-treasury-v1").eq("status","SUCCESS").order("finished_at",{ascending:false}).limit(1).maybeSingle();
-  const world=await db.from("brian_collector_runs").select("finished_at,status").eq("collector_id","brian-world-brain-v1").eq("status","SUCCESS").order("finished_at",{ascending:false}).limit(1).maybeSingle();
-  const now=Date.now();
-  const age=(v:unknown)=>{const ms=Date.parse(String(v??""));return Number.isFinite(ms)?(now-ms)/1000:1e12};
-  return {ok:queueDepth<=3&&age(alpha.data?.finished_at)<1800&&age(treasury.data?.finished_at)<1800&&age(world.data?.finished_at)<1800,queueDepth,alphaAge:age(alpha.data?.finished_at),treasuryAge:age(treasury.data?.finished_at),worldAge:age(world.data?.finished_at)};
+  const q=await db.rpc("brian_archive_runtime_health");
+  if(q.error)throw q.error;
+  const h=q.data&&typeof q.data==="object"?q.data as Record<string,unknown>:{};
+  const queueDepth=Number(h.queue_depth??999);
+  const alphaAge=Number(h.alpha_age_seconds??1e12);
+  const treasuryAge=Number(h.treasury_age_seconds??1e12);
+  const worldAge=Number(h.world_age_seconds??1e12);
+  return {ok:queueDepth<=3&&alphaAge<1800&&treasuryAge<1800&&worldAge<1800,queueDepth,alphaAge,treasuryAge,worldAge};
 }
 
 async function latestManifest(tableName:string){
@@ -116,7 +116,7 @@ async function archivePolicy(policy:any){
 async function purgeVerified(){
   const before=new Date(Date.now()-GRACE_HOURS*3600_000).toISOString();
   const q=await db.from("brian_archive_manifests")
-    .select("archive_id,table_name,storage_path,content_sha256,pk_values,verified_at,state")
+    .select("archive_id,table_name,storage_path,content_sha256,pk_values,verified_at,state,metadata")
     .eq("state","UPLOADED_VERIFIED").lt("verified_at",before)
     .order("verified_at",{ascending:true}).limit(MAX_PURGES_PER_RUN);
   if(q.error)throw q.error;
@@ -138,7 +138,7 @@ async function purgeVerified(){
       if(del.error)throw del.error;
       deleted+=(del.data??[]).length;
     }
-    const upd=await db.from("brian_archive_manifests").update({state:"PURGED",purged_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{purge_verified_again:true,deleted_rows:deleted}}).eq("archive_id",m.archive_id);
+    const upd=await db.from("brian_archive_manifests").update({state:"PURGED",purged_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(m.metadata??{}),purge_verified_again:true,deleted_rows:deleted}}).eq("archive_id",m.archive_id);
     if(upd.error)throw upd.error;
     results.push({archive_id:m.archive_id,table:m.table_name,status:"PURGED",deleted});
   }
@@ -165,7 +165,7 @@ async function restoreArchive(archiveId:string){
     if(up.error)throw up.error;
     restored+=group.length;
   }
-  const upd=await db.from("brian_archive_manifests").update({last_restored_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{last_restore_rows:restored,restore_mode:"upsert_by_primary_key"}}).eq("archive_id",archiveId);
+  const upd=await db.from("brian_archive_manifests").update({last_restored_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(m.data.metadata??{}),last_restore_rows:restored,restore_mode:"upsert_by_primary_key"}}).eq("archive_id",archiveId);
   if(upd.error)throw upd.error;
   return {status:"RESTORED",archive_id:archiveId,table,rows:restored,archive_retained:true};
 }
