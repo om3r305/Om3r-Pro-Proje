@@ -3,6 +3,8 @@
   const CACHE_KEY='brian-frontier-heartbeat-lkg-v3';
   const CACHE_MAX_MS=30*60*1000;
   const PUBLIC_HEARTBEAT_ENDPOINT='/api/brian/brian-frontier-heartbeat-public';
+  const HEARTBEAT_RPC='https://qbcjuxhvhwagvqbjyemo.supabase.co/rest/v1/rpc/brian_frontier_heartbeat_cached_public';
+  const SUPABASE_PUBLISHABLE_KEY='sb_publishable_JjqoC-R-oKSXttrzW7rDJQ_1yw6YdR_';
   const now=()=>Date.now();
   const parseAge=(v)=>{const t=Date.parse(String(v||''));return Number.isFinite(t)?Math.max(0,(now()-t)/1000):Infinity};
   const fmtAge=(v)=>{const s=parseAge(v);return !Number.isFinite(s)?'bilinmiyor':s<60?`${Math.round(s)} sn`:s<3600?`${Math.round(s/60)} dk`:`${Math.round(s/3600)} sa`};
@@ -43,18 +45,43 @@
     };
   }
 
-  async function publicHeartbeat(timeoutMs=25000){
+  async function fetchJsonWithTimeout(url,init,timeoutMs,label){
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
-      const r=await fetch(PUBLIC_HEARTBEAT_ENDPOINT,{method:'POST',headers:{'content-type':'application/json'},body:'{}',cache:'no-store',signal:controller.signal});
+      const r=await fetch(url,{...init,cache:'no-store',signal:controller.signal});
       let data={};try{data=await r.json()}catch{}
       if(!r.ok){const e=new Error(data.error||data.status||`HTTP ${r.status}`);e.status=r.status;e.payload=data;throw e}
       return data;
     }catch(e){
-      if(e?.name==='AbortError')throw new Error('HEARTBEAT_READONLY_TIMEOUT');
+      if(e?.name==='AbortError')throw new Error(label||'HEARTBEAT_TIMEOUT');
       throw e;
     }finally{clearTimeout(timer)}
+  }
+
+  async function publicHeartbeat(timeoutMs=25000){
+    const rpcTimeout=Math.min(9000,timeoutMs);
+    try{
+      const data=await fetchJsonWithTimeout(HEARTBEAT_RPC,{
+        method:'POST',
+        headers:{'content-type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY},
+        body:'{}'
+      },rpcTimeout,'HEARTBEAT_RPC_TIMEOUT');
+      if(data?.status==='OK')return {...data,transport_degraded:false,source:data.source||'heartbeat_cache_rpc'};
+    }catch{}
+    return fetchJsonWithTimeout(PUBLIC_HEARTBEAT_ENDPOINT,{
+      method:'POST',headers:{'content-type':'application/json'},body:'{}'
+    },Math.max(8000,timeoutMs-rpcTimeout),'HEARTBEAT_READONLY_TIMEOUT');
+  }
+
+  function hbObservedMs(hb){
+    const t=Date.parse(String(hb?.observed_at||''));
+    return Number.isFinite(t)?t:0;
+  }
+  function freshestHeartbeat(candidate){
+    const options=[candidate,getHB(),cached()?.hb].filter(Boolean);
+    options.sort((a,b)=>hbObservedMs(b)-hbObservedMs(a));
+    return options[0]||candidate||null;
   }
 
   function truthRows(){
@@ -139,23 +166,29 @@
 
   async function directHeartbeat(){
     try{
-      const hb=await publicHeartbeat(25000);
-      if(hb?.status==='OK'){
-        save(hb);setHB(hb);
+      const incoming=await publicHeartbeat(25000);
+      if(incoming?.status==='OK'){
+        const hb=freshestHeartbeat(incoming);
+        const incomingIsBest=hb===incoming;
+        if(incomingIsBest&&!incoming.transport_degraded)save(incoming);
+        setHB(hb);
         try{applyHeartbeat(hb)}catch{}
         try{if(typeof render==='function')render()}catch{}
         const el=document.getElementById('syncText');
-        if(el)el.textContent='Brian heartbeat doğrulandı';
+        if(el)el.textContent=incomingIsBest&&!incoming.transport_degraded
+          ?'Brian heartbeat doğrulandı'
+          :'Canlı bağlantı yenileniyor · son sağlam kanıt korunuyor';
       }
     }catch(e){
       const c=cached();
-      if(c?.hb){
-        const stale={...c.hb,__cached:true,__cached_saved_at:c.saved_at,__live_error:String(e?.message||e)};
+      const hb=freshestHeartbeat(c?.hb||null);
+      if(hb){
+        const stale={...hb,__cached:true,__cached_saved_at:c?.saved_at||now(),__live_error:String(e?.message||e)};
         setHB(stale);
-        try{applyHeartbeat(c.hb)}catch{}
+        try{applyHeartbeat(hb)}catch{}
       }
       const el=document.getElementById('syncText');
-      if(el)el.textContent=c?.hb?'Canlı bağlantı yenileniyor · son sağlam kanıt gösteriliyor':'Heartbeat gecikti · canlı kanıt bekleniyor';
+      if(el)el.textContent=hb?'Canlı bağlantı yenileniyor · son sağlam kanıt gösteriliyor':'Heartbeat gecikti · canlı kanıt bekleniyor';
       try{if(typeof render==='function')render()}catch{}
     }
   }
