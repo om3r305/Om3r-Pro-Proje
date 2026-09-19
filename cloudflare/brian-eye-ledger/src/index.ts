@@ -5,7 +5,6 @@ const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const BOJ_CANONICAL_CHECK_TOKEN_SHA256 = "a3fb48b8d969accfe5fa1840b516c726e99dc93f71774b03c981c412827e4d06";
 
 type Json = Record<string, unknown>;
 
@@ -852,72 +851,6 @@ export default {
         shadow_only: true,
         live_execution: false
       });
-    }
-
-    if (req.method === "GET" && url.pathname === "/boj-canonical-check") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== BOJ_CANONICAL_CHECK_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_BOJ_CANONICAL_CHECK" }, 401);
-      }
-
-      const sources = loadManifest(env);
-      const source = sources.find((row) => row.endpoint_id === "boj_whatsnew_rss");
-      if (!source) return out({ status: "BOJ_SOURCE_NOT_CONFIGURED" }, 404);
-
-      try {
-        const nowMs = Date.now();
-        const xml = await fetchFeed(source);
-        const parsed = parseFeed(xml);
-        const selected = parsed.filter((item) => freshEnough(item, nowMs));
-        const rows = [];
-
-        for (const item of selected) {
-          const stableIdentity = stableItemIdentity(source, item);
-          const canonicalLink = canonicalSourceUrl(item.link, source.canonical_domain);
-          const eventId = await sha(
-            "source-arch-v2|" + source.endpoint_id + "|" + stableIdentity
-          );
-          const target = ledgerStub(env, eventId);
-          const row = await target.stub.lookup(eventId);
-
-          rows.push({
-            title: item.title,
-            published_at: item.publishedAt,
-            raw_guid: item.guid,
-            raw_link: item.link,
-            stable_identity: stableIdentity,
-            canonical_link: canonicalLink,
-            event_id: eventId,
-            shard: target.shard,
-            first_seen_at: row?.first_seen_at ?? null,
-            last_seen_at: row?.last_seen_at ?? null,
-            seen_count: row?.seen_count ?? null,
-            forwarded_at: row?.forwarded_at ?? null,
-            last_forward_error: row?.last_forward_error ?? null
-          });
-        }
-
-        return out({
-          status: "BOJ_CANONICAL_CHECK_COMPLETE",
-          version: VERSION,
-          parsed: parsed.length,
-          selected: selected.length,
-          rows,
-          safety: {
-            writes: 0,
-            scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
-            r2_enabled: env.R2_ENABLED === "true",
-            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-            shadow_only: env.SHADOW_ONLY === "true",
-            live_execution: env.LIVE_EXECUTION === "true"
-          }
-        });
-      } catch (error) {
-        return out({
-          status: "BOJ_CANONICAL_CHECK_FAILED",
-          error: errText(error).slice(0, 1200)
-        }, 500);
-      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
