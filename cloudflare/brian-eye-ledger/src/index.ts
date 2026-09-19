@@ -1,11 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.1";
+const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const BOJ_LEDGER_CHECK_TOKEN_SHA256 = "e1c45c10562858f80765a708a8d1e06e04c286345c72e29a1b217421674791e0";
 
 type Json = Record<string, unknown>;
 
@@ -356,6 +355,46 @@ function hostMatches(host: string, domain: string) {
   return h === d || h.endsWith("." + d);
 }
 
+function canonicalSourceUrl(value: string, canonicalDomain: string) {
+  const raw = value.trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (!hostMatches(url.hostname, canonicalDomain)) return raw;
+
+    url.protocol = "https:";
+    url.hostname = url.hostname.toLowerCase();
+    url.hash = "";
+    if ((url.protocol === "https:" && url.port === "443") ||
+        (url.protocol === "http:" && url.port === "80")) {
+      url.port = "";
+    }
+
+    // Normalize the official host identity so http/https and www/non-www
+    // variants cannot create separate event identities.
+    const host = url.hostname.replace(/^www\./, "");
+    const path = url.pathname.replace(/\/{2,}/g, "/") || "/";
+    return "https://" + host + path + url.search;
+  } catch {
+    return raw;
+  }
+}
+
+function stableItemIdentity(endpoint: SourceEndpoint, item: FeedItem) {
+  const guid = item.guid.trim();
+  const linkValue = item.link.trim();
+
+  if (/^https?:\/\//i.test(guid)) {
+    return canonicalSourceUrl(guid, endpoint.canonical_domain);
+  }
+  if (/^https?:\/\//i.test(linkValue)) {
+    return canonicalSourceUrl(linkValue, endpoint.canonical_domain);
+  }
+  return guid || linkValue || item.title.trim();
+}
+
+
 function normalizeClaim(value: string) {
   return value
     .toLowerCase()
@@ -613,11 +652,13 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
   const pending: LedgerResult[] = [];
 
   for (const item of selected) {
+    const stableIdentity = stableItemIdentity(endpoint, item);
+    const canonicalLink = canonicalSourceUrl(item.link, endpoint.canonical_domain);
     const eventId = await sha(
-      "source-arch-v2|" + endpoint.endpoint_id + "|" + item.guid
+      "source-arch-v2|" + endpoint.endpoint_id + "|" + stableIdentity
     );
     const fingerprint = await sha(
-      endpoint.endpoint_id + "|" + item.title + "|" + item.link
+      endpoint.endpoint_id + "|" + item.title + "|" + canonicalLink
     );
     const normalized = normalizeClaim(item.title);
     const corroboration = normalized
@@ -647,7 +688,7 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
       entity_confidence: endpoint.tier === "T1_OFFICIAL_PRIMARY" ? 1 : 0.92,
       content_fingerprint: fingerprint,
       corroboration_key: corroboration,
-      provenance_uri: item.link || endpoint.endpoint_url,
+      provenance_uri: canonicalLink || endpoint.endpoint_url,
       pit_verified: true,
       raw_capture_id: captureId,
       metadata: {
@@ -659,6 +700,8 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
         category: endpoint.category,
         region: endpoint.region ?? null,
         categories: item.categories,
+        stable_identity: stableIdentity,
+        canonical_link: canonicalLink || null,
         direction_not_inferred: true,
         external_content_used_as_instruction: false,
         eligible_for_decision_evidence: false,
@@ -808,90 +851,6 @@ export default {
         shadow_only: true,
         live_execution: false
       });
-    }
-
-    if (req.method === "GET" && url.pathname === "/boj-ledger-check") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== BOJ_LEDGER_CHECK_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_BOJ_LEDGER_CHECK" }, 401);
-      }
-
-      const sources = loadManifest(env);
-      const source = sources.find((row) => row.endpoint_id === "boj_whatsnew_rss");
-      if (!source) {
-        return out({ status: "BOJ_SOURCE_NOT_CONFIGURED" }, 404);
-      }
-
-      try {
-        const nowMs = Date.now();
-
-        const xml1 = await fetchFeed(source);
-        const parsed1 = parseFeed(xml1);
-        const selected1 = parsed1.filter((item) => freshEnough(item, nowMs));
-
-        await new Promise((resolve) => setTimeout(resolve, 250));
-
-        const xml2 = await fetchFeed(source);
-        const parsed2 = parseFeed(xml2);
-        const selected2 = parsed2.filter((item) => freshEnough(item, Date.now()));
-
-        const secondByTitle = new Map(selected2.map((item) => [item.title, item]));
-        const rows = [];
-
-        for (const item of selected1) {
-          const eventId1 = await sha(
-            "source-arch-v2|" + source.endpoint_id + "|" + item.guid
-          );
-          const second = secondByTitle.get(item.title) ?? null;
-          const eventId2 = second
-            ? await sha("source-arch-v2|" + source.endpoint_id + "|" + second.guid)
-            : null;
-
-          const target = ledgerStub(env, eventId1);
-          const row = await target.stub.lookup(eventId1);
-
-          rows.push({
-            title: item.title,
-            published_at: item.publishedAt,
-            guid_1: item.guid,
-            link_1: item.link,
-            event_id_1: eventId1,
-            guid_2: second?.guid ?? null,
-            link_2: second?.link ?? null,
-            event_id_2: eventId2,
-            stable_between_fetches: Boolean(eventId2 && eventId1 === eventId2),
-            shard: target.shard,
-            first_seen_at: row?.first_seen_at ?? null,
-            last_seen_at: row?.last_seen_at ?? null,
-            seen_count: row?.seen_count ?? null,
-            forwarded_at: row?.forwarded_at ?? null,
-            last_forward_error: row?.last_forward_error ?? null
-          });
-        }
-
-        return out({
-          status: "BOJ_IDENTITY_DIAGNOSTIC_COMPLETE",
-          parsed_1: parsed1.length,
-          selected_1: selected1.length,
-          parsed_2: parsed2.length,
-          selected_2: selected2.length,
-          all_stable_between_fetches: rows.every((row) => row.stable_between_fetches === true),
-          rows,
-          safety: {
-            writes: 0,
-            scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
-            r2_enabled: env.R2_ENABLED === "true",
-            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-            shadow_only: env.SHADOW_ONLY === "true",
-            live_execution: env.LIVE_EXECUTION === "true"
-          }
-        });
-      } catch (error) {
-        return out({
-          status: "BOJ_IDENTITY_DIAGNOSTIC_FAILED",
-          error: errText(error).slice(0, 1200)
-        }, 500);
-      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
