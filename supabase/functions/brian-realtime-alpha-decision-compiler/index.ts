@@ -168,6 +168,44 @@ function vetoFromPreliminary(preliminary: AlphaDecisionResult, reason: string, v
     vetoReason,
   };
 }
+function applyCrowdBehaviorRisk(
+  decision: AlphaDecisionResult,
+  crowd: CrowdBehaviorContext | undefined,
+): AlphaDecisionResult {
+  if (!crowd || (decision.action !== "OPEN_LONG" && decision.action !== "OPEN_SHORT")) return decision;
+  const direction = decision.action === "OPEN_LONG" ? 1 : -1;
+  const crowdDirection = Math.sign(Number(crowd.direction || 0));
+  const strongConflict =
+    crowdDirection !== 0 &&
+    crowdDirection !== direction &&
+    crowd.strength >= 0.70 &&
+    crowd.confidence >= 0.60;
+  if (strongConflict) {
+    return {
+      ...decision,
+      action: "VETO",
+      vetoReason: "CROWD_BEHAVIOR_CONFLICT",
+      reason: `strong observable crowd-behavior proxy conflicts with the candidate direction; state=${crowd.state}; strength=${crowd.strength.toFixed(3)}; confidence=${crowd.confidence.toFixed(3)}`,
+    };
+  }
+
+  const extremeSameDirectionChase =
+    crowdDirection === direction &&
+    crowd.strength >= 0.85 &&
+    crowd.confidence >= 0.65 &&
+    ((direction === 1 && crowd.state === "FOMO_CHASE") ||
+      (direction === -1 && crowd.state === "PANIC_SELL"));
+  if (extremeSameDirectionChase) {
+    return {
+      ...decision,
+      action: "VETO",
+      vetoReason: "CROWD_EXTREME_CHASE",
+      reason: `candidate is aligned with an extreme crowd chase/panic state; fail closed against late entry; state=${crowd.state}; strength=${crowd.strength.toFixed(3)}`,
+    };
+  }
+  return decision;
+}
+
 function preliminaryIsActionable(preliminary: AlphaDecisionResult | undefined): preliminary is AlphaDecisionResult {
   return Boolean(
     preliminary && preliminary.direction !== 0 &&
@@ -623,6 +661,9 @@ Deno.serve(async (req: Request) => {
           catch (error) { decision = failClosedAssetDecision(`asset compile failed closed: ${errorText(error)}`); degradedSources.push(`asset_compile:${asset}:${errorText(error)}`); }
         }
 
+        const crowdContext = crowdContexts.get(asset);
+        decision = applyCrowdBehaviorRisk(decision, crowdContext);
+
         const referencePrice = observedL2?.quote.referenceMid ?? referenceBook?.mid ?? null;
         const decisionId = await sha(`${ALPHA_COMPILER_VERSION}|decision|${asset}|${observedAt}|${decision.action}|${decision.direction}|${decision.evidenceScore.toFixed(12)}`);
         decisionRows.push({
@@ -664,7 +705,8 @@ Deno.serve(async (req: Request) => {
               captured_at: observedL2?.fetchedAt ?? observedAt,
             },
             official_macro_context: macroContext,
-            crowd_behavior_context: crowdContexts.get(asset) ?? {
+            crowd_behavior_risk_applied: decision.vetoReason === "CROWD_BEHAVIOR_CONFLICT" || decision.vetoReason === "CROWD_EXTREME_CHASE",
+            crowd_behavior_context: crowdContext ?? {
               role: "context_and_risk_proxy_not_independent_vote",
               state: "UNAVAILABLE",
               direction: 0,
