@@ -39,22 +39,14 @@ async function auth(req: Request) {
     throw new Error("UNAUTHORIZED_INTERNAL");
   }
 }
-function isDuplicate(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const row = error as Record<string, unknown>;
-  return String(row.code ?? "") === "23505" ||
-    String(row.message ?? "").toLowerCase().includes("duplicate");
-}
-async function insertIdempotent(table: string, rows: Json[]) {
-  let inserted = 0;
-  let duplicates = 0;
-  for (const row of rows) {
-    const result = await db.from(table).insert(row);
-    if (!result.error) { inserted++; continue; }
-    if (isDuplicate(result.error)) { duplicates++; continue; }
-    throw new Error(table + ":" + JSON.stringify(result.error).slice(0, 900));
-  }
-  return { inserted, duplicates };
+async function upsertBatch(table: string, rows: Json[], conflict: string) {
+  if (!rows.length) return { received: 0, error: null };
+  const result = await db.from(table).upsert(rows, {
+    onConflict: conflict,
+    ignoreDuplicates: true,
+  });
+  if (result.error) throw new Error(table + ":" + JSON.stringify(result.error).slice(0, 900));
+  return { received: rows.length, error: null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -69,18 +61,16 @@ Deno.serve(async (req: Request) => {
     const costs = Array.isArray(body.costs) ? body.costs.slice(0, 20) as Json[] : [];
     const decisions = Array.isArray(body.decisions) ? body.decisions.slice(0, 20) as Json[] : [];
 
-    const costResult = await insertIdempotent("brian_dynamic_cost_quotes", costs);
-    const decisionResult = await insertIdempotent("brian_alpha_decisions", decisions);
+    const costResult = await upsertBatch("brian_dynamic_cost_quotes", costs, "quote_id");
+    const decisionResult = await upsertBatch("brian_alpha_decisions", decisions, "decision_id");
 
     return out({
       status: "CAPTURED_REALTIME_ALPHA_BRIDGE",
       version: VERSION,
       costs_received: costs.length,
       decisions_received: decisions.length,
-      costs_inserted: costResult.inserted,
-      costs_duplicate: costResult.duplicates,
-      decisions_inserted: decisionResult.inserted,
-      decisions_duplicate: decisionResult.duplicates,
+      costs_received: costResult.received,
+      decisions_received: decisionResult.received,
       shadow_only: true,
       live_execution: false,
     });
