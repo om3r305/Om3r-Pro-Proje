@@ -89,6 +89,18 @@ type Frame = {
   provenance_uri: string | null;
 };
 
+function freshness(row: Frame): { state: "YENI"|"TAKIPTE"|"BAGLAM"|"ARSIV"; label: string; ageMinutes: number } {
+  const preferred = row.published_at && Number.isFinite(Date.parse(row.published_at)) ? row.published_at : row.observed_at;
+  const ageMinutes = Math.max(0, (Date.now() - Date.parse(preferred)) / 60000);
+  if (ageMinutes <= 30) return { state: "YENI", label: "YENİ", ageMinutes };
+  if (ageMinutes <= 240) return { state: "TAKIPTE", label: "TAKİPTE", ageMinutes };
+  if (ageMinutes <= 1440) return { state: "BAGLAM", label: "BAĞLAM", ageMinutes };
+  return { state: "ARSIV", label: "ARŞİV", ageMinutes };
+}
+function freshnessBoost(state: string): number {
+  return state === "YENI" ? 0.20 : state === "TAKIPTE" ? 0.10 : state === "BAGLAM" ? 0 : -0.10;
+}
+
 function importantScore(row: Frame): number {
   const narratives = row.narrative_ids ?? [];
   const entities = row.entity_ids ?? [];
@@ -130,14 +142,22 @@ Deno.serve(async (req: Request) => {
     .order("observed_at", { ascending: false }).limit(140);
   if (q.error) return out({ status: "DEGRADED", error: q.error.message, items: [], shadow_only: true, live_execution: false }, 500, origin);
   const items = ((q.data ?? []) as Frame[])
-    .map((row) => ({ row, score: importantScore(row), tr: turkishSummary(row) }))
-    .filter((item) => item.score >= 0.5)
-    .sort((a, b) => b.score - a.score || Date.parse(b.row.observed_at) - Date.parse(a.row.observed_at))
+    .map((row) => {
+      const score = importantScore(row);
+      const f = freshness(row);
+      return { row, score, f, displayScore: score + freshnessBoost(f.state), tr: turkishSummary(row) };
+    })
+    .filter((item) => item.score >= 0.5 && item.f.state !== "ARSIV")
+    .sort((a, b) => b.displayScore - a.displayScore || Date.parse(b.row.observed_at) - Date.parse(a.row.observed_at))
     .slice(0, 24)
-    .map(({ row, score, tr }) => ({
+    .map(({ row, score, f, tr }) => ({
       id: row.frame_id,
       observed_at: row.observed_at,
       published_at: row.published_at,
+      display_time: row.published_at ?? row.observed_at,
+      freshness_state: f.state,
+      freshness_label_tr: f.label,
+      age_minutes: Math.round(f.ageMinutes),
       urgency: score >= 0.8 ? "CRITICAL" : score >= 0.65 ? "HIGH" : "MEDIUM",
       importance: score,
       title_tr: tr.title,
@@ -151,5 +171,5 @@ Deno.serve(async (req: Request) => {
       narrative_ids: row.narrative_ids ?? [],
       provenance_uri: row.provenance_uri,
     }));
-  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
+  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, freshness_states: ["YENI","TAKIPTE","BAGLAM"], main_feed_max_age_hours: 24, old_important_events_remain_world_context: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
 });
