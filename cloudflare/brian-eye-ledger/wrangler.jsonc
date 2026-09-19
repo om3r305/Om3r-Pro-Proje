@@ -8,6 +8,10 @@
       {
         "name": "FIRST_SEEN_LEDGER",
         "class_name": "FirstSeenLedger"
+      },
+      {
+        "name": "ALPHA_RECHECK_QUEUE",
+        "class_name": "AlphaRecheckQueue"
       }
     ]
   },
