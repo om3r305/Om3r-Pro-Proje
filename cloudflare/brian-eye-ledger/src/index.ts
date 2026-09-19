@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const R2_CANARY_TOKEN_SHA256 = "46b7b566e2a808edc34de6a3eaef796e8149f23b72523ac84dd3f4b86b8174c7";
 
 type Json = Record<string, unknown>;
 
@@ -850,6 +851,57 @@ export default {
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         shadow_only: true,
         live_execution: false
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/r2-canary") {
+      const token = url.searchParams.get("token") ?? "";
+      if (await sha(token) !== R2_CANARY_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_R2_CANARY" }, 401);
+      }
+
+      const safe =
+        env.SHADOW_ONLY === "true" &&
+        env.LIVE_EXECUTION !== "true" &&
+        env.ALPHA_RECHECK_ENABLED !== "true" &&
+        env.R2_ENABLED === "true" &&
+        Boolean(env.RAW_BUCKET);
+
+      if (!safe || !env.RAW_BUCKET) {
+        return out({
+          status: "R2_CANARY_BLOCKED",
+          r2_enabled: env.R2_ENABLED === "true",
+          raw_bucket_bound: Boolean(env.RAW_BUCKET),
+          shadow_only: env.SHADOW_ONLY === "true",
+          live_execution: env.LIVE_EXECUTION === "true"
+        }, 409);
+      }
+
+      const path = "canary/r2-binding-test.txt";
+      const body = "brian-r2-canary-v1";
+      await env.RAW_BUCKET.put(path, body, {
+        httpMetadata: { contentType: "text/plain; charset=utf-8" },
+        customMetadata: {
+          purpose: "binding-test",
+          shadow_only: "true"
+        }
+      });
+
+      const head = await env.RAW_BUCKET.head(path);
+
+      return out({
+        status: "R2_CANARY_OK",
+        path,
+        size: head?.size ?? null,
+        etag: head?.etag ?? null,
+        safety: {
+          writes: 1,
+          scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
+          r2_enabled: true,
+          alpha_recheck_enabled: false,
+          shadow_only: true,
+          live_execution: false
+        }
       });
     }
 
