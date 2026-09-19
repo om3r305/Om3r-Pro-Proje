@@ -39,7 +39,6 @@ const MAX_MACRO_CONTEXT_EVENTS = 12;
 const ENABLE_DIP_DIRECTIONAL_EVIDENCE = false; // MAIN and DIP remain separate brains by default.
 const RADAR_MAX_AGE_MS = 30 * 60_000; // 2x the canonical 15m universe cadence.
 const MAX_SHARD_COUNT = 5;
-const CORE_ALPHA_BRIDGE_URL = "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-realtime-alpha-bridge";
 
 type OfficialMacroContextEvent = {
   observation_id: string;
@@ -364,34 +363,6 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   }
 }
 
-async function bridgeAlphaToCore(
-  req: Request,
-  costRows: Record<string, unknown>[],
-  decisionRows: Record<string, unknown>[],
-) {
-  const internalKey = (req.headers.get("x-brian-internal-key") ?? "").trim();
-  if (!internalKey) throw new Error("CORE_ALPHA_BRIDGE_REQUIRES_INTERNAL_KEY");
-  const response = await fetch(CORE_ALPHA_BRIDGE_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-brian-internal-key": internalKey,
-    },
-    body: JSON.stringify({
-      costs: costRows,
-      decisions: decisionRows,
-      shadow_only: true,
-      live_execution: false,
-    }),
-    signal: AbortSignal.timeout(12000),
-  });
-  const body = await response.text();
-  if (!response.ok) {
-    throw new Error("CORE_ALPHA_BRIDGE_HTTP_" + response.status + ":" + body.slice(0, 600));
-  }
-  return body.slice(0, 1200);
-}
-
 async function insertRowsChunked(table: string, rows: Record<string, unknown>[], chunkSize = 8) {
   if (!rows.length) return;
   for (let i = 0; i < rows.length; i += chunkSize) {
@@ -655,12 +626,6 @@ Deno.serve(async (req: Request) => {
 
       await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 8);
       await insertRowsChunked("brian_alpha_decisions", decisionRows, 8);
-
-      try {
-        await bridgeAlphaToCore(req, costRows, decisionRows);
-      } catch (error) {
-        degradedSources.push("core_alpha_bridge:" + errorText(error));
-      }
 
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
       await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources, undefined, shardMeta);
