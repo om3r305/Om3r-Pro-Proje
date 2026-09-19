@@ -64,13 +64,19 @@ Deno.serve(async(req:Request)=>{
 
   try{
     const since24h=new Date(Date.now()-24*3600_000).toISOString();
-    const [controlQ,runsQ,eventsQ,requestsQ,hypQ,sourcesQ,assessQ]=await Promise.all([
+    const [controlQ,runsQ,budgetRunsQ,reviewPassQ,reviewPhaseQ,eventsQ,requestsQ,hypQ,sourcesQ,assessQ]=await Promise.all([
       db.from("brian_evolution_engineering_control")
         .select("control_id,autonomous_claim_enabled,base_branch,max_concurrent_runs,require_human_approval,monitor_minutes,updated_at,metadata")
         .eq("control_id","default").single(),
       db.from("brian_evolution_engineering_runs")
         .select("run_id,request_id,candidate_id,hypothesis_id,worker_id,phase,status,base_branch,base_sha,source_parent_sha,branch_name,commit_sha,pr_number,pr_url,preview_url,previous_good_sha,deployed_sha,rollback_sha,compile_passed,tests_passed,replay_passed,stress_passed,review_passed,preview_passed,measurement_passed,human_approval_status,human_approved_by,human_approved_at,monitor_status,failure_reason,metadata,shadow_only,live_execution,autonomous_apply_allowed,claimed_at,created_at,updated_at")
         .order("created_at",{ascending:false}).limit(120),
+      db.from("brian_evolution_engineering_runs")
+        .select("created_at,metadata").gte("created_at",since24h).order("created_at",{ascending:false}).limit(1000),
+      db.from("brian_evolution_engineering_runs")
+        .select("hypothesis_id").eq("review_passed",true).limit(4000),
+      db.from("brian_evolution_engineering_runs")
+        .select("hypothesis_id,phase").in("phase",["PR","PREVIEW","MEASURE","HUMAN_APPROVAL","DEPLOY","MONITOR","COMPLETE"]).limit(4000),
       db.from("brian_evolution_engineering_events")
         .select("event_id,run_id,observed_at,event_kind,phase,passed,commit_sha,evidence_class,shadow_only,live_execution,payload")
         .order("observed_at",{ascending:false}).limit(700),
@@ -89,7 +95,7 @@ Deno.serve(async(req:Request)=>{
     ]);
 
     if(controlQ.error||!controlQ.data)throw new Error(`control:${controlQ.error?.message??"missing"}`);
-    for(const [name,q] of [["runs",runsQ],["events",eventsQ],["requests",requestsQ],["hypotheses",hypQ],["sources",sourcesQ],["assessments",assessQ]] as const){
+    for(const [name,q] of [["runs",runsQ],["budget_runs",budgetRunsQ],["review_pass",reviewPassQ],["review_phase",reviewPhaseQ],["events",eventsQ],["requests",requestsQ],["hypotheses",hypQ],["sources",sourcesQ],["assessments",assessQ]] as const){
       if(q.error)throw new Error(`${name}:${q.error.message}`);
     }
 
@@ -129,20 +135,52 @@ Deno.serve(async(req:Request)=>{
     const active=enriched.filter(r=>["RUNNING","WAITING"].includes(String(r.status))&&!["HUMAN_APPROVAL","COMPLETE","BLOCKED","ROLLBACK"].includes(String(r.phase)));
     const approvals=enriched.filter(r=>r.phase==="HUMAN_APPROVAL"&&r.status==="WAITING");
     const claimedIds=new Set(runs.map(r=>String(r.request_id)));
-    const eligible=requests.filter(r=>
-      !claimedIds.has(String(r.request_id)) &&
-      r.required_human_review===true &&
-      r.shadow_only===true &&
-      r.live_execution===false &&
-      r.autonomous_apply_allowed===false
-    );
+    const eligible=requests.filter(r=>{
+      if(
+        claimedIds.has(String(r.request_id)) ||
+        r.required_human_review!==true ||
+        r.shadow_only!==true ||
+        r.live_execution!==false ||
+        r.autonomous_apply_allowed!==false
+      ) return false;
+      const meta:any=r?.metadata??{};
+      if(meta.world_engineering===true){
+        if(!currentWorldRequest(r))return false;
+        if(meta.parent_rotation_policy==="STABLE_ONCE"&&reviewedHypothesisIds.has(String(r.hypothesis_id)))return false;
+      }
+      return true;
+    });
 
     const assessmentBySource=new Map(assessments.map(a=>[String(a.source_id),a]));
     const sourceLibrary=sources.map(s=>({...s,assessment:assessmentBySource.get(String(s.source_id))??null}));
+    const sourceById=new Map(sourceLibrary.map(s=>[String(s.source_id),s]));
+    const reviewedHypothesisIds=new Set<string>();
+    for(const row of reviewPassQ.data??[])reviewedHypothesisIds.add(String(row.hypothesis_id));
+    for(const row of reviewPhaseQ.data??[])reviewedHypothesisIds.add(String(row.hypothesis_id));
+    const trustFloor=Math.max(0,Math.min(1,num(controlMeta.world_source_trust_floor,0.72)));
+    const worldEnabled=controlMeta.world_to_engineering_enabled===true;
+
+    function currentWorldRequest(row:any){
+      const meta:any=row?.metadata??{};
+      if(meta.world_engineering!==true)return true;
+      if(!worldEnabled)return false;
+      const sourceId=String(meta.world_source_id??"");
+      const candidateId=String(meta.world_source_candidate_id??"");
+      const source:any=sourceById.get(sourceId);
+      const assessment:any=source?.assessment??null;
+      if(!source||!assessment||!sourceId||!candidateId)return false;
+      return String(source.candidate_id??"")===candidateId
+        && assessment.eligible_for_research===true
+        && num(assessment.trust_score,-1)>=trustFloor
+        && source.authority_class==="OFFICIAL_PRIMARY"
+        && source.access_mode==="PUBLIC_NO_KEY"
+        && !["REJECTED","RETIRED","ARCHIVED"].includes(String(source.stage))
+        && Date.parse(String(source.discovered_at||""))<=Date.parse(String(assessment.assessed_at||""));
+    }
 
     const controlMeta:any=control.metadata??{};
     const budgetLimit=Math.max(1,Math.min(24,Math.trunc(num(controlMeta.autonomous_claim_limit_24h,4))));
-    const autonomousClaims24h=runs.filter(r=>String(r?.metadata?.claim_mode??"")==="AUTONOMOUS" && String(r.created_at)>=since24h).length;
+    const autonomousClaims24h=(budgetRunsQ.data??[]).filter((r:any)=>String(r?.metadata?.claim_mode??"")==="AUTONOMOUS").length;
     const worldRequests=eligible.filter(r=>r?.metadata?.world_engineering===true);
 
     const summary={
@@ -162,13 +200,17 @@ Deno.serve(async(req:Request)=>{
     };
 
     const worldEngineering={
-      enabled:controlMeta.world_to_engineering_enabled===true,
-      ready_sources:sourceLibrary.filter(s=>s.authority_class==="OFFICIAL_PRIMARY"&&s.assessment?.eligible_for_research===true).length,
-      research_verified_sources:sourceLibrary.filter(s=>s.assessment?.eligible_for_research===true).length,
+      enabled:worldEnabled,
+      ready_sources:sourceLibrary.filter(s=>s.authority_class==="OFFICIAL_PRIMARY"&&s.access_mode==="PUBLIC_NO_KEY"&&s.assessment?.eligible_for_research===true&&num(s.assessment?.trust_score,-1)>=trustFloor).length,
+      research_verified_sources:sourceLibrary.filter(s=>s.assessment?.eligible_for_research===true&&num(s.assessment?.trust_score,-1)>=trustFloor).length,
       library_total:sourceLibrary.length,
       queued_jobs:worldRequests.length,
       hypothesis_count:hypotheses.filter(h=>typeof h?.metadata?.world_source_id==="string").length,
       reviewed_runs:enriched.filter(r=>r.review_passed===true).length,
+      claim_time_revalidation:controlMeta.world_claim_revalidation==="LATEST_SOURCE_AND_CANDIDATE_REQUIRED",
+      world_kill_switch_enforced:controlMeta.world_kill_switch_enforced===true,
+      external_content_policy:String(controlMeta.external_content_policy??"UNTRUSTED_DATA_NEVER_INSTRUCTIONS"),
+      trust_floor:trustFloor,
       budget:{
         limit_24h:budgetLimit,
         used_24h:autonomousClaims24h,
@@ -194,6 +236,9 @@ Deno.serve(async(req:Request)=>{
         self_coding_enabled:control.autonomous_claim_enabled===true,
         gpt_approval_actor:String(controlMeta.gpt_approval_actor??"gpt-evidence-gate"),
         world_to_engineering_enabled:worldEngineering.enabled,
+        world_claim_time_revalidation:worldEngineering.claim_time_revalidation,
+        world_kill_switch_enforced:worldEngineering.world_kill_switch_enforced,
+        external_content_never_instructions:worldEngineering.external_content_policy==="UNTRUSTED_DATA_NEVER_INSTRUCTIONS",
         autonomous_budget_remaining_24h:worldEngineering.budget.remaining_24h,
         end_to_end_proven:summary.completed_runs>0||summary.waiting_human_approval>0,
       },
