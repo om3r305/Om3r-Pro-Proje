@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.7";
+const VERSION = "brian.cf-eye-ledger.v1.8";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
