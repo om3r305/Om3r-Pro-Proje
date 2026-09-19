@@ -5,7 +5,6 @@ const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const SCHEDULER_CHECK_TOKEN_SHA256 = "7b447658e711702564c61cbc7f408eaa890be653f7340dcbed19d74385c83f68";
 
 type Json = Record<string, unknown>;
 
@@ -807,42 +806,6 @@ export default {
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         shadow_only: true,
         live_execution: false
-      });
-    }
-
-    if (req.method === "GET" && url.pathname === "/scheduler-check") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== SCHEDULER_CHECK_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_CHECK" }, 401);
-      }
-
-      const eventIds = [
-        "940885dbb670e8f00bc4d19142a86aba26214f7ce393c27ab8879640e56c14bc",
-        "a5b1ea7c8cc2d075eb401e3b313a1464a0f071192279dddaa3c3f2733de6f432"
-      ];
-
-      const rows = [];
-      for (const eventId of eventIds) {
-        const target = ledgerStub(env, eventId);
-        rows.push({
-          event_id: eventId,
-          shard: target.shard,
-          row: await target.stub.lookup(eventId)
-        });
-      }
-
-      return out({
-        status: "SCHEDULER_CHECK_COMPLETE",
-        version: VERSION,
-        scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
-        rows,
-        safety: {
-          writes: 0,
-          r2_enabled: env.R2_ENABLED === "true",
-          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-          shadow_only: env.SHADOW_ONLY === "true",
-          live_execution: env.LIVE_EXECUTION === "true"
-        }
       });
     }
 
