@@ -18,6 +18,9 @@ export interface LeaseResult<T> {
 }
 
 type RpcResult = { data: unknown; error: unknown };
+type AbortableRpcRequest = PromiseLike<RpcResult> & {
+  abortSignal?: (signal: AbortSignal) => PromiseLike<RpcResult>;
+};
 
 const RPC_ATTEMPTS = 2;
 const RPC_BACKOFF_MS = [250];
@@ -118,7 +121,7 @@ async function rpcWithRetry(
   for (let attempt = 1; attempt <= RPC_ATTEMPTS; attempt++) {
     let result: RpcResult;
     try {
-      const request: any = client.rpc(fn, params);
+      const request = client.rpc(fn, params) as AbortableRpcRequest;
       if (typeof request?.abortSignal === "function") {
         result = await request.abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS));
       } else {
