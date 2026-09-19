@@ -9,7 +9,7 @@
  const reason={ALPHA_SIGNAL_REVOKED:'ALPHA sinyali geri çekildi',CANONICAL_ALPHA_SHADOW_SIGNAL:'ALPHA gölge işlem sinyali',MULTIASSET_SHADOW_SIGNAL:'Haber + çapraz piyasa reaksiyonu doğrulandı',MULTIASSET_SIGNAL_REVOKED:'Çapraz piyasa sinyali geri çekildi',MULTIASSET_SESSION_CLOSED_OR_STALE:'Piyasa oturumu kapandı / fiyat tazeliği bitti',RISK_STOP:'Risk sınırı',TIME_DECAY:'Bekleme süresi aşıldı',PROFIT_EDGE_DECAY:'Beklenen avantaj azaldı',POSITIVE_VALIDATED_EDGE:'Doğrulanmış pozitif avantaj'};
  const price=v=>M.num(v)===null?'—':Number(v).toLocaleString('tr-TR',{maximumFractionDigits:8});
  const signedPct=v=>M.num(v)===null?'—':`${Number(v)>=0?'+':''}${(Number(v)*100).toFixed(2)}%`;
- const assetClass=v=>({CRYPTO:'KRİPTO',FX:'DÖVİZ',FOREX:'DÖVİZ',COMMODITY:'EMTİA',EQUITY:'HİSSE',INDEX:'ENDEKS'}[String(v||'').toUpperCase()]||String(v||'VARLIK').toUpperCase());
+ const assetClass=v=>({CRYPTO:'KRİPTO',FX:'DÖVİZ',FOREX:'DÖVİZ',COMMODITY:'EMTİA',EQUITY:'HİSSE',INDEX:'ENDEKS',ETF:'ETF'}[String(v||'').toUpperCase()]||String(v||'VARLIK').toUpperCase());
  const sourceText=c=>c?.source_type==='MULTIASSET_EVENT_REACTION'?'HABER / OLAY + ÇAPRAZ PİYASA':c?.source_type==='EVENT_CATALYST'?'HABER / OLAY + PİYASA':c?.source_type==='MARKET_STRUCTURE'?'PİYASA VERİSİ':'KAYNAK BELİRSİZ';
  const evidenceText=c=>Array.isArray(c?.evidence)&&c.evidence.length?c.evidence.slice(0,5).map(x=>x.reason||x.group).filter(Boolean).join(' · '):'Ayrıntılı kanıt kaydı yok';
  const macroText=c=>Array.isArray(c?.macro_context?.events)&&c.macro_context.events.length?c.macro_context.events.map(x=>x.title).filter(Boolean).join(' · '):'';
