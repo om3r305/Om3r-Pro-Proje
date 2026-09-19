@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.7";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const SENTINEL_CRON_KEY_SHA256 = "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab";
 
 type Json = Record<string, unknown>;
 
@@ -768,6 +769,19 @@ function requireWorkerAuth(req: Request, env: Env) {
   if (!sameSecret(expected, supplied)) throw new Error("UNAUTHORIZED");
 }
 
+async function requireAlphaRouteAuth(req: Request, env: Env) {
+  const dedicated = req.headers.get("x-brian-cloudflare-key")?.trim() ?? "";
+  const expectedDedicated = env.BRIAN_CLOUDFLARE_KEY?.trim() ?? "";
+  if (sameSecret(expectedDedicated, dedicated)) return;
+
+  const cronKey = req.headers.get("x-brian-cron-key")?.trim() ?? "";
+  if (!cronKey) throw new Error("UNAUTHORIZED_ALPHA_ROUTE");
+  const digest = await sha(cronKey);
+  if (!sameSecret(SENTINEL_CRON_KEY_SHA256, digest)) {
+    throw new Error("UNAUTHORIZED_ALPHA_ROUTE");
+  }
+}
+
 async function fetchFeed(endpoint: SourceEndpoint) {
   const isJson = endpoint.endpoint_kind === "STATUSPAGE_JSON";
   const isHtml = endpoint.endpoint_kind === "HTML_LINKS";
@@ -1053,7 +1067,7 @@ async function runSources(env: Env) {
 }
 
 async function routeAlphaRecheck(req: Request, env: Env) {
-  requireWorkerAuth(req, env);
+  await requireAlphaRouteAuth(req, env);
   if (env.ALPHA_RECHECK_ENABLED !== "true") {
     return out({ status: "DISABLED_SHADOW_PHASE", shadow_only: true, live_execution: false }, 503);
   }
