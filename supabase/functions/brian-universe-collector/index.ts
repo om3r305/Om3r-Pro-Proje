@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
-import { withCollectorLease } from "../_shared/collector_lease.ts";\nimport { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
