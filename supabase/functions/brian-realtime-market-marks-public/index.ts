@@ -31,7 +31,7 @@ function out(body:unknown,status=200,origin?:string|null){
 }
 function validAssetId(value: unknown): string | null {
   const id = String(value ?? "").trim();
-  return /^(crypto:[A-Z0-9]{2,20}USDT|fx:[A-Z0-9]{6,12}|index:[A-Z0-9]{2,24}|commodity:[A-Z0-9]{2,24}|equity:[A-Z0-9.-]{1,16})$/.test(id) ? id : null;
+  return /^(crypto:[A-Z0-9]{2,20}USDT|fx:[A-Z0-9]{6,12}|index:[A-Z0-9]{2,24}|commodity:[A-Z0-9]{2,24}|equity:[A-Z0-9.-]{1,16}|etf:[A-Z0-9.-]{1,16})$/.test(id) ? id : null;
 }
 
 Deno.serve(async(req:Request)=>{
