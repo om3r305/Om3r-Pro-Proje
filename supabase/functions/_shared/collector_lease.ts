@@ -23,13 +23,23 @@ const RPC_ATTEMPTS = 2;
 const RPC_BACKOFF_MS = [250];
 const RPC_TIMEOUT_MS = 5_000;
 
-const DB_URL = typeof Deno !== "undefined" ? (Deno.env.get("SUPABASE_DB_URL") ?? "") : "";
 let directSql: ReturnType<typeof postgres> | null = null;
 
+function readDbUrl(): string {
+  try {
+    return typeof Deno !== "undefined" ? (Deno.env.get("SUPABASE_DB_URL") ?? "") : "";
+  } catch {
+    // Deno test sandboxes may intentionally omit --allow-env. In that case
+    // preserve the PostgREST fallback instead of failing during module import.
+    return "";
+  }
+}
+
 function sqlClient() {
-  if (!DB_URL) return null;
+  const dbUrl = readDbUrl();
+  if (!dbUrl) return null;
   if (!directSql) {
-    directSql = postgres(DB_URL, {
+    directSql = postgres(dbUrl, {
       prepare: false,
       max: 1,
       connect_timeout: 3,
