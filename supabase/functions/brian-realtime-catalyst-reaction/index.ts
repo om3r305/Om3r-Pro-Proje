@@ -5,14 +5,14 @@ const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const VERSION = "brian.realtime-catalyst-reaction.v5";
+const VERSION = "brian.realtime-catalyst-reaction.v6-long-tail";
 const ALPHA_RECHECK_URL = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-alpha-recheck";
-const RECHECK_MINUTES = [5,10,15,30] as const;
+const RECHECK_MINUTES = [5,10,15,30,120,360,720] as const;
 
 type Json = Record<string, unknown>;
 type Watch = {
   watch_id:string; event_id:string; asset_id:string; started_at:string; status:string;
-  direction:number; reference_price:number|null; recheck_count:number;
+  direction:number; reference_price:number|null; recheck_count:number; next_recheck_at:string|null;
 };
 
 function out(body:unknown,status=200){
@@ -29,14 +29,22 @@ function errText(e:unknown){
 }
 
 async function loadWatches():Promise<Watch[]>{
+  const now=Date.now();
   const q=await db.from("brian_catalyst_sentinel_watches")
-    .select("watch_id,event_id,asset_id,started_at,status,direction,reference_price,recheck_count")
+    .select("watch_id,event_id,asset_id,started_at,status,direction,reference_price,recheck_count,next_recheck_at")
     .in("status",["WATCHING","BUILDING","BREAKOUT_CANDIDATE","CONFIRMED"])
-    .gt("expires_at",new Date().toISOString())
+    .gt("expires_at",new Date(now).toISOString())
     .order("next_recheck_at",{ascending:true,nullsFirst:false})
     .limit(100);
   if(q.error)throw q.error;
-  return (q.data??[]) as Watch[];
+  return ((q.data??[]) as Watch[]).filter((w)=>{
+    const started=Date.parse(w.started_at);
+    if(!Number.isFinite(started))return false;
+    const ageMinutes=(now-started)/60000;
+    if(ageMinutes<=30)return true; // hot lane: every orchestrator cycle
+    const due=Date.parse(String(w.next_recheck_at??""));
+    return Number.isFinite(due)&&due<=now; // long-tail: only 2h / 6h / 12h checkpoints
+  });
 }
 async function loadPendingAlerts(){
   const since=new Date(Date.now()-30*60*1000).toISOString();
