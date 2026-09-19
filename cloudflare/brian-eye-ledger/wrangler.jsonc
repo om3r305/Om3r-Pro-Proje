@@ -55,6 +55,7 @@
     "REALTIME_UNIVERSE_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-universe-collector",
     "REALTIME_SENSOR_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-sensor-mesh",
     "REALTIME_INTRABAR_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-intrabar-eye",
-    "REALTIME_CATALYST_REACTION_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-catalyst-reaction"
+    "REALTIME_CATALYST_REACTION_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-catalyst-reaction",
+    "REALTIME_ALPHA_COMPILER_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-alpha-decision-compiler"
   }
 }
