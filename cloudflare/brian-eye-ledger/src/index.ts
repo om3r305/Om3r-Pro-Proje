@@ -5,7 +5,6 @@ const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const SOURCE_ONE_SHOT_TOKEN_SHA256 = "a24452e0fd678dae4733e8aff7d76307be9a3227ba76b8c06aa4240b3dd4eb80";
 
 type Json = Record<string, unknown>;
 
@@ -808,77 +807,6 @@ export default {
         shadow_only: true,
         live_execution: false
       });
-    }
-
-    if (req.method === "GET" && url.pathname === "/source-one-shot") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== SOURCE_ONE_SHOT_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_ONE_SHOT" }, 401);
-      }
-
-      let sources: SourceEndpoint[] = [];
-      try {
-        sources = loadManifest(env);
-      } catch (error) {
-        return out({
-          status: "SAFE_TEST_BLOCKED",
-          reason: "INVALID_SOURCE_MANIFEST",
-          error: errText(error).slice(0, 300)
-        }, 409);
-      }
-
-      const safe =
-        env.SHADOW_ONLY === "true" &&
-        env.LIVE_EXECUTION !== "true" &&
-        env.ENABLE_SCHEDULED_EYE !== "true" &&
-        env.R2_ENABLED !== "true" &&
-        env.ALPHA_RECHECK_ENABLED !== "true" &&
-        sources.length === 1 &&
-        sources[0]?.endpoint_id === "ecb_press";
-
-      if (!safe) {
-        return out({
-          status: "SAFE_TEST_BLOCKED",
-          source_count: sources.length,
-          endpoint_id: sources[0]?.endpoint_id ?? null,
-          scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
-          r2_enabled: env.R2_ENABLED === "true",
-          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-          shadow_only: env.SHADOW_ONLY === "true",
-          live_execution: env.LIVE_EXECUTION === "true"
-        }, 409);
-      }
-
-      try {
-        const result = await runSources(env);
-        return out({
-          status: "SOURCE_ONE_SHOT_COMPLETE",
-          result,
-          safety: {
-            source_count: 1,
-            endpoint_id: "ecb_press",
-            scheduled_eye_enabled: false,
-            r2_enabled: false,
-            alpha_recheck_enabled: false,
-            shadow_only: true,
-            live_execution: false
-          }
-        });
-      } catch (error) {
-        return out({
-          status: "SOURCE_ONE_SHOT_FAILED",
-          error: errText(error).slice(0, 1200),
-          safety: {
-            source_count: 1,
-            endpoint_id: "ecb_press",
-            scheduled_eye_enabled: false,
-            r2_enabled: false,
-            alpha_recheck_enabled: false,
-            shadow_only: true,
-            live_execution: false
-          }
-        }, 500);
-      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
