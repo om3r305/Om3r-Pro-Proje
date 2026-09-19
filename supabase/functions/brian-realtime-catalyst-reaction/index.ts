@@ -5,7 +5,7 @@ const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const VERSION = "brian.realtime-catalyst-reaction.v3";
+const VERSION = "brian.realtime-catalyst-reaction.v4";
 const ALPHA_RECHECK_URL = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-alpha-recheck";
 const RECHECK_MINUTES = [5,10,15,30] as const;
 
@@ -76,7 +76,7 @@ async function dispatchAlpha(internalKey:string,eventId:string,assetId:string,al
   const r=await fetch(ALPHA_RECHECK_URL,{
     method:"POST",
     headers:{"content-type":"application/json","x-brian-internal-key":internalKey},
-    body:JSON.stringify({event_id:eventId,asset_id:assetId,alert_id:alertId}),
+    body:JSON.stringify({event_id:eventId,asset_id:assetId,alert_id:alertId,request_id:alertId}),
     signal:AbortSignal.timeout(12000)
   });
   const body=await r.text();
