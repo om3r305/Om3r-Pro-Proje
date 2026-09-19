@@ -6,7 +6,7 @@ const db = createClient(SUPABASE_URL, SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const VERSION = "brian.cloudflare-shadow-ingest.v2.2";
+const VERSION = "brian.cloudflare-shadow-ingest.v2.3";
 const CLOUDFLARE_KEY_SHA256 = "8d348396f3da9bbffde9bef6f6f8d802af542bdcb3354743f92d3ece260fea51";
 const MAX_CAPTURES = 20;
 const MAX_EVENTS = 100;
@@ -219,35 +219,23 @@ Deno.serve(async (req: Request) => {
     const captures = captureRows.map((row) => sanitizeCapture(row as Json));
     const events = eventRows.map((row) => sanitizeEvent(row as Json));
 
-    if (captures.length) {
-      await withPostgrestRetry(
-        "CAPTURE_WRITE_FAILED",
-        async () => await db
-          .from("brian_raw_captures")
-          .upsert(captures, {
-            onConflict: "capture_id",
-            ignoreDuplicates: true,
-          }),
-      );
-    }
-
-    if (events.length) {
-      await withPostgrestRetry(
-        "EVENT_WRITE_FAILED",
-        async () => await db
-          .from("brian_intel_events")
-          .upsert(events, {
-            onConflict: "event_id",
-            ignoreDuplicates: true,
-          }),
-      );
-    }
+    const atomicWrite = await withPostgrestRetry(
+      "ATOMIC_SHADOW_WRITE_FAILED",
+      async () => await db.rpc(
+        "brian_cloudflare_shadow_ingest_batch_v1",
+        {
+          p_captures: captures,
+          p_events: events,
+        },
+      ),
+    );
 
     return out({
       status: "CAPTURED_SHADOW",
       version: VERSION,
       captures_received: captures.length,
       events_received: events.length,
+      atomic_write: atomicWrite.data ?? null,
       alpha_rechecks_queued: 0,
       alpha_recheck_enabled: false,
       auth_boundary: "cloudflare_dedicated_key",
