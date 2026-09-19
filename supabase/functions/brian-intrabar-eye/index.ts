@@ -34,6 +34,8 @@ const RAW_BUCKET = "brian-intelligence-raw";
 const COLLECTOR_ID = "brian-intrabar-eye";
 const TOP_N = 50;
 const CORE_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"] as const;
+const MAX_SCAN_SYMBOLS = 15;
+const RADAR_SCAN_SYMBOLS = Math.max(0, MAX_SCAN_SYMBOLS - CORE_SYMBOLS.length);
 const KLINE_LIMIT = 32;
 const AGG_TRADE_LIMIT = 200;
 const MIN_INTERVAL_SECONDS = 50;
@@ -77,7 +79,7 @@ async function sha256(value: string | Uint8Array): Promise<string> {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 async function fetchJson(url: string): Promise<unknown> {
-  const r = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-2026-Intrabar-Eye/1.0" }, signal: AbortSignal.timeout(8_000) });
+  const r = await fetch(url, { headers: { accept: "application/json", "user-agent": "Brian-2026-Intrabar-Eye/1.0" }, signal: AbortSignal.timeout(5_000) });
   if (!r.ok) throw new Error(`public market fetch failed ${r.status}: ${url}`);
   return await r.json();
 }
@@ -124,7 +126,7 @@ Deno.serve(async (req: Request) => {
   const startedAt = new Date().toISOString();
   try {
     // Cadence is anchored to the prior run start, not its finish. A 10–15s runtime must not suppress the next minute's cron tick.
-    const lastRun = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
+    const lastRun = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(5_000));
     if (lastRun.error) throw lastRun.error;
     if (lastRun.data?.started_at) {
       const age = (Date.now() - Date.parse(lastRun.data.started_at)) / 1000;
@@ -132,13 +134,22 @@ Deno.serve(async (req: Request) => {
     }
 
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
-    const latest = await supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle();
+    const latest = await supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(5_000));
     if (latest.error || !latest.data) throw latest.error ?? new Error("universe snapshot unavailable");
     const universePayload = latest.data.candidates as Record<string, unknown>; const radar = Array.isArray(universePayload?.candidates) ? universePayload.candidates as RadarCandidate[] : [];
     const selectedMap = new Map<string, RadarCandidate>();
-    for (const candidate of radar.slice(0, TOP_N)) if (candidate?.symbol?.endsWith("USDT")) selectedMap.set(candidate.symbol, candidate);
-    for (const symbol of CORE_SYMBOLS) if (!selectedMap.has(symbol)) selectedMap.set(symbol, { symbol, radar_score: 0.5, liquidity_score: 0.5, activity_score: 0.5 });
-    const selected = [...selectedMap.values()]; if (!selected.length) throw new Error("no symbols selected for intrabar scan");
+    for (const symbol of CORE_SYMBOLS) selectedMap.set(symbol, { symbol, radar_score: 0.5, liquidity_score: 0.5, activity_score: 0.5 });
+    const coreSet = new Set<string>(CORE_SYMBOLS as readonly string[]);
+    const extras = radar.slice(0, TOP_N).filter((candidate) => candidate?.symbol?.endsWith("USDT") && !coreSet.has(candidate.symbol));
+    const slot = Math.floor(Date.now() / 60_000);
+    if (extras.length) {
+      const offset = (slot * Math.max(1, RADAR_SCAN_SYMBOLS)) % extras.length;
+      for (let i = 0; i < Math.min(RADAR_SCAN_SYMBOLS, extras.length); i++) {
+        const candidate = extras[(offset + i) % extras.length];
+        selectedMap.set(candidate.symbol, candidate);
+      }
+    }
+    const selected = [...selectedMap.values()].slice(0, MAX_SCAN_SYMBOLS); if (!selected.length) throw new Error("no symbols selected for intrabar scan");
 
     const allBookPayload = await fetchJson("https://api.binance.com/api/v3/ticker/bookTicker"); if (!Array.isArray(allBookPayload)) throw new Error("invalid bookTicker payload");
     const bookMap = new Map<string, Book>();
@@ -148,7 +159,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const observedAt = new Date().toISOString(); const observedMs = Date.parse(observedAt);
-    const fetched = await mapLimit(selected, 10, async (candidate): Promise<MarketRow | null> => {
+    const fetched = await mapLimit(selected, 6, async (candidate): Promise<MarketRow | null> => {
       const book = bookMap.get(candidate.symbol); if (!book) return null;
       const klineUrl = `https://api.binance.com/api/v3/klines?symbol=${candidate.symbol}&interval=1m&limit=${KLINE_LIMIT}`;
       const aggUrl = `https://api.binance.com/api/v3/aggTrades?symbol=${candidate.symbol}&limit=${AGG_TRADE_LIMIT}`;
@@ -181,7 +192,7 @@ Deno.serve(async (req: Request) => {
     for (const market of usable) consensusEyeIds.set(`crypto:${market.candidate.symbol}`, await sha256(`intrabar-consensus|crypto:${market.candidate.symbol}`));
     const allEyeIds = [...signalRows.map((x) => x.eyeId), ...consensusEyeIds.values()];
     const priorResp = allEyeIds.length
-      ? await supabase.rpc("brian_latest_micro_book_ticks", { p_eye_ids: allEyeIds })
+      ? await (supabase.rpc("brian_latest_micro_book_ticks", { p_eye_ids: allEyeIds }) as any).abortSignal(AbortSignal.timeout(6_000))
       : { data: [], error: null };
     if (priorResp.error) throw priorResp.error;
     const latestByEye = new Map<string, PriorTick>();
@@ -196,7 +207,7 @@ Deno.serve(async (req: Request) => {
       const tick = microTick({ eyeId: row.eyeId, templateId: row.template.id, assetId: row.assetId, observedAt, mid: row.market.book.mid, spreadBps: row.market.book.spreadBps, strength: row.signal.strength, confidence, targetDirection: row.signal.direction, startingTicket: row.template.ticket, rawCaptureId, prior, metadata: { reason: row.signal.reason, schema_version: SCHEMA_VERSION } });
       if (tick) { tick.tick_id = await sha256(`${row.eyeId}|${observedAt}|${row.signal.direction}|${row.market.book.mid}`); microTicks.push(tick); }
     }
-    if (observations.length) { const ins = await supabase.from("brian_sensor_observations").insert(observations); if (ins.error) throw ins.error; }
+    if (observations.length) { const ins = await supabase.from("brian_sensor_observations").insert(observations).abortSignal(AbortSignal.timeout(8_000)); if (ins.error) throw ins.error; }
 
     const events: Record<string, unknown>[] = [];
     for (const market of usable) {
@@ -219,11 +230,11 @@ Deno.serve(async (req: Request) => {
       const tick = microTick({ eyeId: consensusEyeId, templateId: "intrabar-consensus", assetId, observedAt, mid: market.book.mid, spreadBps: market.book.spreadBps, strength: outcome.score, confidence: confidenceFromRadar(market.candidate, market.book), targetDirection, startingTicket: 5, rawCaptureId, prior, metadata: { status: outcome.status, late_chase: outcome.lateChase, support_groups: outcome.supportGroups, conflict_groups: outcome.conflictGroups, extension_sigma: extensionSigma, estimated_round_trip_cost_bps: outcome.roundTripCostBps, schema_version: SCHEMA_VERSION } });
       if (tick) { tick.tick_id = await sha256(`${consensusEyeId}|${observedAt}|${targetDirection}|${market.book.mid}`); microTicks.push(tick); }
     }
-    if (events.length) { const ins = await supabase.from("brian_intrabar_reaction_events").insert(events); if (ins.error) throw ins.error; }
-    if (microTicks.length) { const ins = await supabase.from("brian_micro_book_ticks").insert(microTicks); if (ins.error) throw ins.error; }
+    if (events.length) { const ins = await supabase.from("brian_intrabar_reaction_events").insert(events).abortSignal(AbortSignal.timeout(8_000)); if (ins.error) throw ins.error; }
+    if (microTicks.length) { const ins = await supabase.from("brian_micro_book_ticks").insert(microTicks).abortSignal(AbortSignal.timeout(8_000)); if (ins.error) throw ins.error; }
 
     const status = degradedSources.length ? "DEGRADED" : "SUCCESS"; const stored = observations.length + events.length + microTicks.length;
-    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, core_symbols: CORE_SYMBOLS });
+    await recordCollectorRun(startedAt, status, usable.length, stored, degradedSources, { schema_version: SCHEMA_VERSION, experiment_id: EXPERIMENT_ID, selected_count: selected.length, usable_count: usable.length, observation_count: observations.length, event_count: events.length, actionable_count: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_veto_count: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, micro_tick_count: microTicks.length, cadence_seconds: 60, top_n: TOP_N, max_scan_symbols: MAX_SCAN_SYMBOLS, rotating_radar_symbols: RADAR_SCAN_SYMBOLS, core_symbols: CORE_SYMBOLS });
       return jsonResponse({ status, experiment_id: EXPERIMENT_ID, observed_at: observedAt, scanned_symbols: usable.length, signal_observations: observations.length, reaction_events: events.length, actionable_shadow: events.filter((e) => e.status === "ACTIONABLE_SHADOW").length, late_chase_vetoes: events.filter((e) => e.status === "VETOED_LATE_CHASE").length, shadow_only: true, live_execution: false });
     });
     // Contended: another invocation already owns this collector's lease. No collector work has
