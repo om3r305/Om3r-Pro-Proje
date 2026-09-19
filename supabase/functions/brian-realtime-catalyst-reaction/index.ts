@@ -5,7 +5,7 @@ const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const VERSION = "brian.realtime-catalyst-reaction.v4";
+const VERSION = "brian.realtime-catalyst-reaction.v5";
 const ALPHA_RECHECK_URL = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-alpha-recheck";
 const RECHECK_MINUTES = [5,10,15,30] as const;
 
@@ -38,6 +38,18 @@ async function loadWatches():Promise<Watch[]>{
   if(q.error)throw q.error;
   return (q.data??[]) as Watch[];
 }
+async function loadPendingAlerts(){
+  const since=new Date(Date.now()-30*60*1000).toISOString();
+  const q=await db.from("brian_catalyst_sentinel_alerts")
+    .select("alert_id,event_id,asset_id,observed_at,alpha_dispatched")
+    .eq("alpha_dispatched",false)
+    .gt("observed_at",since)
+    .order("observed_at",{ascending:true})
+    .limit(20);
+  if(q.error)throw q.error;
+  return Array.isArray(q.data)?q.data as Json[]:[];
+}
+
 async function books(){
   const r=await fetch("https://api.binance.com/api/v3/ticker/bookTicker",{
     headers:{"user-agent":"Brian-Realtime-Catalyst/2.0"},
@@ -145,10 +157,18 @@ Deno.serve(async(req:Request)=>{
     const rpc=updates.length?await db.rpc("brian_catalyst_apply_reactions_v23",{p_updates:updates}):{data:[],error:null};
     if(rpc.error)throw rpc.error;
     const alerts=Array.isArray(rpc.data)?rpc.data as Json[]:[];
+    stage="load_pending_alerts";
+    const pending=await loadPendingAlerts();
+    const dispatchMap=new Map<string,Json>();
+    for(const row of [...alerts,...pending]){
+      const id=String(row.alert_id??"");
+      if(id&&!dispatchMap.has(id))dispatchMap.set(id,row);
+    }
+    const dispatchRows=[...dispatchMap.values()];
 
     stage="alpha_dispatch";
     let dispatches=0;
-    for(const row of alerts){
+    for(const row of dispatchRows){
       const alertId=String(row.alert_id??""),eventId=String(row.event_id??""),assetId=String(row.asset_id??"");
       if(!alertId||!eventId||!assetId)continue;
       try{
@@ -164,7 +184,7 @@ Deno.serve(async(req:Request)=>{
       }
     }
 
-    return out({status:"SUCCESS",version:VERSION,watches:watches.length,updates:updates.length,alerts:alerts.length,alpha_dispatches:dispatches,elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false});
+    return out({status:"SUCCESS",version:VERSION,watches:watches.length,updates:updates.length,alerts:alerts.length,pending_retries:pending.length,dispatch_candidates:dispatchRows.length,alpha_dispatches:dispatches,elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false});
   }catch(e){
     return out({status:"FAILED_CLOSED",version:VERSION,stage,error:errText(e).slice(0,1200),elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false},500);
   }
