@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.8";
+const VERSION = "brian.cf-eye-ledger.v1.9";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -111,6 +111,8 @@ export interface Env {
   ALPHA_RECHECK_URL?: string;
   BRIAN_CLOUDFLARE_KEY?: string;
   ALPHA_RECHECK_ENABLED: string;
+  CORE_RECOVERY_ENABLED?: string;
+  CORE_LAUNCHER_URL?: string;
   SOURCE_MANIFEST_JSON?: string;
   RAW_BUCKET?: R2Bucket;
 }
@@ -1066,6 +1068,50 @@ async function runSources(env: Env) {
   };
 }
 
+async function runCoreRecovery(env: Env) {
+  if (env.CORE_RECOVERY_ENABLED !== "true") {
+    return { status: "DISABLED", shadow_only: true, live_execution: false };
+  }
+  if (!env.CORE_LAUNCHER_URL || !env.BRIAN_CLOUDFLARE_KEY) {
+    return { status: "NOT_CONFIGURED", shadow_only: true, live_execution: false };
+  }
+
+  const rotating = ["discovery", "evolution", "ocean", "researcher", "sandbox"];
+  const slot = Math.floor(Date.now() / 300000) % rotating.length;
+  const services = ["alpha", "treasury", "world", rotating[slot]];
+
+  const results = await Promise.all(services.map(async (service) => {
+    try {
+      const response = await fetch(env.CORE_LAUNCHER_URL!, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY!
+        },
+        body: JSON.stringify({ service }),
+        signal: AbortSignal.timeout(12000)
+      });
+      const body = await response.json().catch(() => ({})) as Json;
+      return {
+        service,
+        http_status: response.status,
+        accepted: response.ok,
+        target_status: String(body.status ?? "")
+      };
+    } catch (error) {
+      return { service, accepted: false, error: errText(error).slice(0, 500) };
+    }
+  }));
+
+  return {
+    status: results.every((x) => x.accepted) ? "ACCEPTED" : "DEGRADED",
+    services,
+    results,
+    shadow_only: true,
+    live_execution: false
+  };
+}
+
 async function routeAlphaRecheck(req: Request, env: Env) {
   await requireAlphaRouteAuth(req, env);
   if (env.ALPHA_RECHECK_ENABLED !== "true") {
@@ -1124,6 +1170,7 @@ export default {
         scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
         r2_enabled: env.R2_ENABLED === "true" && Boolean(env.RAW_BUCKET),
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+        core_recovery_enabled: env.CORE_RECOVERY_ENABLED === "true",
         shadow_only: true,
         live_execution: false
       });
@@ -1169,7 +1216,9 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ) {
-    if (env.ENABLE_SCHEDULED_EYE !== "true") return;
-    ctx.waitUntil(runSources(env));
+    const tasks: Promise<unknown>[] = [];
+    if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
+    if (env.CORE_RECOVERY_ENABLED === "true") tasks.push(runCoreRecovery(env));
+    if (tasks.length) ctx.waitUntil(Promise.all(tasks));
   }
 } satisfies ExportedHandler<Env>;
