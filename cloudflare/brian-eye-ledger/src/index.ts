@@ -98,7 +98,8 @@ export interface Env {
   ENABLE_SCHEDULED_EYE: string;
   R2_ENABLED: string;
   SUPABASE_INGEST_URL: string;
-  BRIAN_CRON_KEY?: string;
+  BRIAN_CLOUDFLARE_KEY?: string;
+  ALPHA_RECHECK_ENABLED: string;
   SOURCE_MANIFEST_JSON?: string;
   RAW_BUCKET?: R2Bucket;
 }
@@ -342,7 +343,7 @@ function sameSecret(a: string, b: string) {
 }
 
 function requireWorkerAuth(req: Request, env: Env) {
-  const expected = env.BRIAN_CRON_KEY?.trim() ?? "";
+  const expected = env.BRIAN_CLOUDFLARE_KEY?.trim() ?? "";
   const supplied = req.headers.get("x-brian-cron-key")?.trim() ?? "";
   if (!sameSecret(expected, supplied)) throw new Error("UNAUTHORIZED");
 }
@@ -407,7 +408,7 @@ function ledgerStub(env: Env, eventId: string) {
 
 async function forwardBatch(env: Env, pending: LedgerResult[]) {
   if (!pending.length) return { forwarded: 0, status: "NO_NEW_EVENTS" };
-  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CRON_KEY) {
+  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CLOUDFLARE_KEY) {
     throw new Error("SUPABASE_INGEST_NOT_CONFIGURED");
   }
 
@@ -422,7 +423,7 @@ async function forwardBatch(env: Env, pending: LedgerResult[]) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-brian-cron-key": env.BRIAN_CRON_KEY
+      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
     },
     body: JSON.stringify({
       version: VERSION,
@@ -589,10 +590,10 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
 }
 
 async function runSources(env: Env) {
-  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CRON_KEY) {
+  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CLOUDFLARE_KEY) {
     return {
       status: "NOT_CONFIGURED",
-      reason: "SUPABASE_INGEST_URL_OR_BRIAN_CRON_KEY_MISSING",
+      reason: "SUPABASE_INGEST_URL_OR_BRIAN_CLOUDFLARE_KEY_MISSING",
       shadow_only: true,
       live_execution: false
     };
@@ -634,7 +635,10 @@ async function runSources(env: Env) {
 
 async function routeAlphaRecheck(req: Request, env: Env) {
   requireWorkerAuth(req, env);
-  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CRON_KEY) {
+  if (env.ALPHA_RECHECK_ENABLED !== "true") {
+    return out({ status: "DISABLED_SHADOW_PHASE", shadow_only: true, live_execution: false }, 503);
+  }
+  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CLOUDFLARE_KEY) {
     return out({ status: "NOT_CONFIGURED" }, 503);
   }
 
@@ -651,7 +655,7 @@ async function routeAlphaRecheck(req: Request, env: Env) {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-brian-cron-key": env.BRIAN_CRON_KEY
+      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
     },
     body: JSON.stringify({
       version: VERSION,
