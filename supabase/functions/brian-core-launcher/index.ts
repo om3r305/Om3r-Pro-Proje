@@ -47,8 +47,9 @@ Deno.serve(async(req:Request)=>{
     ? {shard_index:shardIndex,shard_count:shardCount}
     : {};
 
+  const cloudflareKey=(req.headers.get("x-brian-cloudflare-key")??"").trim();
   const downstreamKey=(req.headers.get("x-brian-downstream-key")??req.headers.get("x-brian-cron-key")??"").trim();
-  if(!downstreamKey) return out({status:"DOWNSTREAM_KEY_MISSING"},500);
+  if(!cloudflareKey&&!downstreamKey) return out({status:"DOWNSTREAM_KEY_MISSING"},500);
 
   const launchId=crypto.randomUUID();
   const launchedAt=new Date().toISOString();
@@ -64,7 +65,7 @@ Deno.serve(async(req:Request)=>{
           "content-type":"application/json",
           "authorization":`Bearer ${ANON}`,
           "apikey":ANON,
-          "x-brian-cron-key":downstreamKey,
+          ...(cloudflareKey?{"x-brian-cloudflare-key":cloudflareKey}:{"x-brian-cron-key":downstreamKey}),
         },
         body:JSON.stringify(targetBody),
       });
