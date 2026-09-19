@@ -12,8 +12,14 @@ import {
   isCanonicalAlphaShadowPosition,
   type CanonicalAlphaShadowOpportunity,
 } from "./evolution_treasury_alpha_shadow.ts";
+import {
+  MULTIASSET_SHADOW_MAX_TICKET_USD,
+  MULTIASSET_SHADOW_POSITION_PREFIX,
+  isMultiassetShadowPosition,
+  type MultiassetShadowOpportunity,
+} from "./evolution_treasury_multiasset_shadow.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v4";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v5-multiasset-shadow";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
@@ -33,6 +39,11 @@ export interface PromotionGatedTreasuryPlan extends TreasuryCyclePlan {
   promotionGate: PromotionGateState;
   gateVersion: typeof BRIAN_TREASURY_GATE_VERSION;
   canonicalAlphaShadow: {
+    enabled: boolean;
+    candidates: number;
+    actions: number;
+  };
+  multiassetShadow: {
     enabled: boolean;
     candidates: number;
     actions: number;
@@ -179,6 +190,141 @@ function canonicalShadowMaintenance(
   return out;
 }
 
+function latestMultiassetByAsset(rows: MultiassetShadowOpportunity[]): Map<string, MultiassetShadowOpportunity> {
+  const out = new Map<string, MultiassetShadowOpportunity>();
+  for (const row of rows) {
+    const previous = out.get(row.assetId);
+    const at = time(row.observedAt) ?? -1;
+    const previousAt = previous ? time(previous.observedAt) ?? -1 : -1;
+    if (!previous || at > previousAt) out.set(row.assetId, row);
+  }
+  return out;
+}
+
+function multiassetShadowMaintenance(
+  state: TreasuryState,
+  rows: MultiassetShadowOpportunity[],
+): TreasuryOpportunity[] {
+  const latest = latestMultiassetByAsset(rows);
+  const out: TreasuryOpportunity[] = [];
+  for (const position of state.positions.filter(isMultiassetShadowPosition)) {
+    const signal = latest.get(position.assetId);
+    if (!signal) continue;
+    const keep =
+      signal.actionable &&
+      signal.pitClear &&
+      signal.recommendation === "ALLOW_MULTIASSET_SHADOW" &&
+      signal.direction === position.direction;
+    out.push({
+      assetId: position.assetId,
+      direction: position.direction,
+      observedAt: signal.observedAt,
+      referencePrice: signal.referencePrice,
+      expectedNetEdgeBps: keep ? 3 : 0,
+      roundTripCostBps: position.roundTripCostBps,
+      reliabilityConfidence: keep ? Math.max(0.55, signal.signalScore) : 0.5,
+      matureGroupCount: keep ? Math.max(2, signal.matureGroupCount) : 0,
+      pitClear: keep,
+      recommendation: keep ? "ALLOW_EDGE" : "MULTIASSET_SHADOW_REVOKED",
+      sourceDecisionId: signal.sourceDecisionId,
+    });
+  }
+  return out;
+}
+
+function rewriteMultiassetShadowExitReasons(
+  actions: TreasuryAction[],
+  rows: MultiassetShadowOpportunity[],
+) {
+  const latest = latestMultiassetByAsset(rows);
+  for (const action of actions) {
+    if (
+      action.kind !== "EXIT" ||
+      !String(action.positionId || "").startsWith(MULTIASSET_SHADOW_POSITION_PREFIX)
+    ) continue;
+    if (action.reason === "EDGE_INVALIDATED" || action.reason === "STALE_EDGE") {
+      const signal = latest.get(action.assetId);
+      action.reason = signal?.sessionState?.toUpperCase() === "REGULAR"
+        ? "MULTIASSET_SIGNAL_REVOKED"
+        : "MULTIASSET_SESSION_CLOSED_OR_STALE";
+    }
+  }
+}
+
+function applyMultiassetShadowOpens(
+  plan: TreasuryCyclePlan,
+  rows: MultiassetShadowOpportunity[],
+  observedAt: string,
+): number {
+  const candidates = [...latestMultiassetByAsset(rows).values()]
+    .filter((row) =>
+      row.actionable &&
+      row.pitClear &&
+      row.recommendation === "ALLOW_MULTIASSET_SHADOW"
+    )
+    .sort((a, b) =>
+      (b.signalScore - a.signalScore) ||
+      ((time(b.observedAt) ?? 0) - (time(a.observedAt) ?? 0))
+    );
+  let opens = 0;
+  for (const row of candidates) {
+    if (plan.state.positions.length >= MAX_SHADOW_POSITIONS) break;
+    if (plan.state.positions.some((position) => position.assetId === row.assetId)) continue;
+    const requested = row.requestedCapitalUsd;
+    if (
+      !Number.isFinite(requested) ||
+      requested <= 0 ||
+      requested > MULTIASSET_SHADOW_MAX_TICKET_USD
+    ) continue;
+    if (!Number.isFinite(row.roundTripCostBps) || row.roundTripCostBps < 0) continue;
+
+    const entryCostRate = Math.max(0, row.roundTripCostBps) / 20_000;
+    const maxByCash = plan.state.cashUsd / (1 + entryCostRate);
+    const maxByDeployment = Math.max(0, plan.afterEquityUsd - plan.deploymentUsd);
+    const capitalUsd = Math.min(requested, maxByCash, maxByDeployment);
+    if (capitalUsd + 1e-9 < requested) continue;
+    const entryCost = capitalUsd * Math.max(0, row.roundTripCostBps) / 20_000;
+    if (plan.state.cashUsd + 1e-9 < capitalUsd + entryCost) continue;
+
+    const positionId = `${MULTIASSET_SHADOW_POSITION_PREFIX}${row.sourceDecisionId}`;
+    plan.state.cashUsd -= capitalUsd + entryCost;
+    plan.state.realizedPnlUsd -= entryCost;
+    plan.state.cumulativeCostsUsd += entryCost;
+    plan.state.positions.push({
+      positionId,
+      assetId: row.assetId,
+      direction: row.direction,
+      openedAt: observedAt,
+      entryPrice: row.referencePrice,
+      capitalUsd,
+      entryExpectedNetEdgeBps: 0,
+      latestExpectedNetEdgeBps: 0,
+      roundTripCostBps: row.roundTripCostBps,
+      sourceDecisionId: row.sourceDecisionId,
+      highWaterPnlBps: 0,
+    });
+    plan.actions.push({
+      kind: "OPEN",
+      assetId: row.assetId,
+      direction: row.direction,
+      capitalUsd,
+      referencePrice: row.referencePrice,
+      costUsd: entryCost,
+      expectedNetEdgeBps: 0,
+      sourceDecisionId: row.sourceDecisionId,
+      reason: "MULTIASSET_SHADOW_SIGNAL",
+      positionId,
+    });
+    plan.deploymentUsd += capitalUsd;
+    plan.afterEquityUsd = Math.max(1e-9, plan.afterEquityUsd - entryCost);
+    const denominator = Math.max(plan.afterEquityUsd, plan.deploymentUsd);
+    plan.deploymentPct = denominator > 0 ? plan.deploymentUsd / denominator : 0;
+    plan.cashReservePct = plan.afterEquityUsd > 0 ? plan.state.cashUsd / plan.afterEquityUsd : 0;
+    opens++;
+  }
+  return opens;
+}
+
 function halfEntryCostUsd(capitalUsd: number, roundTripCostBps: number): number {
   return capitalUsd * Math.max(0, roundTripCostBps) / 20_000;
 }
@@ -273,17 +419,25 @@ export function planPromotionGatedTreasuryCycle(input: {
   state: TreasuryState;
   opportunities: TreasuryOpportunity[];
   shadowFallbackOpportunities?: CanonicalAlphaShadowOpportunity[];
+  multiassetShadowOpportunities?: MultiassetShadowOpportunity[];
   observedAt: string;
   promotionGate: PromotionGateState;
   positionIdFor: (opportunity: TreasuryOpportunity) => string;
 }): PromotionGatedTreasuryPlan {
   const promotionGate = normalizePromotionGate(input.promotionGate, input.observedAt);
   const fallbackOpportunities = input.shadowFallbackOpportunities ?? [];
+  const multiassetOpportunities = input.multiassetShadowOpportunities ?? [];
+  const multiassetMaintenance = multiassetShadowMaintenance(input.state, multiassetOpportunities);
   const effectiveOpportunities = promotionGate.authorized
-    ? [...input.opportunities, ...canonicalShadowInvalidationsWhenPromoted(input.state, input.opportunities, input.observedAt)]
+    ? [
+      ...input.opportunities,
+      ...canonicalShadowInvalidationsWhenPromoted(input.state, input.opportunities, input.observedAt),
+      ...multiassetMaintenance,
+    ]
     : [
       ...closedGateInvalidations(input.state, input.opportunities, input.observedAt, promotionGate.reason),
       ...canonicalShadowMaintenance(input.state, fallbackOpportunities),
+      ...multiassetMaintenance,
     ];
 
   const planned = planTreasuryCycle({
@@ -294,11 +448,20 @@ export function planPromotionGatedTreasuryCycle(input: {
   });
 
   rewriteCanonicalShadowExitReasons(planned.actions, fallbackOpportunities, promotionGate.authorized);
+  rewriteMultiassetShadowExitReasons(planned.actions, multiassetOpportunities);
   const fallbackOpens = promotionGate.authorized ? 0 : applyCanonicalAlphaShadowOpens(planned, fallbackOpportunities, input.observedAt);
+  const multiassetOpens = applyMultiassetShadowOpens(planned, multiassetOpportunities, input.observedAt);
   const fallbackActions = planned.actions.filter((action) =>
     String(action.positionId || "").startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX) ||
     action.reason === "CANONICAL_ALPHA_SHADOW_SIGNAL" || action.reason === "ALPHA_SIGNAL_REVOKED" ||
     action.reason === "ALPHA_SHADOW_LANE_CLOSED_BY_PROMOTION"
+  ).length;
+
+  const multiassetActions = planned.actions.filter((action) =>
+    String(action.positionId || "").startsWith(MULTIASSET_SHADOW_POSITION_PREFIX) ||
+    action.reason === "MULTIASSET_SHADOW_SIGNAL" ||
+    action.reason === "MULTIASSET_SIGNAL_REVOKED" ||
+    action.reason === "MULTIASSET_SESSION_CLOSED_OR_STALE"
   ).length;
 
   const blockedReasons = [...planned.blockedReasons];
@@ -316,6 +479,11 @@ export function planPromotionGatedTreasuryCycle(input: {
       enabled: !promotionGate.authorized && CANONICAL_ALPHA_MICRO_ENTRY_ENABLED,
       candidates: fallbackOpportunities.filter((row) => row.actionable).length,
       actions: Math.max(fallbackActions, fallbackOpens),
+    },
+    multiassetShadow: {
+      enabled: true,
+      candidates: multiassetOpportunities.filter((row) => row.actionable).length,
+      actions: Math.max(multiassetActions, multiassetOpens),
     },
   };
 }
