@@ -119,12 +119,26 @@ async function rpcWithRetry(
     let result: RpcResult;
     try {
       const request: any = client.rpc(fn, params);
-      result = typeof request?.abortSignal === "function"
-        ? await request.abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS))
-        : await Promise.race([
-            Promise.resolve(request),
-            new Promise<RpcResult>((_, reject) => setTimeout(() => reject(new Error(`${fn} timeout after ${RPC_TIMEOUT_MS}ms`)), RPC_TIMEOUT_MS)),
-          ]);
+      if (typeof request?.abortSignal === "function") {
+        result = await request.abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS));
+      } else {
+        result = await new Promise<RpcResult>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`${fn} timeout after ${RPC_TIMEOUT_MS}ms`)),
+            RPC_TIMEOUT_MS,
+          );
+          Promise.resolve(request).then(
+            (value) => {
+              clearTimeout(timer);
+              resolve(value);
+            },
+            (error) => {
+              clearTimeout(timer);
+              reject(error);
+            },
+          );
+        });
+      }
     } catch (error) {
       lastError = error;
       if (attempt === RPC_ATTEMPTS) break;
