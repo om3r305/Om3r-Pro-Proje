@@ -31,7 +31,7 @@ function out(body:unknown,status=200,origin?:string|null){
 }
 function validAssetId(value: unknown): string | null {
   const id = String(value ?? "").trim();
-  return /^crypto:[A-Z0-9]{2,20}USDT$/.test(id) ? id : null;
+  return /^(crypto:[A-Z0-9]{2,20}USDT|fx:[A-Z0-9]{6,12}|index:[A-Z0-9]{2,24}|commodity:[A-Z0-9]{2,24}|equity:[A-Z0-9.-]{1,16})$/.test(id) ? id : null;
 }
 
 Deno.serve(async(req:Request)=>{
@@ -44,22 +44,47 @@ Deno.serve(async(req:Request)=>{
   const assetIds=[...new Set(raw.map(validAssetId).filter((v):v is string=>Boolean(v)))].slice(0,20);
   if(!assetIds.length)return out({status:"SUCCESS",observed_at:new Date().toISOString(),marks:[],count:0,source:"brian-realtime"},200,origin);
 
-  const since=new Date(Date.now()-10*60_000).toISOString();
-  const q=await db.from("brian_micro_book_ticks")
-    .select("asset_id,observed_at,observed_mid_price")
-    .in("asset_id",assetIds)
-    .gte("observed_at",since)
-    .order("observed_at",{ascending:false})
-    .limit(Math.min(400,Math.max(60,assetIds.length*30)));
+  const cryptoIds=assetIds.filter(id=>id.startsWith("crypto:"));
+  const multiIds=assetIds.filter(id=>!id.startsWith("crypto:"));
+  const latest=new Map<string,Record<string,unknown>>();
 
-  if(q.error)return out({status:"FAILED_CLOSED",error:"MARK_READ_FAILED",marks:[]},503,origin);
+  if(cryptoIds.length){
+    const since=new Date(Date.now()-10*60_000).toISOString();
+    const q=await db.from("brian_micro_book_ticks")
+      .select("asset_id,observed_at,observed_mid_price")
+      .in("asset_id",cryptoIds)
+      .gte("observed_at",since)
+      .order("observed_at",{ascending:false})
+      .limit(Math.min(400,Math.max(60,cryptoIds.length*30)));
+    if(q.error)return out({status:"FAILED_CLOSED",error:"CRYPTO_MARK_READ_FAILED",marks:[]},503,origin);
+    for(const row of q.data??[]){
+      const id=String(row.asset_id??"");
+      const price=Number(row.observed_mid_price);
+      if(!latest.has(id)&&Number.isFinite(price)&&price>0){
+        latest.set(id,{asset_id:id,observed_at:String(row.observed_at),price,session_state:"CONTINUOUS",live:true,source:"brian_micro_book_ticks"});
+      }
+    }
+  }
 
-  const latest=new Map<string,{asset_id:string;observed_at:string;price:number}>();
-  for(const row of q.data??[]){
-    const id=String(row.asset_id??"");
-    const price=Number(row.observed_mid_price);
-    if(!latest.has(id)&&Number.isFinite(price)&&price>0){
-      latest.set(id,{asset_id:id,observed_at:String(row.observed_at),price});
+  if(multiIds.length){
+    const q=await db.from("brian_multiasset_market_latest")
+      .select("asset_id,provider_time,price,session_state,data_latency_seconds,provider_quality")
+      .in("asset_id",multiIds);
+    if(q.error)return out({status:"FAILED_CLOSED",error:"MULTIASSET_MARK_READ_FAILED",marks:[]},503,origin);
+    for(const row of q.data??[]){
+      const id=String(row.asset_id??"");
+      const price=Number(row.price);
+      const latency=Number(row.data_latency_seconds);
+      const session=String(row.session_state??"UNKNOWN").toUpperCase();
+      if(!latest.has(id)&&Number.isFinite(price)&&price>0){
+        latest.set(id,{
+          asset_id:id,observed_at:String(row.provider_time),price,session_state:session,
+          data_latency_seconds:Number.isFinite(latency)?latency:null,
+          provider_quality:row.provider_quality,
+          live:session==="REGULAR"&&Number.isFinite(latency)&&latency<=15*60,
+          source:"brian_multiasset_market_latest"
+        });
+      }
     }
   }
 
