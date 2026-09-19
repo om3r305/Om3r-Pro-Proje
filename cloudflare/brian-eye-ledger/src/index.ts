@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.0";
+const VERSION = "brian.cf-eye-ledger.v2.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -108,7 +108,9 @@ export interface Env {
   ENABLE_SCHEDULED_EYE: string;
   R2_ENABLED: string;
   SUPABASE_INGEST_URL: string;
+  REALTIME_INGEST_URL?: string;
   ALPHA_RECHECK_URL?: string;
+  REALTIME_ALPHA_RECHECK_URL?: string;
   BRIAN_CLOUDFLARE_KEY?: string;
   ALPHA_RECHECK_ENABLED: string;
   CORE_RECOVERY_ENABLED?: string;
@@ -818,6 +820,50 @@ async function fetchFeed(endpoint: SourceEndpoint) {
   return xml;
 }
 
+function sourceStateKey(endpoint: SourceEndpoint) {
+  return "source-state-v1/" + endpoint.endpoint_id + ".json";
+}
+
+async function sourcePayloadUnchanged(
+  env: Env,
+  endpoint: SourceEndpoint,
+  payloadHash: string
+) {
+  if (env.R2_ENABLED !== "true" || !env.RAW_BUCKET) return false;
+  const obj = await env.RAW_BUCKET.get(sourceStateKey(endpoint));
+  if (!obj) return false;
+  const state = await obj.json().catch(() => ({})) as Json;
+  return String(state.payload_hash ?? "") === payloadHash;
+}
+
+async function persistSourceState(
+  env: Env,
+  endpoint: SourceEndpoint,
+  payloadHash: string,
+  observedAt: string
+) {
+  if (env.R2_ENABLED !== "true" || !env.RAW_BUCKET) return;
+  await env.RAW_BUCKET.put(
+    sourceStateKey(endpoint),
+    JSON.stringify({
+      endpoint_id: endpoint.endpoint_id,
+      source_id: endpoint.source_id,
+      payload_hash: payloadHash,
+      observed_at: observedAt,
+      runtime: VERSION
+    }),
+    {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: {
+        endpoint_id: endpoint.endpoint_id,
+        source_id: endpoint.source_id,
+        payload_hash: payloadHash,
+        shadow_only: "true"
+      }
+    }
+  );
+}
+
 async function persistRaw(
   env: Env,
   endpoint: SourceEndpoint,
@@ -842,7 +888,9 @@ async function persistRaw(
     return { stored: false, path, reason: "R2_DISABLED" };
   }
 
-  await env.RAW_BUCKET.put(path, xml, {
+  const existing = await env.RAW_BUCKET.head(path);
+  if (!existing) {
+    await env.RAW_BUCKET.put(path, xml, {
     httpMetadata: { contentType:
       endpoint.endpoint_kind === "STATUSPAGE_JSON" ? "application/json; charset=utf-8" :
       endpoint.endpoint_kind === "HTML_LINKS" ? "text/html; charset=utf-8" :
@@ -856,8 +904,9 @@ async function persistRaw(
       shadow_only: "true"
     }
   });
+  }
 
-  return { stored: true, path, reason: null };
+  return { stored: true, path, reason: existing ? "ALREADY_STORED" : null };
 }
 
 function ledgerStub(env: Env, eventId: string) {
@@ -944,25 +993,41 @@ async function sendIngestBatch(env: Env, pending: LedgerResult[]) {
     events.set(row.event.event_id, row.event);
   }
 
-  const response = await fetch(env.SUPABASE_INGEST_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY!
-    },
-    body: JSON.stringify({
-      version: VERSION,
-      captures: [...captures.values()],
-      events: [...events.values()],
-      rechecks: [],
-      shadow_only: true,
-      live_execution: false
-    }),
-    signal: AbortSignal.timeout(12000)
+  const payload = JSON.stringify({
+    version: VERSION,
+    captures: [...captures.values()],
+    events: [...events.values()],
+    rechecks: [],
+    shadow_only: true,
+    live_execution: false
   });
-  const body = await response.text();
-  if (!response.ok) throw new Error("INGEST_HTTP_" + response.status + ":" + body.slice(0, 500));
-  return { forwarded: events.size, response: body.slice(0, 1000) };
+
+  const targets = [
+    { name: "core", url: env.SUPABASE_INGEST_URL },
+    ...(env.REALTIME_INGEST_URL ? [{ name: "realtime", url: env.REALTIME_INGEST_URL }] : [])
+  ];
+
+  const responses = await Promise.all(targets.map(async (target) => {
+    const response = await fetch(target.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY!
+      },
+      body: payload,
+      signal: AbortSignal.timeout(12000)
+    });
+    const body = await response.text();
+    if (!response.ok) {
+      throw new Error(
+        "INGEST_" + target.name.toUpperCase() + "_HTTP_" +
+        response.status + ":" + body.slice(0, 500)
+      );
+    }
+    return { target: target.name, http_status: response.status, body: body.slice(0, 500) };
+  }));
+
+  return { forwarded: events.size, responses };
 }
 
 async function queueR2IngestBatch(env: Env, pending: LedgerResult[], error: string) {
@@ -1040,25 +1105,45 @@ async function flushR2IngestOutbox(env: Env) {
 
 async function deliverR2AlphaRequest(env: Env, requestId: string, payload: Json) {
   if (!env.RAW_BUCKET || !env.ALPHA_RECHECK_URL || !env.BRIAN_CLOUDFLARE_KEY) return false;
+
+  const targets = [
+    { name: "core", url: env.ALPHA_RECHECK_URL },
+    ...(env.REALTIME_ALPHA_RECHECK_URL
+      ? [{ name: "realtime", url: env.REALTIME_ALPHA_RECHECK_URL }]
+      : [])
+  ];
+
   try {
-    const response = await fetch(env.ALPHA_RECHECK_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(20000)
-    });
-    const responseText = await response.text();
-    if (!response.ok) return false;
+    const responses = await Promise.all(targets.map(async (target) => {
+      const response = await fetch(target.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY!
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(20000)
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        throw new Error(
+          "ALPHA_" + target.name.toUpperCase() + "_HTTP_" +
+          response.status + ":" + responseText.slice(0, 500)
+        );
+      }
+      return {
+        target: target.name,
+        http_status: response.status,
+        response: responseText.slice(0, 1500)
+      };
+    }));
 
     await env.RAW_BUCKET.put(
       "outbox-delivered/alpha/" + requestId + ".json",
       JSON.stringify({
         request_id: requestId,
         delivered_at: new Date().toISOString(),
-        response: responseText.slice(0, 2000)
+        responses
       }),
       {
         httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -1096,6 +1181,18 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
   const xml = await fetchFeed(endpoint);
   const raw = new TextEncoder().encode(xml);
   const payloadHash = await sha(raw);
+  if (await sourcePayloadUnchanged(env, endpoint, payloadHash)) {
+    return {
+      endpoint_id: endpoint.endpoint_id,
+      parsed: 0,
+      selected: 0,
+      pending: 0,
+      forwarded: 0,
+      forward_status: "UNCHANGED_SOURCE_HASH",
+      raw_r2_committed: true,
+      unchanged: true
+    };
+  }
   const captureId = await sha(endpoint.endpoint_id + "|" + observedAt + "|" + payloadHash);
   const rawPersist = await persistRaw(env, endpoint, observedAt, payloadHash, xml);
 
@@ -1219,6 +1316,7 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
   }
 
   const forwarded = await forwardBatch(env, pending);
+  await persistSourceState(env, endpoint, payloadHash, observedAt);
   return {
     endpoint_id: endpoint.endpoint_id,
     parsed: parsed.length,
@@ -1250,17 +1348,16 @@ async function runSources(env: Env) {
     };
   }
 
-  const results: Json[] = [];
-  for (const endpoint of sources) {
+  const results = await Promise.all(sources.map(async (endpoint): Promise<Json> => {
     try {
-      results.push(await pollSource(env, endpoint));
+      return await pollSource(env, endpoint);
     } catch (error) {
-      results.push({
+      return {
         endpoint_id: endpoint.endpoint_id,
         error: errText(error).slice(0, 1200)
-      });
+      };
     }
-  }
+  }));
 
   const failures = results.filter((row) => row.error);
   return {
@@ -1429,6 +1526,8 @@ export default {
         core_recovery_enabled: env.CORE_RECOVERY_ENABLED === "true",
         durable_objects_enabled: env.DURABLE_OBJECTS_ENABLED === "true",
         r2_outbox_enabled: env.R2_OUTBOX_ENABLED === "true",
+        realtime_dual_write_enabled: Boolean(env.REALTIME_INGEST_URL),
+        realtime_alpha_dual_write_enabled: Boolean(env.REALTIME_ALPHA_RECHECK_URL),
         shadow_only: true,
         live_execution: false
       });
@@ -1481,7 +1580,7 @@ export default {
   },
 
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext
   ) {
@@ -1490,9 +1589,18 @@ export default {
         await flushR2AlphaOutbox(env);
         await flushR2IngestOutbox(env);
       }
+
       const tasks: Promise<unknown>[] = [];
       if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
-      if (env.CORE_RECOVERY_ENABLED === "true") tasks.push(runCoreRecovery(env));
+
+      const scheduledMinute = Math.floor(controller.scheduledTime / 60000);
+      if (
+        env.CORE_RECOVERY_ENABLED === "true" &&
+        scheduledMinute % 5 === 0
+      ) {
+        tasks.push(runCoreRecovery(env));
+      }
+
       if (tasks.length) await Promise.all(tasks);
     })());
   }
