@@ -126,7 +126,10 @@ Deno.serve(async (req: Request) => {
   const startedAt = new Date().toISOString();
   try {
     // Cadence is anchored to the prior run start, not its finish. A 10–15s runtime must not suppress the next minute's cron tick.
-    const lastRun = await supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(5_000));
+    const lastRunQuery: any = supabase.from("brian_collector_runs").select("started_at").eq("collector_id", COLLECTOR_ID).in("status", ["SUCCESS", "DEGRADED"]).order("started_at", { ascending: false }).limit(1).maybeSingle();
+    const lastRun = typeof lastRunQuery.abortSignal === "function"
+      ? await lastRunQuery.abortSignal(AbortSignal.timeout(5_000))
+      : await lastRunQuery;
     if (lastRun.error) throw lastRun.error;
     if (lastRun.data?.started_at) {
       const age = (Date.now() - Date.parse(lastRun.data.started_at)) / 1000;
@@ -134,7 +137,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const lease = await withCollectorLease(supabase, COLLECTOR_ID, LEASE_SECONDS, async () => {
-    const latest = await supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(5_000));
+    const latestQuery: any = supabase.from("brian_universe_snapshots").select("snapshot_id,observed_at,candidates").order("observed_at", { ascending: false }).limit(1).maybeSingle();
+    const latest = typeof latestQuery.abortSignal === "function"
+      ? await latestQuery.abortSignal(AbortSignal.timeout(5_000))
+      : await latestQuery;
     if (latest.error || !latest.data) throw latest.error ?? new Error("universe snapshot unavailable");
     const universePayload = latest.data.candidates as Record<string, unknown>; const radar = Array.isArray(universePayload?.candidates) ? universePayload.candidates as RadarCandidate[] : [];
     const selectedMap = new Map<string, RadarCandidate>();
