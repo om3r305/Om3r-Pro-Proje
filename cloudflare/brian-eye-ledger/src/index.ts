@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.4";
+const VERSION = "brian.cf-eye-ledger.v1.5";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -14,11 +14,12 @@ type SourceEndpoint = {
   organization?: string;
   canonical_domain: string;
   endpoint_url: string;
-  endpoint_kind: "RSS" | "ATOM" | "STATUSPAGE_ATOM" | "STATUSPAGE_JSON";
+  endpoint_kind: "RSS" | "ATOM" | "STATUSPAGE_ATOM" | "STATUSPAGE_JSON" | "HTML_LINKS";
   tier: string;
   category: string;
   region?: string;
   priority?: number;
+  html_path_prefix?: string;
 };
 
 type FeedItem = {
@@ -603,6 +604,67 @@ function parseFeed(xml: string): FeedItem[] {
   return items;
 }
 
+function decodeHtmlText(value: string) {
+  return value
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseHtmlLinks(raw: string, endpoint: SourceEndpoint): FeedItem[] {
+  const prefix = endpoint.html_path_prefix?.trim() ?? "";
+  if (!prefix.startsWith("/")) throw new Error("HTML_PATH_PREFIX_REQUIRED");
+
+  const items: FeedItem[] = [];
+  const seen = new Set<string>();
+  const anchor = /<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
+  const monthDate = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/g;
+
+  let match: RegExpExecArray | null;
+  while ((match = anchor.exec(raw)) && items.length < MAX_ITEMS_PER_FEED) {
+    const hrefRaw = String(match[2] ?? "").replace(/&amp;/gi, "&").trim();
+    const title = decodeHtmlText(String(match[3] ?? ""));
+    if (!hrefRaw || !title) continue;
+
+    let absolute = "";
+    try {
+      const u = new URL(hrefRaw, endpoint.endpoint_url);
+      if (!hostMatches(u.hostname, endpoint.canonical_domain)) continue;
+      if (!u.pathname.startsWith(prefix) || u.pathname === prefix.replace(/\/$/, "")) continue;
+      u.hash = "";
+      absolute = u.toString();
+    } catch {
+      continue;
+    }
+
+    if (seen.has(absolute)) continue;
+    seen.add(absolute);
+
+    const contextStart = Math.max(0, match.index - 900);
+    const context = decodeHtmlText(raw.slice(contextStart, match.index));
+    const dateMatches = [...context.matchAll(monthDate)];
+    const lastDate = dateMatches.length ? dateMatches[dateMatches.length - 1][0] : "";
+    const publishedAt = lastDate ? iso(lastDate) : null;
+
+    items.push({
+      title: title.slice(0, 1500),
+      link: absolute,
+      guid: absolute,
+      publishedAt,
+      categories: []
+    });
+  }
+  return items;
+}
+
 function parseStatusPageJson(raw: string): FeedItem[] {
   const doc = JSON.parse(raw) as Json;
   const items: FeedItem[] = [];
@@ -680,16 +742,21 @@ function requireWorkerAuth(req: Request, env: Env) {
 
 async function fetchFeed(endpoint: SourceEndpoint) {
   const isJson = endpoint.endpoint_kind === "STATUSPAGE_JSON";
+  const isHtml = endpoint.endpoint_kind === "HTML_LINKS";
   const timeoutMs =
     endpoint.endpoint_kind === "STATUSPAGE_ATOM" ? 20000 :
     isJson ? 12000 :
+    isHtml ? 12000 :
     9000;
   const response = await fetch(endpoint.endpoint_url, {
     redirect: "follow",
     headers: {
       accept: isJson
         ? "application/json,*/*;q=0.1"
-        : "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1"
+        : isHtml
+          ? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
+          : "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1",
+      "user-agent": "BrianMarketIntelligence/1.0 official-source-monitor"
     },
     signal: AbortSignal.timeout(timeoutMs)
   });
@@ -710,7 +777,10 @@ async function persistRaw(
   payloadHash: string,
   xml: string
 ) {
-  const extension = endpoint.endpoint_kind === "STATUSPAGE_JSON" ? ".json" : ".xml";
+  const extension =
+    endpoint.endpoint_kind === "STATUSPAGE_JSON" ? ".json" :
+    endpoint.endpoint_kind === "HTML_LINKS" ? ".html" :
+    ".xml";
   const path =
     "source-arch-v2/" +
     endpoint.endpoint_id +
@@ -725,7 +795,11 @@ async function persistRaw(
   }
 
   await env.RAW_BUCKET.put(path, xml, {
-    httpMetadata: { contentType: endpoint.endpoint_kind === "STATUSPAGE_JSON" ? "application/json; charset=utf-8" : "application/xml; charset=utf-8" },
+    httpMetadata: { contentType:
+      endpoint.endpoint_kind === "STATUSPAGE_JSON" ? "application/json; charset=utf-8" :
+      endpoint.endpoint_kind === "HTML_LINKS" ? "text/html; charset=utf-8" :
+      "application/xml; charset=utf-8"
+    },
     customMetadata: {
       endpoint_id: endpoint.endpoint_id,
       source_id: endpoint.source_id,
@@ -808,7 +882,9 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
   const parsed =
     endpoint.endpoint_kind === "STATUSPAGE_JSON"
       ? parseStatusPageJson(xml)
-      : parseFeed(xml);
+      : endpoint.endpoint_kind === "HTML_LINKS"
+        ? parseHtmlLinks(xml, endpoint)
+        : parseFeed(xml);
   const selected = parsed.filter((item) => freshEnough(item, nowMs));
   const pending: LedgerResult[] = [];
 
