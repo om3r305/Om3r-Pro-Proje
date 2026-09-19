@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
+import { gzip } from "npm:pako@2.1.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -188,7 +189,8 @@ async function fetchSource(endpoint: Endpoint) {
     headers: {
       accept: isHtml ? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
         : "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1",
-      "user-agent": "BrianRealtimeOfficialEye/1.0 contact=owner",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36 BrianRealtimeOfficialEye/1.0",
+      "accept-language": "en-US,en;q=0.9",
     },
     signal: AbortSignal.timeout(isHtml ? 12000 : 9000),
   });
@@ -223,10 +225,11 @@ async function setState(endpoint: Endpoint, payloadHash: string, status: number,
   }
 }
 async function persistRaw(endpoint: Endpoint, payloadHash: string, body: string) {
-  const ext = endpoint.endpoint_kind === "HTML" ? ".html" : ".xml";
+  const ext = endpoint.endpoint_kind === "HTML" ? ".html.gz" : ".xml.gz";
   const path = `source-arch-v2/${endpoint.endpoint_id}/${new Date().toISOString().slice(0,10)}/${payloadHash}${ext}`;
-  const upload = await db.storage.from(BUCKET).upload(path, new TextEncoder().encode(body), {
-    contentType: endpoint.endpoint_kind === "HTML" ? "text/html; charset=utf-8" : "application/xml; charset=utf-8",
+  const compressed = gzip(new TextEncoder().encode(body), { level: 6 });
+  const upload = await db.storage.from(BUCKET).upload(path, compressed, {
+    contentType: "application/gzip",
     upsert: false,
     cacheControl: "31536000",
   });
