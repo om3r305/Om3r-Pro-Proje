@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const PIPELINE_SELF_TEST_TOKEN_SHA256 = "1565d0d0ad64e1d70f6d6f05cc4405a2f7c4b9ca78bb5dcc09f2658f70288633";
 
 type Json = Record<string, unknown>;
 
@@ -745,18 +746,11 @@ export default {
       });
     }
 
-    if (req.method === "GET" && url.pathname === "/one-shot-shadow-test") {
-      let sources: SourceEndpoint[] = [];
-      try {
-        sources = loadManifest(env);
-      } catch (error) {
-        return out({
-          status: "SAFE_TEST_BLOCKED",
-          reason: "INVALID_SOURCE_MANIFEST",
-          error: errText(error).slice(0, 300),
-          shadow_only: true,
-          live_execution: false
-        }, 409);
+    if (req.method === "GET" && url.pathname === "/pipeline-self-test") {
+      const token = url.searchParams.get("token") ?? "";
+      const tokenHash = await sha(token);
+      if (tokenHash !== PIPELINE_SELF_TEST_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_TEST" }, 401);
       }
 
       const safe =
@@ -764,13 +758,11 @@ export default {
         env.LIVE_EXECUTION !== "true" &&
         env.ENABLE_SCHEDULED_EYE !== "true" &&
         env.R2_ENABLED !== "true" &&
-        env.ALPHA_RECHECK_ENABLED !== "true" &&
-        sources.length === 1;
+        env.ALPHA_RECHECK_ENABLED !== "true";
 
       if (!safe) {
         return out({
           status: "SAFE_TEST_BLOCKED",
-          source_count: sources.length,
           scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
           r2_enabled: env.R2_ENABLED === "true",
           alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
@@ -779,12 +771,93 @@ export default {
         }, 409);
       }
 
-      const result = await runSources(env);
+      const now = new Date().toISOString();
+      const captureId = await sha("brian-cloudflare-pipeline-self-test-capture-v1");
+      const eventId = await sha("brian-cloudflare-pipeline-self-test-event-v1");
+      const fingerprint = await sha("brian-cloudflare-pipeline-self-test-content-v1");
+
+      const capture: CaptureEnvelope = {
+        capture_id: captureId,
+        provider: "cloudflare_eye:self_test",
+        record_type: "cloudflare_pipeline_self_test",
+        observed_at: now,
+        captured_at: now,
+        provenance_uri: url.origin + "/health",
+        payload_hash: fingerprint,
+        payload: {
+          runtime: VERSION,
+          synthetic: true,
+          cloudflare_shadow: true,
+          decision_evidence_locked: true,
+          external_content_used_as_instruction: false,
+          shadow_only: true,
+          live_execution: false
+        }
+      };
+
+      const event: EventEnvelope = {
+        event_id: eventId,
+        asset: "GLOBAL",
+        event_kind: "SHADOW_PIPELINE_SELF_TEST",
+        source_kind: "T1_OFFICIAL_PRIMARY",
+        source_id: "test:cloudflare:pipeline",
+        published_at: now,
+        first_observed_at: now,
+        captured_at: now,
+        claim: "Brian Cloudflare shadow pipeline self-test event",
+        direction: 0,
+        magnitude: 0.1,
+        trust_class: "OFFICIAL_PRIMARY",
+        entity_confidence: 1,
+        content_fingerprint: fingerprint,
+        corroboration_key: null,
+        provenance_uri: url.origin + "/health",
+        pit_verified: true,
+        raw_capture_id: captureId,
+        metadata: {
+          runtime: VERSION,
+          synthetic: true,
+          direction_not_inferred: true,
+          external_content_used_as_instruction: false,
+          eligible_for_decision_evidence: false,
+          decision_evidence_locked: true,
+          cloudflare_shadow: true,
+          shadow_only: true,
+          live_execution: false
+        }
+      };
+
+      const target = ledgerStub(env, eventId);
+      const ledger = await target.stub.record({
+        event_id: eventId,
+        source_id: event.source_id,
+        published_at: event.published_at,
+        payload_hash: fingerprint,
+        event: {
+          ...event,
+          metadata: {
+            ...event.metadata,
+            cf_ledger_shard: target.shard
+          }
+        },
+        capture
+      });
+
+      let forward = { forwarded: 0, status: "ALREADY_FORWARDED" };
+      if (ledger.needs_forward) {
+        forward = await forwardBatch(env, [ledger]);
+      }
+
       return out({
-        status: "ONE_SHOT_COMPLETE",
-        result,
+        status: "PIPELINE_SELF_TEST_COMPLETE",
+        first_seen: ledger.first_seen,
+        first_seen_at: ledger.first_seen_at,
+        seen_count: ledger.seen_count,
+        forwarded: forward.forwarded,
+        forward_status: forward.status,
+        event_id: eventId,
+        capture_id: captureId,
         safety: {
-          source_count: 1,
           scheduled_eye_enabled: false,
           r2_enabled: false,
           alpha_recheck_enabled: false,
