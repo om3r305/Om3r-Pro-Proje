@@ -699,6 +699,55 @@ export default {
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/one-shot-shadow-test") {
+      let sources: SourceEndpoint[] = [];
+      try {
+        sources = loadManifest(env);
+      } catch (error) {
+        return out({
+          status: "SAFE_TEST_BLOCKED",
+          reason: "INVALID_SOURCE_MANIFEST",
+          error: errText(error).slice(0, 300),
+          shadow_only: true,
+          live_execution: false
+        }, 409);
+      }
+
+      const safe =
+        env.SHADOW_ONLY === "true" &&
+        env.LIVE_EXECUTION !== "true" &&
+        env.ENABLE_SCHEDULED_EYE !== "true" &&
+        env.R2_ENABLED !== "true" &&
+        env.ALPHA_RECHECK_ENABLED !== "true" &&
+        sources.length === 1;
+
+      if (!safe) {
+        return out({
+          status: "SAFE_TEST_BLOCKED",
+          source_count: sources.length,
+          scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
+          r2_enabled: env.R2_ENABLED === "true",
+          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+          shadow_only: env.SHADOW_ONLY === "true",
+          live_execution: env.LIVE_EXECUTION === "true"
+        }, 409);
+      }
+
+      const result = await runSources(env);
+      return out({
+        status: "ONE_SHOT_COMPLETE",
+        result,
+        safety: {
+          source_count: 1,
+          scheduled_eye_enabled: false,
+          r2_enabled: false,
+          alpha_recheck_enabled: false,
+          shadow_only: true,
+          live_execution: false
+        }
+      });
+    }
+
     if (req.method === "POST" && url.pathname === "/run") {
       try {
         requireWorkerAuth(req, env);
