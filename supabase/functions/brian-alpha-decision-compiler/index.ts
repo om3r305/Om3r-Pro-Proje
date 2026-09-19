@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
-import { requireCronAuth } from "../_shared/cron_auth.ts";
+import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 import {
   ALPHA_COMPILER_VERSION,
   compileAlphaDecision,
@@ -39,6 +39,7 @@ const MAX_MACRO_CONTEXT_EVENTS = 12;
 const ENABLE_DIP_DIRECTIONAL_EVIDENCE = false; // MAIN and DIP remain separate brains by default.
 const RADAR_MAX_AGE_MS = 30 * 60_000; // 2x the canonical 15m universe cadence.
 const MAX_SHARD_COUNT = 5;
+const CORE_ALPHA_BRIDGE_URL = "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-realtime-alpha-bridge";
 
 type OfficialMacroContextEvent = {
   observation_id: string;
@@ -363,6 +364,34 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
   }
 }
 
+async function bridgeAlphaToCore(
+  req: Request,
+  costRows: Record<string, unknown>[],
+  decisionRows: Record<string, unknown>[],
+) {
+  const internalKey = (req.headers.get("x-brian-internal-key") ?? "").trim();
+  if (!internalKey) throw new Error("CORE_ALPHA_BRIDGE_REQUIRES_INTERNAL_KEY");
+  const response = await fetch(CORE_ALPHA_BRIDGE_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-brian-internal-key": internalKey,
+    },
+    body: JSON.stringify({
+      costs: costRows,
+      decisions: decisionRows,
+      shadow_only: true,
+      live_execution: false,
+    }),
+    signal: AbortSignal.timeout(12000),
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error("CORE_ALPHA_BRIDGE_HTTP_" + response.status + ":" + body.slice(0, 600));
+  }
+  return body.slice(0, 1200);
+}
+
 async function insertRowsChunked(table: string, rows: Record<string, unknown>[], chunkSize = 8) {
   if (!rows.length) return;
   for (let i = 0; i < rows.length; i += chunkSize) {
@@ -418,11 +447,9 @@ async function recordRun(
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
   try {
-    await requireCronAuth(req, supabase);
-  } catch (error) {
-    const message = errorText(error);
-    const unauthorized = message.includes("UNAUTHORIZED_CRON");
-    return json({ status: unauthorized ? "UNAUTHORIZED" : "FAILED_CLOSED", error: message, shadow_only: true, live_execution: false }, unauthorized ? 401 : 503);
+    await requireRealtimeInternal(req);
+  } catch {
+    return json({ status: "UNAUTHORIZED", shadow_only: true, live_execution: false }, 401);
   }
 
   const requestBody = await req.json().catch(() => ({}));
@@ -628,6 +655,13 @@ Deno.serve(async (req: Request) => {
 
       await insertRowsChunked("brian_dynamic_cost_quotes", costRows, 8);
       await insertRowsChunked("brian_alpha_decisions", decisionRows, 8);
+
+      try {
+        await bridgeAlphaToCore(req, costRows, decisionRows);
+      } catch (error) {
+        degradedSources.push("core_alpha_bridge:" + errorText(error));
+      }
+
       const status = degradedSources.length ? "DEGRADED" : "SUCCESS";
       await recordRun(startedAt, status, assets.length, costRows.length + decisionRows.length, degradedSources, undefined, shardMeta);
       return json({ status: "CAPTURED", run_quality: status, compiler_version: ALPHA_COMPILER_VERSION, observed_at: observedAt, radar_assets_total: allAssets.length, assets: assets.length, decisions: decisionRows.length, actionable: decisionRows.filter((x) => x.action === "OPEN_LONG" || x.action === "OPEN_SHORT").length, vetoed: decisionRows.filter((x) => x.action === "VETO").length, wait: decisionRows.filter((x) => x.action === "WAIT").length, macro_context_events: macroContext.event_count, l2_observed_costs: observedL2Count, degraded_top_of_book_costs: degradedCostCount, degraded_sources: degradedSources, shard_index: shardIndex, shard_count: shardCount, shadow_only: true, live_execution: false });
