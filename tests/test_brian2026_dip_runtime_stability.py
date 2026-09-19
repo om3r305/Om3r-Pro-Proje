@@ -7,14 +7,16 @@ SERVER_UI = (ROOT / "monster-coins-pro" / "dip-server-authoritative-v7.js").read
 SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
 
 
-def test_v841_live_page_loads_v84_renderer_then_authority_control_only():
-    renderer = HTML.index('/dip-v84.js')
-    authority = HTML.index('/dip-v841-control.js')
-    assert renderer < authority
+def test_v86_live_page_loads_current_control_and_runtime_layers_only():
+    control = HTML.index('/dip-v852-control.js')
+    renderer = HTML.index('/dip-v844-multiasset-ui.js')
+    guardian = HTML.index('/dip-v852-guardian-ui.js')
+    resilience = HTML.index('/dip-v856-resilience.js')
+    assert control < renderer < guardian < resilience
     for legacy in ('/dip-v83.js','/dip-v83-liveview.js','/dip-expert-v4-hotfix.js','/dip-expert-v4-runtime-guard.js','/dip-expert-v5-brain.js','/dip-server-authoritative-v7.js'):
         assert legacy not in HTML
     # Frozen V8.3 browser artifacts remain in the repository as historical fallback/evidence,
-    # but are not executed by the V8.4.1 live page.
+    # but are not executed by the V8.6 live page.
     assert (ROOT / 'monster-coins-pro' / 'dip-v83.js').exists()
     assert (ROOT / 'monster-coins-pro' / 'dip-v83-liveview.js').exists()
 
