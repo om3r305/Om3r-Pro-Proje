@@ -3,14 +3,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_alpha_uses_canonical_radar_and_causal_windows():
-    source = (ROOT / "supabase/functions/brian-alpha-decision-compiler/index.ts").read_text()
+def test_realtime_alpha_uses_canonical_radar_and_causal_windows():
+    source = (ROOT / "supabase/functions/brian-realtime-alpha-decision-compiler/index.ts").read_text()
     assert 'from("brian_universe_snapshots")' in source
-    assert 'brian_emergent_mover_frames' not in source
+    assert "brian_emergent_mover_frames" not in source
     assert '.eq("horizon", horizon)' in source
-    assert '.limit(6000)' not in source
-    assert 'ENABLE_DIP_DIRECTIONAL_EVIDENCE = false' in source
-    assert 'if (ENABLE_DIP_DIRECTIONAL_EVIDENCE) await addDipEvidence' in source
+    assert ".limit(6000)" not in source
+    assert "ENABLE_DIP_DIRECTIONAL_EVIDENCE = false" in source
+    assert "if (ENABLE_DIP_DIRECTIONAL_EVIDENCE) await addDipEvidence" in source
+
+
+def test_core_alpha_is_sync_only_not_a_second_decision_brain():
+    source = (ROOT / "supabase/functions/brian-alpha-decision-compiler/index.ts").read_text()
+    assert 'mode: "REALTIME_ALPHA_SYNC"' in source
+    assert 'source_project: "brian-realtime"' in source
+    assert "compileAlphaDecision" not in source
+    assert 'from("brian_universe_snapshots")' not in source
+    assert 'from("brian_sensor_observations")' not in source
 
 
 def test_micro_latest_state_consumers_use_rpc():
@@ -18,8 +27,8 @@ def test_micro_latest_state_consumers_use_rpc():
     sensor = (ROOT / "supabase/functions/brian-sensor-mesh/index.ts").read_text()
     for source in (intrabar, sensor):
         assert 'rpc("brian_latest_micro_book_ticks"' in source
-    assert '.limit(1000)' not in intrabar
-    assert '.limit(500)' not in sensor
+    assert ".limit(1000)" not in intrabar
+    assert ".limit(500)" not in sensor
 
 
 def test_latest_state_migration_is_lateral_and_index_neutral():
