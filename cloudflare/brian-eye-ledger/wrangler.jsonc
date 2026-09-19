@@ -26,6 +26,7 @@
     "ENABLE_SCHEDULED_EYE": "false",
     "R2_ENABLED": "false",
     "ALPHA_RECHECK_ENABLED": "false",
-    "SUPABASE_INGEST_URL": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-cloudflare-shadow-ingest"
+    "SUPABASE_INGEST_URL": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-cloudflare-shadow-ingest",
+    "SOURCE_MANIFEST_JSON": "[{\"endpoint_id\":\"coinbase_status_atom\",\"source_id\":\"official:coinbase:status\",\"organization\":\"Coinbase Status\",\"canonical_domain\":\"status.coinbase.com\",\"endpoint_url\":\"https://status.coinbase.com/history.atom\",\"endpoint_kind\":\"STATUSPAGE_ATOM\",\"tier\":\"T1_OFFICIAL_PRIMARY\",\"category\":\"CRYPTO_EXCHANGE_STATUS\",\"region\":\"GLOBAL\",\"priority\":95}]"
   }
 }
