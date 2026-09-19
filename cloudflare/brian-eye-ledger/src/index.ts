@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.9";
+const VERSION = "brian.cf-eye-ledger.v2.0";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -113,6 +113,8 @@ export interface Env {
   ALPHA_RECHECK_ENABLED: string;
   CORE_RECOVERY_ENABLED?: string;
   CORE_LAUNCHER_URL?: string;
+  DURABLE_OBJECTS_ENABLED?: string;
+  R2_OUTBOX_ENABLED?: string;
   SOURCE_MANIFEST_JSON?: string;
   RAW_BUCKET?: R2Bucket;
 }
@@ -208,6 +210,7 @@ export class FirstSeenLedger extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    if (this.envRef.DURABLE_OBJECTS_ENABLED !== "true") return;
     const rows = this.ctx.storage.sql
       .exec<LedgerRow>(
         "SELECT event_id, first_seen_at, last_seen_at, seen_count, forwarded_at, event_json, capture_json " +
@@ -392,6 +395,7 @@ export class AlphaRecheckQueue extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    if (this.envRef.DURABLE_OBJECTS_ENABLED !== "true") return;
     const row = this.ctx.storage.sql
       .exec<Json>(
         "SELECT * FROM alpha_rechecks WHERE delivered_at IS NULL ORDER BY queued_at LIMIT 1"
@@ -868,24 +872,222 @@ function alphaQueueStub(env: Env, requestId: string) {
   return { shard, stub: env.ALPHA_RECHECK_QUEUE.get(id) };
 }
 
+async function r2RecordEvent(
+  env: Env,
+  event: EventEnvelope,
+  capture: CaptureEnvelope,
+  payloadHash: string
+): Promise<LedgerResult> {
+  if (!env.RAW_BUCKET || env.R2_OUTBOX_ENABLED !== "true") {
+    throw new Error("R2_LEDGER_NOT_CONFIGURED");
+  }
+
+  const key = "event-ledger-v1/" + event.event_id.slice(0, 2) + "/" + event.event_id + ".json";
+  const existing = await env.RAW_BUCKET.head(key);
+  if (existing) {
+    return {
+      event_id: event.event_id,
+      first_seen: false,
+      first_seen_at: existing.customMetadata?.first_seen_at ?? event.first_observed_at,
+      seen_count: 1,
+      needs_forward: false,
+      event,
+      capture
+    };
+  }
+
+  const now = new Date().toISOString();
+  const storedEvent: EventEnvelope = {
+    ...event,
+    first_observed_at: now,
+    metadata: {
+      ...event.metadata,
+      r2_ledger: true,
+      durable_object_bypassed: true
+    }
+  };
+
+  await env.RAW_BUCKET.put(key, JSON.stringify({
+    event_id: event.event_id,
+    source_id: event.source_id,
+    published_at: event.published_at,
+    payload_hash: payloadHash,
+    first_seen_at: now,
+    event: storedEvent,
+    capture
+  }), {
+    httpMetadata: { contentType: "application/json; charset=utf-8" },
+    customMetadata: {
+      event_id: event.event_id,
+      source_id: event.source_id,
+      first_seen_at: now,
+      shadow_only: "true"
+    }
+  });
+
+  return {
+    event_id: event.event_id,
+    first_seen: true,
+    first_seen_at: now,
+    seen_count: 1,
+    needs_forward: true,
+    event: storedEvent,
+    capture
+  };
+}
+
+async function sendIngestBatch(env: Env, pending: LedgerResult[]) {
+  const captures = new Map<string, CaptureEnvelope>();
+  const events = new Map<string, EventEnvelope>();
+  for (const row of pending) {
+    captures.set(row.capture.capture_id, row.capture);
+    events.set(row.event.event_id, row.event);
+  }
+
+  const response = await fetch(env.SUPABASE_INGEST_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY!
+    },
+    body: JSON.stringify({
+      version: VERSION,
+      captures: [...captures.values()],
+      events: [...events.values()],
+      rechecks: [],
+      shadow_only: true,
+      live_execution: false
+    }),
+    signal: AbortSignal.timeout(12000)
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error("INGEST_HTTP_" + response.status + ":" + body.slice(0, 500));
+  return { forwarded: events.size, response: body.slice(0, 1000) };
+}
+
+async function queueR2IngestBatch(env: Env, pending: LedgerResult[], error: string) {
+  if (!env.RAW_BUCKET) throw new Error("R2_BUCKET_MISSING");
+  const ids = pending.map((x) => x.event_id).sort().join("|");
+  const batchId = await sha("r2-ingest-outbox-v1|" + ids);
+  const key = "outbox-pending/ingest/" + batchId + ".json";
+  const exists = await env.RAW_BUCKET.head(key);
+  if (!exists) {
+    await env.RAW_BUCKET.put(key, JSON.stringify({
+      batch_id: batchId,
+      queued_at: new Date().toISOString(),
+      last_error: error.slice(0, 1000),
+      pending
+    }), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: { batch_id: batchId, shadow_only: "true" }
+    });
+  }
+  return key;
+}
+
 async function forwardBatch(env: Env, pending: LedgerResult[]) {
   if (!pending.length) {
     return { forwarded: 0, queued: 0, status: "NO_NEW_EVENTS" };
   }
 
-  const scheduled = new Set<string>();
-  for (const row of pending) {
-    const target = ledgerStub(env, row.event_id);
-    if (scheduled.has(target.shard)) continue;
-    scheduled.add(target.shard);
-    await target.stub.scheduleFlush(250);
+  if (env.DURABLE_OBJECTS_ENABLED === "true") {
+    const scheduled = new Set<string>();
+    for (const row of pending) {
+      const target = ledgerStub(env, row.event_id);
+      if (scheduled.has(target.shard)) continue;
+      scheduled.add(target.shard);
+      await target.stub.scheduleFlush(250);
+    }
+    return {
+      forwarded: 0,
+      queued: pending.length,
+      status: "QUEUED_DURABLE_OUTBOX"
+    };
   }
 
-  return {
-    forwarded: 0,
-    queued: pending.length,
-    status: "QUEUED_DURABLE_OUTBOX"
-  };
+  try {
+    const sent = await sendIngestBatch(env, pending);
+    return { forwarded: sent.forwarded, queued: 0, status: "FORWARDED_DIRECT_R2_LEDGER" };
+  } catch (error) {
+    const key = await queueR2IngestBatch(env, pending, errText(error));
+    return { forwarded: 0, queued: pending.length, status: "QUEUED_R2_OUTBOX", outbox_key: key };
+  }
+}
+
+async function flushR2IngestOutbox(env: Env) {
+  if (!env.RAW_BUCKET || env.R2_OUTBOX_ENABLED !== "true") return { status: "DISABLED", processed: 0 };
+  const listed = await env.RAW_BUCKET.list({ prefix: "outbox-pending/ingest/", limit: 10 });
+  let delivered = 0;
+  for (const item of listed.objects) {
+    const obj = await env.RAW_BUCKET.get(item.key);
+    if (!obj) continue;
+    const payload = await obj.json() as Json;
+    const pending = Array.isArray(payload.pending) ? payload.pending as unknown as LedgerResult[] : [];
+    if (!pending.length) {
+      await env.RAW_BUCKET.delete(item.key);
+      continue;
+    }
+    try {
+      await sendIngestBatch(env, pending);
+      await env.RAW_BUCKET.delete(item.key);
+      delivered++;
+    } catch {
+      // Keep the object for the next cron pulse. No per-object alarm, no DO duration.
+    }
+  }
+  return { status: "OK", processed: listed.objects.length, delivered };
+}
+
+async function deliverR2AlphaRequest(env: Env, requestId: string, payload: Json) {
+  if (!env.RAW_BUCKET || !env.ALPHA_RECHECK_URL || !env.BRIAN_CLOUDFLARE_KEY) return false;
+  try {
+    const response = await fetch(env.ALPHA_RECHECK_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(20000)
+    });
+    const responseText = await response.text();
+    if (!response.ok) return false;
+
+    await env.RAW_BUCKET.put(
+      "outbox-delivered/alpha/" + requestId + ".json",
+      JSON.stringify({
+        request_id: requestId,
+        delivered_at: new Date().toISOString(),
+        response: responseText.slice(0, 2000)
+      }),
+      {
+        httpMetadata: { contentType: "application/json; charset=utf-8" },
+        customMetadata: { request_id: requestId, shadow_only: "true" }
+      }
+    );
+    await env.RAW_BUCKET.delete("outbox-pending/alpha/" + requestId + ".json");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function flushR2AlphaOutbox(env: Env) {
+  if (!env.RAW_BUCKET || env.R2_OUTBOX_ENABLED !== "true") return { status: "DISABLED", processed: 0 };
+  const listed = await env.RAW_BUCKET.list({ prefix: "outbox-pending/alpha/", limit: 10 });
+  let delivered = 0;
+  for (const item of listed.objects) {
+    const obj = await env.RAW_BUCKET.get(item.key);
+    if (!obj) continue;
+    const payload = await obj.json() as Json;
+    const requestId = String(payload.request_id ?? "").trim();
+    if (!requestId) {
+      await env.RAW_BUCKET.delete(item.key);
+      continue;
+    }
+    if (await deliverR2AlphaRequest(env, requestId, payload)) delivered++;
+  }
+  return { status: "OK", processed: listed.objects.length, delivered };
 }
 
 async function pollSource(env: Env, endpoint: SourceEndpoint) {
@@ -993,21 +1195,25 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
       }
     };
 
-    const target = ledgerStub(env, eventId);
-    const ledger = await target.stub.record({
-      event_id: eventId,
-      source_id: endpoint.source_id,
-      published_at: item.publishedAt,
-      payload_hash: payloadHash,
-      event: {
-        ...event,
-        metadata: {
-          ...event.metadata,
-          cf_ledger_shard: target.shard
-        }
-      },
-      capture
-    });
+    const ledger = env.DURABLE_OBJECTS_ENABLED === "true"
+      ? await (async () => {
+          const target = ledgerStub(env, eventId);
+          return await target.stub.record({
+            event_id: eventId,
+            source_id: endpoint.source_id,
+            published_at: item.publishedAt,
+            payload_hash: payloadHash,
+            event: {
+              ...event,
+              metadata: {
+                ...event.metadata,
+                cf_ledger_shard: target.shard
+              }
+            },
+            capture
+          });
+        })()
+      : await r2RecordEvent(env, event, capture, payloadHash);
 
     if (ledger.needs_forward) pending.push(ledger);
   }
@@ -1112,7 +1318,7 @@ async function runCoreRecovery(env: Env) {
   };
 }
 
-async function routeAlphaRecheck(req: Request, env: Env) {
+async function routeAlphaRecheck(req: Request, env: Env, ctx?: ExecutionContext) {
   await requireAlphaRouteAuth(req, env);
   if (env.ALPHA_RECHECK_ENABLED !== "true") {
     return out({ status: "DISABLED_SHADOW_PHASE", shadow_only: true, live_execution: false }, 503);
@@ -1133,27 +1339,77 @@ async function routeAlphaRecheck(req: Request, env: Env) {
   const requestId = String(body.request_id ?? "").trim() ||
     await sha("alpha-recheck-v1|" + eventId + "|" + assetId + "|" + alertId);
 
-  const target = alphaQueueStub(env, requestId);
-  const state = await target.stub.enqueue({
-    request_id: requestId,
-    event_id: eventId,
-    asset_id: assetId,
-    alert_id: alertId || null
-  });
+  if (env.DURABLE_OBJECTS_ENABLED === "true") {
+    const target = alphaQueueStub(env, requestId);
+    const state = await target.stub.enqueue({
+      request_id: requestId,
+      event_id: eventId,
+      asset_id: assetId,
+      alert_id: alertId || null
+    });
+    return out({
+      status: state.delivered_at ? "ALREADY_DELIVERED" : "QUEUED_DURABLE_ALPHA_RECHECK",
+      request_id: requestId,
+      shard: target.shard,
+      attempts: Number(state.attempts ?? 0),
+      delivered_at: state.delivered_at ?? null,
+      last_error: state.last_error ?? null,
+      shadow_only: true,
+      live_execution: false
+    }, state.delivered_at ? 200 : 202);
+  }
+
+  if (!env.RAW_BUCKET || env.R2_OUTBOX_ENABLED !== "true") {
+    return out({ status: "R2_OUTBOX_NOT_CONFIGURED", shadow_only: true, live_execution: false }, 503);
+  }
+
+  const deliveredKey = "outbox-delivered/alpha/" + requestId + ".json";
+  if (await env.RAW_BUCKET.head(deliveredKey)) {
+    return out({
+      status: "ALREADY_DELIVERED",
+      request_id: requestId,
+      transport: "R2_OUTBOX",
+      shadow_only: true,
+      live_execution: false
+    }, 200);
+  }
+
+  const pendingKey = "outbox-pending/alpha/" + requestId + ".json";
+  if (!(await env.RAW_BUCKET.head(pendingKey))) {
+    await env.RAW_BUCKET.put(pendingKey, JSON.stringify({
+      request_id: requestId,
+      event_id: eventId,
+      asset_id: assetId,
+      alert_id: alertId || null,
+      queued_at: new Date().toISOString(),
+      transport: "R2_OUTBOX",
+      shadow_only: true,
+      live_execution: false
+    }), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+      customMetadata: { request_id: requestId, shadow_only: "true" }
+    });
+  }
+
+  if (ctx) {
+    ctx.waitUntil(deliverR2AlphaRequest(env, requestId, {
+      request_id: requestId,
+      event_id: eventId,
+      asset_id: assetId,
+      alert_id: alertId || null
+    }));
+  }
 
   return out({
-    status: state.delivered_at ? "ALREADY_DELIVERED" : "QUEUED_DURABLE_ALPHA_RECHECK",
+    status: "QUEUED_R2_ALPHA_RECHECK",
     request_id: requestId,
-    shard: target.shard,
-    attempts: Number(state.attempts ?? 0),
-    delivered_at: state.delivered_at ?? null,
-    last_error: state.last_error ?? null,
+    transport: "R2_OUTBOX",
     shadow_only: true,
     live_execution: false
-  }, state.delivered_at ? 200 : 202);
+  }, 202);
 }
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/health/")) {
@@ -1171,6 +1427,8 @@ export default {
         r2_enabled: env.R2_ENABLED === "true" && Boolean(env.RAW_BUCKET),
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         core_recovery_enabled: env.CORE_RECOVERY_ENABLED === "true",
+        durable_objects_enabled: env.DURABLE_OBJECTS_ENABLED === "true",
+        r2_outbox_enabled: env.R2_OUTBOX_ENABLED === "true",
         shadow_only: true,
         live_execution: false
       });
@@ -1187,7 +1445,7 @@ export default {
 
     if (req.method === "POST" && url.pathname === "/route/alpha-recheck") {
       try {
-        return await routeAlphaRecheck(req, env);
+        return await routeAlphaRecheck(req, env, ctx);
       } catch {
         return out({ status: "UNAUTHORIZED" }, 401);
       }
@@ -1201,10 +1459,21 @@ export default {
       }
       const eventId = url.searchParams.get("event_id")?.trim() ?? "";
       if (!eventId) return out({ error: "event_id required" }, 400);
-      const target = ledgerStub(env, eventId);
+      if (env.DURABLE_OBJECTS_ENABLED === "true") {
+        const target = ledgerStub(env, eventId);
+        return out({
+          transport: "DURABLE_OBJECT",
+          shard: target.shard,
+          row: await target.stub.lookup(eventId)
+        });
+      }
+      if (!env.RAW_BUCKET) return out({ status: "R2_NOT_CONFIGURED" }, 503);
+      const key = "event-ledger-v1/" + eventId.slice(0, 2) + "/" + eventId + ".json";
+      const obj = await env.RAW_BUCKET.get(key);
       return out({
-        shard: target.shard,
-        row: await target.stub.lookup(eventId)
+        transport: "R2",
+        key,
+        row: obj ? await obj.json() : null
       });
     }
 
@@ -1216,9 +1485,15 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ) {
-    const tasks: Promise<unknown>[] = [];
-    if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
-    if (env.CORE_RECOVERY_ENABLED === "true") tasks.push(runCoreRecovery(env));
-    if (tasks.length) ctx.waitUntil(Promise.all(tasks));
+    ctx.waitUntil((async () => {
+      if (env.R2_OUTBOX_ENABLED === "true") {
+        await flushR2AlphaOutbox(env);
+        await flushR2IngestOutbox(env);
+      }
+      const tasks: Promise<unknown>[] = [];
+      if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
+      if (env.CORE_RECOVERY_ENABLED === "true") tasks.push(runCoreRecovery(env));
+      if (tasks.length) await Promise.all(tasks);
+    })());
   }
 } satisfies ExportedHandler<Env>;
