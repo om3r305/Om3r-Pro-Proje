@@ -138,21 +138,6 @@ Deno.serve(async(req:Request)=>{
     const active=enriched.filter(r=>["RUNNING","WAITING"].includes(String(r.status))&&!["HUMAN_APPROVAL","COMPLETE","BLOCKED","ROLLBACK"].includes(String(r.phase)));
     const approvals=enriched.filter(r=>r.phase==="HUMAN_APPROVAL"&&r.status==="WAITING");
     const claimedIds=new Set(runs.map(r=>String(r.request_id)));
-    const eligible=requests.filter(r=>{
-      if(
-        claimedIds.has(String(r.request_id)) ||
-        r.required_human_review!==true ||
-        r.shadow_only!==true ||
-        r.live_execution!==false ||
-        r.autonomous_apply_allowed!==false
-      ) return false;
-      const meta:any=r?.metadata??{};
-      if(meta.world_engineering===true){
-        if(!currentWorldRequest(r))return false;
-        if(meta.parent_rotation_policy==="STABLE_ONCE"&&reviewedHypothesisIds.has(String(r.hypothesis_id)))return false;
-      }
-      return true;
-    });
 
     const assessmentBySource=new Map(assessments.map(a=>[String(a.source_id),a]));
     const sourceLibrary=sources.map(s=>({...s,assessment:assessmentBySource.get(String(s.source_id))??null}));
@@ -160,6 +145,8 @@ Deno.serve(async(req:Request)=>{
     const reviewedHypothesisIds=new Set<string>();
     for(const row of reviewPassQ.data??[])reviewedHypothesisIds.add(String(row.hypothesis_id));
     for(const row of reviewPhaseQ.data??[])reviewedHypothesisIds.add(String(row.hypothesis_id));
+
+    const controlMeta:any=control.metadata??{};
     const trustFloor=Math.max(0,Math.min(1,num(controlMeta.world_source_trust_floor,0.72)));
     const worldEnabled=controlMeta.world_to_engineering_enabled===true;
 
@@ -181,7 +168,22 @@ Deno.serve(async(req:Request)=>{
         && Date.parse(String(source.discovered_at||""))<=Date.parse(String(assessment.assessed_at||""));
     }
 
-    const controlMeta:any=control.metadata??{};
+    const eligible=requests.filter(r=>{
+      if(
+        claimedIds.has(String(r.request_id)) ||
+        r.required_human_review!==true ||
+        r.shadow_only!==true ||
+        r.live_execution!==false ||
+        r.autonomous_apply_allowed!==false
+      ) return false;
+      const meta:any=r?.metadata??{};
+      if(meta.world_engineering===true){
+        if(!currentWorldRequest(r))return false;
+        if(meta.parent_rotation_policy==="STABLE_ONCE"&&reviewedHypothesisIds.has(String(r.hypothesis_id)))return false;
+      }
+      return true;
+    });
+
     const budgetLimit=Math.max(1,Math.min(24,Math.trunc(num(controlMeta.autonomous_claim_limit_24h,4))));
     const autonomousClaims24h=(budgetRunsQ.data??[]).filter((r:any)=>String(r?.metadata?.claim_mode??"")==="AUTONOMOUS").length;
     const worldRequests=eligible.filter(r=>r?.metadata?.world_engineering===true);
