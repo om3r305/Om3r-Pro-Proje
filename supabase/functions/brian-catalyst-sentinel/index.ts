@@ -1,7 +1,7 @@
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
 import postgres from "npm:postgres@3.4.7";
 const URL=Deno.env.get("SUPABASE_URL")!,SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,ANON=Deno.env.get("SUPABASE_ANON_KEY")??"",DB_URL=Deno.env.get("SUPABASE_DB_URL")??"";
-const EXPECTED="814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab",V="brian.catalyst-sentinel.v2.3.5",REF="qbcjuxhvhwagvqbjyemo",CF_ALPHA_ROUTE="https://brian-eye-ledger-shadow.omer-30588.workers.dev/route/alpha-recheck";
+const EXPECTED="814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab",V="brian.catalyst-sentinel.v2.3.6",REF="qbcjuxhvhwagvqbjyemo";
 function pooled(raw:string){try{const u=new URL(raw);u.hostname="aws-0-eu-central-1.pooler.supabase.com";u.port="6543";u.username=`postgres.${REF}`;u.searchParams.set("sslmode","require");return u.toString()}catch{return raw}}
 const PG_URL=DB_URL?pooled(DB_URL):"";
 const sql=PG_URL?postgres(PG_URL,{max:1,connect_timeout:3,idle_timeout:5,prepare:false,ssl:"require"}):null;
