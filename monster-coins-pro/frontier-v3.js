@@ -117,12 +117,22 @@ function renderModules(){
 }
 
 function news(){
-  if(Array.isArray(S.news?.items)&&S.news.items.length)return S.news.items.slice(0,10).map(x=>({urgency:x.urgency||'MEDIUM',title:x.title_tr||'Brian için önemli gelişme',summary:x.summary_tr||'',time:x.observed_at,source:x.source_id,asset:x.primary_asset,original:x.original_claim}));
-  const out=[];(S.world?.narratives||[]).slice(0,5).forEach(n=>out.push({urgency:Number(n.strength)>=.75?'HIGH':'MEDIUM',title:trLabel(n.label),summary:`Brian bu anlatıyı ${Math.round(Number(n.strength||0)*100)}% güçle izliyor.`,time:n.observed_at,source:'World Brain'}));return out;
+  if(Array.isArray(S.news?.items)&&S.news.items.length)return S.news.items.slice(0,10).map(x=>({
+    urgency:x.urgency||'MEDIUM',
+    freshness:x.freshness_state||'BAGLAM',
+    freshnessLabel:x.freshness_label_tr||'BAĞLAM',
+    title:x.title_tr||'Brian için önemli gelişme',
+    summary:x.summary_tr||'',
+    time:x.display_time||x.published_at||x.observed_at,
+    source:x.source_id,
+    asset:x.primary_asset,
+    original:x.original_claim
+  }));
+  const out=[];(S.world?.narratives||[]).slice(0,5).forEach(n=>out.push({urgency:Number(n.strength)>=.75?'HIGH':'MEDIUM',freshness:'TAKIPTE',freshnessLabel:'TAKİPTE',title:trLabel(n.label),summary:`Brian bu anlatıyı ${Math.round(Number(n.strength||0)*100)}% güçle izliyor.`,time:n.observed_at,source:'World Brain'}));return out;
 }
 function renderNews(){
   const items=news();$('newsBadge').textContent=items.length?`${items.length} ÖNEMLİ`:'AKIŞ YOK';$('newsBadge').className=`badge ${items.length?'ok':'warn'}`;
-  $('criticalNews').innerHTML=items.length?items.slice(0,7).map(n=>`<div class="news"><div class="news-top"><div class="news-title">${esc(n.title)}</div><div class="severity ${String(n.urgency).toLowerCase()}">${n.urgency==='CRITICAL'?'KRİTİK':n.urgency==='HIGH'?'YÜKSEK':'ORTA'}</div></div><div class="news-meta">${esc(n.summary)}${n.asset?` · ${esc(n.asset)}`:''}<br>${clock(n.time)} · ${esc(n.source||'Brian')}</div>${n.original?`<details class="news-meta"><summary>Orijinal kaynak</summary>${esc(n.original)}</details>`:''}</div>`).join(''):'<div class="news"><div class="news-title">Brian filtresinden geçen kritik gelişme henüz yok.</div><div class="news-meta">Bu bir genel haber akışı değildir; yalnız Brian için değerli gelişmeler görünür.</div></div>';
+  $('criticalNews').innerHTML=items.length?items.slice(0,7).map(n=>`<div class="news"><div class="news-top"><div class="news-title">${esc(n.title)}</div><div class="severity ${String(n.urgency).toLowerCase()}">${esc(n.freshnessLabel||'BAĞLAM')} · ${n.urgency==='CRITICAL'?'KRİTİK':n.urgency==='HIGH'?'YÜKSEK':'ORTA'}</div></div><div class="news-meta">${esc(n.summary)}${n.asset?` · ${esc(n.asset)}`:''}<br>${age(n.time)} önce · ${esc(n.source||'Brian')}</div>${n.original?`<details class="news-meta"><summary>Orijinal kaynak</summary>${esc(n.original)}</details>`:''}</div>`).join(''):'<div class="news"><div class="news-title">Brian filtresinden geçen kritik gelişme henüz yok.</div><div class="news-meta">Bu bir genel haber akışı değildir; yalnız Brian için değerli gelişmeler görünür.</div></div>';
   const top=items.slice(0,4),h=top.length?top.map(n=>`<div class="ticker-item"><span class="dot ${n.urgency==='CRITICAL'?'bad':n.urgency==='HIGH'?'warn':'info'}"></span><b>Brian:</b> ${esc(n.title)}</div>`).join(''):'<div class="ticker-item"><span class="dot info"></span><b>Brian:</b> dünya akışı izleniyor · kritik gelişme yok</div>';$('tickerTrack').innerHTML=h+h;
 }
 function renderAlpha(){const a=S.control?.alpha_v2||{},ds=a.decisions||[],d=ds[0];$('alphaValue').textContent=d?act(d.action):(a.online?'CANLI':'—');$('alphaMeta').textContent=d?`${String(d.asset_id||'').replace('crypto:','')} · ${age(d.observed_at)} önce`:'Karar bekleniyor';$('alphaBadge').textContent=a.online?'CANLI':'BAĞLANTI';$('alphaBadge').className=`badge ${a.online?'ok':'bad'}`;$('alphaFeed').innerHTML=ds.slice(0,5).map(x=>`<div class="module"><div class="module-icon">α</div><div class="module-main"><div class="module-name">${esc(String(x.asset_id||'').replace('crypto:',''))} · ${esc(act(x.action))}</div><div class="module-meta">${clock(x.observed_at)} · kanıt ${Number(x.evidence_score||0).toFixed(2)} · maliyet ${Number(x.estimated_round_trip_cost_bps||0).toFixed(1)} bps</div></div><span class="dot ${['OPEN_LONG','OPEN_SHORT'].includes(x.action)?'ok':x.action==='VETO'?'bad':'info'}"></span></div>`).join('')||'<div class="module"><span class="dot warn"></span><div class="module-main"><div class="module-name">ALPHA karar akışı bekleniyor</div></div></div>'}
