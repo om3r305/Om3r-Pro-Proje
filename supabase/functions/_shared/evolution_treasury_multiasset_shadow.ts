@@ -18,6 +18,7 @@ export interface MultiassetAlphaDecisionRow {
   evidenceScore: number | null;
   independentGroupCount: number;
   supportGroups: string[];
+  linkedEventIds: string[];
   requestedVirtualNotionalUsd: number | null;
   estimatedRoundTripCostBps: number | null;
   vetoReason: string | null;
@@ -117,7 +118,9 @@ export function buildMultiassetShadowOpportunities(
     const directionSource = metadataString(row, "direction_source");
     const executionGrade = row.metadata?.execution_grade === true;
     const lane = metadataString(row, "shadow_lane");
-    const linkedEventIds = metadataStrings(row, "linked_event_ids");
+    const linkedEventIds = Array.isArray(row.linkedEventIds)
+      ? row.linkedEventIds.map(String).filter(Boolean)
+      : metadataStrings(row, "linked_event_ids");
     const actionMatchesDirection =
       (row.action === "OPEN_LONG" && rawDirection === 1) ||
       (row.action === "OPEN_SHORT" && rawDirection === -1);
