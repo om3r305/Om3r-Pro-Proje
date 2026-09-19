@@ -4,7 +4,7 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-multiasset-market-eye.v1";
+const VERSION="brian.realtime-multiasset-market-eye.v2-registry";
 const COLLECTOR_ID="brian-realtime-multiasset-market-eye-v1";
 
 type Spec={asset_id:string;asset_class:string;symbol:string;themes:string[];priority:number};
