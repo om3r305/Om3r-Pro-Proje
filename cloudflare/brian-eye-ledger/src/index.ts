@@ -14,7 +14,7 @@ type SourceEndpoint = {
   organization?: string;
   canonical_domain: string;
   endpoint_url: string;
-  endpoint_kind: "RSS" | "ATOM" | "STATUSPAGE_ATOM";
+  endpoint_kind: "RSS" | "ATOM" | "STATUSPAGE_ATOM" | "STATUSPAGE_JSON";
   tier: string;
   category: string;
   region?: string;
@@ -308,6 +308,41 @@ function parseFeed(xml: string): FeedItem[] {
   return items;
 }
 
+function parseStatusPageJson(raw: string): FeedItem[] {
+  const doc = JSON.parse(raw) as Json;
+  const items: FeedItem[] = [];
+  const page = (doc.page && typeof doc.page === "object") ? doc.page as Json : {};
+  const status = (doc.status && typeof doc.status === "object") ? doc.status as Json : {};
+  const incidents = Array.isArray(doc.incidents) ? doc.incidents as Json[] : [];
+
+  const indicator = txt(status.indicator);
+  const description = txt(status.description);
+  if (indicator || description) {
+    items.push({
+      title: ("Coinbase Status: " + (description || indicator || "unknown")).slice(0, 1500),
+      link: "",
+      guid: "status:" + (indicator || "unknown") + ":" + (description || "unknown"),
+      publishedAt: null,
+      categories: [indicator || "unknown"]
+    });
+  }
+
+  for (const incident of incidents.slice(0, 20)) {
+    const title = txt(incident.name);
+    const guid = txt(incident.id) || title;
+    if (!title || !guid) continue;
+    items.push({
+      title: title.slice(0, 1500),
+      link: txt(incident.shortlink),
+      guid: "incident:" + guid,
+      publishedAt: iso(incident.updated_at ?? incident.created_at),
+      categories: [txt(incident.impact), txt(incident.status)].filter(Boolean)
+    });
+  }
+
+  return items;
+}
+
 function freshEnough(item: FeedItem, nowMs: number) {
   if (!item.publishedAt) return true;
   const ms = Date.parse(item.publishedAt);
@@ -349,11 +384,17 @@ function requireWorkerAuth(req: Request, env: Env) {
 }
 
 async function fetchFeed(endpoint: SourceEndpoint) {
-  const timeoutMs = endpoint.endpoint_kind === "STATUSPAGE_ATOM" ? 20000 : 9000;
+  const isJson = endpoint.endpoint_kind === "STATUSPAGE_JSON";
+  const timeoutMs =
+    endpoint.endpoint_kind === "STATUSPAGE_ATOM" ? 20000 :
+    isJson ? 12000 :
+    9000;
   const response = await fetch(endpoint.endpoint_url, {
     redirect: "follow",
     headers: {
-      accept: "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1"
+      accept: isJson
+        ? "application/json,*/*;q=0.1"
+        : "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1"
     },
     signal: AbortSignal.timeout(timeoutMs)
   });
@@ -374,6 +415,7 @@ async function persistRaw(
   payloadHash: string,
   xml: string
 ) {
+  const extension = endpoint.endpoint_kind === "STATUSPAGE_JSON" ? ".json" : ".xml";
   const path =
     "source-arch-v2/" +
     endpoint.endpoint_id +
@@ -381,14 +423,14 @@ async function persistRaw(
     observedAt.slice(0, 10) +
     "/" +
     payloadHash +
-    ".xml";
+    extension;
 
   if (env.R2_ENABLED !== "true" || !env.RAW_BUCKET) {
     return { stored: false, path, reason: "R2_DISABLED" };
   }
 
   await env.RAW_BUCKET.put(path, xml, {
-    httpMetadata: { contentType: "application/xml; charset=utf-8" },
+    httpMetadata: { contentType: endpoint.endpoint_kind === "STATUSPAGE_JSON" ? "application/json; charset=utf-8" : "application/xml; charset=utf-8" },
     customMetadata: {
       endpoint_id: endpoint.endpoint_id,
       source_id: endpoint.source_id,
@@ -498,7 +540,10 @@ async function pollSource(env: Env, endpoint: SourceEndpoint) {
     }
   };
 
-  const parsed = parseFeed(xml);
+  const parsed =
+    endpoint.endpoint_kind === "STATUSPAGE_JSON"
+      ? parseStatusPageJson(xml)
+      : parseFeed(xml);
   const selected = parsed.filter((item) => freshEnough(item, nowMs));
   const pending: LedgerResult[] = [];
 
