@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const SOURCE_DIAGNOSTIC_TOKEN_SHA256 = "9a8aed27e111396fb3fd0bb4918e7ffd394f0adf8bf0307b9c3caa9e6307f49e";
 
 type Json = Record<string, unknown>;
 
@@ -806,6 +807,83 @@ export default {
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         shadow_only: true,
         live_execution: false
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/source-diagnostic") {
+      const token = url.searchParams.get("token") ?? "";
+      if (await sha(token) !== SOURCE_DIAGNOSTIC_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_DIAGNOSTIC" }, 401);
+      }
+
+      const targets = [
+        {
+          id: "ecb_press",
+          url: "https://www.ecb.europa.eu/rss/press.html",
+          expected_host: "www.ecb.europa.eu"
+        },
+        {
+          id: "cloudflare_trace",
+          url: "https://www.cloudflare.com/cdn-cgi/trace",
+          expected_host: "www.cloudflare.com"
+        }
+      ];
+
+      const results: Json[] = [];
+
+      for (const target of targets) {
+        const started = Date.now();
+        try {
+          const response = await fetch(target.url, {
+            redirect: "follow",
+            headers: {
+              accept: target.id === "ecb_press"
+                ? "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.1"
+                : "text/plain,*/*;q=0.1"
+            },
+            signal: AbortSignal.timeout(15000)
+          });
+
+          const textBody = await response.text();
+          let finalHost = "";
+          try { finalHost = new URL(response.url).hostname; } catch {}
+
+          results.push({
+            id: target.id,
+            ok: response.ok,
+            http_status: response.status,
+            elapsed_ms: Date.now() - started,
+            final_url: response.url,
+            final_host: finalHost,
+            expected_host: target.expected_host,
+            host_match: finalHost === target.expected_host,
+            content_type: response.headers.get("content-type"),
+            content_length_header: response.headers.get("content-length"),
+            body_bytes: new TextEncoder().encode(textBody).byteLength,
+            body_prefix: textBody.slice(0, 120)
+          });
+        } catch (error) {
+          results.push({
+            id: target.id,
+            ok: false,
+            elapsed_ms: Date.now() - started,
+            error: errText(error).slice(0, 500)
+          });
+        }
+      }
+
+      return out({
+        status: "SOURCE_DIAGNOSTIC_COMPLETE",
+        version: VERSION,
+        results,
+        safety: {
+          writes: 0,
+          scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
+          r2_enabled: env.R2_ENABLED === "true",
+          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+          shadow_only: env.SHADOW_ONLY === "true",
+          live_execution: env.LIVE_EXECUTION === "true"
+        }
       });
     }
 
