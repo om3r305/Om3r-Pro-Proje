@@ -25,6 +25,7 @@
     "LIVE_EXECUTION": "false",
     "ENABLE_SCHEDULED_EYE": "false",
     "R2_ENABLED": "false",
+    "ALPHA_RECHECK_ENABLED": "false",
     "SUPABASE_INGEST_URL": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-cloudflare-shadow-ingest"
   }
 }
