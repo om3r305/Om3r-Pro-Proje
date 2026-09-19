@@ -1,0 +1,127 @@
+{
+  "version": "brian.project-topology.v1",
+  "branch": "brian-2026",
+  "principles": {
+    "single_repo": true,
+    "single_frontier_ui": true,
+    "shadow_only": true,
+    "live_execution": false,
+    "durable_objects_hot_path": false,
+    "raw_archive": "cloudflare-r2",
+    "world_analysis_blocks_realtime": false
+  },
+  "slos": {
+    "official_source_poll_seconds": 60,
+    "eye_p95_first_seen_seconds": 90,
+    "realtime_ingest_target_seconds": 10,
+    "catalyst_to_alpha_recheck_target_seconds": 15,
+    "event_loss_tolerance": 0
+  },
+  "projects": {
+    "core_pro": {
+      "role": "control-plane",
+      "status": "existing",
+      "critical": true,
+      "tables": [
+        "brian_dashboard_auth",
+        "brian_dashboard_session_events",
+        "brian_dashboard_hourly_reports",
+        "brian_treasury_shadow_snapshots",
+        "brian_treasury_shadow_actions",
+        "brian_evolution_runtime_config",
+        "brian_system_job_registry",
+        "brian_meeting_shadow_ledger",
+        "brian_core_launch_log"
+      ]
+    },
+    "realtime_pro": {
+      "role": "eyes-sensors-catalyst-alpha",
+      "status": "to_create",
+      "critical": true,
+      "tables": [
+        "brian_raw_captures",
+        "brian_intel_events",
+        "brian_source_endpoints_v2",
+        "brian_source_endpoint_health_v2",
+        "brian_source_scores_v2",
+        "brian_universe_snapshots",
+        "brian_sensor_observations",
+        "brian_micro_book_ticks",
+        "brian_intrabar_reaction_events",
+        "brian_dynamic_cost_quotes",
+        "brian_alpha_decisions",
+        "brian_alpha_decision_outcomes",
+        "brian_alpha_shadow_position_events",
+        "brian_catalyst_sentinel_feed_state",
+        "brian_catalyst_sentinel_watches",
+        "brian_catalyst_sentinel_alerts",
+        "brian_catalyst_sentinel_runtime"
+      ],
+      "services": [
+        "cloudflare-official-eye",
+        "brian-source-observer-v2",
+        "brian-source-registry-v2",
+        "brian-universe-collector",
+        "brian-sensor-mesh",
+        "brian-intrabar-eye",
+        "brian-catalyst-sentinel",
+        "brian-alpha-decision-compiler",
+        "brian-cloudflare-alpha-recheck"
+      ]
+    },
+    "lab_free": {
+      "role": "world-research-evolution",
+      "status": "to_create_later",
+      "critical": false,
+      "tables": [
+        "brian_world_source_candidates",
+        "brian_world_source_assessments",
+        "brian_world_event_frames",
+        "brian_world_entity_observations",
+        "brian_world_relation_assertions",
+        "brian_world_narrative_snapshots",
+        "brian_world_future_events",
+        "brian_world_causal_mechanisms",
+        "brian_world_scenario_snapshots",
+        "brian_world_asset_impact_candidates",
+        "brian_world_brain_runs",
+        "brian_evolution_events",
+        "brian_evolution_capability_snapshots",
+        "brian_evolution_hypothesis_snapshots",
+        "brian_evolution_code_candidates",
+        "brian_evolution_gap_snapshots",
+        "brian_evolution_orchestrator_runs",
+        "brian_evolution_experiments",
+        "brian_evolution_experiment_results",
+        "brian_evolution_drift_snapshots",
+        "brian_evolution_promotion_decisions",
+        "brian_evolution_codegen_requests",
+        "brian_evolution_code_artifact_receipts"
+      ]
+    },
+    "r2": {
+      "role": "raw-first-seen-outbox-backup",
+      "critical": true,
+      "paths": [
+        "source-arch-v2/",
+        "event-ledger-v1/",
+        "outbox-pending/",
+        "outbox-delivered/"
+      ]
+    }
+  },
+  "phase1_exclusions": {
+    "dip": "Do not migrate or mutate DIP runtime in phase 1.",
+    "burger": "Burger remains a separate Supabase project.",
+    "destructive_changes": false
+  },
+  "cutover": [
+    "create realtime_pro",
+    "apply schema only",
+    "dual-write realtime events",
+    "compare counts and first_seen latency",
+    "switch realtime readers",
+    "disable duplicate heavy jobs on core only after parity",
+    "move world/research to lab_free later"
+  ]
+}
