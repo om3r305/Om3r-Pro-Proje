@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1";
+const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -106,8 +106,11 @@ export interface Env {
 }
 
 export class FirstSeenLedger extends DurableObject<Env> {
+  private envRef: Env;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.envRef = env;
     this.ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS first_seen_events (" +
         "event_id TEXT PRIMARY KEY," +
@@ -183,6 +186,102 @@ export class FirstSeenLedger extends DurableObject<Env> {
     };
   }
 
+  async scheduleFlush(delayMs = 250): Promise<{ scheduled: true; at: number }> {
+    const at = Date.now() + Math.max(0, delayMs);
+    const current = await this.ctx.storage.getAlarm();
+    if (current == null || at < current) {
+      await this.ctx.storage.setAlarm(at);
+    }
+    return { scheduled: true, at };
+  }
+
+  async alarm(): Promise<void> {
+    const rows = this.ctx.storage.sql
+      .exec<LedgerRow>(
+        "SELECT event_id, first_seen_at, last_seen_at, seen_count, forwarded_at, event_json, capture_json " +
+        "FROM first_seen_events WHERE forwarded_at IS NULL ORDER BY first_seen_at LIMIT 50"
+      )
+      .toArray();
+
+    if (!rows.length) return;
+
+    const retryLater = async (message: string, delayMs = 60000) => {
+      for (const row of rows) {
+        this.ctx.storage.sql.exec(
+          "UPDATE first_seen_events SET last_forward_error = ? WHERE event_id = ?",
+          message.slice(0, 1000),
+          row.event_id
+        );
+      }
+      await this.ctx.storage.setAlarm(Date.now() + delayMs);
+    };
+
+    if (!this.envRef.SUPABASE_INGEST_URL || !this.envRef.BRIAN_CLOUDFLARE_KEY) {
+      await retryLater("SUPABASE_INGEST_NOT_CONFIGURED", 300000);
+      return;
+    }
+
+    const captures = new Map<string, CaptureEnvelope>();
+    const events = new Map<string, EventEnvelope>();
+    for (const row of rows) {
+      const capture = JSON.parse(row.capture_json) as CaptureEnvelope;
+      const event = JSON.parse(row.event_json) as EventEnvelope;
+      captures.set(capture.capture_id, capture);
+      events.set(event.event_id, event);
+    }
+
+    try {
+      const response = await fetch(this.envRef.SUPABASE_INGEST_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-brian-cloudflare-key": this.envRef.BRIAN_CLOUDFLARE_KEY
+        },
+        body: JSON.stringify({
+          version: VERSION,
+          captures: [...captures.values()],
+          events: [...events.values()],
+          rechecks: [],
+          shadow_only: true,
+          live_execution: false
+        }),
+        signal: AbortSignal.timeout(25000)
+      });
+
+      const body = await response.json().catch(() => ({})) as Json;
+      if (!response.ok) {
+        await retryLater(
+          "SUPABASE_INGEST_HTTP_" +
+          response.status +
+          ":" +
+          JSON.stringify(body).slice(0, 700)
+        );
+        return;
+      }
+
+      const now = new Date().toISOString();
+      for (const row of rows) {
+        this.ctx.storage.sql.exec(
+          "UPDATE first_seen_events SET forwarded_at = ?, last_forward_error = NULL WHERE event_id = ?",
+          now,
+          row.event_id
+        );
+      }
+
+      const remaining = this.ctx.storage.sql
+        .exec<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM first_seen_events WHERE forwarded_at IS NULL"
+        )
+        .one();
+
+      if (Number(remaining.count) > 0) {
+        await this.ctx.storage.setAlarm(Date.now() + 250);
+      }
+    } catch (error) {
+      await retryLater("SUPABASE_FORWARD_EXCEPTION:" + errText(error));
+    }
+  }
+
   async markForwarded(eventId: string): Promise<void> {
     this.ctx.storage.sql.exec(
       "UPDATE first_seen_events SET forwarded_at = ?, last_forward_error = NULL WHERE event_id = ?",
@@ -197,6 +296,7 @@ export class FirstSeenLedger extends DurableObject<Env> {
       error.slice(0, 1000),
       eventId
     );
+    await this.scheduleFlush(60000);
   }
 
   async lookup(eventId: string): Promise<Json | null> {
@@ -451,58 +551,22 @@ function ledgerStub(env: Env, eventId: string) {
 }
 
 async function forwardBatch(env: Env, pending: LedgerResult[]) {
-  if (!pending.length) return { forwarded: 0, status: "NO_NEW_EVENTS" };
-  if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CLOUDFLARE_KEY) {
-    throw new Error("SUPABASE_INGEST_NOT_CONFIGURED");
+  if (!pending.length) {
+    return { forwarded: 0, queued: 0, status: "NO_NEW_EVENTS" };
   }
 
-  const captures = new Map<string, CaptureEnvelope>();
-  const events = new Map<string, EventEnvelope>();
-  for (const row of pending) {
-    captures.set(row.capture.capture_id, row.capture);
-    events.set(row.event.event_id, row.event);
-  }
-
-  const response = await fetch(env.SUPABASE_INGEST_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-    },
-    body: JSON.stringify({
-      version: VERSION,
-      captures: [...captures.values()],
-      events: [...events.values()],
-      rechecks: [],
-      shadow_only: true,
-      live_execution: false
-    }),
-    signal: AbortSignal.timeout(12000)
-  });
-
-  const body = await response.json().catch(() => ({})) as Json;
-  if (!response.ok) {
-    const message =
-      "SUPABASE_INGEST_HTTP_" +
-      response.status +
-      ":" +
-      JSON.stringify(body).slice(0, 700);
-
-    for (const row of pending) {
-      const target = ledgerStub(env, row.event_id);
-      await target.stub.markForwardError(row.event_id, message);
-    }
-    throw new Error(message);
-  }
-
+  const scheduled = new Set<string>();
   for (const row of pending) {
     const target = ledgerStub(env, row.event_id);
-    await target.stub.markForwarded(row.event_id);
+    if (scheduled.has(target.shard)) continue;
+    scheduled.add(target.shard);
+    await target.stub.scheduleFlush(250);
   }
 
   return {
-    forwarded: pending.length,
-    status: String(body.status ?? "CAPTURED_SHADOW")
+    forwarded: 0,
+    queued: pending.length,
+    status: "QUEUED_DURABLE_OUTBOX"
   };
 }
 
@@ -847,7 +911,7 @@ export default {
       });
 
       stage = "supabase_forward";
-      let forward = { forwarded: 0, status: "ALREADY_FORWARDED" };
+      let forward = { forwarded: 0, queued: 0, status: "ALREADY_FORWARDED" };
       if (ledger.needs_forward) {
         forward = await forwardBatch(env, [ledger]);
       }
@@ -859,6 +923,7 @@ export default {
         first_seen_at: ledger.first_seen_at,
         seen_count: ledger.seen_count,
         forwarded: forward.forwarded,
+        queued: forward.queued,
         forward_status: forward.status,
         event_id: eventId,
         capture_id: captureId,
