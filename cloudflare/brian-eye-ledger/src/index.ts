@@ -344,7 +344,7 @@ function sameSecret(a: string, b: string) {
 
 function requireWorkerAuth(req: Request, env: Env) {
   const expected = env.BRIAN_CLOUDFLARE_KEY?.trim() ?? "";
-  const supplied = req.headers.get("x-brian-cron-key")?.trim() ?? "";
+  const supplied = req.headers.get("x-brian-cloudflare-key")?.trim() ?? "";
   if (!sameSecret(expected, supplied)) throw new Error("UNAUTHORIZED");
 }
 
@@ -693,6 +693,7 @@ export default {
         source_count: sourceCount,
         scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
         r2_enabled: env.R2_ENABLED === "true" && Boolean(env.RAW_BUCKET),
+        alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         shadow_only: true,
         live_execution: false
       });
