@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const BOJ_LEDGER_CHECK_TOKEN_SHA256 = "e1c45c10562858f80765a708a8d1e06e04c286345c72e29a1b217421674791e0";
 
 type Json = Record<string, unknown>;
 
@@ -807,6 +808,66 @@ export default {
         shadow_only: true,
         live_execution: false
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/boj-ledger-check") {
+      const token = url.searchParams.get("token") ?? "";
+      if (await sha(token) !== BOJ_LEDGER_CHECK_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_BOJ_LEDGER_CHECK" }, 401);
+      }
+
+      const sources = loadManifest(env);
+      const source = sources.find((row) => row.endpoint_id === "boj_whatsnew_rss");
+      if (!source) {
+        return out({ status: "BOJ_SOURCE_NOT_CONFIGURED" }, 404);
+      }
+
+      try {
+        const nowMs = Date.now();
+        const xml = await fetchFeed(source);
+        const parsed = parseFeed(xml);
+        const selected = parsed.filter((item) => freshEnough(item, nowMs));
+        const rows = [];
+
+        for (const item of selected) {
+          const eventId = await sha(
+            "source-arch-v2|" + source.endpoint_id + "|" + item.guid
+          );
+          const target = ledgerStub(env, eventId);
+          const row = await target.stub.lookup(eventId);
+          rows.push({
+            event_id: eventId,
+            shard: target.shard,
+            title: item.title,
+            published_at: item.publishedAt,
+            first_seen_at: row?.first_seen_at ?? null,
+            last_seen_at: row?.last_seen_at ?? null,
+            seen_count: row?.seen_count ?? null,
+            forwarded_at: row?.forwarded_at ?? null,
+            last_forward_error: row?.last_forward_error ?? null
+          });
+        }
+
+        return out({
+          status: "BOJ_LEDGER_CHECK_COMPLETE",
+          parsed: parsed.length,
+          selected: selected.length,
+          rows,
+          safety: {
+            writes: 0,
+            scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
+            r2_enabled: env.R2_ENABLED === "true",
+            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+            shadow_only: env.SHADOW_ONLY === "true",
+            live_execution: env.LIVE_EXECUTION === "true"
+          }
+        });
+      } catch (error) {
+        return out({
+          status: "BOJ_LEDGER_CHECK_FAILED",
+          error: errText(error).slice(0, 1200)
+        }, 500);
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
