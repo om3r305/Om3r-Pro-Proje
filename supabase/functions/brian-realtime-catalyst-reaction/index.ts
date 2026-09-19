@@ -5,7 +5,7 @@ const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const VERSION = "brian.realtime-catalyst-reaction.v2";
+const VERSION = "brian.realtime-catalyst-reaction.v3";
 const ALPHA_RECHECK_URL = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-alpha-recheck";
 const RECHECK_MINUTES = [5,10,15,30] as const;
 
@@ -20,7 +20,13 @@ function out(body:unknown,status=200){
 }
 function finite(v:unknown,d=0){const n=Number(v);return Number.isFinite(n)?n:d}
 function clip(v:number){return Math.max(0,Math.min(1,v))}
-function errText(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
+function errText(e:unknown){
+  if(e instanceof Error)return `${e.name}: ${e.message}`;
+  if(e&&typeof e==="object"){
+    try{return JSON.stringify(e)}catch{}
+  }
+  return String(e);
+}
 
 async function loadWatches():Promise<Watch[]>{
   const q=await db.from("brian_catalyst_sentinel_watches")
@@ -83,11 +89,13 @@ Deno.serve(async(req:Request)=>{
   let internalKey="";
   try{internalKey=await requireRealtimeInternal(req)}catch{return out({status:"UNAUTHORIZED"},401)}
   const started=Date.now();
+  let stage="load_watches";
 
   try{
     const watches=await loadWatches();
     if(!watches.length)return out({status:"SUCCESS",version:VERSION,watches:0,updates:0,alerts:0,alpha_dispatches:0,elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false});
 
+    stage="books";
     const bookMap=await books();
     const baseline=new Map<string,{ret:number;dir:number}>();
     for(const w of watches){
@@ -97,6 +105,7 @@ Deno.serve(async(req:Request)=>{
       baseline.set(w.asset_id,{ret,dir:ret>.00005?1:ret<-.00005?-1:0});
     }
 
+    stage="compute_reactions";
     const depthCandidates=watches.filter(w=>{
       const b=bookMap.get(w.asset_id),ref=finite(w.reference_price);
       return Boolean(b&&ref>0&&Math.abs(b.mid/ref-1)*10000>=20);
@@ -132,10 +141,12 @@ Deno.serve(async(req:Request)=>{
       });
     }
 
+    stage="apply_reactions_rpc";
     const rpc=updates.length?await db.rpc("brian_catalyst_apply_reactions_v23",{p_updates:updates}):{data:[],error:null};
     if(rpc.error)throw rpc.error;
     const alerts=Array.isArray(rpc.data)?rpc.data as Json[]:[];
 
+    stage="alpha_dispatch";
     let dispatches=0;
     for(const row of alerts){
       const alertId=String(row.alert_id??""),eventId=String(row.event_id??""),assetId=String(row.asset_id??"");
@@ -155,6 +166,6 @@ Deno.serve(async(req:Request)=>{
 
     return out({status:"SUCCESS",version:VERSION,watches:watches.length,updates:updates.length,alerts:alerts.length,alpha_dispatches:dispatches,elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false});
   }catch(e){
-    return out({status:"FAILED_CLOSED",version:VERSION,error:errText(e).slice(0,1200),elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false},500);
+    return out({status:"FAILED_CLOSED",version:VERSION,stage,error:errText(e).slice(0,1200),elapsed_ms:Date.now()-started,shadow_only:true,live_execution:false},500);
   }
 });
