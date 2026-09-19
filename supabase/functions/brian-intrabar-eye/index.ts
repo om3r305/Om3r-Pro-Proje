@@ -22,7 +22,8 @@ import {
   windowReturn,
 } from "./logic.ts";
 import type { Book, IntrabarSignalRow, MarketRow, PriorTick, RadarCandidate, Signal } from "./logic.ts";
-import { withCollectorLease } from "../_shared/collector_lease.ts";\nimport { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
