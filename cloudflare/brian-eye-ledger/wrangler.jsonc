@@ -33,7 +33,7 @@
   ],
   "triggers": {
     "crons": [
-      "*/5 * * * *"
+      "* * * * *"
     ]
   },
   "vars": {
@@ -48,6 +48,8 @@
     "CORE_RECOVERY_ENABLED": "true",
     "CORE_LAUNCHER_URL": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-core-launcher",
     "DURABLE_OBJECTS_ENABLED": "false",
-    "R2_OUTBOX_ENABLED": "true"
+    "R2_OUTBOX_ENABLED": "true",
+    "REALTIME_INGEST_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-cloudflare-shadow-ingest",
+    "REALTIME_ALPHA_RECHECK_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-cloudflare-alpha-recheck"
   }
 }
