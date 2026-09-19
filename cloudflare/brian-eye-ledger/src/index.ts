@@ -699,53 +699,6 @@ export default {
       });
     }
 
-    if (req.method === "GET" && url.pathname === "/probe-auth") {
-      if (!env.SUPABASE_INGEST_URL || !env.BRIAN_CLOUDFLARE_KEY) {
-        return out({
-          status: "NOT_CONFIGURED",
-          has_ingest_url: Boolean(env.SUPABASE_INGEST_URL),
-          has_cloudflare_secret: Boolean(env.BRIAN_CLOUDFLARE_KEY),
-          shadow_only: true,
-          live_execution: false
-        }, 503);
-      }
-
-      try {
-        const response = await fetch(env.SUPABASE_INGEST_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-          },
-          body: JSON.stringify({
-            captures: [],
-            events: [],
-            rechecks: [],
-            shadow_only: true,
-            live_execution: false
-          }),
-          signal: AbortSignal.timeout(12000)
-        });
-        const payload = await response.json().catch(() => ({}));
-        return out({
-          status: response.ok ? "AUTH_OK" : "AUTH_FAILED",
-          bridge_http_status: response.status,
-          bridge: payload,
-          probe_writes: 0,
-          shadow_only: true,
-          live_execution: false
-        }, response.ok ? 200 : 502);
-      } catch (error) {
-        return out({
-          status: "PROBE_FAILED",
-          error: errText(error).slice(0, 500),
-          probe_writes: 0,
-          shadow_only: true,
-          live_execution: false
-        }, 502);
-      }
-    }
-
     if (req.method === "POST" && url.pathname === "/run") {
       try {
         requireWorkerAuth(req, env);
