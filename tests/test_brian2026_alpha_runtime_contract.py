@@ -137,17 +137,17 @@ def test_alpha_writers_require_application_level_auth():
 def test_alpha_files_contain_no_authenticated_or_live_execution_surface():
     paths = [REALTIME_COMPILER, CORE_SYNC, AUDIT, DECISION, RUNTIME_POLICY, CRON_AUTH, REALTIME_AUTH, AUDITOR, MACRO, *MIGRATIONS]
     forbidden = {
-        "binance spot order endpoint": re.compile(r"/api/v3/order(?:\\b|\\?)", re.I),
-        "binance futures order endpoint": re.compile(r"/fapi/v\\d+/order(?:\\b|\\?)", re.I),
-        "binance sapi execution surface": re.compile(r"/sapi/v\\d+/", re.I),
+        "binance spot order endpoint": re.compile(r"/api/v3/order(?:\b|\?)", re.I),
+        "binance futures order endpoint": re.compile(r"/fapi/v\d+/order(?:\b|\?)", re.I),
+        "binance sapi execution surface": re.compile(r"/sapi/v\d+/", re.I),
         "binance api-key header": re.compile(r"X-MBX-APIKEY", re.I),
         "binance api secret env": re.compile(r"BINANCE_API_SECRET", re.I),
         "signed query parameter": re.compile(r"signature=", re.I),
-        "HMAC constructor": re.compile(r"createHmac\\s*\\(", re.I),
-        "WebCrypto signing": re.compile(r"crypto\\.subtle\\.sign\\s*\\(", re.I),
-        "runtime live_execution true": re.compile(r"live_execution\\s*[:=]\\s*true", re.I),
-        "runtime shadow_only false": re.compile(r"shadow_only\\s*[:=]\\s*false", re.I),
-        "SQL live_execution default true": re.compile(r"live_execution\\s+boolean[^;\\n]*default\\s+true", re.I),
+        "HMAC constructor": re.compile(r"createHmac\s*\(", re.I),
+        "WebCrypto signing": re.compile(r"crypto\.subtle\.sign\s*\(", re.I),
+        "runtime live_execution true": re.compile(r"live_execution\s*[:=]\s*true", re.I),
+        "runtime shadow_only false": re.compile(r"shadow_only\s*[:=]\s*false", re.I),
+        "SQL live_execution default true": re.compile(r"live_execution\s+boolean[^;\n]*default\s+true", re.I),
     }
     failures: list[str] = []
     for path in paths:
