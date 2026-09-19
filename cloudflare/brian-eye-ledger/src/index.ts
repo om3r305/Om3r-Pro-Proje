@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.6";
+const VERSION = "brian.cf-eye-ledger.v1.7";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -576,7 +576,8 @@ function parseFeed(xml: string): FeedItem[] {
   const doc = parser.parse(xml) as Json;
   const rss = (doc.rss as Json | undefined)?.channel as Json | undefined;
   const atom = doc.feed as Json | undefined;
-  const raw = arr((rss?.item ?? atom?.entry) as Json | Json[] | undefined);
+  const rdf = (doc["rdf:RDF"] ?? doc.RDF) as Json | undefined;
+  const raw = arr((rss?.item ?? atom?.entry ?? rdf?.item) as Json | Json[] | undefined);
   const items: FeedItem[] = [];
 
   for (const row of raw.slice(0, MAX_ITEMS_PER_FEED)) {
@@ -1125,7 +1126,7 @@ export default {
         "cftc_press_html",
         "nyfed_press_html",
         "bis_media_rss",
-        "imf_news_html"
+        "boc_press_rss"
       ]);
       const sources = loadManifest(env).filter((x) => ids.has(x.endpoint_id));
       const results: Json[] = [];
