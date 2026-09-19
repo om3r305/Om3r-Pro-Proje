@@ -7,21 +7,18 @@ const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:f
 const VERSION="brian.realtime-multiasset-market-eye.v1";
 const COLLECTOR_ID="brian-realtime-multiasset-market-eye-v1";
 
-type Spec={asset_id:string;asset_class:string;symbol:string};
-const SPECS:Spec[]=[
-  {asset_id:"fx:EURUSD",asset_class:"fx",symbol:"EURUSD=X"},
-  {asset_id:"fx:GBPUSD",asset_class:"fx",symbol:"GBPUSD=X"},
-  {asset_id:"fx:USDJPY",asset_class:"fx",symbol:"JPY=X"},
-  {asset_id:"index:SP500",asset_class:"index",symbol:"^GSPC"},
-  {asset_id:"index:NASDAQ100",asset_class:"index",symbol:"^NDX"},
-  {asset_id:"index:DAX",asset_class:"index",symbol:"^GDAXI"},
-  {asset_id:"commodity:GOLD",asset_class:"commodity",symbol:"GC=F"},
-  {asset_id:"commodity:WTI",asset_class:"commodity",symbol:"CL=F"},
-  {asset_id:"commodity:BRENT",asset_class:"commodity",symbol:"BZ=F"},
-  {asset_id:"equity:NVDA",asset_class:"equity",symbol:"NVDA"},
-  {asset_id:"equity:AAPL",asset_class:"equity",symbol:"AAPL"},
-  {asset_id:"equity:MSFT",asset_class:"equity",symbol:"MSFT"},
-  {asset_id:"equity:META",asset_class:"equity",symbol:"META"},
+type Spec={asset_id:string;asset_class:string;symbol:string;themes:string[];priority:number};
+const FALLBACK_SPECS:Spec[]=[
+  {asset_id:"fx:EURUSD",asset_class:"fx",symbol:"EURUSD=X",themes:["MONETARY","FX"],priority:100},
+  {asset_id:"fx:GBPUSD",asset_class:"fx",symbol:"GBPUSD=X",themes:["MONETARY","FX"],priority:95},
+  {asset_id:"fx:USDJPY",asset_class:"fx",symbol:"JPY=X",themes:["MONETARY","FX","GEOPOLITICAL"],priority:100},
+  {asset_id:"index:SP500",asset_class:"index",symbol:"^GSPC",themes:["MONETARY","FINANCIAL","GEOPOLITICAL"],priority:100},
+  {asset_id:"index:NASDAQ100",asset_class:"index",symbol:"^NDX",themes:["MONETARY","FINANCIAL","AI_TECH"],priority:100},
+  {asset_id:"index:DAX",asset_class:"index",symbol:"^GDAXI",themes:["MONETARY","FINANCIAL","GEOPOLITICAL"],priority:95},
+  {asset_id:"commodity:GOLD",asset_class:"commodity",symbol:"GC=F",themes:["MONETARY","FINANCIAL","FX","GEOPOLITICAL"],priority:100},
+  {asset_id:"commodity:WTI",asset_class:"commodity",symbol:"CL=F",themes:["ENERGY","GEOPOLITICAL"],priority:100},
+  {asset_id:"commodity:BRENT",asset_class:"commodity",symbol:"BZ=F",themes:["ENERGY","GEOPOLITICAL"],priority:100},
+  {asset_id:"equity:NVDA",asset_class:"equity",symbol:"NVDA",themes:["AI_TECH"],priority:100},
 ];
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -29,6 +26,23 @@ function n(v:unknown):number|null{if(v==null||v==="")return null;const x=Number(
 function clip(v:number,lo=-1,hi=1){return Math.max(lo,Math.min(hi,v))}
 async function sha(s:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 function errorText(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
+
+async function loadSpecs():Promise<Spec[]>{
+  const q=await db.from("brian_multiasset_instruments")
+    .select("asset_id,asset_class,provider_symbol,themes,priority,active")
+    .eq("active",true)
+    .order("priority",{ascending:false})
+    .order("asset_id",{ascending:true})
+    .limit(36);
+  if(q.error||!(q.data??[]).length)return FALLBACK_SPECS;
+  return (q.data??[]).map((row:any)=>({
+    asset_id:String(row.asset_id),
+    asset_class:String(row.asset_class),
+    symbol:String(row.provider_symbol),
+    themes:Array.isArray(row.themes)?row.themes.map(String):[],
+    priority:Number(row.priority??50),
+  }));
+}
 
 async function fetchOne(spec:Spec){
   const endpoint=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(spec.symbol)}?interval=5m&range=1d&includePrePost=true&events=div%2Csplits`;
@@ -75,7 +89,8 @@ async function fetchOne(spec:Spec){
       version:VERSION,currency:meta.currency??null,exchange_name:meta.exchangeName??null,
       instrument_type:meta.instrumentType??null,regular_market_time:meta.regularMarketTime??null,
       provider_endpoint:"query1.finance.yahoo.com/v8/finance/chart",
-      execution_grade:false,public_unofficial_source:true
+      execution_grade:false,public_unofficial_source:true,
+      themes:spec.themes,priority:spec.priority
     },
     shadow_only:true,live_execution:false
   };
@@ -96,24 +111,26 @@ Deno.serve(async(req:Request)=>{
   try{await requireRealtimeInternal(req)}catch{return out({status:"UNAUTHORIZED"},401)}
   const startedAt=new Date().toISOString();
   try{
+    const specs=await loadSpecs();
     const rows:any[]=[];const degraded:string[]=[];
-    for(let i=0;i<SPECS.length;i+=4){
-      const settled=await Promise.allSettled(SPECS.slice(i,i+4).map(fetchOne));
-      settled.forEach((s,j)=>{if(s.status==="fulfilled")rows.push(s.value);else degraded.push(`${SPECS[i+j].asset_id}:${errorText(s.reason)}`)});
+    for(let i=0;i<specs.length;i+=4){
+      const batch=specs.slice(i,i+4);
+      const settled=await Promise.allSettled(batch.map(fetchOne));
+      settled.forEach((s,j)=>{if(s.status==="fulfilled")rows.push(s.value);else degraded.push(`${batch[j].asset_id}:${errorText(s.reason)}`)});
     }
     if(rows.length){
       const q=await db.from("brian_multiasset_market_marks").upsert(rows,{onConflict:"mark_id",ignoreDuplicates:true});
       if(q.error)throw new Error(`persist:${q.error.message}`);
     }
     const status=rows.length===0?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
-    await recordRun(startedAt,status,SPECS.length,rows.length,degraded,status==="FAILED"?new Error("no multiasset marks"):undefined);
+    await recordRun(startedAt,status,specs.length,rows.length,degraded,status==="FAILED"?new Error("no multiasset marks"):undefined);
     return out({
-      status,version:VERSION,requested:SPECS.length,stored:rows.length,degraded_sources:degraded,
+      status,version:VERSION,requested:specs.length,stored:rows.length,degraded_sources:degraded,
       marks:rows.map(r=>({asset_id:r.asset_id,price:r.price,provider_time:r.provider_time,session_state:r.session_state,data_latency_seconds:r.data_latency_seconds})),
       execution_grade:false,shadow_only:true,live_execution:false
     },status==="FAILED"?503:200);
   }catch(e){
-    await recordRun(startedAt,"FAILED",SPECS.length,0,[],e);
+    await recordRun(startedAt,"FAILED",specs.length,0,[],e);
     return out({status:"FAILED_CLOSED",error:errorText(e),shadow_only:true,live_execution:false},500);
   }
 });
