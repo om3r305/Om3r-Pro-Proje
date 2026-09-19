@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
-import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { withCollectorLease } from "../_shared/collector_lease.ts";\nimport { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -139,6 +139,8 @@ function indexRows(payload: unknown): Map<string, Record<string, unknown>> {
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ error: "POST required" }, 405);
+  try { await requireRealtimeInternal(req); }
+  catch { return jsonResponse({ status: "UNAUTHORIZED" }, 401); }
 
   try {
     const last = await supabase
