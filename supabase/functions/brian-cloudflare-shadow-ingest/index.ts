@@ -6,7 +6,7 @@ const db = createClient(SUPABASE_URL, SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const VERSION = "brian.cloudflare-shadow-ingest.v2.1";
+const VERSION = "brian.cloudflare-shadow-ingest.v2.2";
 const CLOUDFLARE_KEY_SHA256 = "8d348396f3da9bbffde9bef6f6f8d802af542bdcb3354743f92d3ece260fea51";
 const MAX_CAPTURES = 20;
 const MAX_EVENTS = 100;
@@ -57,6 +57,43 @@ async function requireCloudflareAuth(req: Request) {
   if (!constantTimeEqual(hash, CLOUDFLARE_KEY_SHA256)) {
     throw new Error("UNAUTHORIZED_CLOUDFLARE");
   }
+}
+
+function isTransientPostgrestError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const row = error as Record<string, unknown>;
+  const code = String(row.code ?? "").toUpperCase();
+  const message = String(row.message ?? "").toLowerCase();
+  return code === "PGRST002" ||
+    code === "PGRST000" ||
+    message.includes("schema cache") ||
+    message.includes("could not query the database") ||
+    message.includes("upstream request timeout") ||
+    message.includes("connection") && message.includes("timeout");
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withPostgrestRetry<T>(
+  label: string,
+  operation: () => Promise<{ data: T | null; error: unknown }>,
+) {
+  const delays = [0, 700, 1800, 3500];
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (delays[attempt] > 0) await sleep(delays[attempt]);
+    const result = await operation();
+    if (!result.error) return result;
+    lastError = result.error;
+    if (!isTransientPostgrestError(result.error) || attempt === delays.length - 1) {
+      throw new Error(label + ":" + errText(result.error));
+    }
+  }
+
+  throw new Error(label + ":" + errText(lastError));
 }
 
 function cleanString(value: unknown, max = 1500) {
@@ -183,23 +220,27 @@ Deno.serve(async (req: Request) => {
     const events = eventRows.map((row) => sanitizeEvent(row as Json));
 
     if (captures.length) {
-      const captureWrite = await db
-        .from("brian_raw_captures")
-        .upsert(captures, {
-          onConflict: "capture_id",
-          ignoreDuplicates: true,
-        });
-      if (captureWrite.error) throw captureWrite.error;
+      await withPostgrestRetry(
+        "CAPTURE_WRITE_FAILED",
+        async () => await db
+          .from("brian_raw_captures")
+          .upsert(captures, {
+            onConflict: "capture_id",
+            ignoreDuplicates: true,
+          }),
+      );
     }
 
     if (events.length) {
-      const eventWrite = await db
-        .from("brian_intel_events")
-        .upsert(events, {
-          onConflict: "event_id",
-          ignoreDuplicates: true,
-        });
-      if (eventWrite.error) throw eventWrite.error;
+      await withPostgrestRetry(
+        "EVENT_WRITE_FAILED",
+        async () => await db
+          .from("brian_intel_events")
+          .upsert(events, {
+            onConflict: "event_id",
+            ignoreDuplicates: true,
+          }),
+      );
     }
 
     return out({
