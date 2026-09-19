@@ -76,7 +76,7 @@ export function isMultiassetShadowPosition(position: TreasuryPosition): boolean 
 
 export function buildMultiassetShadowOpportunities(
   rows: MultiassetAlphaDecisionRow[],
-  _positions: TreasuryPosition[],
+  positions: TreasuryPosition[],
   nowIso: string,
 ): MultiassetShadowOpportunity[] {
   const nowMs = time(nowIso);
@@ -91,6 +91,7 @@ export function buildMultiassetShadowOpportunities(
     if (!previous || rowMs > previousMs) latest.set(row.assetId, row);
   }
 
+  const positionByAsset = new Map(positions.filter(isMultiassetShadowPosition).map((position) => [position.assetId, position]));
   const out: MultiassetShadowOpportunity[] = [];
   for (const row of latest.values()) {
     const observedMs = time(row.observedAt);
@@ -100,7 +101,9 @@ export function buildMultiassetShadowOpportunities(
     const requested = finite(row.requestedVirtualNotionalUsd);
     const cost = finite(row.estimatedRoundTripCostBps);
     const latency = finite(row.dataLatencySeconds);
-    const direction = Number(row.direction);
+    const rawDirection = Number(row.direction);
+    const existingPosition = positionByAsset.get(row.assetId);
+    const direction = rawDirection === 1 || rawDirection === -1 ? rawDirection : existingPosition?.direction ?? 0;
     if (
       observedMs == null || providerMs == null || referencePrice == null || referencePrice <= 0 ||
       score == null || requested == null || cost == null || cost < 0 || latency == null || latency < 0 ||
@@ -116,8 +119,8 @@ export function buildMultiassetShadowOpportunities(
     const lane = metadataString(row, "shadow_lane");
     const linkedEventIds = metadataStrings(row, "linked_event_ids");
     const actionMatchesDirection =
-      (row.action === "OPEN_LONG" && direction === 1) ||
-      (row.action === "OPEN_SHORT" && direction === -1);
+      (row.action === "OPEN_LONG" && rawDirection === 1) ||
+      (row.action === "OPEN_SHORT" && rawDirection === -1);
 
     const actionable =
       ageSeconds <= MULTIASSET_SHADOW_OPEN_MAX_AGE_SECONDS &&
