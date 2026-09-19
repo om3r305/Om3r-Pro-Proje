@@ -1,12 +1,15 @@
-import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import postgres from "npm:postgres@3.4.7";
 
-const URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db = createClient(URL, SERVICE, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+const DB_URL = Deno.env.get("SUPABASE_DB_URL") ?? "";
+const sql = DB_URL ? postgres(DB_URL, {
+  prepare: false,
+  max: 1,
+  connect_timeout: 3,
+  idle_timeout: 5,
+  max_lifetime: 30,
+}) : null;
 
-const VERSION = "brian.realtime-alpha-bridge.v2";
+const VERSION = "brian.realtime-alpha-bridge.v4";
 const INTERNAL_KEY_SHA256 = "b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a";
 
 type Json = Record<string, unknown>;
@@ -39,14 +42,25 @@ async function auth(req: Request) {
     throw new Error("UNAUTHORIZED_INTERNAL");
   }
 }
-async function upsertBatch(table: string, rows: Json[], conflict: string) {
-  if (!rows.length) return { received: 0, error: null };
-  const result = await db.from(table).upsert(rows, {
-    onConflict: conflict,
-    ignoreDuplicates: true,
-  });
-  if (result.error) throw new Error(table + ":" + JSON.stringify(result.error).slice(0, 900));
-  return { received: rows.length, error: null };
+async function writeDirect(costs: Json[], decisions: Json[]) {
+  if (!sql) throw new Error("SUPABASE_DB_URL_MISSING");
+  const costById = new Map<string, Json>();
+  for (const cost of costs) {
+    const id = String(cost.quote_id ?? "");
+    if (id) costById.set(id, cost);
+  }
+
+  let written = 0;
+  for (const decision of decisions) {
+    const costId = String(decision.source_cost_quote_id ?? "");
+    const cost = costId ? (costById.get(costId) ?? null) : null;
+    await sql.unsafe(
+      "select public.brian_cloudflare_alpha_shadow_write_v1($1::jsonb,$2::jsonb) as result",
+      [cost ? JSON.stringify(cost) : null, JSON.stringify(decision)],
+    );
+    written++;
+  }
+  return { written };
 }
 
 Deno.serve(async (req: Request) => {
@@ -61,16 +75,14 @@ Deno.serve(async (req: Request) => {
     const costs = Array.isArray(body.costs) ? body.costs.slice(0, 20) as Json[] : [];
     const decisions = Array.isArray(body.decisions) ? body.decisions.slice(0, 20) as Json[] : [];
 
-    const costResult = await upsertBatch("brian_dynamic_cost_quotes", costs, "quote_id");
-    const decisionResult = await upsertBatch("brian_alpha_decisions", decisions, "decision_id");
+    const directResult = await writeDirect(costs, decisions);
 
     return out({
       status: "CAPTURED_REALTIME_ALPHA_BRIDGE",
       version: VERSION,
       costs_received: costs.length,
       decisions_received: decisions.length,
-      costs_received: costResult.received,
-      decisions_received: decisionResult.received,
+      decisions_written: directResult.written,
       shadow_only: true,
       live_execution: false,
     });
