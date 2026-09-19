@@ -6,7 +6,7 @@ const db = createClient(SUPABASE_URL, SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const VERSION = "brian.cloudflare-shadow-ingest.v2";
+const VERSION = "brian.cloudflare-shadow-ingest.v2.1";
 const CLOUDFLARE_KEY_SHA256 = "8d348396f3da9bbffde9bef6f6f8d802af542bdcb3354743f92d3ece260fea51";
 const MAX_CAPTURES = 20;
 const MAX_EVENTS = 100;
@@ -24,7 +24,16 @@ function out(body: unknown, status = 200) {
 }
 
 function errText(error: unknown) {
-  return error instanceof Error ? error.name + ": " + error.message : String(error);
+  if (error instanceof Error) return error.name + ": " + error.message;
+  if (error && typeof error === "object") {
+    const row = error as Record<string, unknown>;
+    const fields = ["code","message","details","hint","status","statusText"]
+      .filter((key) => row[key] != null)
+      .map((key) => key + "=" + String(row[key]));
+    if (fields.length) return fields.join(" | ");
+    try { return JSON.stringify(error); } catch {}
+  }
+  return String(error);
 }
 
 async function sha256Hex(value: string) {
@@ -94,6 +103,13 @@ function sanitizeEvent(row: Json) {
   const metadata =
     row.metadata && typeof row.metadata === "object" ? row.metadata as Json : {};
 
+  const firstObservedAt = cleanIso(row.first_observed_at);
+  const requestedCapturedAt = cleanIso(row.captured_at ?? row.first_observed_at);
+  const capturedAt =
+    Date.parse(requestedCapturedAt) < Date.parse(firstObservedAt)
+      ? firstObservedAt
+      : requestedCapturedAt;
+
   return {
     event_id: eventId,
     asset: cleanString(row.asset, 120) || "GLOBAL",
@@ -101,8 +117,8 @@ function sanitizeEvent(row: Json) {
     source_kind: cleanString(row.source_kind, 160),
     source_id: cleanString(row.source_id, 300),
     published_at: row.published_at ? cleanIso(row.published_at) : null,
-    first_observed_at: cleanIso(row.first_observed_at),
-    captured_at: cleanIso(row.captured_at ?? row.first_observed_at),
+    first_observed_at: firstObservedAt,
+    captured_at: capturedAt,
     claim: cleanString(row.claim, 1500),
     direction: 0,
     magnitude: Math.max(0, Math.min(1, Number(row.magnitude ?? 1))),
