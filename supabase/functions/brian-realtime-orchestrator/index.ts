@@ -33,8 +33,10 @@ async function call(name:string,url:string,key:string,timeoutMs:number){
     const text=await r.text();
     let body:Json={};
     try{body=JSON.parse(text) as Json}catch{body={raw:text.slice(0,600)}}
+    const targetStatus=String(body.status??"");
+    const logicalOk=r.ok && !["FAILED","FAILED_CLOSED","DEGRADED","UNAUTHORIZED"].includes(targetStatus);
     return {
-      name,ok:r.ok,http_status:r.status,target_status:String(body.status??""),
+      name,ok:logicalOk,http_status:r.status,target_status:targetStatus,
       elapsed_ms:Date.now()-started,body
     };
   }catch(e){
