@@ -42,11 +42,14 @@ function constantTimeEqual(left:string,right:string){
   return diff===0;
 }
 async function auth(req:Request){
-  const supplied=(req.headers.get("x-brian-dashboard-key")??"").trim();
+  const supplied=(req.headers.get("x-brian-dashboard-key")??req.headers.get("x-brian-cron-key")??"").trim();
   if(!supplied)throw new Error("UNAUTHORIZED_DASHBOARD");
-  const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256").eq("auth_id",AUTH_ID).single();
+  const q=await db.from("brian_dashboard_auth").select("dashboard_key_sha256,cron_key_sha256").eq("auth_id",AUTH_ID).single();
   if(q.error||!q.data)throw new Error("DASHBOARD_AUTH_UNAVAILABLE");
-  if(!constantTimeEqual(await sha256Hex(supplied),String(q.data.dashboard_key_sha256??"")))throw new Error("UNAUTHORIZED_DASHBOARD");
+  const digest=await sha256Hex(supplied);
+  const dashboardOk=constantTimeEqual(digest,String(q.data.dashboard_key_sha256??""));
+  const cronOk=constantTimeEqual(digest,String(q.data.cron_key_sha256??""));
+  if(!dashboardOk&&!cronOk)throw new Error("UNAUTHORIZED_DASHBOARD");
 }
 function num(v:unknown,f=0){const n=Number(v);return Number.isFinite(n)?n:f}
 function refs(v:unknown){return Array.isArray(v)?v.map(String).filter(Boolean):[]}
