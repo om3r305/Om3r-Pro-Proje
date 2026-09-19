@@ -9,7 +9,7 @@ const sql = DB_URL ? postgres(DB_URL, {
   max_lifetime: 30,
 }) : null;
 
-const VERSION = "brian.realtime-alpha-bridge.v4";
+const VERSION = "brian.realtime-alpha-bridge.v5";
 const INTERNAL_KEY_SHA256 = "b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a";
 
 type Json = Record<string, unknown>;
@@ -54,10 +54,12 @@ async function writeDirect(costs: Json[], decisions: Json[]) {
   for (const decision of decisions) {
     const costId = String(decision.source_cost_quote_id ?? "");
     const cost = costId ? (costById.get(costId) ?? null) : null;
-    await sql.unsafe(
-      "select public.brian_cloudflare_alpha_shadow_write_v1($1::jsonb,$2::jsonb) as result",
-      [cost ? JSON.stringify(cost) : null, JSON.stringify(decision)],
-    );
+    await sql`
+      select public.brian_cloudflare_alpha_shadow_write_v1(
+        ${sql.json(cost)}::jsonb,
+        ${sql.json(decision)}::jsonb
+      ) as result
+    `;
     written++;
   }
   return { written };
