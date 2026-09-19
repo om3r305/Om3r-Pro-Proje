@@ -19,6 +19,10 @@
     "FirstSeenLedger": {
       "type": "durable-object",
       "storage": "sqlite"
+    },
+    "AlphaRecheckQueue": {
+      "type": "durable-object",
+      "storage": "sqlite"
     }
   },
   "r2_buckets": [
