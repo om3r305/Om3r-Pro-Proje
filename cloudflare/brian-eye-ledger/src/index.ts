@@ -747,6 +747,8 @@ export default {
     }
 
     if (req.method === "GET" && url.pathname === "/pipeline-self-test") {
+      let stage = "token_check";
+      try {
       const token = url.searchParams.get("token") ?? "";
       const tokenHash = await sha(token);
       if (tokenHash !== PIPELINE_SELF_TEST_TOKEN_SHA256) {
@@ -827,6 +829,7 @@ export default {
         }
       };
 
+      stage = "durable_object_record";
       const target = ledgerStub(env, eventId);
       const ledger = await target.stub.record({
         event_id: eventId,
@@ -843,11 +846,13 @@ export default {
         capture
       });
 
+      stage = "supabase_forward";
       let forward = { forwarded: 0, status: "ALREADY_FORWARDED" };
       if (ledger.needs_forward) {
         forward = await forwardBatch(env, [ledger]);
       }
 
+      stage = "response";
       return out({
         status: "PIPELINE_SELF_TEST_COMPLETE",
         first_seen: ledger.first_seen,
@@ -865,6 +870,20 @@ export default {
           live_execution: false
         }
       });
+      } catch (error) {
+        return out({
+          status: "PIPELINE_SELF_TEST_FAILED",
+          stage,
+          error: errText(error).slice(0, 1200),
+          safety: {
+            scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
+            r2_enabled: env.R2_ENABLED === "true",
+            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+            shadow_only: env.SHADOW_ONLY === "true",
+            live_execution: env.LIVE_EXECUTION === "true"
+          }
+        }, 500);
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
