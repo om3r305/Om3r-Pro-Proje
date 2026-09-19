@@ -128,6 +128,29 @@ function parseFeed(xml: string): FeedItem[] {
   }
   return items;
 }
+function parseFederalRegisterJson(raw: string): FeedItem[] {
+  const doc = JSON.parse(raw) as Json;
+  const rows = Array.isArray(doc.results) ? doc.results as Json[]
+    : Array.isArray(doc.documents) ? doc.documents as Json[]
+    : [];
+  const items: FeedItem[] = [];
+  for (const row of rows.slice(0, MAX_ITEMS)) {
+    const title = String(row.title ?? row.name ?? "").replace(/\s+/g, " ").trim();
+    const href = String(row.html_url ?? row.pdf_url ?? row.raw_text_url ?? "").trim();
+    const guid = String(row.document_number ?? row.id ?? href ?? title).trim();
+    const publishedAt = iso(row.publication_date ?? row.filing_date ?? row.agencies);
+    if (!title || !guid) continue;
+    items.push({
+      title: title.slice(0, 1500),
+      link: href,
+      guid,
+      publishedAt,
+      categories: ["CFTC","FEDERAL_REGISTER"],
+    });
+  }
+  return items;
+}
+
 function decodeHtmlText(value: string) {
   return value.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
@@ -184,10 +207,12 @@ function freshEnough(item: FeedItem, nowMs: number) {
 }
 async function fetchSource(endpoint: Endpoint) {
   const isHtml = endpoint.endpoint_kind === "HTML";
+  const isJson = endpoint.endpoint_kind === "JSON_API";
   const response = await fetch(endpoint.endpoint_url, {
     redirect: "follow",
     headers: {
-      accept: isHtml ? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
+      accept: isJson ? "application/json,*/*;q=0.1"
+        : isHtml ? "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
         : "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1",
       "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36 BrianRealtimeOfficialEye/1.0",
       "accept-language": "en-US,en;q=0.9",
@@ -225,7 +250,7 @@ async function setState(endpoint: Endpoint, payloadHash: string, status: number,
   }
 }
 async function persistRaw(endpoint: Endpoint, payloadHash: string, body: string) {
-  const ext = endpoint.endpoint_kind === "HTML" ? ".html.gz" : ".xml.gz";
+  const ext = endpoint.endpoint_kind === "HTML" ? ".html.gz" : endpoint.endpoint_kind === "JSON_API" ? ".json.gz" : ".xml.gz";
   const path = `source-arch-v2/${endpoint.endpoint_id}/${new Date().toISOString().slice(0,10)}/${payloadHash}${ext}`;
   const compressed = gzip(new TextEncoder().encode(body), { level: 6 });
   const upload = await db.storage.from(BUCKET).upload(path, compressed, {
@@ -289,7 +314,11 @@ async function observe(endpoint: Endpoint) {
     return { endpoint_id: endpoint.endpoint_id, unchanged: true, parsed: 0, stored: 0, catalysts: 0 };
   }
 
-  const items = endpoint.endpoint_kind === "HTML" ? parseHtmlLinks(fetched.body, endpoint) : parseFeed(fetched.body);
+  const items = endpoint.endpoint_kind === "HTML"
+    ? parseHtmlLinks(fetched.body, endpoint)
+    : endpoint.endpoint_kind === "JSON_API"
+      ? parseFederalRegisterJson(fetched.body)
+      : parseFeed(fetched.body);
   const selected = items.filter((item) => freshEnough(item, nowMs));
   const storagePath = await persistRaw(endpoint, payloadHash, fetched.body);
   const captureId = await sha(`realtime-eye|${endpoint.endpoint_id}|${payloadHash}`);
