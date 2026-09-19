@@ -1,9 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
 
-const URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
+const db = createClient(SUPABASE_URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const VERSION = "brian.realtime-official-eye.v1";
 const COLLECTOR_ID = "brian-realtime-official-eye-v1";
