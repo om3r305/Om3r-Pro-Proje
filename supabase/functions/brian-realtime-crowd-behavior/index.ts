@@ -4,13 +4,20 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-crowd-behavior.v1";
+const VERSION="brian.realtime-crowd-behavior.v2-multiasset";
 const COLLECTOR_ID="brian-realtime-crowd-behavior-v1";
 const SOURCE_GROUPS=new Set(["micro_velocity","micro_volume","micro_breakout","micro_reclaim","micro_taker_flow","derivatives_oi","derivatives_taker","derivatives_funding"]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
 function num(v:unknown,d=0){const n=Number(v);return Number.isFinite(n)?n:d}
 function clip(v:number,lo=0,hi=1){return Math.max(lo,Math.min(hi,v))}
+function signedClip(v:number){return Math.max(-1,Math.min(1,v))}
+function multiThreshold(assetClass:string){
+  return assetClass==="fx"?0.0007:
+    assetClass==="index"?0.0015:
+    assetClass==="commodity"?0.0020:
+    assetClass==="etf"?0.0020:0.0025;
+}
 async function sha(s:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 function errorText(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
 
@@ -88,6 +95,46 @@ Deno.serve(async(req:Request)=>{
         evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
       });
     }
+    const multiQ=await db.from("brian_multiasset_market_latest")
+      .select("mark_id,asset_id,asset_class,provider_time,return_5m,return_1h,session_state,data_latency_seconds")
+      .eq("session_state","REGULAR")
+      .lte("data_latency_seconds",15*60)
+      .limit(100);
+    if(multiQ.error)throw new Error(`multiasset_read:${multiQ.error.message}`);
+
+    for(const row of multiQ.data??[]){
+      const asset=String(row.asset_id??"");
+      const assetClass=String(row.asset_class??"");
+      const r5=num(row.return_5m,0),r1=num(row.return_1h,0);
+      const th=multiThreshold(assetClass);
+      const weighted=r5*.6+r1*.4;
+      const normalized=signedClip(weighted/(th*2));
+      let state="BALANCED",direction=0;
+      if(normalized>=.28){state="CROWD_BID_PROXY";direction=1}
+      if(normalized<=-.28){state="CROWD_OFFER_PROXY";direction=-1}
+      if(normalized>=.75){state="FOMO_CHASE_PROXY";direction=1}
+      if(normalized<=-.75){state="PANIC_SELL_PROXY";direction=-1}
+      const strength=clip(Math.abs(normalized));
+      const confidence=clip(.58+.12*Math.min(1,Math.abs(r5)/Math.max(th,1e-9))+.1*Math.min(1,Math.abs(r1)/Math.max(th,1e-9)));
+      const observedAt=new Date().toISOString();
+      const frameId=await sha(`${VERSION}|${asset}|${String(row.provider_time)}|${state}|${normalized.toFixed(4)}`);
+      frames.push({
+        frame_id:frameId,asset_id:asset,observed_at:observedAt,state,direction,strength,confidence,
+        supporting_groups:direction===0?[]:["multiasset_price_reaction"],
+        conflict_groups:[],
+        source_observation_ids:[`mark:${String(row.mark_id)}`],
+        reason:`multiasset crowd-behavior risk proxy from observed price reaction; state=${state}; normalized=${normalized.toFixed(3)}`,
+        metadata:{
+          version:VERSION,role:"CONTEXT_AND_RISK_PROXY_NOT_INDEPENDENT_DIRECTION_VOTE",
+          normalized_score:normalized,source_group_count:1,
+          psychology_semantics:"observable market-behavior proxy; no claim about individual mental state",
+          multiasset:true,asset_class:assetClass,return_5m:r5,return_1h:r1,
+          provider_time:String(row.provider_time),data_latency_seconds:num(row.data_latency_seconds,1e9)
+        },
+        evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
+      });
+    }
+
     if(frames.length){
       const ins=await db.from("brian_crowd_behavior_frames").upsert(frames,{onConflict:"frame_id",ignoreDuplicates:true});
       if(ins.error)throw new Error(`persist_frames:${ins.error.message}`);
@@ -96,7 +143,7 @@ Deno.serve(async(req:Request)=>{
     const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|SUCCESS`);
     await db.from("brian_collector_runs").insert({
       run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status:"SUCCESS",
-      observed_records:q.data?.length??0,stored_records:frames.length,degraded_sources:[],
+      observed_records:(q.data?.length??0)+(multiQ.data?.length??0),stored_records:frames.length,degraded_sources:[],
       metadata:{version:VERSION,context_only:true,not_independent_direction_vote:true,shadow_only:true,live_execution:false},
       evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
     });
