@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.5";
+const VERSION = "brian.cf-eye-ledger.v1.6";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -626,12 +626,24 @@ function parseHtmlLinks(raw: string, endpoint: SourceEndpoint): FeedItem[] {
   const items: FeedItem[] = [];
   const seen = new Set<string>();
   const anchor = /<a\b[^>]*\bhref\s*=\s*(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/gi;
-  const monthDate = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/g;
+  const datePatterns = [
+    /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/i,
+    /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+\d{1,2},\s+\d{4}\b/i,
+    /\b\d{1,2}\/\d{1,2}\/\d{4}\b/
+  ];
+
+  const findDate = (value: string) => {
+    for (const pattern of datePatterns) {
+      const m = value.match(pattern);
+      if (m?.[0]) return m[0];
+    }
+    return "";
+  };
 
   let match: RegExpExecArray | null;
   while ((match = anchor.exec(raw)) && items.length < MAX_ITEMS_PER_FEED) {
     const hrefRaw = String(match[2] ?? "").replace(/&amp;/gi, "&").trim();
-    const title = decodeHtmlText(String(match[3] ?? ""));
+    let title = decodeHtmlText(String(match[3] ?? ""));
     if (!hrefRaw || !title) continue;
 
     let absolute = "";
@@ -648,12 +660,27 @@ function parseHtmlLinks(raw: string, endpoint: SourceEndpoint): FeedItem[] {
     if (seen.has(absolute)) continue;
     seen.add(absolute);
 
-    const contextStart = Math.max(0, match.index - 900);
-    const context = decodeHtmlText(raw.slice(contextStart, match.index));
-    const dateMatches = [...context.matchAll(monthDate)];
-    const lastDate = dateMatches.length ? dateMatches[dateMatches.length - 1][0] : "";
-    const publishedAt = lastDate ? iso(lastDate) : null;
+    const titleDate = findDate(title);
+    if (titleDate) {
+      title = title.replace(titleDate, "").replace(/^\s*[-|:–—]\s*/, "").trim();
+    }
 
+    const contextStart = Math.max(0, match.index - 1200);
+    const context = decodeHtmlText(raw.slice(contextStart, match.index));
+    let contextDate = "";
+    for (const pattern of datePatterns) {
+      const flags = pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g";
+      const all = [...context.matchAll(new RegExp(pattern.source, flags))];
+      if (all.length) {
+        const candidate = all[all.length - 1][0];
+        if (!contextDate || Date.parse(candidate) > Date.parse(contextDate)) contextDate = candidate;
+      }
+    }
+
+    const dateValue = titleDate || contextDate;
+    const publishedAt = dateValue ? iso(dateValue) : null;
+
+    if (!title) continue;
     items.push({
       title: title.slice(0, 1500),
       link: absolute,
