@@ -856,56 +856,83 @@ export default {
     }
 
     if (req.method === "GET" && url.pathname === "/alpha-recheck-test") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== ALPHA_TEST_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_ALPHA_TEST" }, 401);
-      }
-
-      const safe =
-        env.SHADOW_ONLY === "true" &&
-        env.LIVE_EXECUTION !== "true" &&
-        env.ALPHA_RECHECK_ENABLED !== "true" &&
-        Boolean(env.ALPHA_RECHECK_URL) &&
-        Boolean(env.BRIAN_CLOUDFLARE_KEY);
-
-      if (!safe || !env.ALPHA_RECHECK_URL || !env.BRIAN_CLOUDFLARE_KEY) {
-        return out({
-          status: "ALPHA_TEST_BLOCKED",
-          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-          alpha_url_configured: Boolean(env.ALPHA_RECHECK_URL),
-          shadow_only: env.SHADOW_ONLY === "true",
-          live_execution: env.LIVE_EXECUTION === "true"
-        }, 409);
-      }
-
-      const eventId = "ce38f95ee2ae0f228907a1ef5a7ac33c6c3f362bc2b16e81b42d46b70b5bf6b7";
-      const assetId = "crypto:BTCUSDT";
-
-      const response = await fetch(env.ALPHA_RECHECK_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-        },
-        body: JSON.stringify({
-          event_id: eventId,
-          asset_id: assetId,
-          alert_id: "cloudflare-alpha-shadow-test"
-        }),
-        signal: AbortSignal.timeout(25000)
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      return out({
-        status: response.ok ? "ALPHA_RECHECK_TEST_COMPLETE" : "ALPHA_RECHECK_TEST_FAILED",
-        alpha_http_status: response.status,
-        payload,
-        safety: {
-          global_alpha_recheck_enabled: false,
-          shadow_only: true,
-          live_execution: false
+      let stage = "token_check";
+      const startedAt = Date.now();
+      try {
+        const token = url.searchParams.get("token") ?? "";
+        if (await sha(token) !== ALPHA_TEST_TOKEN_SHA256) {
+          return out({ status: "UNAUTHORIZED_ALPHA_TEST" }, 401);
         }
-      }, response.ok ? 200 : 500);
+
+        stage = "safety_check";
+        const safe =
+          env.SHADOW_ONLY === "true" &&
+          env.LIVE_EXECUTION !== "true" &&
+          env.ALPHA_RECHECK_ENABLED !== "true" &&
+          Boolean(env.ALPHA_RECHECK_URL) &&
+          Boolean(env.BRIAN_CLOUDFLARE_KEY);
+
+        if (!safe || !env.ALPHA_RECHECK_URL || !env.BRIAN_CLOUDFLARE_KEY) {
+          return out({
+            status: "ALPHA_TEST_BLOCKED",
+            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+            alpha_url_configured: Boolean(env.ALPHA_RECHECK_URL),
+            shadow_only: env.SHADOW_ONLY === "true",
+            live_execution: env.LIVE_EXECUTION === "true"
+          }, 409);
+        }
+
+        const eventId = "ce38f95ee2ae0f228907a1ef5a7ac33c6c3f362bc2b16e81b42d46b70b5bf6b7";
+        const assetId = "crypto:BTCUSDT";
+
+        stage = "alpha_fetch";
+        const response = await fetch(env.ALPHA_RECHECK_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
+          },
+          body: JSON.stringify({
+            event_id: eventId,
+            asset_id: assetId,
+            alert_id: "cloudflare-alpha-shadow-test"
+          }),
+          signal: AbortSignal.timeout(55000)
+        });
+
+        stage = "alpha_response";
+        const responseText = await response.text();
+        let payload: unknown = {};
+        try {
+          payload = responseText ? JSON.parse(responseText) : {};
+        } catch {
+          payload = { raw: responseText.slice(0, 1200) };
+        }
+
+        return out({
+          status: response.ok ? "ALPHA_RECHECK_TEST_COMPLETE" : "ALPHA_RECHECK_TEST_FAILED",
+          alpha_http_status: response.status,
+          elapsed_ms: Date.now() - startedAt,
+          payload,
+          safety: {
+            global_alpha_recheck_enabled: false,
+            shadow_only: true,
+            live_execution: false
+          }
+        }, response.ok ? 200 : 500);
+      } catch (error) {
+        return out({
+          status: "ALPHA_RECHECK_TEST_EXCEPTION",
+          stage,
+          elapsed_ms: Date.now() - startedAt,
+          error: errText(error).slice(0, 1200),
+          safety: {
+            global_alpha_recheck_enabled: false,
+            shadow_only: true,
+            live_execution: false
+          }
+        }, 500);
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
