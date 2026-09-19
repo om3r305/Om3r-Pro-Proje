@@ -5,7 +5,6 @@ const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const BULK_EYE_CHECK_TOKEN_SHA256 = "bbfb8044c2b3be257164f5a61dcb6611561d5173e98f0e58fda17df42c645d98";
 
 type Json = Record<string, unknown>;
 
@@ -852,61 +851,6 @@ export default {
         shadow_only: true,
         live_execution: false
       });
-    }
-
-    if (req.method === "GET" && url.pathname === "/bulk-eye-check") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== BULK_EYE_CHECK_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_BULK_CHECK" }, 401);
-      }
-
-      const sources = loadManifest(env).filter((row) =>
-        row.endpoint_id === "consilium_press" ||
-        row.endpoint_id === "bundesbank_general_rss"
-      );
-
-      const safe =
-        sources.length === 2 &&
-        env.SHADOW_ONLY === "true" &&
-        env.LIVE_EXECUTION !== "true" &&
-        env.R2_ENABLED !== "true" &&
-        env.ALPHA_RECHECK_ENABLED !== "true";
-
-      if (!safe) {
-        return out({
-          status: "SAFE_BULK_CHECK_BLOCKED",
-          source_count: sources.length,
-          shadow_only: env.SHADOW_ONLY === "true",
-          live_execution: env.LIVE_EXECUTION === "true",
-          r2_enabled: env.R2_ENABLED === "true",
-          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true"
-        }, 409);
-      }
-
-      const results = [];
-      for (const source of sources) {
-        try {
-          results.push(await pollSource(env, source));
-        } catch (error) {
-          results.push({
-            endpoint_id: source.endpoint_id,
-            error: errText(error).slice(0, 1200)
-          });
-        }
-      }
-
-      const failures = results.filter((row) => row.error);
-      return out({
-        status: failures.length ? "BULK_EYE_CHECK_DEGRADED" : "BULK_EYE_CHECK_COMPLETE",
-        results,
-        safety: {
-          scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
-          r2_enabled: false,
-          alpha_recheck_enabled: false,
-          shadow_only: true,
-          live_execution: false
-        }
-      }, failures.length ? 500 : 200);
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
