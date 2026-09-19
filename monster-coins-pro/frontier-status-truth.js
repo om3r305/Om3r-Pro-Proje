@@ -13,6 +13,7 @@
   const getHB=()=>{try{return typeof STABILITY!=='undefined'?STABILITY.heartbeat:null}catch{return null}};
   const setHB=(hb)=>{try{if(typeof STABILITY!=='undefined')STABILITY.heartbeat=hb}catch{}};
   const latestRun=(hb,id)=>hb?.collectors?.[id]||null;
+  const runSuccessAge=(r)=>parseAge(r?.last_success_at||(okStatus(r)?(r?.finished_at||r?.started_at):null));
   const withEvidence=(state,meta)=>({state,meta});
 
   function hydrate(){
@@ -107,35 +108,52 @@
 
     const alphaAge=parseAge(hb.alpha?.observed_at);
     const alphaRun=latestRun(hb,'brian-alpha-decision-compiler-v2');
-    let alpha=alphaAge<=600?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`):alphaAge<=1200?withEvidence('warn',`ALPHA kararı ${fmtAge(hb.alpha?.observed_at)} önce`):withEvidence(okStatus(alphaRun)?'warn':'bad',alphaRun?.error_class||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
+    const alphaSuccessAge=runSuccessAge(alphaRun);
+    let alpha=alphaAge<=720
+      ?withEvidence('ok',`Karar akışı ${fmtAge(hb.alpha?.observed_at)} önce · ${String(hb.alpha?.asset_id||'').replace('crypto:','')||'ALPHA'} ${String(hb.alpha?.action||'')}`)
+      :alphaAge<=1080||alphaSuccessAge<=600
+        ?withEvidence('warn',`ALPHA senkronu canlı · son karar ${fmtAge(hb.alpha?.observed_at)} önce`)
+        :withEvidence(alphaSuccessAge<=900?'warn':'bad',alphaRun?.error_class||`ALPHA kanıtı ${fmtAge(hb.alpha?.observed_at)} önce`);
 
     const wr=hb.world_run||{};
     const wrAge=parseAge(wr.finished_at||wr.started_at);
     const worldRun=latestRun(hb,'brian-world-brain-v1');
-    let world=String(wr.status)==='SUCCESS'&&wrAge<=1200?withEvidence('ok',`Dünya çekirdeği canlı · ${fmtAge(wr.finished_at||wr.started_at)} önce`):wrAge<=2400?withEvidence('warn',`World Brain kanıtı ${fmtAge(wr.finished_at||wr.started_at)} önce`):withEvidence(okStatus(worldRun)?'warn':'bad',worldRun?.error_class||'World Brain taze kanıt bekliyor');
+    const worldSuccessAge=runSuccessAge(worldRun);
+    let world=(String(wr.status)==='SUCCESS'&&wrAge<=900)||worldSuccessAge<=900
+      ?withEvidence('ok',`Dünya çekirdeği canlı · ${fmtAge(wr.finished_at||wr.started_at)} önce`)
+      :wrAge<=1800||worldSuccessAge<=1800
+        ?withEvidence('warn',`World Brain son sağlam kanıt ${fmtAge(worldRun?.last_success_at||wr.finished_at||wr.started_at)} önce`)
+        :withEvidence('bad',worldRun?.error_class||'World Brain taze kanıt bekliyor');
 
     const t=c.treasury||{};
     const tAge=parseAge(t.observed_at);
     const tr=latestRun(hb,'brian-evolution-treasury-v1');
-    const trAge=parseAge(tr?.finished_at||tr?.started_at);
-    const treasuryCycleLive=liveCycleStatus(tr)&&trAge<=900;
-    let treasury=treasuryCycleLive&&t.equity_usd!=null
-      ?withEvidence('ok',`Kasa cycle canlı · $${Number(t.equity_usd).toLocaleString('tr-TR')} · son snapshot ${fmtAge(t.observed_at)} önce`)
-      :t.equity_usd!=null&&tAge<=600
-        ?withEvidence('ok',`Gerçek kasa $${Number(t.equity_usd).toLocaleString('tr-TR')} · ${fmtAge(t.observed_at)} önce`)
-        :t.equity_usd!=null&&tAge<=1800
-          ?withEvidence('warn',`Kasa son kanıt ${fmtAge(t.observed_at)} önce`)
-          :withEvidence(okStatus(tr)?'warn':'bad',tr?.error_class||'Hazine taze kanıt bekliyor');
+    const trSuccessAge=runSuccessAge(tr);
+    const treasuryCycleLive=(liveCycleStatus(tr)&&parseAge(tr?.finished_at||tr?.started_at)<=900)||trSuccessAge<=900;
+    let treasury=treasuryCycleLive&&t.equity_usd!=null&&tAge<=1800
+      ?withEvidence('ok',`Kasa hattı canlı · ${Number(t.equity_usd).toLocaleString('tr-TR')} · son snapshot ${fmtAge(t.observed_at)} önce`)
+      :t.equity_usd!=null&&tAge<=1800
+        ?withEvidence('warn',`Kasa son kanıt ${fmtAge(t.observed_at)} önce`)
+        :withEvidence(trSuccessAge<=1800?'warn':'bad',tr?.error_class||'Hazine taze kanıt bekliyor');
 
     const evo=latestRun(hb,'brian-evolution-orchestrator-v1')||latestRun(hb,'brian-evolution-sandbox-v1')||latestRun(hb,'brian-evolution-researcher-v1');
-    const evoAge=parseAge(evo?.finished_at||evo?.started_at);
-    let research=okStatus(evo)&&evoAge<=2400?withEvidence('ok',`Evolution / Lab canlı · ${fmtAge(evo.finished_at||evo.started_at)} önce`):evoAge<=3600?withEvidence('warn',`Araştırma hattı ${fmtAge(evo?.finished_at||evo?.started_at)} önce`):withEvidence('warn',evo?.error_class||'Araştırma hattı yeni cycle bekliyor');
+    const evoSuccessAge=runSuccessAge(evo);
+    let research=evoSuccessAge<=2400?withEvidence('ok',`Evolution / Lab canlı · son başarı ${fmtAge(evo?.last_success_at||evo?.finished_at||evo?.started_at)} önce`):evoSuccessAge<=3600?withEvidence('warn',`Araştırma hattı son başarı ${fmtAge(evo?.last_success_at||evo?.finished_at||evo?.started_at)} önce`):withEvidence('warn',evo?.error_class||'Araştırma hattı yeni cycle bekliyor');
 
     const oceanRun=latestRun(hb,'brian-evolution-ocean-worker-v1');
-    const oceanAge=parseAge(oceanRun?.finished_at||oceanRun?.started_at);
-    let ocean=okStatus(oceanRun)&&oceanAge<=2400?withEvidence('ok',`Ocean worker canlı · ${fmtAge(oceanRun.finished_at||oceanRun.started_at)} önce`):withEvidence('warn',oceanRun?.error_class||'Ocean yeni cycle bekliyor');
+    const oceanSuccessAge=runSuccessAge(oceanRun);
+    let ocean=oceanSuccessAge<=2400?withEvidence('ok',`Ocean worker canlı · ${fmtAge(oceanRun?.last_success_at||oceanRun?.finished_at||oceanRun?.started_at)} önce`):withEvidence('warn',oceanRun?.error_class||'Ocean yeni cycle bekliyor');
 
-    let behavior=(world.state==='ok'&&alpha.state==='ok')?withEvidence('ok','World + ALPHA davranış kanıt zinciri canlı'):(world.state==='bad'||alpha.state==='bad')?withEvidence('warn','Davranış kanıt zinciri tazeleniyor'):withEvidence('warn','Davranış kanıt zinciri tazeleniyor');
+    const b=hb.behavior||{};
+    const behaviorAt=b.observed_at||b.decision_observed_at;
+    const behaviorAge=parseAge(behaviorAt);
+    let behavior=behaviorAge<=720
+      ?withEvidence('ok',`Davranış ${String(b.state||'CANLI').replaceAll('_',' ')} · ${fmtAge(behaviorAt)} önce`)
+      :behaviorAge<=1080
+        ?withEvidence('warn',`Davranış kanıtı ${fmtAge(behaviorAt)} önce`)
+        :alpha.state==='bad'
+          ?withEvidence('bad','Davranış kanıtı ve ALPHA bağlantısı taze değil')
+          :withEvidence('warn','Davranış hattı yeni kanıt bekliyor');
 
     if(cachedMode||hbAge>120){
       [world,behavior,alpha,treasury,research,ocean].forEach(x=>{if(x.state==='ok')x.state='warn';x.meta+=freshnessSuffix||` · heartbeat ${Math.round(hbAge)} sn önce`});
