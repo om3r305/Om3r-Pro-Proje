@@ -10,6 +10,7 @@ const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-re
 type Mark={asset_id:string;asset_class:string;provider_time:string;price:number;return_5m:number|null;return_1h:number|null;session_state:string;data_latency_seconds:number;provider_quality:string;metadata?:Record<string,unknown>};
 type EventRow={event_id:string;observed_at:string;published_at:string|null;event_kind:string;source_id:string;claim:string;primary_asset:string|null};
 type Link={event:EventRow;weight:number;theme:string};
+type Crowd={asset_id:string;observed_at:string;state:string;direction:number;strength:number;confidence:number;reason?:string;metadata?:Record<string,unknown>};
 
 function out(b:unknown,s=200){return new Response(JSON.stringify(b),{status:s,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
 function n(v:unknown,d=0){const x=Number(v);return Number.isFinite(x)?x:d}
@@ -72,6 +73,12 @@ Deno.serve(async(req:Request)=>{
     const exportJson=await exportResp.json().catch(()=>({}));
     if(!exportResp.ok||exportJson?.status!=="SUCCESS")throw new Error(`realtime_export:${exportResp.status}:${String(exportJson?.status??"")}`);
     const marks=(Array.isArray(exportJson.marks)?exportJson.marks:[]) as Mark[];
+    const crowdRows=(Array.isArray(exportJson.crowd)?exportJson.crowd:[]) as Crowd[];
+    const crowdByAsset=new Map<string,Crowd>();
+    for(const row of crowdRows){
+      const id=String(row.asset_id??"");
+      if(id&&!crowdByAsset.has(id))crowdByAsset.set(id,row);
+    }
 
     const since=new Date(Date.now()-6*60*60_000).toISOString();
     const eventsQ=await db.from("brian_world_event_frames")
@@ -127,11 +134,21 @@ Deno.serve(async(req:Request)=>{
       if(relevant)groups.push("event_link");
       if(moving)groups.push("market_reaction");
       const score=clip(.48*eventStrength+.52*reactionScore);
+      const crowd=crowdByAsset.get(String(m.asset_id));
+      const crowdDirection=Math.sign(n(crowd?.direction,0));
+      const crowdStrength=clip(n(crowd?.strength,0));
+      const crowdConfidence=clip(n(crowd?.confidence,0));
+      const crowdState=String(crowd?.state??"UNAVAILABLE");
+      const crowdConflict=direction!==0&&crowdDirection!==0&&crowdDirection!==direction&&crowdStrength>=.70&&crowdConfidence>=.60;
+      const crowdExtremeChase=direction!==0&&crowdDirection===direction&&crowdStrength>=.85&&crowdConfidence>=.65&&
+        ((direction===1&&crowdState==="FOMO_CHASE_PROXY")||(direction===-1&&crowdState==="PANIC_SELL_PROXY"));
       let action="WAIT",veto:string|null=null;
       if(!fresh)veto="MARKET_CLOSED_OR_STALE";
       else if(!relevant)veto="NO_RELEVANT_EVENT";
       else if(!moving||direction===0)veto="REACTION_NOT_CONFIRMED";
       else if(groups.length<2)veto="INSUFFICIENT_INDEPENDENT_GROUPS";
+      else if(crowdConflict)veto="CROWD_BEHAVIOR_CONFLICT";
+      else if(crowdExtremeChase)veto="CROWD_EXTREME_CHASE";
       else if(score<.52)veto="SCORE_BELOW_GATE";
       else action=direction===1?"OPEN_LONG":"OPEN_SHORT";
       const observedAt=new Date().toISOString();
@@ -152,6 +169,9 @@ Deno.serve(async(req:Request)=>{
           return_5m:r5,return_1h:r1,threshold:th,linked_themes:[...new Set(links.map(l=>l.theme))],
           direction_source:"OBSERVED_MARKET_REACTION_NOT_HEADLINE_GUESS",
           data_quality_gate:"REGULAR_SESSION_AND_15M_FRESHNESS",
+          crowd_behavior_role:"RISK_CONTEXT_NOT_INDEPENDENT_EVIDENCE",
+          crowd_behavior_context:crowd??null,
+          crowd_behavior_risk_applied:crowdConflict||crowdExtremeChase,
           execution_grade:false,shadow_lane:"MULTIASSET_EVENT_REACTION"
         },
         evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
