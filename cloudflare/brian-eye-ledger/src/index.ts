@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.2";
+const VERSION = "brian.cf-eye-ledger.v2.3";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -115,6 +115,7 @@ export interface Env {
   REALTIME_UNIVERSE_URL?: string;
   REALTIME_SENSOR_URL?: string;
   REALTIME_INTRABAR_URL?: string;
+  REALTIME_CATALYST_REACTION_URL?: string;
   BRIAN_CLOUDFLARE_KEY?: string;
   ALPHA_RECHECK_ENABLED: string;
   CORE_RECOVERY_ENABLED?: string;
@@ -1611,6 +1612,7 @@ export default {
         realtime_universe_configured: Boolean(env.REALTIME_UNIVERSE_URL),
         realtime_sensor_configured: Boolean(env.REALTIME_SENSOR_URL),
         realtime_intrabar_configured: Boolean(env.REALTIME_INTRABAR_URL),
+        realtime_catalyst_reaction_configured: Boolean(env.REALTIME_CATALYST_REACTION_URL),
         shadow_only: true,
         live_execution: false
       });
@@ -1673,23 +1675,40 @@ export default {
         await flushR2IngestOutbox(env);
       }
 
-      const tasks: Promise<unknown>[] = [];
-      if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
-
       const scheduledMinute = Math.floor(controller.scheduledTime / 60000);
 
+      const eyePromise =
+        env.ENABLE_SCHEDULED_EYE === "true"
+          ? runSources(env)
+          : Promise.resolve({ status: "DISABLED" });
+
+      const parallel: Promise<unknown>[] = [];
+
       if (env.REALTIME_ENGINES_ENABLED === "true") {
-        tasks.push(runRealtimeEngines(env, scheduledMinute));
+        parallel.push(runRealtimeEngines(env, scheduledMinute));
       }
 
       if (
         env.CORE_RECOVERY_ENABLED === "true" &&
         scheduledMinute % 5 === 0
       ) {
-        tasks.push(runCoreRecovery(env));
+        parallel.push(runCoreRecovery(env));
       }
 
-      if (tasks.length) await Promise.all(tasks);
+      await eyePromise;
+
+      if (
+        env.REALTIME_ENGINES_ENABLED === "true" &&
+        env.REALTIME_CATALYST_REACTION_URL
+      ) {
+        await callRealtimeEngine(
+          env,
+          "catalyst_reaction",
+          env.REALTIME_CATALYST_REACTION_URL
+        );
+      }
+
+      if (parallel.length) await Promise.all(parallel);
     })());
   }
 } satisfies ExportedHandler<Env>;
