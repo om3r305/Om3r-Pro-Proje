@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.2";
+const VERSION = "brian.cf-eye-ledger.v1.3";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -92,8 +92,16 @@ type LedgerResult = {
   capture: CaptureEnvelope;
 };
 
+type AlphaRecheckQueueInput = {
+  request_id: string;
+  event_id: string;
+  asset_id: string;
+  alert_id: string | null;
+};
+
 export interface Env {
   FIRST_SEEN_LEDGER: DurableObjectNamespace<FirstSeenLedger>;
+  ALPHA_RECHECK_QUEUE: DurableObjectNamespace<AlphaRecheckQueue>;
   SHADOW_ONLY: string;
   LIVE_EXECUTION: string;
   ENABLE_SCHEDULED_EYE: string;
@@ -305,6 +313,152 @@ export class FirstSeenLedger extends DurableObject<Env> {
       .exec<Json>("SELECT * FROM first_seen_events WHERE event_id = ? LIMIT 1", eventId)
       .toArray()[0];
     return row ?? null;
+  }
+}
+
+export class AlphaRecheckQueue extends DurableObject<Env> {
+  private envRef: Env;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.envRef = env;
+    this.ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS alpha_rechecks (" +
+        "request_id TEXT PRIMARY KEY," +
+        "event_id TEXT NOT NULL," +
+        "asset_id TEXT NOT NULL," +
+        "alert_id TEXT," +
+        "queued_at TEXT NOT NULL," +
+        "updated_at TEXT NOT NULL," +
+        "attempts INTEGER NOT NULL DEFAULT 0," +
+        "delivered_at TEXT," +
+        "last_error TEXT," +
+        "last_response TEXT" +
+      ");" +
+      "CREATE INDEX IF NOT EXISTS idx_alpha_rechecks_pending ON alpha_rechecks(delivered_at, queued_at);"
+    );
+  }
+
+  async enqueue(input: AlphaRecheckQueueInput): Promise<Json> {
+    const now = new Date().toISOString();
+    const prior = this.ctx.storage.sql
+      .exec<Json>(
+        "SELECT * FROM alpha_rechecks WHERE request_id = ? LIMIT 1",
+        input.request_id
+      )
+      .toArray()[0];
+
+    if (!prior) {
+      this.ctx.storage.sql.exec(
+        "INSERT INTO alpha_rechecks " +
+        "(request_id,event_id,asset_id,alert_id,queued_at,updated_at,attempts,delivered_at,last_error,last_response) " +
+        "VALUES (?,?,?,?,?,?,0,NULL,NULL,NULL)",
+        input.request_id,
+        input.event_id,
+        input.asset_id,
+        input.alert_id,
+        now,
+        now
+      );
+    }
+
+    const current = this.ctx.storage.sql
+      .exec<Json>(
+        "SELECT * FROM alpha_rechecks WHERE request_id = ? LIMIT 1",
+        input.request_id
+      )
+      .toArray()[0];
+
+    if (!current?.delivered_at) {
+      const existingAlarm = await this.ctx.storage.getAlarm();
+      if (existingAlarm == null || existingAlarm > Date.now() + 500) {
+        await this.ctx.storage.setAlarm(Date.now() + 250);
+      }
+    }
+
+    return current ?? {};
+  }
+
+  async lookup(requestId: string): Promise<Json | null> {
+    return this.ctx.storage.sql
+      .exec<Json>(
+        "SELECT * FROM alpha_rechecks WHERE request_id = ? LIMIT 1",
+        requestId
+      )
+      .toArray()[0] ?? null;
+  }
+
+  async alarm(): Promise<void> {
+    const row = this.ctx.storage.sql
+      .exec<Json>(
+        "SELECT * FROM alpha_rechecks WHERE delivered_at IS NULL ORDER BY queued_at LIMIT 1"
+      )
+      .toArray()[0];
+
+    if (!row) return;
+
+    const requestId = String(row.request_id ?? "");
+    const retry = async (message: string, responseText = "") => {
+      this.ctx.storage.sql.exec(
+        "UPDATE alpha_rechecks SET attempts = attempts + 1, updated_at = ?, last_error = ?, last_response = ? WHERE request_id = ?",
+        new Date().toISOString(),
+        message.slice(0, 1000),
+        responseText.slice(0, 2000),
+        requestId
+      );
+      await this.ctx.storage.setAlarm(Date.now() + 60000);
+    };
+
+    if (!this.envRef.ALPHA_RECHECK_URL || !this.envRef.BRIAN_CLOUDFLARE_KEY) {
+      await retry("ALPHA_RECHECK_NOT_CONFIGURED");
+      return;
+    }
+
+    try {
+      const response = await fetch(this.envRef.ALPHA_RECHECK_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-brian-cloudflare-key": this.envRef.BRIAN_CLOUDFLARE_KEY
+        },
+        body: JSON.stringify({
+          request_id: requestId,
+          event_id: String(row.event_id ?? ""),
+          asset_id: String(row.asset_id ?? ""),
+          alert_id: row.alert_id == null ? null : String(row.alert_id)
+        }),
+        signal: AbortSignal.timeout(55000)
+      });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        await retry(
+          "ALPHA_HTTP_" + response.status + ":" + responseText.slice(0, 700),
+          responseText
+        );
+        return;
+      }
+
+      this.ctx.storage.sql.exec(
+        "UPDATE alpha_rechecks SET attempts = attempts + 1, updated_at = ?, delivered_at = ?, last_error = NULL, last_response = ? WHERE request_id = ?",
+        new Date().toISOString(),
+        new Date().toISOString(),
+        responseText.slice(0, 2000),
+        requestId
+      );
+
+      const remaining = this.ctx.storage.sql
+        .exec<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM alpha_rechecks WHERE delivered_at IS NULL"
+        )
+        .one();
+      if (Number(remaining.count) > 0) {
+        await this.ctx.storage.setAlarm(Date.now() + 250);
+      }
+    } catch (error) {
+      await retry("ALPHA_EXCEPTION:" + errText(error));
+    }
   }
 }
 
@@ -591,6 +745,12 @@ function ledgerStub(env: Env, eventId: string) {
   return { shard, stub: env.FIRST_SEEN_LEDGER.get(id) };
 }
 
+function alphaQueueStub(env: Env, requestId: string) {
+  const shard = requestId.slice(0, 2) || "00";
+  const id = env.ALPHA_RECHECK_QUEUE.idFromName("alpha:" + shard);
+  return { shard, stub: env.ALPHA_RECHECK_QUEUE.get(id) };
+}
+
 async function forwardBatch(env: Env, pending: LedgerResult[]) {
   if (!pending.length) {
     return { forwarded: 0, queued: 0, status: "NO_NEW_EVENTS" };
@@ -807,31 +967,28 @@ async function routeAlphaRecheck(req: Request, env: Env) {
     return out({ error: "event_id and crypto:*USDT asset_id required" }, 400);
   }
 
-  const response = await fetch(env.ALPHA_RECHECK_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-    },
-    body: JSON.stringify({
-      version: VERSION,
-      captures: [],
-      events: [],
-      rechecks: [{
-        event_id: eventId,
-        asset_id: assetId,
-        alert_id: alertId || null
-      }],
-      shadow_only: true,
-      live_execution: false
-    }),
-    signal: AbortSignal.timeout(12000)
+  const requestId = String(body.request_id ?? "").trim() ||
+    await sha("alpha-recheck-v1|" + eventId + "|" + assetId + "|" + alertId);
+
+  const target = alphaQueueStub(env, requestId);
+  const state = await target.stub.enqueue({
+    request_id: requestId,
+    event_id: eventId,
+    asset_id: assetId,
+    alert_id: alertId || null
   });
 
-  const payload = await response.json().catch(() => ({}));
-  return out(payload, response.status);
+  return out({
+    status: state.delivered_at ? "ALREADY_DELIVERED" : "QUEUED_DURABLE_ALPHA_RECHECK",
+    request_id: requestId,
+    shard: target.shard,
+    attempts: Number(state.attempts ?? 0),
+    delivered_at: state.delivered_at ?? null,
+    last_error: state.last_error ?? null,
+    shadow_only: true,
+    live_execution: false
+  }, state.delivered_at ? 200 : 202);
 }
-
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -856,15 +1013,12 @@ export default {
     }
 
     if (req.method === "GET" && url.pathname === "/alpha-recheck-test") {
-      let stage = "token_check";
-      const startedAt = Date.now();
       try {
         const token = url.searchParams.get("token") ?? "";
         if (await sha(token) !== ALPHA_TEST_TOKEN_SHA256) {
           return out({ status: "UNAUTHORIZED_ALPHA_TEST" }, 401);
         }
 
-        stage = "safety_check";
         const safe =
           env.SHADOW_ONLY === "true" &&
           env.LIVE_EXECUTION !== "true" &&
@@ -872,7 +1026,7 @@ export default {
           Boolean(env.ALPHA_RECHECK_URL) &&
           Boolean(env.BRIAN_CLOUDFLARE_KEY);
 
-        if (!safe || !env.ALPHA_RECHECK_URL || !env.BRIAN_CLOUDFLARE_KEY) {
+        if (!safe) {
           return out({
             status: "ALPHA_TEST_BLOCKED",
             alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
@@ -884,47 +1038,36 @@ export default {
 
         const eventId = "ce38f95ee2ae0f228907a1ef5a7ac33c6c3f362bc2b16e81b42d46b70b5bf6b7";
         const assetId = "crypto:BTCUSDT";
-
-        stage = "alpha_fetch";
-        const response = await fetch(env.ALPHA_RECHECK_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
-          },
-          body: JSON.stringify({
-            event_id: eventId,
-            asset_id: assetId,
-            alert_id: "cloudflare-alpha-shadow-test"
-          }),
-          signal: AbortSignal.timeout(55000)
+        const requestId = await sha(
+          "alpha-shadow-test-v2|" + eventId + "|" + assetId
+        );
+        const target = alphaQueueStub(env, requestId);
+        const current = await target.stub.enqueue({
+          request_id: requestId,
+          event_id: eventId,
+          asset_id: assetId,
+          alert_id: "cloudflare-alpha-shadow-test"
         });
 
-        stage = "alpha_response";
-        const responseText = await response.text();
-        let payload: unknown = {};
-        try {
-          payload = responseText ? JSON.parse(responseText) : {};
-        } catch {
-          payload = { raw: responseText.slice(0, 1200) };
-        }
-
         return out({
-          status: response.ok ? "ALPHA_RECHECK_TEST_COMPLETE" : "ALPHA_RECHECK_TEST_FAILED",
-          alpha_http_status: response.status,
-          elapsed_ms: Date.now() - startedAt,
-          payload,
+          status: current.delivered_at
+            ? "ALPHA_RECHECK_TEST_DELIVERED"
+            : "ALPHA_RECHECK_TEST_QUEUED",
+          request_id: requestId,
+          shard: target.shard,
+          attempts: Number(current.attempts ?? 0),
+          delivered_at: current.delivered_at ?? null,
+          last_error: current.last_error ?? null,
+          last_response: current.last_response ?? null,
           safety: {
             global_alpha_recheck_enabled: false,
             shadow_only: true,
             live_execution: false
           }
-        }, response.ok ? 200 : 500);
+        });
       } catch (error) {
         return out({
           status: "ALPHA_RECHECK_TEST_EXCEPTION",
-          stage,
-          elapsed_ms: Date.now() - startedAt,
           error: errText(error).slice(0, 1200),
           safety: {
             global_alpha_recheck_enabled: false,
