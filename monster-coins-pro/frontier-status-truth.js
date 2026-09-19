@@ -2,7 +2,7 @@
 (()=>{
   const CACHE_KEY='brian-frontier-heartbeat-lkg-v3';
   const CACHE_MAX_MS=30*60*1000;
-  const PUBLIC_HEARTBEAT_ENDPOINT='/api/brian/brian-frontier-heartbeat-public';
+  const PUBLIC_HEARTBEAT_ENDPOINT='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-frontier-heartbeat-public';
   const now=()=>Date.now();
   const parseAge=(v)=>{const t=Date.parse(String(v||''));return Number.isFinite(t)?Math.max(0,(now()-t)/1000):Infinity};
   const fmtAge=(v)=>{const s=parseAge(v);return !Number.isFinite(s)?'bilinmiyor':s<60?`${Math.round(s)} sn`:s<3600?`${Math.round(s/60)} dk`:`${Math.round(s/3600)} sa`};
