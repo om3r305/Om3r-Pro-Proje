@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.1";
+const VERSION = "brian.cf-eye-ledger.v2.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -111,6 +111,10 @@ export interface Env {
   REALTIME_INGEST_URL?: string;
   ALPHA_RECHECK_URL?: string;
   REALTIME_ALPHA_RECHECK_URL?: string;
+  REALTIME_ENGINES_ENABLED?: string;
+  REALTIME_UNIVERSE_URL?: string;
+  REALTIME_SENSOR_URL?: string;
+  REALTIME_INTRABAR_URL?: string;
   BRIAN_CLOUDFLARE_KEY?: string;
   ALPHA_RECHECK_ENABLED: string;
   CORE_RECOVERY_ENABLED?: string;
@@ -1371,6 +1375,81 @@ async function runSources(env: Env) {
   };
 }
 
+async function callRealtimeEngine(env: Env, name: string, url?: string) {
+  if (!url || !env.BRIAN_CLOUDFLARE_KEY) {
+    return { name, accepted: false, status: "NOT_CONFIGURED" };
+  }
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-brian-cloudflare-key": env.BRIAN_CLOUDFLARE_KEY
+      },
+      body: "{}",
+      signal: AbortSignal.timeout(50000)
+    });
+    const body = await response.json().catch(() => ({})) as Json;
+    return {
+      name,
+      accepted: response.ok,
+      http_status: response.status,
+      target_status: String(body.status ?? ""),
+      elapsed_ms: Number(body.elapsed_ms ?? 0) || null
+    };
+  } catch (error) {
+    return {
+      name,
+      accepted: false,
+      error: errText(error).slice(0, 700)
+    };
+  }
+}
+
+async function runRealtimeEngines(env: Env, scheduledMinute: number) {
+  if (env.REALTIME_ENGINES_ENABLED !== "true") {
+    return { status: "DISABLED", shadow_only: true, live_execution: false };
+  }
+
+  const results: Json[] = [];
+
+  if (scheduledMinute % 5 === 0) {
+    const universe = await callRealtimeEngine(
+      env,
+      "universe",
+      env.REALTIME_UNIVERSE_URL
+    );
+    results.push(universe);
+
+    if (universe.accepted) {
+      results.push(await callRealtimeEngine(
+        env,
+        "sensor",
+        env.REALTIME_SENSOR_URL
+      ));
+    } else {
+      results.push({
+        name: "sensor",
+        accepted: false,
+        status: "SKIPPED_UNIVERSE_FAILED"
+      });
+    }
+  }
+
+  results.push(await callRealtimeEngine(
+    env,
+    "intrabar",
+    env.REALTIME_INTRABAR_URL
+  ));
+
+  return {
+    status: results.every((row) => row.accepted !== false) ? "SUCCESS" : "DEGRADED",
+    results,
+    shadow_only: true,
+    live_execution: false
+  };
+}
+
 async function runCoreRecovery(env: Env) {
   if (env.CORE_RECOVERY_ENABLED !== "true") {
     return { status: "DISABLED", shadow_only: true, live_execution: false };
@@ -1528,6 +1607,10 @@ export default {
         r2_outbox_enabled: env.R2_OUTBOX_ENABLED === "true",
         realtime_dual_write_enabled: Boolean(env.REALTIME_INGEST_URL),
         realtime_alpha_dual_write_enabled: Boolean(env.REALTIME_ALPHA_RECHECK_URL),
+        realtime_engines_enabled: env.REALTIME_ENGINES_ENABLED === "true",
+        realtime_universe_configured: Boolean(env.REALTIME_UNIVERSE_URL),
+        realtime_sensor_configured: Boolean(env.REALTIME_SENSOR_URL),
+        realtime_intrabar_configured: Boolean(env.REALTIME_INTRABAR_URL),
         shadow_only: true,
         live_execution: false
       });
@@ -1594,6 +1677,11 @@ export default {
       if (env.ENABLE_SCHEDULED_EYE === "true") tasks.push(runSources(env));
 
       const scheduledMinute = Math.floor(controller.scheduledTime / 60000);
+
+      if (env.REALTIME_ENGINES_ENABLED === "true") {
+        tasks.push(runRealtimeEngines(env, scheduledMinute));
+      }
+
       if (
         env.CORE_RECOVERY_ENABLED === "true" &&
         scheduledMinute % 5 === 0
