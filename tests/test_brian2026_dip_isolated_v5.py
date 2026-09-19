@@ -9,12 +9,14 @@ SW = (ROOT / "monster-coins-pro" / "sw.js").read_text(encoding="utf-8")
 
 
 def test_v5_is_archived_and_not_wired_to_live_dashboards():
-    # V8.4.1 Authority owns /dip now. V5 may remain cached as an archived asset,
+    # V8.6 Hunter + Harvest owns /dip now. V5 may remain cached as an archived asset,
     # but it must not be executed by either the live DIP page or the main dashboard.
     assert "/dip-expert-v5-brain.js" not in DIP
     assert "/dip-expert-v5-brain.js" not in MAIN
-    assert "/dip-v84.js" in DIP
-    assert "/dip-v841-control.js" in DIP
+    assert "/dip-v852-control.js" in DIP
+    assert "/dip-v844-multiasset-ui.js" in DIP
+    assert "/dip-v852-guardian-ui.js" in DIP
+    assert "/dip-v856-resilience.js" in DIP
     assert "/dip-v83.js" not in DIP
     assert "/dip-v83-liveview.js" not in DIP
     assert "/dip-expert-v5-brain.js" in SW
