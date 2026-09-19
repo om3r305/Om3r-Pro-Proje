@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v4";
+const VERSION = "brian.realtime-orchestrator.v5-multiasset-crowd";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -13,6 +13,8 @@ const ENDPOINTS = {
   intrabar: BASE + "/brian-intrabar-eye",
   alpha: BASE + "/brian-alpha-decision-compiler",
   catalyst: BASE + "/brian-realtime-catalyst-reaction",
+  crowd: BASE + "/brian-realtime-crowd-behavior",
+  multiasset: BASE + "/brian-realtime-multiasset-market-eye",
 };
 
 type Json = Record<string, unknown>;
@@ -63,6 +65,7 @@ async function marketLane(key:string,minute:number){
         if(minute%10===0){
           results.push(await call("derivatives",ENDPOINTS.derivatives,key,50000));
         }
+        results.push(await call("crowd_behavior",ENDPOINTS.crowd,key,50000));
         results.push(await call("big_move",ENDPOINTS.bigMove,key,50000));
       }else{
         if(minute%10===0) results.push({name:"derivatives",ok:false,target_status:"SKIPPED_SENSOR_FAILED"});
@@ -73,6 +76,10 @@ async function marketLane(key:string,minute:number){
       if(minute%10===0) results.push({name:"derivatives",ok:false,target_status:"SKIPPED_UNIVERSE_FAILED"});
       results.push({name:"big_move",ok:false,target_status:"SKIPPED_UNIVERSE_FAILED"});
     }
+  }
+
+  if(minute%10===0){
+    results.push(await call("multiasset_market",ENDPOINTS.multiasset,key,50000));
   }
 
   if(minute%60===7){
