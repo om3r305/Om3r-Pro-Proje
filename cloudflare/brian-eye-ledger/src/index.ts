@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.3";
+const VERSION = "brian.cf-eye-ledger.v2.4";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -115,6 +115,7 @@ export interface Env {
   REALTIME_UNIVERSE_URL?: string;
   REALTIME_SENSOR_URL?: string;
   REALTIME_INTRABAR_URL?: string;
+  REALTIME_ALPHA_COMPILER_URL?: string;
   REALTIME_CATALYST_REACTION_URL?: string;
   BRIAN_CLOUDFLARE_KEY?: string;
   ALPHA_RECHECK_ENABLED: string;
@@ -1443,6 +1444,14 @@ async function runRealtimeEngines(env: Env, scheduledMinute: number) {
     env.REALTIME_INTRABAR_URL
   ));
 
+  if (scheduledMinute % 2 === 0) {
+    results.push(await callRealtimeEngine(
+      env,
+      "alpha",
+      env.REALTIME_ALPHA_COMPILER_URL
+    ));
+  }
+
   return {
     status: results.every((row) => row.accepted !== false) ? "SUCCESS" : "DEGRADED",
     results,
@@ -1612,6 +1621,7 @@ export default {
         realtime_universe_configured: Boolean(env.REALTIME_UNIVERSE_URL),
         realtime_sensor_configured: Boolean(env.REALTIME_SENSOR_URL),
         realtime_intrabar_configured: Boolean(env.REALTIME_INTRABAR_URL),
+        realtime_alpha_compiler_configured: Boolean(env.REALTIME_ALPHA_COMPILER_URL),
         realtime_catalyst_reaction_configured: Boolean(env.REALTIME_CATALYST_REACTION_URL),
         shadow_only: true,
         live_execution: false
