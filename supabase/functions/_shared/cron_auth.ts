@@ -2,6 +2,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 const DEFAULT_AUTH_ID = "control-v3";
 const DEFAULT_CRON_KEY_SHA256_FALLBACK = "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab";
+const CLOUDFLARE_KEY_SHA256 = "8d348396f3da9bbffde9bef6f6f8d802af542bdcb3354743f92d3ece260fea51";
 
 function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
@@ -46,6 +47,13 @@ export async function requireCronAuth(
   supabase: SupabaseClient,
   authId = DEFAULT_AUTH_ID,
 ): Promise<void> {
+  const cloudflareKey = (req.headers.get("x-brian-cloudflare-key") ?? "").trim();
+  if (cloudflareKey) {
+    const cloudflareHash = await sha256Hex(cloudflareKey);
+    if (constantTimeEqual(cloudflareHash, CLOUDFLARE_KEY_SHA256)) return;
+    throw new Error("UNAUTHORIZED_CLOUDFLARE");
+  }
+
   const supplied = (req.headers.get("x-brian-cron-key") ?? "").trim();
   if (!supplied) throw new Error("UNAUTHORIZED_CRON");
 
