@@ -5,7 +5,6 @@ const VERSION = "brian.cf-eye-ledger.v1.7";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const SOURCE_SMOKE2_TOKEN_SHA256 = "fee59957e0d92f1d1fb5d9bac082b7973834f1dc070f893c06f25bb1db8d354a";
 
 type Json = Record<string, unknown>;
 
@@ -1113,45 +1112,6 @@ export default {
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         shadow_only: true,
         live_execution: false
-      });
-    }
-
-    if (req.method === "GET" && url.pathname === "/source-smoke-test-2") {
-      const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== SOURCE_SMOKE2_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_SOURCE_SMOKE_2" }, 401);
-      }
-
-      const ids = new Set([
-        "cftc_press_html",
-        "nyfed_press_html",
-        "bis_media_rss",
-        "boc_press_rss"
-      ]);
-      const sources = loadManifest(env).filter((x) => ids.has(x.endpoint_id));
-      const results: Json[] = [];
-
-      for (const endpoint of sources) {
-        try {
-          results.push(await pollSource(env, endpoint));
-        } catch (error) {
-          results.push({
-            endpoint_id: endpoint.endpoint_id,
-            error: errText(error).slice(0, 1200)
-          });
-        }
-      }
-
-      return out({
-        status: results.some((x) => x.error) ? "DEGRADED" : "SUCCESS",
-        version: VERSION,
-        tested_sources: sources.length,
-        results,
-        safety: {
-          shadow_only: true,
-          live_execution: false,
-          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true"
-        }
       });
     }
 
