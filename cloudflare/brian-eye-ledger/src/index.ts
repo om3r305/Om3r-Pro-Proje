@@ -5,6 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.1";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
+const BOJ_ONE_SHOT_TOKEN_SHA256 = "130bca5f869afbb2ee0623779b01d9fc6e00728ad16322cc0bda61e3dfb1e938";
 
 type Json = Record<string, unknown>;
 
@@ -807,6 +808,59 @@ export default {
         shadow_only: true,
         live_execution: false
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/boj-one-shot") {
+      const token = url.searchParams.get("token") ?? "";
+      if (await sha(token) !== BOJ_ONE_SHOT_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_BOJ_TEST" }, 401);
+      }
+
+      const sources = loadManifest(env);
+      const source = sources.find((row) => row.endpoint_id === "boj_whatsnew_rss");
+
+      const safe =
+        Boolean(source) &&
+        env.SHADOW_ONLY === "true" &&
+        env.LIVE_EXECUTION !== "true" &&
+        env.R2_ENABLED !== "true" &&
+        env.ALPHA_RECHECK_ENABLED !== "true";
+
+      if (!safe || !source) {
+        return out({
+          status: "SAFE_TEST_BLOCKED",
+          source_present: Boolean(source),
+          r2_enabled: env.R2_ENABLED === "true",
+          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+          shadow_only: env.SHADOW_ONLY === "true",
+          live_execution: env.LIVE_EXECUTION === "true"
+        }, 409);
+      }
+
+      try {
+        const result = await pollSource(env, source);
+        return out({
+          status: "BOJ_ONE_SHOT_COMPLETE",
+          result,
+          safety: {
+            r2_enabled: false,
+            alpha_recheck_enabled: false,
+            shadow_only: true,
+            live_execution: false
+          }
+        });
+      } catch (error) {
+        return out({
+          status: "BOJ_ONE_SHOT_FAILED",
+          error: errText(error).slice(0, 1200),
+          safety: {
+            r2_enabled: false,
+            alpha_recheck_enabled: false,
+            shadow_only: true,
+            live_execution: false
+          }
+        }, 500);
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
