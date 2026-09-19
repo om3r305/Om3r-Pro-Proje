@@ -5,7 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const R2_CANARY_TOKEN_SHA256 = "46b7b566e2a808edc34de6a3eaef796e8149f23b72523ac84dd3f4b86b8174c7";
+const R2_CANARY_TOKEN_SHA256 = "0fe572a0d74af999c3a735f53feb54e8be72d93479333f22ee5767320b49526f";
 
 type Json = Record<string, unknown>;
 
