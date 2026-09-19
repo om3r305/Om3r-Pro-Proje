@@ -15,6 +15,13 @@ import {
   type CanonicalAlphaShadowOpportunity,
 } from "../_shared/evolution_treasury_alpha_shadow.ts";
 import {
+  MULTIASSET_SHADOW_MAINTENANCE_MAX_AGE_SECONDS,
+  MULTIASSET_SHADOW_POSITION_PREFIX,
+  buildMultiassetShadowOpportunities,
+  type MultiassetAlphaDecisionRow,
+  type MultiassetShadowOpportunity,
+} from "../_shared/evolution_treasury_multiasset_shadow.ts";
+import {
   assessTreasuryRuntimeEvidence,
   missingTreasuryPositionEdgeAssets,
 } from "../_shared/evolution_treasury_runtime.ts";
@@ -38,6 +45,7 @@ const MARK_LOOKBACK_MS = 5 * 60_000;
 const DEGRADED_MARK_LOOKBACK_MS = 60 * 60_000;
 const EDGE_SELECT = "decision_id,observed_at,evaluated_at,asset_id,direction,estimated_round_trip_cost_bps,expected_net_edge_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear";
 const ALPHA_SHADOW_SELECT = "decision_id,observed_at,asset_id,observed_reference_price,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,veto_reason,evidence_class,shadow_only,live_execution,metadata";
+const MULTIASSET_SHADOW_SELECT = "decision_id,observed_at,asset_id,asset_class,provider_time,observed_reference_price,action,direction,evidence_score,independent_group_count,support_groups,linked_event_ids,requested_virtual_notional_usd,estimated_round_trip_cost_bps,veto_reason,session_state,data_latency_seconds,metadata,evidence_class,shadow_only,live_execution";
 
 type SnapshotRow = {
   snapshot_id: string;
@@ -336,6 +344,45 @@ async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIs
   return buildCanonicalAlphaShadowOpportunities(rows, state.positions, nowIso);
 }
 
+async function loadMultiassetShadowOpportunities(
+  state: TreasuryState,
+  nowIso: string,
+): Promise<MultiassetShadowOpportunity[]> {
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(nowMs)) throw new Error("treasury_multiasset_shadow: invalid cycle timestamp");
+  const since = new Date(nowMs - MULTIASSET_SHADOW_MAINTENANCE_MAX_AGE_SECONDS * 1000).toISOString();
+  const future = new Date(nowMs + 5_000).toISOString();
+  const q = await db.from("brian_multiasset_alpha_decisions")
+    .select(MULTIASSET_SHADOW_SELECT)
+    .gte("observed_at", since).lte("observed_at", future)
+    .order("observed_at", { ascending: false }).limit(300);
+  if (q.error) throw new Error(`treasury_multiasset_shadow:${q.error.message}`);
+
+  const rows: MultiassetAlphaDecisionRow[] = (q.data ?? []).map((row) => ({
+    decisionId: String(row.decision_id),
+    observedAt: String(row.observed_at),
+    assetId: String(row.asset_id),
+    assetClass: String(row.asset_class ?? "unknown"),
+    providerTime: String(row.provider_time),
+    referencePrice: finite(row.observed_reference_price),
+    action: String(row.action ?? "WAIT"),
+    direction: Number(row.direction ?? 0),
+    evidenceScore: finite(row.evidence_score),
+    independentGroupCount: Math.max(0, Math.trunc(Number(row.independent_group_count ?? 0))),
+    supportGroups: Array.isArray(row.support_groups) ? row.support_groups.map(String) : [],
+    linkedEventIds: Array.isArray(row.linked_event_ids) ? row.linked_event_ids.map(String) : [],
+    requestedVirtualNotionalUsd: finite(row.requested_virtual_notional_usd),
+    estimatedRoundTripCostBps: finite(row.estimated_round_trip_cost_bps),
+    vetoReason: row.veto_reason == null ? null : String(row.veto_reason),
+    sessionState: String(row.session_state ?? "UNKNOWN"),
+    dataLatencySeconds: finite(row.data_latency_seconds),
+    shadowOnly: row.shadow_only === true,
+    liveExecution: row.live_execution === true,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+  }));
+  return buildMultiassetShadowOpportunities(rows, state.positions, nowIso);
+}
+
 async function commitCycle(input: {
   observedAt: string;
   previousSnapshotId: string | null;
@@ -350,6 +397,9 @@ async function commitCycle(input: {
     const canonicalAlphaShadow = String(action.positionId || "").startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX) ||
       action.reason === "CANONICAL_ALPHA_SHADOW_SIGNAL" || action.reason === "ALPHA_SIGNAL_REVOKED" ||
       action.reason === "ALPHA_SHADOW_LANE_CLOSED_BY_PROMOTION";
+    const multiassetShadow = String(action.positionId || "").startsWith(MULTIASSET_SHADOW_POSITION_PREFIX) ||
+      action.reason === "MULTIASSET_SHADOW_SIGNAL" || action.reason === "MULTIASSET_SIGNAL_REVOKED" ||
+      action.reason === "MULTIASSET_SESSION_CLOSED_OR_STALE";
     actions.push({
       action_id: await sha(`treasury-action|${cycleId}|${index}|${action.kind}|${action.assetId}|${action.positionId ?? "none"}`),
       observed_at: input.observedAt,
@@ -367,7 +417,9 @@ async function commitCycle(input: {
         treasury_version: BRIAN_TREASURY_VERSION,
         gate_version: BRIAN_TREASURY_GATE_VERSION,
         canonical_alpha_shadow: canonicalAlphaShadow,
-        expected_edge_semantics: canonicalAlphaShadow ? "UNAVAILABLE_CANONICAL_ALPHA_SHADOW" : "EXPECTED_NET_EDGE_BPS",
+        multiasset_shadow: multiassetShadow,
+        shadow_lane: multiassetShadow ? "MULTIASSET_EVENT_REACTION" : canonicalAlphaShadow ? "CANONICAL_ALPHA" : "EXPECTED_EDGE",
+        expected_edge_semantics: canonicalAlphaShadow || multiassetShadow ? "UNAVAILABLE_SHADOW_SIGNAL" : "EXPECTED_NET_EDGE_BPS",
       },
     });
   }
@@ -395,6 +447,7 @@ async function commitCycle(input: {
       opportunities_observed: input.opportunities.length,
       promotion_gate_decided_at: input.plan.promotionGate.decidedAt ?? null,
       canonical_alpha_shadow: input.plan.canonicalAlphaShadow,
+      multiasset_shadow: input.plan.multiassetShadow,
       point_in_time_execution_marks: true,
       degraded_mark_fallback_enabled: true,
       open_position_edge_supplement_enabled: true,
@@ -458,27 +511,31 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities, alphaShadowOpportunities] = await Promise.all([
+      const [promotionGate, opportunities, alphaShadowOpportunities, multiassetShadowOpportunities] = await Promise.all([
         loadPromotionGate(),
         loadOpportunities(loaded.state, observedAt),
         loadCanonicalAlphaShadowOpportunities(loaded.state, observedAt),
+        loadMultiassetShadowOpportunities(loaded.state, observedAt),
       ]);
       const plan = planPromotionGatedTreasuryCycle({
         state: loaded.state,
         opportunities,
         shadowFallbackOpportunities: alphaShadowOpportunities,
+        multiassetShadowOpportunities,
         observedAt,
         promotionGate,
         positionIdFor: (opportunity) => `treasury:${opportunity.sourceDecisionId}`,
       });
       const committed = await commitCycle({ observedAt, previousSnapshotId: loaded.previousSnapshotId, plan, opportunities });
-      await recordRun(startedAt, "SUCCESS", opportunities.length + alphaShadowOpportunities.length, 1 + plan.actions.length, {
+      await recordRun(startedAt, "SUCCESS", opportunities.length + alphaShadowOpportunities.length + multiassetShadowOpportunities.length, 1 + plan.actions.length, {
         cycle_id: committed.cycleId,
         snapshot_id: committed.snapshotId,
         promotion_gate_open: plan.promotionGate.authorized,
         promotion_gate_ref: plan.promotionGate.evidenceRef,
         promotion_gate_decided_at: plan.promotionGate.decidedAt ?? null,
         canonical_alpha_shadow: plan.canonicalAlphaShadow,
+        multiasset_shadow: plan.multiassetShadow,
+        multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
         actions: plan.actions.length,
         positions: plan.state.positions.length,
         equity_usd: plan.afterEquityUsd,
@@ -497,6 +554,8 @@ Deno.serve(async (req: Request) => {
         opportunities: opportunities.length,
         canonical_alpha_shadow: plan.canonicalAlphaShadow,
         canonical_alpha_shadow_opportunities: alphaShadowOpportunities.length,
+        multiasset_shadow: plan.multiassetShadow,
+        multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
         actions: plan.actions,
         treasury: {
           starting_equity_usd: plan.state.startingEquityUsd,
