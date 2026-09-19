@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v3";
+const VERSION = "brian.realtime-orchestrator.v4";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -8,6 +8,7 @@ const ENDPOINTS = {
   sensor: BASE + "/brian-sensor-mesh",
   derivatives: BASE + "/brian-realtime-derivatives-eye",
   fx: BASE + "/brian-realtime-fx-eye",
+  macro: BASE + "/brian-realtime-official-macro-eye",
   bigMove: BASE + "/brian-realtime-big-move-hunter",
   intrabar: BASE + "/brian-intrabar-eye",
   alpha: BASE + "/brian-alpha-decision-compiler",
@@ -38,7 +39,10 @@ async function call(name:string,url:string,key:string,timeoutMs:number){
     try{body=JSON.parse(text) as Json}catch{body={raw:text.slice(0,600)}}
     const targetStatus=String(body.status??"");
     const logicalOk=r.ok && !["FAILED","FAILED_CLOSED","DEGRADED","UNAUTHORIZED"].includes(targetStatus);
-    return {name,ok:logicalOk,http_status:r.status,target_status:targetStatus,elapsed_ms:Date.now()-started,body};
+    return {
+      name,ok:logicalOk,http_status:r.status,target_status:targetStatus,
+      elapsed_ms:Date.now()-started,body
+    };
   }catch(e){
     return {name,ok:false,http_status:0,target_status:"FETCH_FAILED",elapsed_ms:Date.now()-started,error:errText(e).slice(0,800)};
   }
@@ -56,7 +60,9 @@ async function marketLane(key:string,minute:number){
       results.push(sensor);
 
       if(sensor.ok){
-        if(minute%10===0) results.push(await call("derivatives",ENDPOINTS.derivatives,key,50000));
+        if(minute%10===0){
+          results.push(await call("derivatives",ENDPOINTS.derivatives,key,50000));
+        }
         results.push(await call("big_move",ENDPOINTS.bigMove,key,50000));
       }else{
         if(minute%10===0) results.push({name:"derivatives",ok:false,target_status:"SKIPPED_SENSOR_FAILED"});
@@ -69,11 +75,19 @@ async function marketLane(key:string,minute:number){
     }
   }
 
-  if(minute%60===7) results.push(await call("fx",ENDPOINTS.fx,key,50000));
+  if(minute%60===7){
+    results.push(await call("fx",ENDPOINTS.fx,key,50000));
+  }
+
+  if(minute%20===9){
+    results.push(await call("macro",ENDPOINTS.macro,key,50000));
+  }
 
   results.push(await call("intrabar",ENDPOINTS.intrabar,key,50000));
 
-  if(minute%2===0) results.push(await call("alpha",ENDPOINTS.alpha,key,50000));
+  if(minute%2===0){
+    results.push(await call("alpha",ENDPOINTS.alpha,key,50000));
+  }
   return results;
 }
 
@@ -92,6 +106,7 @@ Deno.serve(async(req:Request)=>{
 
   const eyePromise=call("official_eye",ENDPOINTS.eye,key,50000);
   const marketPromise=marketLane(key,minute);
+
   const [eye,market]=await Promise.all([eyePromise,marketPromise]);
   const catalyst=await call("catalyst_reaction",ENDPOINTS.catalyst,key,50000);
   const results=[eye,...market,catalyst];
