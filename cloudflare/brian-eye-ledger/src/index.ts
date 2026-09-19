@@ -5,7 +5,7 @@ const VERSION = "brian.cf-eye-ledger.v1.2";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const R2_CANARY_TOKEN_SHA256 = "0fe572a0d74af999c3a735f53feb54e8be72d93479333f22ee5767320b49526f";
+const R2_STATUS_TOKEN_SHA256 = "0276d3e35600cf9e4b5dec343b6569f11dced7293785bd506db37f6ab642ed68";
 
 type Json = Record<string, unknown>;
 
@@ -854,53 +854,59 @@ export default {
       });
     }
 
-    if (req.method === "GET" && url.pathname === "/r2-canary") {
+    if (req.method === "GET" && url.pathname === "/r2-status") {
       const token = url.searchParams.get("token") ?? "";
-      if (await sha(token) !== R2_CANARY_TOKEN_SHA256) {
-        return out({ status: "UNAUTHORIZED_R2_CANARY" }, 401);
+      if (await sha(token) !== R2_STATUS_TOKEN_SHA256) {
+        return out({ status: "UNAUTHORIZED_R2_STATUS" }, 401);
       }
 
-      const safe =
-        env.SHADOW_ONLY === "true" &&
-        env.LIVE_EXECUTION !== "true" &&
-        env.ALPHA_RECHECK_ENABLED !== "true" &&
-        env.R2_ENABLED === "true" &&
-        Boolean(env.RAW_BUCKET);
-
-      if (!safe || !env.RAW_BUCKET) {
+      if (env.R2_ENABLED !== "true" || !env.RAW_BUCKET) {
         return out({
-          status: "R2_CANARY_BLOCKED",
+          status: "R2_STATUS_BLOCKED",
           r2_enabled: env.R2_ENABLED === "true",
-          raw_bucket_bound: Boolean(env.RAW_BUCKET),
-          shadow_only: env.SHADOW_ONLY === "true",
-          live_execution: env.LIVE_EXECUTION === "true"
+          raw_bucket_bound: Boolean(env.RAW_BUCKET)
         }, 409);
       }
 
-      const path = "canary/r2-binding-test.txt";
-      const body = "brian-r2-canary-v1";
-      await env.RAW_BUCKET.put(path, body, {
-        httpMetadata: { contentType: "text/plain; charset=utf-8" },
-        customMetadata: {
-          purpose: "binding-test",
-          shadow_only: "true"
-        }
+      const listed = await env.RAW_BUCKET.list({
+        prefix: "source-arch-v2/",
+        limit: 100
       });
 
-      const head = await env.RAW_BUCKET.head(path);
+      const objects = listed.objects.map((obj) => ({
+        key: obj.key,
+        size: obj.size,
+        uploaded: obj.uploaded?.toISOString?.() ?? null,
+        etag: obj.etag
+      }));
+
+      const endpointIds = [
+        "ecb_press",
+        "boj_whatsnew_rss",
+        "consilium_press",
+        "bundesbank_general_rss"
+      ];
+
+      const perSource = endpointIds.map((endpointId) => ({
+        endpoint_id: endpointId,
+        object_count: objects.filter((obj) =>
+          obj.key.startsWith("source-arch-v2/" + endpointId + "/")
+        ).length
+      }));
 
       return out({
-        status: "R2_CANARY_OK",
-        path,
-        size: head?.size ?? null,
-        etag: head?.etag ?? null,
+        status: "R2_STATUS_OK",
+        object_count: objects.length,
+        truncated: listed.truncated,
+        per_source: perSource,
+        objects: objects.slice(0, 20),
         safety: {
-          writes: 1,
+          writes: 0,
           scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
           r2_enabled: true,
-          alpha_recheck_enabled: false,
-          shadow_only: true,
-          live_execution: false
+          alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
+          shadow_only: env.SHADOW_ONLY === "true",
+          live_execution: env.LIVE_EXECUTION === "true"
         }
       });
     }
