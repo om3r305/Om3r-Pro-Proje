@@ -98,6 +98,26 @@ Deno.serve(async(req:Request)=>{
     if(q.error)throw q.error;
     decisions.push(...(q.data||[]));
   }
+  const foundDecisionIds=new Set(decisions.map((d:any)=>String(d.decision_id)));
+  const missingDecisionIds=decisionIds.filter(id=>!foundDecisionIds.has(id)).slice(0,180);
+  for(let i=0;i<missingDecisionIds.length;i+=40){
+    const ids=missingDecisionIds.slice(i,i+40);
+    const q=await db.from("brian_multiasset_alpha_decisions")
+      .select("decision_id,observed_at,asset_id,asset_class,action,direction,evidence_score,independent_group_count,requested_virtual_notional_usd,estimated_round_trip_cost_bps,reason,veto_reason,support_groups,conflict_groups,linked_event_ids,session_state,data_latency_seconds,metadata")
+      .in("decision_id",ids).limit(ids.length);
+    if(q.error)throw q.error;
+    decisions.push(...(q.data||[]).map((row:any)=>({
+      ...row,
+      metadata:{
+        ...(row.metadata||{}),
+        multiasset_shadow:true,
+        linked_event_ids:Array.isArray(row.linked_event_ids)?row.linked_event_ids:[],
+        asset_class:row.asset_class,
+        session_state:row.session_state,
+        data_latency_seconds:row.data_latency_seconds,
+      }
+    })));
+  }
   const decisionById=new Map(decisions.map((d:any)=>[String(d.decision_id),d]));
   const evidenceIds=[...new Set(decisions.flatMap((d:any)=>Array.isArray(d?.metadata?.source_evidence_ids_all)?d.metadata.source_evidence_ids_all.map(String):[]).filter(Boolean))];
   let sensors:any[]=[];
@@ -111,14 +131,28 @@ Deno.serve(async(req:Request)=>{
   }
   const sensorById=new Map(sensors.map((s:any)=>[String(s.observation_id),s]));
   const assetIds=[...new Set(positions.map((p:any)=>String(p?.assetId??p?.asset_id??"")).filter(Boolean))];
+  const cryptoAssetIds=assetIds.filter((id:string)=>id.startsWith("crypto:"));
+  const multiassetIds=assetIds.filter((id:string)=>!id.startsWith("crypto:"));
   let ticks:any[]=[];
-  if(assetIds.length){
+  if(cryptoAssetIds.length){
     const since=new Date(Date.now()-30*60_000).toISOString();
     const q=await db.from("brian_micro_book_ticks")
       .select("asset_id,observed_at,observed_mid_price")
-      .in("asset_id",assetIds).gte("observed_at",since)
-      .order("observed_at",{ascending:false}).limit(Math.max(120,Math.min(360,assetIds.length*90)));
+      .in("asset_id",cryptoAssetIds).gte("observed_at",since)
+      .order("observed_at",{ascending:false}).limit(Math.max(120,Math.min(360,cryptoAssetIds.length*90)));
     if(q.error)throw q.error;ticks=q.data||[];
+  }
+  if(multiassetIds.length){
+    const q=await db.from("brian_multiasset_alpha_latest")
+      .select("asset_id,observed_at,provider_time,observed_reference_price,session_state")
+      .in("asset_id",multiassetIds);
+    if(q.error)throw q.error;
+    ticks.push(...(q.data||[]).map((row:any)=>({
+      asset_id:row.asset_id,
+      observed_at:row.provider_time||row.observed_at,
+      observed_mid_price:row.observed_reference_price,
+      session_state:row.session_state,
+    })));
   }
   const markByAsset=new Map<string,any>();
   for(const t of ticks){const a=String(t.asset_id);if(!markByAsset.has(a))markByAsset.set(a,t);}
@@ -131,6 +165,7 @@ Deno.serve(async(req:Request)=>{
     const evidence=ids.map((id:string)=>sensorById.get(id)).filter(Boolean);
     const groups=[...new Set(evidence.map((s:any)=>String(s.independent_group||"")).filter(Boolean))];
     const eventDriven=evidence.some((s:any)=>String(s.independent_group)==="world_event_reaction"||String(s.sensor_family).toLowerCase().includes("event"));
+    const multiasset=decision?.metadata?.shadow_lane==="MULTIASSET_EVENT_REACTION"||decision?.metadata?.multiasset_shadow===true;
     const macro=decision?.metadata?.official_macro_context??null;
     const macroEvents=Array.isArray(macro?.events)?macro.events:[];
     return {
@@ -146,10 +181,17 @@ Deno.serve(async(req:Request)=>{
       veto_reason:decision.veto_reason||null,
       support_groups:Array.isArray(decision.support_groups)?decision.support_groups:[],
       conflict_groups:Array.isArray(decision.conflict_groups)?decision.conflict_groups:[],
-      source_type:eventDriven?"EVENT_CATALYST":"MARKET_STRUCTURE",
-      source_label:eventDriven?"Haber / olay + piyasa doğrulaması":"Piyasa mikro-yapısı / akış",
-      evidence_groups:groups,
-      evidence:evidence.map((s:any)=>({
+      source_type:multiasset?"MULTIASSET_EVENT_REACTION":eventDriven?"EVENT_CATALYST":"MARKET_STRUCTURE",
+      source_label:multiasset?"Haber / olay + çapraz piyasa reaksiyonu":eventDriven?"Haber / olay + piyasa doğrulaması":"Piyasa mikro-yapısı / akış",
+      evidence_groups:multiasset?(Array.isArray(decision.support_groups)?decision.support_groups:[]):groups,
+      linked_event_ids:multiasset?(Array.isArray(decision?.metadata?.linked_event_ids)?decision.metadata.linked_event_ids:[]):[],
+      evidence:multiasset
+        ? (Array.isArray(decision.support_groups)?decision.support_groups:[]).map((group:string)=>({
+            observation_id:null,observed_at:decision.observed_at,group,family:"multiasset_event_reaction",
+            direction:Number(decision.direction||0),strength:Number(decision.evidence_score||0),
+            confidence:Number(decision.evidence_score||0),reason:group==="event_link"?"Olay-varlık bağlantısı":"Canlı piyasa reaksiyonu doğrulaması"
+          }))
+        : evidence.map((s:any)=>({
         observation_id:s.observation_id,observed_at:s.observed_at,group:s.independent_group,
         family:s.sensor_family,direction:Number(s.direction||0),strength:Number(s.strength||0),
         confidence:Number(s.confidence||0),reason:s.reason||null
