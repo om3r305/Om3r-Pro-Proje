@@ -1,11 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v1.3";
+const VERSION = "brian.cf-eye-ledger.v1.4";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
-const ALPHA_TEST_TOKEN_SHA256 = "7f38f0ec66f82d8512d4a894b3ee651ad3fe653202dbc0d4f8fe3a63416676d6";
 
 type Json = Record<string, unknown>;
 
@@ -1010,72 +1009,6 @@ export default {
         shadow_only: true,
         live_execution: false
       });
-    }
-
-    if (req.method === "GET" && url.pathname === "/alpha-recheck-test") {
-      try {
-        const token = url.searchParams.get("token") ?? "";
-        if (await sha(token) !== ALPHA_TEST_TOKEN_SHA256) {
-          return out({ status: "UNAUTHORIZED_ALPHA_TEST" }, 401);
-        }
-
-        const safe =
-          env.SHADOW_ONLY === "true" &&
-          env.LIVE_EXECUTION !== "true" &&
-          env.ALPHA_RECHECK_ENABLED !== "true" &&
-          Boolean(env.ALPHA_RECHECK_URL) &&
-          Boolean(env.BRIAN_CLOUDFLARE_KEY);
-
-        if (!safe) {
-          return out({
-            status: "ALPHA_TEST_BLOCKED",
-            alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
-            alpha_url_configured: Boolean(env.ALPHA_RECHECK_URL),
-            shadow_only: env.SHADOW_ONLY === "true",
-            live_execution: env.LIVE_EXECUTION === "true"
-          }, 409);
-        }
-
-        const eventId = "ce38f95ee2ae0f228907a1ef5a7ac33c6c3f362bc2b16e81b42d46b70b5bf6b7";
-        const assetId = "crypto:BTCUSDT";
-        const requestId = await sha(
-          "alpha-shadow-test-v2|" + eventId + "|" + assetId
-        );
-        const target = alphaQueueStub(env, requestId);
-        const current = await target.stub.enqueue({
-          request_id: requestId,
-          event_id: eventId,
-          asset_id: assetId,
-          alert_id: "cloudflare-alpha-shadow-test"
-        });
-
-        return out({
-          status: current.delivered_at
-            ? "ALPHA_RECHECK_TEST_DELIVERED"
-            : "ALPHA_RECHECK_TEST_QUEUED",
-          request_id: requestId,
-          shard: target.shard,
-          attempts: Number(current.attempts ?? 0),
-          delivered_at: current.delivered_at ?? null,
-          last_error: current.last_error ?? null,
-          last_response: current.last_response ?? null,
-          safety: {
-            global_alpha_recheck_enabled: false,
-            shadow_only: true,
-            live_execution: false
-          }
-        });
-      } catch (error) {
-        return out({
-          status: "ALPHA_RECHECK_TEST_EXCEPTION",
-          error: errText(error).slice(0, 1200),
-          safety: {
-            global_alpha_recheck_enabled: false,
-            shadow_only: true,
-            live_execution: false
-          }
-        }, 500);
-      }
     }
 
     if (req.method === "POST" && url.pathname === "/run") {
