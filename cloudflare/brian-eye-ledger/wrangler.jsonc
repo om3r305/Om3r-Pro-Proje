@@ -27,6 +27,6 @@
     "R2_ENABLED": "false",
     "ALPHA_RECHECK_ENABLED": "false",
     "SUPABASE_INGEST_URL": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-cloudflare-shadow-ingest",
-    "SOURCE_MANIFEST_JSON": "[{\"endpoint_id\":\"ecb_press\",\"source_id\":\"official:ecb:press\",\"organization\":\"ECB\",\"canonical_domain\":\"ecb.europa.eu\",\"endpoint_url\":\"https://www.ecb.europa.eu/rss/press.html\",\"endpoint_kind\":\"RSS\",\"tier\":\"T1_OFFICIAL_PRIMARY\",\"category\":\"CENTRAL_BANK\",\"region\":\"EU\",\"priority\":100}]"
+    "SOURCE_MANIFEST_JSON": "[{\"endpoint_id\":\"cloudflare_pipeline_test\",\"source_id\":\"test:cloudflare:pipeline\",\"organization\":\"Brian Test Feed\",\"canonical_domain\":\"qbcjuxhvhwagvqbjyemo.supabase.co\",\"endpoint_url\":\"https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-cloudflare-test-feed\",\"endpoint_kind\":\"RSS\",\"tier\":\"T1_OFFICIAL_PRIMARY\",\"category\":\"SHADOW_TEST\",\"region\":\"GLOBAL\",\"priority\":100}]"
   }
 }
