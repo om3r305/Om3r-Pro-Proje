@@ -349,12 +349,13 @@ function requireWorkerAuth(req: Request, env: Env) {
 }
 
 async function fetchFeed(endpoint: SourceEndpoint) {
+  const timeoutMs = endpoint.endpoint_kind === "STATUSPAGE_ATOM" ? 20000 : 9000;
   const response = await fetch(endpoint.endpoint_url, {
     redirect: "follow",
     headers: {
       accept: "application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1"
     },
-    signal: AbortSignal.timeout(9000)
+    signal: AbortSignal.timeout(timeoutMs)
   });
   if (!response.ok) throw new Error("HTTP_" + response.status);
   const finalHost = new URL(response.url || endpoint.endpoint_url).hostname;
