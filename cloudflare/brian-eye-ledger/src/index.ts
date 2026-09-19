@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.6";
+const VERSION = "brian.cf-eye-ledger.v2.7-decommissioned";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -104,6 +104,7 @@ export interface Env {
   FIRST_SEEN_LEDGER: DurableObjectNamespace<FirstSeenLedger>;
   ALPHA_RECHECK_QUEUE: DurableObjectNamespace<AlphaRecheckQueue>;
   SHADOW_ONLY: string;
+  DECOMMISSIONED?: string;
   LIVE_EXECUTION: string;
   ENABLE_SCHEDULED_EYE: string;
   R2_ENABLED: string;
@@ -1597,6 +1598,16 @@ async function routeAlphaRecheck(req: Request, env: Env, ctx?: ExecutionContext)
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    const isHealth = req.method === "GET" && (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/health/");
+    if (env.DECOMMISSIONED === "true" && !isHealth) {
+      return out({
+        status: "DECOMMISSIONED",
+        version: VERSION,
+        replacement: "supabase:brian-realtime",
+        shadow_only: true,
+        live_execution: false
+      }, 410);
+    }
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/health" || url.pathname === "/health/")) {
       let sourceCount = 0;
@@ -1606,7 +1617,7 @@ export default {
         sourceCount = -1;
       }
       return out({
-        status: "OK",
+        status: env.DECOMMISSIONED === "true" ? "DECOMMISSIONED" : "OK",
         version: VERSION,
         source_count: sourceCount,
         scheduled_eye_enabled: env.ENABLE_SCHEDULED_EYE === "true",
@@ -1679,6 +1690,7 @@ export default {
     env: Env,
     ctx: ExecutionContext
   ) {
+    if (env.DECOMMISSIONED === "true") return;
     ctx.waitUntil((async () => {
       if (env.R2_OUTBOX_ENABLED === "true") {
         await flushR2AlphaOutbox(env);
