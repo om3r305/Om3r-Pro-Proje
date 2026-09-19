@@ -824,22 +824,43 @@ export default {
 
       try {
         const nowMs = Date.now();
-        const xml = await fetchFeed(source);
-        const parsed = parseFeed(xml);
-        const selected = parsed.filter((item) => freshEnough(item, nowMs));
+
+        const xml1 = await fetchFeed(source);
+        const parsed1 = parseFeed(xml1);
+        const selected1 = parsed1.filter((item) => freshEnough(item, nowMs));
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+
+        const xml2 = await fetchFeed(source);
+        const parsed2 = parseFeed(xml2);
+        const selected2 = parsed2.filter((item) => freshEnough(item, Date.now()));
+
+        const secondByTitle = new Map(selected2.map((item) => [item.title, item]));
         const rows = [];
 
-        for (const item of selected) {
-          const eventId = await sha(
+        for (const item of selected1) {
+          const eventId1 = await sha(
             "source-arch-v2|" + source.endpoint_id + "|" + item.guid
           );
-          const target = ledgerStub(env, eventId);
-          const row = await target.stub.lookup(eventId);
+          const second = secondByTitle.get(item.title) ?? null;
+          const eventId2 = second
+            ? await sha("source-arch-v2|" + source.endpoint_id + "|" + second.guid)
+            : null;
+
+          const target = ledgerStub(env, eventId1);
+          const row = await target.stub.lookup(eventId1);
+
           rows.push({
-            event_id: eventId,
-            shard: target.shard,
             title: item.title,
             published_at: item.publishedAt,
+            guid_1: item.guid,
+            link_1: item.link,
+            event_id_1: eventId1,
+            guid_2: second?.guid ?? null,
+            link_2: second?.link ?? null,
+            event_id_2: eventId2,
+            stable_between_fetches: Boolean(eventId2 && eventId1 === eventId2),
+            shard: target.shard,
             first_seen_at: row?.first_seen_at ?? null,
             last_seen_at: row?.last_seen_at ?? null,
             seen_count: row?.seen_count ?? null,
@@ -849,9 +870,12 @@ export default {
         }
 
         return out({
-          status: "BOJ_LEDGER_CHECK_COMPLETE",
-          parsed: parsed.length,
-          selected: selected.length,
+          status: "BOJ_IDENTITY_DIAGNOSTIC_COMPLETE",
+          parsed_1: parsed1.length,
+          selected_1: selected1.length,
+          parsed_2: parsed2.length,
+          selected_2: selected2.length,
+          all_stable_between_fetches: rows.every((row) => row.stable_between_fetches === true),
           rows,
           safety: {
             writes: 0,
@@ -864,7 +888,7 @@ export default {
         });
       } catch (error) {
         return out({
-          status: "BOJ_LEDGER_CHECK_FAILED",
+          status: "BOJ_IDENTITY_DIAGNOSTIC_FAILED",
           error: errText(error).slice(0, 1200)
         }, 500);
       }
