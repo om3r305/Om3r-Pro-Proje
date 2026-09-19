@@ -22,7 +22,7 @@ import {
   windowReturn,
 } from "./logic.ts";
 import type { Book, IntrabarSignalRow, MarketRow, PriorTick, RadarCandidate, Signal } from "./logic.ts";
-import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { withCollectorLease } from "../_shared/collector_lease.ts";\nimport { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -134,6 +134,8 @@ async function recordCollectorRun(startedAt: string, status: "SUCCESS" | "DEGRAD
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return jsonResponse({ error: "POST required" }, 405);
+  try { await requireRealtimeInternal(req); }
+  catch { return jsonResponse({ status: "UNAUTHORIZED" }, 401); }
   const startedAt = new Date().toISOString();
   try {
     // Cadence is anchored to the prior run start, not its finish. A 10–15s runtime must not suppress the next minute's cron tick.
