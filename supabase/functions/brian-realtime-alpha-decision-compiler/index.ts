@@ -63,6 +63,17 @@ type OfficialMacroContext = {
   degraded_reason?: string;
 };
 
+type CrowdBehaviorContext = {
+  role: "context_and_risk_proxy_not_independent_vote";
+  state: string;
+  direction: number;
+  strength: number;
+  confidence: number;
+  observed_at: string | null;
+  reason: string | null;
+  source_groups: string[];
+};
+
 type ReferenceBook = { mid: number; spreadBps: number };
 type ObservedL2Cost = {
   quote: DynamicCostQuote;
@@ -308,6 +319,38 @@ async function loadOfficialMacroContext(asOfMs: number, asOf: string): Promise<O
   };
 }
 
+async function loadCrowdContexts(assets: string[], nowMs: number): Promise<Map<string, CrowdBehaviorContext>> {
+  const map = new Map<string, CrowdBehaviorContext>();
+  if (!assets.length) return map;
+  const since = new Date(nowMs - 10 * 60_000).toISOString();
+  const resp = await supabase.from("brian_crowd_behavior_frames")
+    .select("asset_id,observed_at,state,direction,strength,confidence,reason,supporting_groups,conflict_groups")
+    .in("asset_id", assets)
+    .gte("observed_at", since)
+    .order("observed_at", { ascending: false })
+    .limit(Math.max(80, assets.length * 5))
+    .abortSignal(AbortSignal.timeout(6_000));
+  if (resp.error) throw resp.error;
+  for (const row of resp.data ?? []) {
+    const asset = String(row.asset_id);
+    if (map.has(asset)) continue;
+    map.set(asset, {
+      role: "context_and_risk_proxy_not_independent_vote",
+      state: String(row.state ?? "BALANCED"),
+      direction: Number(row.direction ?? 0),
+      strength: clip(finite(row.strength, 0)),
+      confidence: clip(finite(row.confidence, 0)),
+      observed_at: String(row.observed_at ?? ""),
+      reason: row.reason == null ? null : String(row.reason),
+      source_groups: [...new Set([
+        ...(Array.isArray(row.supporting_groups) ? row.supporting_groups.map(String) : []),
+        ...(Array.isArray(row.conflict_groups) ? row.conflict_groups.map(String) : []),
+      ])],
+    });
+  }
+  return map;
+}
+
 async function loadIntrabarContexts(assets: string[], nowMs: number): Promise<Map<string, IntrabarVetoContext>> {
   const map = new Map<string, IntrabarVetoContext>();
   const since = new Date(nowMs - 5 * 60_000).toISOString();
@@ -508,6 +551,10 @@ Deno.serve(async (req: Request) => {
         macroContext = emptyMacroContext(macroAsOf, reason);
       }
 
+      let crowdContexts = new Map<string, CrowdBehaviorContext>();
+      try { crowdContexts = await loadCrowdContexts(assets, Date.now()); }
+      catch (error) { degradedSources.push(`crowd_behavior_context:${errorText(error)}`); }
+
       // Decision time is after all evidence/cost/context reads, so every attached input is causal.
       const observedAt = new Date().toISOString();
       const decisionRows: Record<string, unknown>[] = []; const costRows: Record<string, unknown>[] = [];
@@ -617,6 +664,16 @@ Deno.serve(async (req: Request) => {
               captured_at: observedL2?.fetchedAt ?? observedAt,
             },
             official_macro_context: macroContext,
+            crowd_behavior_context: crowdContexts.get(asset) ?? {
+              role: "context_and_risk_proxy_not_independent_vote",
+              state: "UNAVAILABLE",
+              direction: 0,
+              strength: 0,
+              confidence: 0,
+              observed_at: null,
+              reason: "no fresh crowd-behavior frame",
+              source_groups: [],
+            },
           },
           evidence_class: EVIDENCE,
           shadow_only: true,
