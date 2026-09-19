@@ -22,6 +22,10 @@ function isTransientAuthLookupFailure(message: string): boolean {
     text.includes("could not query the database") ||
     text.includes("connection to the database timed out") ||
     text.includes("upstream request timeout") ||
+    text.includes("signal timed out") ||
+    text.includes("timeouterror") ||
+    text.includes("fetch failed") ||
+    text.includes("network") ||
     text.includes("pgrst002") ||
     text.includes("pgrst000");
 }
@@ -44,6 +48,13 @@ export async function requireCronAuth(
 ): Promise<void> {
   const supplied = (req.headers.get("x-brian-cron-key") ?? "").trim();
   if (!supplied) throw new Error("UNAUTHORIZED_CRON");
+
+  // Fast path: the canonical control key can be authenticated without a DB round trip.
+  // This prevents a DB slowdown from locking recovery workers out of the system.
+  if (authId === DEFAULT_AUTH_ID) {
+    const suppliedHash = await sha256Hex(supplied);
+    if (constantTimeEqual(suppliedHash, DEFAULT_CRON_KEY_SHA256_FALLBACK)) return;
+  }
 
   let result: any;
   try {
