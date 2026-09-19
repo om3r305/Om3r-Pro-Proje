@@ -1,3 +1,5 @@
+import postgres from "npm:postgres@3.4.7";
+
 // Collector-level atomic lease/mutex for Brian collectors.
 //
 // The database lease remains the source of truth. This client wrapper adds bounded retry and
@@ -20,6 +22,61 @@ type RpcResult = { data: unknown; error: unknown };
 const RPC_ATTEMPTS = 2;
 const RPC_BACKOFF_MS = [250];
 const RPC_TIMEOUT_MS = 5_000;
+
+const DB_URL = typeof Deno !== "undefined" ? (Deno.env.get("SUPABASE_DB_URL") ?? "") : "";
+let directSql: ReturnType<typeof postgres> | null = null;
+
+function sqlClient() {
+  if (!DB_URL) return null;
+  if (!directSql) {
+    directSql = postgres(DB_URL, {
+      prepare: false,
+      max: 1,
+      connect_timeout: 3,
+      idle_timeout: 5,
+      max_lifetime: 30,
+    });
+  }
+  return directSql;
+}
+
+async function directLeaseCall(
+  fn: "acquire" | "renew" | "release",
+  collectorId: string,
+  ownerToken: string,
+  leaseSeconds?: number,
+): Promise<boolean | null> {
+  const sql = sqlClient();
+  if (!sql) return null;
+
+  try {
+    if (fn === "acquire") {
+      const rows = await sql`
+        select public.brian_acquire_collector_lease(
+          ${collectorId}, ${ownerToken}, ${Number(leaseSeconds ?? 1)}
+        ) as value
+      `;
+      return rows?.[0]?.value === true;
+    }
+    if (fn === "renew") {
+      const rows = await sql`
+        select public.brian_renew_collector_lease(
+          ${collectorId}, ${ownerToken}, ${Number(leaseSeconds ?? 1)}
+        ) as value
+      `;
+      return rows?.[0]?.value === true;
+    }
+    const rows = await sql`
+      select public.brian_release_collector_lease(
+        ${collectorId}, ${ownerToken}
+      ) as value
+    `;
+    return rows?.[0]?.value === true;
+  } catch (error) {
+    console.error(`collector lease direct postgres ${fn} failed for ${collectorId}: ${errorText(error)}`);
+    return null;
+  }
+}
 
 export function randomOwnerToken(): string {
   return crypto.randomUUID();
@@ -79,6 +136,8 @@ export async function acquireCollectorLease(
   ownerToken: string,
   leaseSeconds: number,
 ): Promise<boolean> {
+  const direct = await directLeaseCall("acquire", collectorId, ownerToken, leaseSeconds);
+  if (direct !== null) return direct;
   const data = await rpcWithRetry(client, "brian_acquire_collector_lease", {
     p_collector_id: collectorId,
     p_owner_token: ownerToken,
@@ -93,6 +152,8 @@ export async function renewCollectorLease(
   ownerToken: string,
   leaseSeconds: number,
 ): Promise<boolean> {
+  const direct = await directLeaseCall("renew", collectorId, ownerToken, leaseSeconds);
+  if (direct !== null) return direct;
   const data = await rpcWithRetry(client, "brian_renew_collector_lease", {
     p_collector_id: collectorId,
     p_owner_token: ownerToken,
@@ -106,6 +167,8 @@ export async function releaseCollectorLease(
   collectorId: string,
   ownerToken: string,
 ): Promise<boolean> {
+  const direct = await directLeaseCall("release", collectorId, ownerToken);
+  if (direct !== null) return direct;
   const data = await rpcWithRetry(client, "brian_release_collector_lease", {
     p_collector_id: collectorId,
     p_owner_token: ownerToken,
