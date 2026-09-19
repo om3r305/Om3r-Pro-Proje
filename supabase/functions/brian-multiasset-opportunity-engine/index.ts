@@ -3,7 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.multiasset-opportunity-engine.v2";
+const VERSION="brian.multiasset-opportunity-engine.v3-registry";
 const COLLECTOR_ID="brian-multiasset-opportunity-engine-v1";
 const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-multiasset-export";
 
@@ -39,17 +39,22 @@ function classify(claim:string,source:string){
   if(/\b(dollar|usd|euro|eur|yen|jpy|sterling|gbp|currency|fx)\b/.test(x))themes.add("FX");
   return [...themes];
 }
-function assetsForTheme(theme:string):string[]{
-  if(theme==="MONETARY")return ["fx:EURUSD","fx:GBPUSD","fx:USDJPY","index:SP500","index:NASDAQ100","index:DAX","commodity:GOLD"];
-  if(theme==="GEOPOLITICAL")return ["commodity:GOLD","commodity:WTI","commodity:BRENT","index:SP500","index:DAX","fx:USDJPY"];
-  if(theme==="ENERGY")return ["commodity:WTI","commodity:BRENT","commodity:GOLD","index:SP500","index:DAX"];
-  if(theme==="AI_TECH")return ["index:NASDAQ100","index:SP500","equity:NVDA","equity:MSFT","equity:META"];
-  if(theme==="FINANCIAL")return ["index:SP500","index:NASDAQ100","index:DAX","commodity:GOLD","fx:EURUSD","fx:USDJPY"];
-  if(theme==="FX")return ["fx:EURUSD","fx:GBPUSD","fx:USDJPY","commodity:GOLD"];
-  return [];
+function markThemes(mark:Mark):string[]{
+  const raw=mark.metadata?.themes;
+  return Array.isArray(raw)?raw.map(String).filter(Boolean):[];
 }
-function threshold(assetClass:string){return assetClass==="fx"?0.0007:assetClass==="index"?0.0015:assetClass==="commodity"?0.0020:0.0025}
-function costBps(assetClass:string){return assetClass==="fx"?6:assetClass==="index"?10:assetClass==="commodity"?14:18}
+function threshold(assetClass:string){
+  return assetClass==="fx"?0.0007:
+    assetClass==="index"?0.0015:
+    assetClass==="commodity"?0.0020:
+    assetClass==="etf"?0.0020:0.0025;
+}
+function costBps(assetClass:string){
+  return assetClass==="fx"?6:
+    assetClass==="index"?10:
+    assetClass==="commodity"?14:
+    assetClass==="etf"?12:18;
+}
 function ticket(score:number){return score>=.82?20:score>=.68?10:score>=.55?5:3}
 
 Deno.serve(async(req:Request)=>{
@@ -78,6 +83,14 @@ Deno.serve(async(req:Request)=>{
     const events=(eventsQ.data??[]) as EventRow[];
 
     const linksByAsset=new Map<string,Link[]>();
+    const marksByTheme=new Map<string,Mark[]>();
+    for(const mark of marks){
+      for(const theme of markThemes(mark)){
+        const arr=marksByTheme.get(theme)??[];
+        arr.push(mark);
+        marksByTheme.set(theme,arr);
+      }
+    }
     for(const ev of events){
       const themes=classify(String(ev.claim??""),String(ev.source_id??""));
       if(!themes.length)continue;
@@ -86,7 +99,8 @@ Deno.serve(async(req:Request)=>{
       const sourceWeight=String(ev.source_id).startsWith("official:") ? 1 : String(ev.source_id).startsWith("institutional:") ? .85 : .72;
       const decay=Math.exp(-ageH/4);
       for(const theme of themes){
-        for(const asset of assetsForTheme(theme)){
+        for(const mark of marksByTheme.get(theme)??[]){
+          const asset=String(mark.asset_id);
           const arr=linksByAsset.get(asset)??[];
           arr.push({event:ev,weight:sourceWeight*decay,theme});
           linksByAsset.set(asset,arr);
