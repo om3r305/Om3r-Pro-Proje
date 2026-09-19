@@ -50,6 +50,10 @@
     "DURABLE_OBJECTS_ENABLED": "false",
     "R2_OUTBOX_ENABLED": "true",
     "REALTIME_INGEST_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-cloudflare-shadow-ingest",
-    "REALTIME_ALPHA_RECHECK_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-cloudflare-alpha-recheck"
+    "REALTIME_ALPHA_RECHECK_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-cloudflare-alpha-recheck",
+    "REALTIME_ENGINES_ENABLED": "true",
+    "REALTIME_UNIVERSE_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-universe-collector",
+    "REALTIME_SENSOR_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-sensor-mesh",
+    "REALTIME_INTRABAR_URL": "https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-intrabar-eye"
   }
 }
