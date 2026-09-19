@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { XMLParser } from "fast-xml-parser";
 
-const VERSION = "brian.cf-eye-ledger.v2.4";
+const VERSION = "brian.cf-eye-ledger.v2.5";
 const MAX_SOURCES = 20;
 const MAX_ITEMS_PER_FEED = 80;
 const MAX_ITEM_AGE_MS = 48 * 60 * 60 * 1000;
@@ -1468,7 +1468,7 @@ async function runCoreRecovery(env: Env) {
     return { status: "NOT_CONFIGURED", shadow_only: true, live_execution: false };
   }
 
-  const rotating = ["discovery", "evolution", "ocean", "researcher", "sandbox"];
+  const rotating = ["discovery", "ocean"];
   const slot = Math.floor(Date.now() / 300000) % rotating.length;
   const services = ["alpha", "treasury", "world", rotating[slot]];
 
@@ -1613,6 +1613,7 @@ export default {
         r2_enabled: env.R2_ENABLED === "true" && Boolean(env.RAW_BUCKET),
         alpha_recheck_enabled: env.ALPHA_RECHECK_ENABLED === "true",
         core_recovery_enabled: env.CORE_RECOVERY_ENABLED === "true",
+        evolution_os_enabled: false,
         durable_objects_enabled: env.DURABLE_OBJECTS_ENABLED === "true",
         r2_outbox_enabled: env.R2_OUTBOX_ENABLED === "true",
         realtime_dual_write_enabled: Boolean(env.REALTIME_INGEST_URL),
