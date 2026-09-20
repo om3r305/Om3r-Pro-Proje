@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v5-direct-wire";
+const VERSION="brian.realtime-core-scheduler.v6-direct-wire-health";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -100,6 +100,9 @@ Deno.serve(async(req:Request)=>{
   }
   if(minute%15===7 && await collectorFresh("phase39-ecb-fx",90*60_000)){
     actions.push("fx_heartbeat");
+  }
+  if(await collectorFresh("brian-direct-wire-eye-v1",6*60_000)){
+    actions.push("direct_wire_heartbeat");
   }
   const results:Result[]=[];
 
