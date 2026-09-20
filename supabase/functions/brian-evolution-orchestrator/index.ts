@@ -107,11 +107,21 @@ async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[
   if (l2Q.error) throw new Error(`alpha_l2_evidence:${l2Q.error.message}`);
   if (externalQ.error) throw new Error(`external_capability_heartbeats:${externalQ.error.message}`);
 
+  const runRows = (runsQ.data ?? []) as CollectorRunLike[];
+  const latestNewsEvidence = runRows
+    .filter((row) => ["brian-world-discovery-eye-v1","brian-breaking-scout-v1","phase39-gdelt-news","brian-news-eye"].includes(String(row.collector_id)))
+    .filter((row) => {
+      const status = String(row.status ?? "").toUpperCase();
+      return status === "SUCCESS" || (status === "DEGRADED" && Number(row.observed_records ?? 0) > 0);
+    })
+    .sort((a,b) => (Date.parse(String(b.finished_at ?? b.started_at ?? ""))||0) - (Date.parse(String(a.finished_at ?? a.started_at ?? ""))||0))[0] ?? null;
+
   const synthetic = [
     syntheticSuccess("brian-universe-collector", universeQ.data?.observed_at),
     syntheticSuccess("brian-sensor-mesh", sensorQ.data?.observed_at),
     syntheticSuccess("brian-live-shadow", shadowQ.data?.observed_at),
     syntheticSuccess("brian-l2-on-demand", l2Q.data?.observed_at),
+    syntheticSuccess("brian-world-discovery-aggregate", latestNewsEvidence?.finished_at ?? latestNewsEvidence?.started_at),
   ].filter((row): row is CollectorRunLike => row !== null);
 
   const externalRuns = (externalQ.data ?? []).map((row: any): CollectorRunLike => ({
