@@ -4,11 +4,11 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v5-tiered-discovery";
+const VERSION="brian.breaking-scout.v6-critical-coverage";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
-type Article={title:string;url:string;publishedAt:string|null;sourceId:string;theme:string;trust:string;provider:string};
+type Article={title:string;url:string;publishedAt:string|null;sourceId:string;theme:string;trust:string;provider:string;laneId?:string;critical?:boolean};
 
 const FEEDS:Feed[]=[
   {id:"official:fed:monetary",url:"https://www.federalreserve.gov/feeds/press_monetary.xml",theme:"macro_rates",trust:"OFFICIAL_PRIMARY",kind:"RSS"},
@@ -22,11 +22,13 @@ const FEEDS:Feed[]=[
 ];
 
 const DISCOVERY=[
-  {id:"discovery:geopolitics",theme:"geopolitics",googleQ:'(war OR missile OR sanctions OR ceasefire OR invasion OR "Red Sea" OR Taiwan OR shipping OR attack) when:1h',fallbackQ:'war missile sanctions ceasefire invasion Red Sea Taiwan shipping attack',compactQ:'war sanctions ceasefire missile attack'},
-  {id:"discovery:macro",theme:"macro_rates",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR payrolls OR "interest rate" OR yields) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI payrolls interest rate yields',compactQ:'Federal Reserve ECB inflation'},
-  {id:"discovery:energy",theme:"commodities_energy",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR refinery OR pipeline OR "energy supply") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas refinery pipeline energy supply',compactQ:'oil OPEC natural gas'},
-  {id:"discovery:ai",theme:"technology_ai",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR "AI datacenter") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC AI datacenter',compactQ:'NVIDIA OpenAI semiconductor'},
-];
+  {id:"discovery:geopolitics",theme:"geopolitics",priority:"CRITICAL",googleQ:'(war OR missile OR drone OR sanctions OR ceasefire OR invasion OR escalation OR retaliation OR "Red Sea" OR Taiwan OR shipping OR blockade OR attack) when:1h',fallbackQ:'war missile drone sanctions ceasefire invasion escalation retaliation Red Sea Taiwan shipping blockade attack',compactQ:'war missile drone sanctions escalation retaliation attack'},
+  {id:"discovery:energy",theme:"commodities_energy",priority:"CRITICAL",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR LNG OR refinery OR pipeline OR tanker OR terminal OR "energy supply" OR Hormuz OR "Bab el-Mandeb") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas LNG refinery pipeline tanker terminal energy supply Hormuz Bab el-Mandeb',compactQ:'oil OPEC LNG refinery tanker Hormuz'},
+  {id:"discovery:middle-east-risk",theme:"geopolitics",priority:"CRITICAL",googleQ:'(Iran OR Houthi OR Saudi OR Riyadh OR Yanbu OR Hormuz OR "Bab el-Mandeb" OR "Red Sea") (attack OR missile OR drone OR escalation OR retaliation OR tanker OR port OR refinery OR shipping) when:1h',fallbackQ:'Iran Houthi Saudi Riyadh Yanbu Hormuz Bab el-Mandeb Red Sea attack missile drone escalation retaliation tanker port refinery shipping',compactQ:'Iran Houthi Saudi Riyadh Hormuz missile drone attack escalation'},
+  {id:"discovery:reuters-market-wire",theme:"geopolitics",priority:"CRITICAL",googleQ:'site:reuters.com (Iran OR Houthi OR Saudi OR Riyadh OR Hormuz OR oil OR refinery OR missile OR drone OR sanctions OR "Federal Reserve" OR SEC OR NVIDIA) when:1h',fallbackQ:'site:reuters.com Iran Houthi Saudi Riyadh Hormuz oil refinery missile drone sanctions Federal Reserve SEC NVIDIA',compactQ:'site:reuters.com Iran Houthi Saudi Hormuz oil attack'},
+  {id:"discovery:macro",theme:"macro_rates",priority:"NORMAL",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR PCE OR payrolls OR unemployment OR "interest rate" OR yields OR GDP) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI PCE payrolls unemployment interest rate yields GDP',compactQ:'Federal Reserve ECB inflation CPI PCE'},
+  {id:"discovery:ai",theme:"technology_ai",priority:"NORMAL",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR HBM OR "memory chip" OR "AI datacenter" OR "export control") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC HBM memory chip AI datacenter export control',compactQ:'NVIDIA OpenAI semiconductor TSMC HBM'},
+] as const;
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
 function decode(v:string){return v.replace(/^<!\[CDATA\[|\]\]>$/g,"").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&lt;/g,"<").replace(/&gt;/g,">")}
@@ -48,9 +50,11 @@ async function authorize(req:Request):Promise<"REALTIME_ORCHESTRATOR"|"LEGACY_CO
 }
 function selectedFeeds(){
   const slot=Math.floor(Date.now()/120000);
+  const critical=DISCOVERY.filter((row)=>row.priority==="CRITICAL");
+  const rotating=DISCOVERY.filter((row)=>row.priority!=="CRITICAL").filter((_,i)=>i%2===slot%2);
   return {
     feeds:FEEDS.filter((_,i)=>i%2===slot%2),
-    discovery:DISCOVERY.filter((_,i)=>i%2===slot%2),
+    discovery:[...critical,...rotating],
     slot
   };
 }
@@ -97,7 +101,7 @@ async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
   if(!rows.length)throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
   return rows;
 }
-async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
+async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
   const providerErrors:string[]=[];
   // Supabase Edge has repeatedly timed out against Google News while Bing RSS is
   // healthy. Use the healthy provider first so the fast lane does not spend ~4s
@@ -109,7 +113,7 @@ async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbac
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
     },3000);
-    return {articles,provider:"bing_news_rss",providerErrors};
+    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"bing_news_rss",providerErrors};
   }catch(e){providerErrors.push("bing-full:"+errorText(e).slice(0,180))}
   try{
     const params=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us"});
@@ -118,7 +122,7 @@ async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbac
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
     },3000);
-    return {articles,provider:"bing_news_rss_compact",providerErrors};
+    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"bing_news_rss_compact",providerErrors};
   }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
   try{
     const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
@@ -127,7 +131,7 @@ async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbac
       url:`https://news.google.com/rss/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
     },3500);
-    return {articles,provider:"google_news_rss",providerErrors};
+    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"google_news_rss",providerErrors};
   }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
   throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
 }
@@ -203,6 +207,7 @@ Deno.serve(async(req:Request)=>{
         metadata:{
           breaking_fast_lane:true,world_theme:a.theme,provider:a.provider,discovery_only:true,
           directional_vote:false,requires_truth_engine:true,before_bbc_goal:true,
+          discovery_lane:a.laneId??null,critical_watch:a.critical===true,
           source_latency_seconds:latency,fast_lane_version:VERSION
         }
       });
@@ -216,16 +221,29 @@ Deno.serve(async(req:Request)=>{
       stored=Array.isArray(q.data)?q.data.length:0;
     }
     const totalSources=officialSettled.length+discoverySettled.length;
-    const status=degraded.length===totalSources?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
+    const selectedCritical=selected.discovery.filter((row)=>row.priority==="CRITICAL").map((row)=>row.id);
+    const failedCritical=selectedCritical.filter((id)=>degraded.includes(id));
+    const criticalCandidates=events.filter((row:any)=>row.metadata?.critical_watch===true).length;
+    const criticalSources=[...new Set(events.filter((row:any)=>row.metadata?.critical_watch===true).map((row:any)=>String(row.source_id||"")).filter(Boolean))];
+    const coverageState=failedCritical.length?"DEGRADED":criticalCandidates>0?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA";
+    const status=degraded.length===totalSources?"FAILED":degraded.length||failedCritical.length?"DEGRADED":"SUCCESS";
     await recordRun(startedAt,status,articles.length,stored,degraded,{
       provider_errors:providerErrors,
       discovery_providers:discoveryProviders,
-      candidate_records:events.length
+      candidate_records:events.length,
+      critical_lanes_expected:selectedCritical.length,
+      critical_lanes_failed:failedCritical,
+      critical_candidates:criticalCandidates,
+      critical_sources:criticalSources.slice(0,12),
+      coverage_state:coverageState
     });
     return out({
       status,version:VERSION,scheduler,slot:selected.slot,feeds:totalSources,
       observed:articles.length,candidates:events.length,stored,degraded_sources:degraded,
       discovery_providers:discoveryProviders,provider_errors:providerErrors,
+      critical_lanes:selected.discovery.filter((row)=>row.priority==="CRITICAL").map((row)=>row.id),
+      critical_candidates:events.filter((row:any)=>row.metadata?.critical_watch===true).length,
+      coverage_state:selected.discovery.some((row)=>row.priority==="CRITICAL"&&degraded.includes(row.id))?"DEGRADED":events.some((row:any)=>row.metadata?.critical_watch===true)?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA",
       fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false
     },status==="FAILED"?503:200);
   }catch(e){
