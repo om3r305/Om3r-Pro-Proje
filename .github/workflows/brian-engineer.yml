@@ -56,7 +56,7 @@ jobs:
           OLLAMA_VERSION: v0.34.0
           OLLAMA_ARCHIVE_SHA256: cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804
           OLLAMA_HOST: 127.0.0.1:11434
-          OLLAMA_CONTEXT_LENGTH: '32768'
+          OLLAMA_CONTEXT_LENGTH: '16384'
           OLLAMA_NUM_PARALLEL: '1'
           OLLAMA_MODELS: ${{ runner.temp }}/brian-ollama-models
         run: |
@@ -95,4 +95,7 @@ jobs:
           BRIAN_ANTHROPIC_API_KEY: ${{ secrets.BRIAN_ANTHROPIC_API_KEY }}
           BRIAN_ANTHROPIC_BASE_URL: ${{ secrets.BRIAN_ANTHROPIC_BASE_URL }}
           BRIAN_ANTHROPIC_MODEL: ${{ vars.BRIAN_ANTHROPIC_MODEL }}
+          BRIAN_HOSTED_ATTEMPT_TIMEOUT_SECONDS: '120'
+          BRIAN_BYOK_ATTEMPT_TIMEOUT_SECONDS: '180'
+          BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS: '300'
         run: bash scripts/brian_engineer_runner.sh
