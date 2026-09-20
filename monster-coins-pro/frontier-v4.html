@@ -64,7 +64,7 @@ body.frontier-v4-booting:before{content:"Brian Frontier V4 hazırlanıyor…";po
     };
 
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
-    await load('/frontier-v3.js?v=20260912-u3');
+    await load('/frontier-v3.js?v=20260920-alpha3');
     await load('/frontier-v4.js?v=20260912-a1');
     await load('/frontier-engineer-console.js?v=20260914-e3');
     await load('/engineering-room-model.js?v=20260916-1');
