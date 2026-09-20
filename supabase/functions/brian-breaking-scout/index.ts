@@ -4,10 +4,10 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v8-freshness-filter";
+const VERSION="brian.breaking-scout.v9-or-web-fallback";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
-type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
+type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"|"BING_WEB"};
 type Article={title:string;url:string;publishedAt:string|null;sourceId:string;theme:string;trust:string;provider:string;laneId?:string;critical?:boolean};
 
 const FEEDS:Feed[]=[
@@ -22,12 +22,12 @@ const FEEDS:Feed[]=[
 ];
 
 const DISCOVERY=[
-  {id:"discovery:geopolitics",theme:"geopolitics",priority:"CRITICAL",googleQ:'(war OR missile OR drone OR sanctions OR ceasefire OR invasion OR escalation OR retaliation OR "Red Sea" OR Taiwan OR shipping OR blockade OR attack) when:1h',fallbackQ:'war missile drone sanctions ceasefire invasion escalation retaliation Red Sea Taiwan shipping blockade attack',compactQ:'war missile drone sanctions escalation retaliation attack'},
-  {id:"discovery:energy",theme:"commodities_energy",priority:"CRITICAL",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR LNG OR refinery OR pipeline OR tanker OR terminal OR "energy supply" OR Hormuz OR "Bab el-Mandeb") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas LNG refinery pipeline tanker terminal energy supply Hormuz Bab el-Mandeb',compactQ:'oil OPEC LNG refinery tanker Hormuz'},
-  {id:"discovery:middle-east-risk",theme:"geopolitics",priority:"CRITICAL",googleQ:'(Iran OR Houthi OR Saudi OR Riyadh OR Yanbu OR Hormuz OR "Bab el-Mandeb" OR "Red Sea") (attack OR missile OR drone OR escalation OR retaliation OR tanker OR port OR refinery OR shipping) when:1h',fallbackQ:'Iran Houthi Saudi Riyadh Yanbu Hormuz Bab el-Mandeb Red Sea attack missile drone escalation retaliation tanker port refinery shipping',compactQ:'Iran Houthi Saudi Riyadh Hormuz missile drone attack escalation'},
-  {id:"discovery:reuters-market-wire",theme:"geopolitics",priority:"CRITICAL",googleQ:'site:reuters.com (Iran OR Houthi OR Saudi OR Riyadh OR Hormuz OR oil OR refinery OR missile OR drone OR sanctions OR "Federal Reserve" OR SEC OR NVIDIA) when:1h',fallbackQ:'site:reuters.com Iran Houthi Saudi Riyadh Hormuz oil refinery missile drone sanctions Federal Reserve SEC NVIDIA',compactQ:'site:reuters.com Iran Houthi Saudi Hormuz oil attack'},
-  {id:"discovery:macro",theme:"macro_rates",priority:"NORMAL",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR PCE OR payrolls OR unemployment OR "interest rate" OR yields OR GDP) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI PCE payrolls unemployment interest rate yields GDP',compactQ:'Federal Reserve ECB inflation CPI PCE'},
-  {id:"discovery:ai",theme:"technology_ai",priority:"NORMAL",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR HBM OR "memory chip" OR "AI datacenter" OR "export control") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC HBM memory chip AI datacenter export control',compactQ:'NVIDIA OpenAI semiconductor TSMC HBM'},
+  {id:"discovery:geopolitics",theme:"geopolitics",priority:"CRITICAL",googleQ:'(war OR missile OR drone OR sanctions OR ceasefire OR invasion OR escalation OR retaliation OR "Red Sea" OR Taiwan OR shipping OR blockade OR attack) when:1h',fallbackQ:'(war OR missile OR drone OR sanctions OR ceasefire OR invasion OR escalation OR retaliation OR "Red Sea" OR Taiwan OR shipping OR blockade OR attack)',compactQ:'(war OR missile OR drone OR sanctions OR escalation OR retaliation OR attack)'},
+  {id:"discovery:energy",theme:"commodities_energy",priority:"CRITICAL",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR LNG OR refinery OR pipeline OR tanker OR terminal OR "energy supply" OR Hormuz OR "Bab el-Mandeb") when:1h',fallbackQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR LNG OR refinery OR pipeline OR tanker OR terminal OR "energy supply" OR Hormuz OR "Bab el-Mandeb")',compactQ:'(oil OR OPEC OR LNG OR refinery OR tanker OR Hormuz)'},
+  {id:"discovery:middle-east-risk",theme:"geopolitics",priority:"CRITICAL",googleQ:'(Iran OR Houthi OR Saudi OR Riyadh OR Yanbu OR Hormuz OR "Bab el-Mandeb" OR "Red Sea") (attack OR missile OR drone OR escalation OR retaliation OR tanker OR port OR refinery OR shipping) when:1h',fallbackQ:'(Iran OR Houthi OR Saudi OR Riyadh OR Yanbu OR Hormuz OR "Bab el-Mandeb" OR "Red Sea") (attack OR missile OR drone OR escalation OR retaliation OR tanker OR port OR refinery OR shipping)',compactQ:'(Iran OR Houthi OR Saudi OR Riyadh OR Hormuz) (missile OR drone OR attack OR escalation)'},
+  {id:"discovery:reuters-market-wire",theme:"geopolitics",priority:"CRITICAL",googleQ:'site:reuters.com (Iran OR Houthi OR Saudi OR Riyadh OR Hormuz OR oil OR refinery OR missile OR drone OR sanctions OR "Federal Reserve" OR SEC OR NVIDIA) when:1h',fallbackQ:'site:reuters.com (Iran OR Houthi OR Saudi OR Riyadh OR Hormuz OR oil OR refinery OR missile OR drone OR sanctions OR "Federal Reserve" OR SEC OR NVIDIA)',compactQ:'site:reuters.com (Iran OR Houthi OR Saudi OR Hormuz OR oil OR attack)'},
+  {id:"discovery:macro",theme:"macro_rates",priority:"NORMAL",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR PCE OR payrolls OR unemployment OR "interest rate" OR yields OR GDP) when:1h',fallbackQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR PCE OR payrolls OR unemployment OR "interest rate" OR yields OR GDP)',compactQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR PCE)'},
+  {id:"discovery:ai",theme:"technology_ai",priority:"NORMAL",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR HBM OR "memory chip" OR "AI datacenter" OR "export control") when:1h',fallbackQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR HBM OR "memory chip" OR "AI datacenter" OR "export control")',compactQ:'(NVIDIA OR OpenAI OR semiconductor OR TSMC OR HBM)'},
 ] as const;
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -67,14 +67,14 @@ function parseXml(xml:string,feed:Feed):Article[]{
     const sourceUrl=attr(b,"source","url");
     if(!title||!url)continue;
     let sourceId=feed.id;
-    if(feed.kind==="GOOGLE"||feed.kind==="BING"){
-      sourceId=sourceName||(feed.kind==="GOOGLE"?"google-news":"bing-news");
+    if(feed.kind==="GOOGLE"||feed.kind==="BING"||feed.kind==="BING_WEB"){
+      sourceId=sourceName||(feed.kind==="GOOGLE"?"google-news":feed.kind==="BING_WEB"?"bing-web":"bing-news");
       try{
         const host=new URL(sourceUrl||url).hostname.replace(/^www\./,"");
         if(host&&!/^(news\.google\.com|www\.bing\.com|bing\.com)$/i.test(host))sourceId=host;
       }catch{}
     }
-    out.push({title,url,publishedAt:pub,sourceId,theme:feed.theme,trust:feed.trust,provider:feed.kind==="GOOGLE"?"google_news_rss":feed.kind==="BING"?"bing_news_rss":"official_rss"});
+    out.push({title,url,publishedAt:pub,sourceId,theme:feed.theme,trust:feed.trust,provider:feed.kind==="GOOGLE"?"google_news_rss":feed.kind==="BING"?"bing_news_rss":feed.kind==="BING_WEB"?"bing_web_rss":"official_rss"});
     if(out.length>=30)break;
   }
   for(const m of xml.matchAll(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi)){
@@ -123,6 +123,14 @@ function uniqueArticles(rows:Article[]){
     return true;
   });
 }
+const TRUSTED_WEB_DISCOVERY_DOMAINS=[
+  "reuters.com","apnews.com","bbc.com","bbc.co.uk","bloomberg.com","ft.com","wsj.com",
+  "cnbc.com","cnn.com","theguardian.com","aljazeera.com"
+];
+function trustedWebDiscovery(a:Article){
+  const s=String(a.sourceId||"").toLowerCase().replace(/^www\./,"");
+  return TRUSTED_WEB_DISCOVERY_DOMAINS.some((d)=>s===d||s.endsWith("."+d));
+}
 async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
   const providerErrors:string[]=[];
   const tagRows=(rows:Article[])=>freshDiscoveryArticles(rows).map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"}));
@@ -170,9 +178,21 @@ async function fetchDiscovery(row:{id:string;theme:string;priority:string;google
       const fresh=tagRows(raw);
       if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_news_rss_compact",providerErrors};
     }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
+    let webAvailable=false;
+    try{
+      const webParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US"});
+      const raw=await fetchFeed({
+        id:row.id+":bing-web",
+        url:`https://www.bing.com/search?${webParams}`,
+        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING_WEB"
+      },1800,true);
+      webAvailable=true;
+      const fresh=tagRows(raw).filter(trustedWebDiscovery);
+      if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_web_rss",providerErrors};
+    }catch(e){providerErrors.push("bing-web:"+errorText(e).slice(0,180))}
     const primaryAvailable=bingResult.status==="fulfilled"||googleResult.status==="fulfilled";
-    if(primaryAvailable||compactAvailable){
-      return {articles:[],provider:bingResult.status==="fulfilled"&&googleResult.status==="fulfilled"?"bing+google_critical":"critical_partial_provider",providerErrors};
+    if(primaryAvailable||compactAvailable||webAvailable){
+      return {articles:[],provider:webAvailable?"critical_scan_with_web":bingResult.status==="fulfilled"&&googleResult.status==="fulfilled"?"bing+google_critical":"critical_partial_provider",providerErrors};
     }
     throw new Error(`${row.id}:ALL_CRITICAL_PROVIDERS_FAILED:${providerErrors.join("|")}`);
   }
