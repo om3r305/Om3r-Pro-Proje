@@ -14,6 +14,7 @@ type Json=Record<string,unknown>;
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
 function err(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
 async function sha(v:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
+
 async function record(startedAt:string,status:string,observed:number,stored:number,errorMessage:string|null=null){
   const finishedAt=new Date().toISOString();
   const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
@@ -32,9 +33,7 @@ async function state(){
 }
 async function setState(ok:boolean,status:number,errorMessage:string|null,changed:boolean){
   const now=new Date().toISOString();
-  const row:Json={
-    endpoint_id:STATE_ID,last_fetch_at:now,last_http_status:status||null,last_error:errorMessage,updated_at:now
-  };
+  const row:Json={endpoint_id:STATE_ID,last_fetch_at:now,last_http_status:status||null,last_error:errorMessage,updated_at:now};
   if(ok)row.last_success_at=now;
   if(changed)row.last_change_at=now;
   const q=await db.from("brian_realtime_source_state").upsert(row,{onConflict:"endpoint_id"});
@@ -77,11 +76,7 @@ Deno.serve(async(req:Request)=>{
     const stored=Number(body.stored??0);
     await setState(true,r.status,null,stored>0);
     await record(startedAt,"SUCCESS",events.length,stored);
-    return out({
-      status:"SUCCESS",version:VERSION,from:new Date(fromMs).toISOString(),
-      scanned:events.length,core_accepted:Number(body.accepted??0),core_stored:stored,
-      shadow_only:true,live_execution:false
-    });
+    return out({status:"SUCCESS",version:VERSION,from:new Date(fromMs).toISOString(),scanned:events.length,core_accepted:Number(body.accepted??0),core_stored:stored,shadow_only:true,live_execution:false});
   }catch(e){
     const message=err(e).slice(0,1000);
     try{await setState(false,0,message,false)}catch{}
