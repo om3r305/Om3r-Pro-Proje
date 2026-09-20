@@ -5,7 +5,7 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v1";
+const GUARDIAN_VERSION="dip-position-guardian-v2-reentry-state";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -78,9 +78,8 @@ async function micro(symbol:string){
   return{ret5:r5,ret15:r15,buyRatio:total>0?buy/total:.5,trades:recent.length};
 }
 function cooldownMs(reason:string,pnl:number){
-  if(pnl<0)return reason==="THESIS_BREAK"?12*60_000:30*60_000;
-  if(reason==="PROFIT_RATCHET")return 3*60_000;
-  if(reason==="HARVEST_TRAIL"||reason==="PEAK_REVERSAL"||reason==="FORECAST_REVERSAL")return 7*60_000;
+  if(pnl<0)return reason==="STOP"?2*60_000:12*60_000;
+  if(pnl>0)return 5*60_000;
   return 10*60_000;
 }
 function inferRegime(p:Pos){
@@ -189,17 +188,22 @@ async function tick(heavy:boolean){
       cash+=gross-fee;realized+=pnl;trades++;
       if(pnl>.01){wins++;lossStreak=0;}else if(pnl<-.01){losses++;lossStreak++;lastLossAt=Date.now();}
       delete positions[row.symbol];
-      const prev:any=cooldowns[row.symbol]||{},prevLossAt=num(prev.last_loss_at),sameWindow=pnl<-.01&&prevLossAt>0&&Date.now()-prevLossAt<6*60*60_000;
-      const symbolLossStreak=pnl<-.01?(sameWindow?Math.max(1,num(prev.symbol_loss_streak))+1:1):0;
-      let until=Date.now()+cooldownMs(reason,pnl);
-      if(pnl<-.01)until=Math.max(until,Date.now()+(symbolLossStreak>=3?8*60*60_000:symbolLossStreak>=2?4*60*60_000:45*60_000));
-      cooldowns[row.symbol]={until,reason,exit_price:exit,exit_at:Date.now(),pnl,symbol_loss_streak:symbolLossStreak,last_loss_at:pnl<-.01?Date.now():prevLossAt,circuit_breaker:symbolLossStreak>=2};
+      const exitNow=Date.now(),prev:any=cooldowns[row.symbol]||{},prevLossAt=num(prev.last_loss_at),sameWindow=pnl<-.01&&prevLossAt>0&&exitNow-prevLossAt<6*60*60_000;
+      const symbolLossStreak=pnl<-.01?(sameWindow?Math.max(1,num(prev.symbol_loss_streak))+1:1):0,reentryCount=num(p.reentry_attempt),
+        waveProfitBank=Math.max(0,num(p.wave_profit_bank)+pnl),waveStartedAt=num(p.wave_started_at,Date.parse(String(p.opened_at||"")));
+      let until=exitNow+cooldownMs(reason,pnl);
+      if(pnl<-.01&&symbolLossStreak>=2)until=exitNow+(symbolLossStreak>=3?8*60*60_000:4*60*60_000);
+      const waveExhaustedUntil=reentryCount>=1?exitNow+45*60_000:0;
+      cooldowns[row.symbol]={until,reason,exit_price:exit,exit_at:exitNow,pnl,symbol_loss_streak:symbolLossStreak,last_loss_at:pnl<-.01?exitNow:prevLossAt,
+        circuit_breaker:symbolLossStreak>=2,prior_entry:entry,post_exit_low:exit,post_exit_high:exit,reentry_count:reentryCount,
+        wave_profit_bank:waveProfitBank,wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil};
 
       const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
         guardian_version:GUARDIAN_VERSION,engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
         guardian_fast_exit:true,guardian_interval_target_seconds:5,entry,stop:p.stop,harvest_trigger:p.target,trail:p.trail??null,max_price:p.max_price,
         harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,
-        micro:row.m??null,spread_bps:spreadBps,shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
+        micro:row.m??null,spread_bps:spreadBps,reentry_type:p.reentry_type??"FRESH",reentry_attempt:num(p.reentry_attempt),wave_profit_bank:Math.max(0,num(p.wave_profit_bank)+pnl),
+        shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
       }};
       await insertEvent(event);actions.push(event);
     }
