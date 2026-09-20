@@ -145,15 +145,20 @@
     let ocean=oceanSuccessAge<=2400?withEvidence('ok',`Ocean worker canlı · ${fmtAge(oceanRun?.last_success_at||oceanRun?.finished_at||oceanRun?.started_at)} önce`):withEvidence('warn',oceanRun?.error_class||'Ocean yeni cycle bekliyor');
 
     const b=hb.behavior||{};
-    const behaviorAt=b.observed_at||b.decision_observed_at;
-    const behaviorAge=parseAge(behaviorAt);
-    let behavior=behaviorAge<=720
-      ?withEvidence('ok',`Davranış ${String(b.state||'CANLI').replaceAll('_',' ')} · ${fmtAge(behaviorAt)} önce`)
-      :behaviorAge<=1080
-        ?withEvidence('warn',`Davranış kanıtı ${fmtAge(behaviorAt)} önce`)
-        :alpha.state==='bad'
-          ?withEvidence('bad','Davranış kanıtı ve ALPHA bağlantısı taze değil')
-          :withEvidence('warn','Davranış hattı yeni kanıt bekliyor');
+    const behaviorContextAt=b.observed_at||b.decision_observed_at;
+    const behaviorContextAge=parseAge(behaviorContextAt);
+    const behaviorPipelineAt=b.pipeline_observed_at||null;
+    const behaviorPipelineAge=parseAge(behaviorPipelineAt);
+    const behaviorPipelineLive=String(b.pipeline_status||'').toUpperCase()==='SUCCESS'&&behaviorPipelineAge<=720;
+    let behavior=behaviorPipelineLive
+      ?withEvidence('ok',`Davranış üreticisi canlı · pipeline ${fmtAge(behaviorPipelineAt)} önce · ALPHA bağlamı ${fmtAge(behaviorContextAt)} önce`)
+      :behaviorContextAge<=720
+        ?withEvidence('ok',`Davranış ${String(b.state||'CANLI').replaceAll('_',' ')} · ${fmtAge(behaviorContextAt)} önce`)
+        :behaviorContextAge<=1080
+          ?withEvidence('warn',`Davranış pipeline heartbeat bekliyor · son bağlı bağlam ${fmtAge(behaviorContextAt)} önce`)
+          :alpha.state==='bad'
+            ?withEvidence('bad','Davranış pipeline heartbeat ve ALPHA bağlantısı taze değil')
+            :withEvidence('warn','Davranış hattı yeni pipeline kanıtı bekliyor');
 
     if(cachedMode||hbAge>120){
       [world,behavior,alpha,treasury,research,ocean].forEach(x=>{if(x.state==='ok')x.state='warn';x.meta+=freshnessSuffix||` · heartbeat ${Math.round(hbAge)} sn önce`});
