@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v1";
+const VERSION="brian.breaking-scout.v2-realtime-scheduled";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"};
@@ -35,6 +35,25 @@ function attr(block:string,name:string,attrName:string){const m=block.match(new 
 function iso(v:string){if(!v)return null;const d=new Date(v);return Number.isFinite(d.getTime())?d.toISOString():null}
 async function sha(v:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 function errorText(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
+const REALTIME_INTERNAL_KEY_SHA256="b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a";
+function ct(a:string,b:string){if(a.length!==b.length)return false;let x=0;for(let i=0;i<a.length;i++)x|=a.charCodeAt(i)^b.charCodeAt(i);return x===0}
+async function authorize(req:Request):Promise<"REALTIME_ORCHESTRATOR"|"LEGACY_CORE_CRON">{
+  const internal=(req.headers.get("x-brian-internal-key")??"").trim();
+  if(internal){
+    if(!ct(await sha(internal),REALTIME_INTERNAL_KEY_SHA256))throw new Error("UNAUTHORIZED_INTERNAL");
+    return "REALTIME_ORCHESTRATOR";
+  }
+  await requireCronAuth(req,db);
+  return "LEGACY_CORE_CRON";
+}
+function selectedFeeds(){
+  const slot=Math.floor(Date.now()/120000);
+  return {
+    feeds:FEEDS.filter((_,i)=>i%2===slot%2),
+    google:GOOGLE.filter((_,i)=>i%2===slot%2),
+    slot
+  };
+}
 
 function parseXml(xml:string,feed:Feed):Article[]{
   const out:Article[]=[];
@@ -86,17 +105,22 @@ async function recordRun(startedAt:string,status:string,observed:number,stored:n
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return out({error:"POST required"},405);
   const startedAt=new Date().toISOString();
-  try{await requireCronAuth(req,db)}catch(e){return out({status:"UNAUTHORIZED",error:errorText(e)},401)}
+  let scheduler:"REALTIME_ORCHESTRATOR"|"LEGACY_CORE_CRON";
+  try{scheduler=await authorize(req)}catch(e){return out({status:"UNAUTHORIZED",error:errorText(e)},401)}
+  if(scheduler==="LEGACY_CORE_CRON"){
+    return out({status:"MOVED_TO_REALTIME_ORCHESTRATOR",version:VERSION,shadow_only:true,live_execution:false});
+  }
   try{
+    const selected=selectedFeeds();
     const settled=await Promise.allSettled([
-      ...FEEDS.map(fetchFeed),
-      ...GOOGLE.map(fetchGoogle),
+      ...selected.feeds.map(fetchFeed),
+      ...selected.google.map(fetchGoogle),
     ]);
     const degraded:string[]=[];
     const articles:Article[]=[];
     settled.forEach((s,i)=>{
       if(s.status==="fulfilled")articles.push(...s.value);
-      else degraded.push(i<FEEDS.length?FEEDS[i].id:GOOGLE[i-FEEDS.length].id);
+      else degraded.push(i<selected.feeds.length?selected.feeds[i].id:selected.google[i-selected.feeds.length].id);
     });
 
     const now=Date.now();
@@ -130,7 +154,7 @@ Deno.serve(async(req:Request)=>{
     }
     const status=degraded.length===settled.length?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
     await recordRun(startedAt,status,articles.length,events.length,degraded);
-    return out({status,version:VERSION,feeds:settled.length,observed:articles.length,candidates:events.length,degraded_sources:degraded,fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false},status==="FAILED"?503:200);
+    return out({status,version:VERSION,scheduler,slot:selected.slot,feeds:settled.length,observed:articles.length,candidates:events.length,degraded_sources:degraded,fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false},status==="FAILED"?503:200);
   }catch(e){
     await recordRun(startedAt,"FAILED",0,0,[]);
     return out({status:"FAILED",error:errorText(e),shadow_only:true,live_execution:false},500);
