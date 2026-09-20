@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v4-fast-fallback";
+const VERSION="brian.breaking-scout.v5-tiered-discovery";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
@@ -22,10 +22,10 @@ const FEEDS:Feed[]=[
 ];
 
 const DISCOVERY=[
-  {id:"discovery:geopolitics",theme:"geopolitics",googleQ:'(war OR missile OR sanctions OR ceasefire OR invasion OR "Red Sea" OR Taiwan OR shipping OR attack) when:1h',fallbackQ:'war missile sanctions ceasefire invasion Red Sea Taiwan shipping attack'},
-  {id:"discovery:macro",theme:"macro_rates",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR payrolls OR "interest rate" OR yields) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI payrolls interest rate yields'},
-  {id:"discovery:energy",theme:"commodities_energy",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR refinery OR pipeline OR "energy supply") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas refinery pipeline energy supply'},
-  {id:"discovery:ai",theme:"technology_ai",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR "AI datacenter") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC AI datacenter'},
+  {id:"discovery:geopolitics",theme:"geopolitics",googleQ:'(war OR missile OR sanctions OR ceasefire OR invasion OR "Red Sea" OR Taiwan OR shipping OR attack) when:1h',fallbackQ:'war missile sanctions ceasefire invasion Red Sea Taiwan shipping attack',compactQ:'war sanctions ceasefire missile attack'},
+  {id:"discovery:macro",theme:"macro_rates",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR payrolls OR "interest rate" OR yields) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI payrolls interest rate yields',compactQ:'Federal Reserve ECB inflation'},
+  {id:"discovery:energy",theme:"commodities_energy",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR refinery OR pipeline OR "energy supply") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas refinery pipeline energy supply',compactQ:'oil OPEC natural gas'},
+  {id:"discovery:ai",theme:"technology_ai",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR "AI datacenter") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC AI datacenter',compactQ:'NVIDIA OpenAI semiconductor'},
 ];
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -97,7 +97,7 @@ async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
   if(!rows.length)throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
   return rows;
 }
-async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbackQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
+async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
   const providerErrors:string[]=[];
   // Supabase Edge has repeatedly timed out against Google News while Bing RSS is
   // healthy. Use the healthy provider first so the fast lane does not spend ~4s
@@ -108,9 +108,18 @@ async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbac
       id:row.id+":bing",
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },3500);
+    },3000);
     return {articles,provider:"bing_news_rss",providerErrors};
-  }catch(e){providerErrors.push("bing:"+errorText(e).slice(0,180))}
+  }catch(e){providerErrors.push("bing-full:"+errorText(e).slice(0,180))}
+  try{
+    const params=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us"});
+    const articles=await fetchFeed({
+      id:row.id+":bing-compact",
+      url:`https://www.bing.com/news/search?${params}`,
+      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
+    },3000);
+    return {articles,provider:"bing_news_rss_compact",providerErrors};
+  }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
   try{
     const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
     const articles=await fetchFeed({
