@@ -19,7 +19,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return out({error:"POST required"},405);
   try{await auth(req)}catch{return out({status:"UNAUTHORIZED"},401)}
   try{
-    const q:any=db.rpc("refresh_frontier_heartbeat_cache");
+    const q:any=db.rpc("brian_refresh_frontier_heartbeat_cache");
     const r=typeof q.abortSignal==="function"
       ? await q.abortSignal(AbortSignal.timeout(6500))
       : await Promise.race([
