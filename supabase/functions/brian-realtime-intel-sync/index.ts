@@ -4,7 +4,7 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-intel-sync.v1";
+const VERSION="brian.realtime-intel-sync.v2-direct-wire";
 const COLLECTOR_ID="brian-realtime-intel-sync-v1";
 const STATE_ID="core-intel-sync";
 const CORE_INGEST="https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-core-intel-ingest";
@@ -51,12 +51,18 @@ Deno.serve(async(req:Request)=>{
     const fromMs=Number.isFinite(last)?Math.max(fallback,last-5*60_000):fallback;
     const q=await db.from("brian_intel_events")
       .select(EVENT_SELECT)
-      .eq("trust_class","OFFICIAL_PRIMARY")
+      .in("trust_class",["OFFICIAL_PRIMARY","INDEPENDENT_PROFESSIONAL"])
       .gte("first_observed_at",new Date(fromMs).toISOString())
       .order("first_observed_at",{ascending:true})
       .limit(250);
     if(q.error)throw q.error;
-    const events=(q.data??[]) as Json[];
+    const events=((q.data??[]) as Json[]).filter((row)=>{
+      const trust=String(row.trust_class??"");
+      const kind=String(row.event_kind??"");
+      const meta=(row.metadata&&typeof row.metadata==="object"?row.metadata:{}) as Json;
+      return trust==="OFFICIAL_PRIMARY" ||
+        (trust==="INDEPENDENT_PROFESSIONAL" && kind==="DIRECT_WIRE_DISCOVERY" && meta.direct_wire===true);
+    });
 
     const r=await fetch(CORE_INGEST,{
       method:"POST",
