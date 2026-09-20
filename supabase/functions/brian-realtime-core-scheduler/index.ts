@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v1";
+const VERSION="brian.realtime-core-scheduler.v2-balanced";
 const CORE_BRIDGE="https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-core-scheduler-bridge";
 
 type Result={action:string;ok:boolean;http_status:number;target_status:string;elapsed_ms:number;body?:unknown;error?:string};
@@ -41,8 +41,8 @@ function planned(minute:number){
   if(includes(minute,[9,24,39,54])) actions.push("discovery");
   if(includes(minute,[15,45])) actions.push("source_registry");
   if(includes(minute,[14,44])) actions.push("meeting_sync");
-  if(includes(minute,[20,50])) actions.push("recovery");
-  if(includes(minute,[0,30])) actions.push("watchdog");
+  if(includes(minute,[0,10,20,30,40,50])) actions.push("recovery");
+  if(includes(minute,[5,20,35,50])) actions.push("watchdog");
 
   return [...new Set(actions)];
 }
