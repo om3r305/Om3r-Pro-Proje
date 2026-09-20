@@ -4,8 +4,9 @@
  function project(hb,rows=[],error=null,now=Date.now()){
   const run=id=>hb?.collectors?.[id],stamp=r=>r?.finished_at||r?.started_at;
   const world=stamp(hb?.world_run),alpha=hb?.alpha?.observed_at,treasury=hb?.control?.treasury;
+  const behavior=hb?.behavior?.pipeline_observed_at||hb?.behavior?.observed_at||hb?.behavior?.decision_observed_at||null;
   const research=run('brian-evolution-orchestrator-v1')||run('brian-evolution-sandbox-v1')||run('brian-evolution-researcher-v1');
-  const stamps={world,behavior:world&&alpha?(Date.parse(world)<Date.parse(alpha)?world:alpha):null,alpha,treasury:stamp(run('brian-evolution-treasury-v1'))||treasury?.observed_at,research:stamp(research),ocean:stamp(run('brian-evolution-ocean-worker-v1'))};
+  const stamps={world,behavior,alpha,treasury:stamp(run('brian-evolution-treasury-v1'))||treasury?.observed_at,research:stamp(research),ocean:stamp(run('brian-evolution-ocean-worker-v1'))};
   const okHeartbeat=!!hb&&String(hb.status||'').toUpperCase()==='OK';
   const observedFresh=okHeartbeat&&fresh(hb.observed_at,now,300);
   const cached=Boolean(hb?.__cached||hb?.transport_degraded);
@@ -22,7 +23,7 @@
     return {...m,state,stamp:stamps[m.key]||null,meta};
   });
   const number=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
-  return {modules:result,heartbeatFresh:transportFresh,evidenceFresh,transportFresh,transportDegraded:evidenceFresh&&!transportFresh,enabled,live:result.filter(x=>x.state==='live'||x.state==='waiting'&&evidenceFresh).length,heartbeatAt:hb?.observed_at||null,equity:number(treasury?.equity_usd),treasuryFresh:evidenceFresh&&fresh(treasury?.observed_at,now,600),positions:Array.isArray(treasury?.positions)?treasury.positions.length:null,action:hb?.alpha?.action||null,asset:hb?.alpha?.asset_id||null};
+  return {modules:result,heartbeatFresh:transportFresh,evidenceFresh,transportFresh,transportDegraded:evidenceFresh&&!transportFresh,enabled,live:result.filter(x=>x.state==='live').length,waiting:result.filter(x=>x.state==='waiting').length,heartbeatAt:hb?.observed_at||null,equity:number(treasury?.equity_usd),treasuryFresh:evidenceFresh&&fresh(treasury?.observed_at,now,600),positions:Array.isArray(treasury?.positions)?treasury.positions.length:null,action:hb?.alpha?.action||null,asset:hb?.alpha?.asset_id||null};
  }
  const api={project};if(typeof module!=='undefined')module.exports=api;else root.BrianCommandModel=api;
 })(typeof window!=='undefined'?window:globalThis);
