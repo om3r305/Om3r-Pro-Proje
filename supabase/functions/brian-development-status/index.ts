@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
     const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const [
-      alphaRows,
+      alphaMetricRows,
       collectorRows,
       worldAssessments,
       worldRuns,
@@ -164,12 +164,7 @@ Deno.serve(async (req: Request) => {
       jobCount,
       codegenCount,
     ] = await Promise.all([
-      safeRows("alpha-outcomes", db.from("brian_alpha_decision_outcomes")
-        .select("direction_adjusted_return,horizon_seconds,resolved_at,brian_alpha_decisions!inner(action,estimated_round_trip_cost_bps)")
-        .gte("resolved_at", weekAgo)
-        .in("brian_alpha_decisions.action", ["OPEN_LONG", "OPEN_SHORT"])
-        .order("resolved_at", { ascending: false })
-        .limit(300)),
+      safeRows("alpha-regime-metrics", db.rpc("brian_alpha_development_metrics_v1")),
       safeRows("collector-runs", db.from("brian_collector_runs")
         .select("collector_id,status,started_at,finished_at,observed_records,stored_records,degraded_sources,error_class")
         .gte("started_at", dayAgo)
@@ -221,54 +216,48 @@ Deno.serve(async (req: Request) => {
         .select("request_id").order("requested_at", { ascending: false }).limit(1000)),
     ]);
 
-    // 1) Brain / ALPHA: quality is actual directional success after decision-time estimated cost.
-    let alphaGrossWins = 0;
-    let alphaAfterCostWins = 0;
-    let alphaCostSamples = 0;
-    const horizon = new Map<number, { n: number; gross: number; after: number; costN: number }>();
-    for (const row of alphaRows) {
-      const adjustedBps = Number(row.direction_adjusted_return ?? 0) * 10000;
-      const embedded = Array.isArray(row.brian_alpha_decisions)
-        ? row.brian_alpha_decisions[0]
-        : row.brian_alpha_decisions;
-      const cost = Number(embedded?.estimated_round_trip_cost_bps);
-      if (adjustedBps > 0) alphaGrossWins += 1;
-      const h = Number(row.horizon_seconds ?? 0);
-      const bucket = horizon.get(h) ?? { n: 0, gross: 0, after: 0, costN: 0 };
-      bucket.n += 1;
-      if (adjustedBps > 0) bucket.gross += 1;
-      if (Number.isFinite(cost) && cost >= 0) {
-        alphaCostSamples += 1;
-        bucket.costN += 1;
-        if (adjustedBps > cost) {
-          alphaAfterCostWins += 1;
-          bucket.after += 1;
-        }
-      }
-      horizon.set(h, bucket);
-    }
-    const alphaGrossRate = ratioPct(alphaGrossWins, alphaRows.length);
-    const alphaAfterCostRate = ratioPct(alphaAfterCostWins, alphaCostSamples);
-    const alphaQuality = alphaCostSamples >= 50 ? alphaAfterCostRate : alphaGrossRate * 0.7;
-    const alphaEvidence = evidenceCurve(alphaRows.length, 3000);
+    // 1) Brain / ALPHA: current regime is scored separately from legacy history.
+    // The current regime starts with the first Realtime-synced decision carrying the
+    // observable crowd-behavior risk context. Historical evidence remains visible,
+    // but old behavior can no longer permanently pin the current ALPHA score.
+    const alphaMetric = alphaMetricRows[0] ?? {};
+    const alphaCurrentSamples = Number(alphaMetric.current_samples ?? 0);
+    const alphaCurrentCostSamples = Number(alphaMetric.current_cost_samples ?? 0);
+    const alphaQuality = Number(alphaMetric.selected_quality_pct ?? 0);
+    const alphaEvidence = Number(alphaMetric.selected_evidence_pct ?? 0);
+    const alphaHorizons = Array.isArray(alphaMetric.current_horizons) ? alphaMetric.current_horizons : [];
+    const horizonAfterCost = (seconds: number) => {
+      const row = alphaHorizons.find((item: any) => Number(item?.seconds) === seconds);
+      const value = Number(row?.after_cost_favorable_pct);
+      return Number.isFinite(value) ? round1(value) : null;
+    };
     const alpha = component(
       "alpha",
       "Beyin",
       "ALPHA Karar Kalitesi",
       alphaQuality,
       alphaEvidence,
-      alphaRows.length,
-      "Gerçekleşmiş yön sonucu, karar anındaki tahmini round-trip maliyeti geçebildiği ölçüde başarılı sayılır.",
+      alphaCurrentSamples,
+      "ALPHA artık güncel rejim üzerinden ölçülür: gerçekleşmiş yönün karar anındaki round-trip maliyetini aşması başarıdır. Eski rejim silinmez; ayrı tarihsel referans olarak tutulur.",
       {
-        gross_direction_hit_pct: round1(alphaGrossRate),
-        after_cost_favorable_pct: round1(alphaAfterCostRate),
-        cost_matched_samples: alphaCostSamples,
-        horizons: [...horizon.entries()].map(([seconds, v]) => ({
-          seconds,
-          samples: v.n,
-          gross_hit_pct: round1(ratioPct(v.gross, v.n)),
-          after_cost_favorable_pct: round1(ratioPct(v.after, v.costN)),
-        })).sort((a, b) => a.seconds - b.seconds),
+        current_regime_started_at: alphaMetric.regime_started_at ?? null,
+        current_regime_quality_mode: alphaMetric.quality_mode ?? null,
+        current_regime_samples: alphaCurrentSamples,
+        current_cost_matched_samples: alphaCurrentCostSamples,
+        current_gross_direction_hit_pct: round1(Number(alphaMetric.current_gross_hit_pct ?? 0)),
+        current_after_cost_favorable_pct: round1(Number(alphaMetric.current_after_cost_hit_pct ?? 0)),
+        current_regime_evidence_pct: round1(Number(alphaMetric.current_evidence_pct ?? 0)),
+        current_avg_round_trip_cost_bps: round1(Number(alphaMetric.current_avg_cost_bps ?? 0)),
+        current_avg_signed_move_bps: round1(Number(alphaMetric.current_avg_signed_move_bps ?? 0)),
+        current_5m_after_cost_pct: horizonAfterCost(300),
+        current_15m_after_cost_pct: horizonAfterCost(900),
+        current_60m_after_cost_pct: horizonAfterCost(3600),
+        legacy_samples: Number(alphaMetric.legacy_samples ?? 0),
+        legacy_gross_direction_hit_pct: round1(Number(alphaMetric.legacy_gross_hit_pct ?? 0)),
+        legacy_after_cost_favorable_pct: round1(Number(alphaMetric.legacy_after_cost_hit_pct ?? 0)),
+        lifetime_outcomes: Number(alphaMetric.lifetime_samples ?? 0),
+        lifetime_decisions: Number(alphaMetric.lifetime_decisions ?? 0),
+        lifetime_evidence_pct: round1(Number(alphaMetric.lifetime_evidence_pct ?? 0)),
       },
     );
 
@@ -466,10 +455,10 @@ Deno.serve(async (req: Request) => {
     const payload = {
       status: "ONLINE",
       observed_at: new Date().toISOString(),
-      model: "brian.development-anatomy.v2-fast",
+      model: "brian.development-anatomy.v3-alpha-regime",
       score_contract: {
         quality: "Observed behavioral quality only. Service uptime alone is not success.",
-        evidence: "Sample depth / coverage. Low evidence prevents false confidence.",
+        evidence: "Current-regime sample depth / coverage. Lifetime evidence is retained separately for audit.",
         component_maturity: "quality × evidence",
         overall_maturity: "weighted geometric maturity across critical organs",
         note: "An unproven critical organ constrains the whole Brian score; strong infrastructure cannot hide missing real-world evidence.",
