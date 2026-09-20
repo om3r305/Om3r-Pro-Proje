@@ -33,16 +33,22 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
 }
 
 function includes(minute:number,values:number[]){return values.includes(minute)}
-async function derivativesFresh(){
+async function tableFresh(table:string,maxAgeMs:number){
+  const q=await rtDb.from(table).select("observed_at").order("observed_at",{ascending:false}).limit(1).maybeSingle();
+  if(q.error||!q.data)return false;
+  const stamp=Date.parse(String(q.data.observed_at??""));
+  return Number.isFinite(stamp) && Date.now()-stamp<=maxAgeMs;
+}
+async function collectorFresh(collectorId:string,maxAgeMs:number){
   const q=await rtDb.from("brian_collector_runs")
     .select("status,finished_at,started_at")
-    .eq("collector_id","phase39-binance-usdm-derivatives")
+    .eq("collector_id",collectorId)
     .order("started_at",{ascending:false})
     .limit(1)
     .maybeSingle();
   if(q.error||!q.data)return false;
   const stamp=Date.parse(String(q.data.finished_at??q.data.started_at??""));
-  return String(q.data.status).toUpperCase()==="SUCCESS" && Number.isFinite(stamp) && Date.now()-stamp<=12*60_000;
+  return String(q.data.status).toUpperCase()==="SUCCESS" && Number.isFinite(stamp) && Date.now()-stamp<=maxAgeMs;
 }
 
 function planned(minute:number){
@@ -73,7 +79,18 @@ Deno.serve(async(req:Request)=>{
   const now=new Date();
   const minute=now.getUTCMinutes();
   const actions=planned(minute);
-  if(minute%5===2 && await derivativesFresh()) actions.push("derivatives_heartbeat");
+  if(minute%5===2){
+    const [u,s,i,d]=await Promise.all([
+      tableFresh("brian_universe_snapshots",12*60_000),
+      tableFresh("brian_sensor_observations",12*60_000),
+      tableFresh("brian_intrabar_reaction_events",6*60_000),
+      collectorFresh("phase39-binance-usdm-derivatives",12*60_000),
+    ]);
+    if(u) actions.push("universe_heartbeat");
+    if(s) actions.push("sensor_heartbeat");
+    if(i) actions.push("intrabar_heartbeat");
+    if(d) actions.push("derivatives_heartbeat");
+  }
   const results:Result[]=[];
 
   for(const action of [...new Set(actions)]){
