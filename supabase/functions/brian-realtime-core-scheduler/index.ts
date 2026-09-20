@@ -91,6 +91,9 @@ Deno.serve(async(req:Request)=>{
     if(i) actions.push("intrabar_heartbeat");
     if(d) actions.push("derivatives_heartbeat");
   }
+  if(minute%15===7 && await collectorFresh("phase39-ecb-fx",90*60_000)){
+    actions.push("fx_heartbeat");
+  }
   const results:Result[]=[];
 
   for(const action of [...new Set(actions)]){
