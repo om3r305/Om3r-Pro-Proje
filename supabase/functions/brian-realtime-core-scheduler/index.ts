@@ -1,6 +1,10 @@
+import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v2-balanced";
+const VERSION="brian.realtime-core-scheduler.v3-capability-heartbeat";
+const RT_URL=Deno.env.get("SUPABASE_URL")!;
+const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
 const CORE_BRIDGE="https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-core-scheduler-bridge";
 
 type Result={action:string;ok:boolean;http_status:number;target_status:string;elapsed_ms:number;body?:unknown;error?:string};
@@ -29,6 +33,18 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
 }
 
 function includes(minute:number,values:number[]){return values.includes(minute)}
+async function derivativesFresh(){
+  const q=await rtDb.from("brian_collector_runs")
+    .select("status,finished_at,started_at")
+    .eq("collector_id","phase39-binance-usdm-derivatives")
+    .order("started_at",{ascending:false})
+    .limit(1)
+    .maybeSingle();
+  if(q.error||!q.data)return false;
+  const stamp=Date.parse(String(q.data.finished_at??q.data.started_at??""));
+  return String(q.data.status).toUpperCase()==="SUCCESS" && Number.isFinite(stamp) && Date.now()-stamp<=12*60_000;
+}
+
 function planned(minute:number){
   const actions:string[]=["dip"];
 
@@ -57,9 +73,10 @@ Deno.serve(async(req:Request)=>{
   const now=new Date();
   const minute=now.getUTCMinutes();
   const actions=planned(minute);
+  if(minute%5===2 && await derivativesFresh()) actions.push("derivatives_heartbeat");
   const results:Result[]=[];
 
-  for(const action of actions){
+  for(const action of [...new Set(actions)]){
     results.push(await runAction(action,key,action==="recovery"||action==="watchdog"?15000:12000));
     if(results[results.length-1].ok===false && action==="dip"){
       // A Core transport failure should not create a retry storm in the same minute.
