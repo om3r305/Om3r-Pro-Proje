@@ -23,10 +23,10 @@ export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v5-mul
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
-// Keep the canonical ALPHA fallback active in SHADOW while BIG_MOVE validation runs.
-// This creates only bounded virtual positions; live_execution remains false and the
-// EXPECTED_EDGE promotion gate still controls the ordinary Treasury allocator.
-const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = true;
+// Canonical ALPHA without an explicit expected-edge estimate remains a research signal.
+// Do not charge the main SHADOW treasury for probe churn: learning/outcomes continue,
+// but only promoted EXPECTED_EDGE or the separate multiasset event-reaction lane may open capital.
+const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = false;
 
 export interface PromotionGateState {
   authorized: boolean;
@@ -172,7 +172,11 @@ function canonicalShadowMaintenance(
   for (const position of state.positions.filter(isCanonicalAlphaShadowPosition)) {
     const signal = latest.get(position.assetId);
     if (!signal) continue;
-    const keep = signal.actionable && signal.pitClear && signal.recommendation === "ALLOW_CANONICAL_ALPHA_SHADOW" && signal.direction === position.direction;
+    const keep = CANONICAL_ALPHA_MICRO_ENTRY_ENABLED &&
+      signal.actionable &&
+      signal.pitClear &&
+      signal.recommendation === "ALLOW_CANONICAL_ALPHA_SHADOW" &&
+      signal.direction === position.direction;
     out.push({
       assetId: position.assetId,
       direction: position.direction,
