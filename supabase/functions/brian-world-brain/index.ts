@@ -11,7 +11,7 @@ const COLLECTOR_ID = "brian-world-brain-v1";
 const LEASE_SECONDS = 300;
 const LOOKBACK_MS = 12 * 60 * 60 * 1000;
 const EVENT_OVERLAP_MS = 15 * 60 * 1000;
-const MAX_INCREMENTAL_EVENTS = 50;
+const MAX_INCREMENTAL_EVENTS = 200;
 const WRITE_CHUNK = 10;
 const CLASSIFICATION_GUARD_VERSION = "world-brain-classifier-guard.v1";
 
@@ -33,8 +33,8 @@ function transientDbError(message: string): boolean {
 
 async function persistChunk(table: string, chunk: Record<string, unknown>[], onConflict: string): Promise<number> {
   if (!chunk.length) return 0;
-  const q = await db.from(table).upsert(chunk, { onConflict, ignoreDuplicates: true });
-  if (!q.error) return chunk.length;
+  const q = await db.from(table).upsert(chunk, { onConflict, ignoreDuplicates: true }).select(onConflict);
+  if (!q.error) return Array.isArray(q.data) ? q.data.length : 0;
   const message = String(q.error.message ?? q.error);
   if (chunk.length > 1 && transientDbError(message)) {
     const mid = Math.ceil(chunk.length / 2);
@@ -132,23 +132,19 @@ async function loadContextEvents(nowMs: number): Promise<WorldBrainInputEvent[]>
 }
 
 async function loadIncrementalEvents(nowMs: number): Promise<WorldBrainInputEvent[]> {
-  const watermark = await db.from("brian_world_event_frames")
-    .select("observed_at")
-    .order("observed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (watermark.error) throw new Error(`world_watermark:${watermark.error.message}`);
-  const lastMs = watermark.data?.observed_at ? Date.parse(String(watermark.data.observed_at)) : NaN;
-  const startMs = Number.isFinite(lastMs)
-    ? Math.max(nowMs - LOOKBACK_MS, lastMs - EVENT_OVERLAP_MS)
-    : nowMs - LOOKBACK_MS;
+  // Do not watermark from frame.observed_at with an overlapped ascending LIMIT:
+  // once the overlap contains more than MAX_INCREMENTAL_EVENTS that pattern can
+  // replay the same oldest rows forever and starve fresh news. Read a bounded
+  // latest window instead; frame writes are idempotent by frame_id.
   const q = await db.from("brian_intel_events")
     .select(EVENT_SELECT)
-    .gte("first_observed_at", fromIso(startMs))
-    .order("first_observed_at", { ascending: true })
+    .gte("first_observed_at", fromIso(nowMs - LOOKBACK_MS))
+    .order("first_observed_at", { ascending: false })
     .limit(MAX_INCREMENTAL_EVENTS);
   if (q.error) throw new Error(`intel_events_incremental:${q.error.message}`);
-  return (q.data ?? []) as WorldBrainInputEvent[];
+  const rows = ((q.data ?? []) as WorldBrainInputEvent[]);
+  rows.reverse();
+  return rows;
 }
 
 async function journal(observedAt: string, counts: Record<string, number>): Promise<number> {
@@ -208,6 +204,8 @@ async function runReceipt(args: {
     metadata: {
       version: WORLD_BRAIN_VERSION,
       classification_guard_version: CLASSIFICATION_GUARD_VERSION,
+      incremental_strategy: "latest_window_idempotent_v2",
+      max_incremental_events: MAX_INCREMENTAL_EVENTS,
       lookback_hours: LOOKBACK_MS / 3600000,
       causal_claims_are_research_hypotheses: true,
       direct_alpha_influence: false,
@@ -328,6 +326,7 @@ Deno.serve(async (req: Request) => {
         observed_at: observedAt,
         world_brain_version: WORLD_BRAIN_VERSION,
         classification_guard_version: CLASSIFICATION_GUARD_VERSION,
+        incremental_strategy: "latest_window_idempotent_v2",
         input_events: contextEvents.length,
         incremental_events: incrementalEvents.length,
         ...counts,
