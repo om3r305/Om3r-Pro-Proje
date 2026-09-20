@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v3-multiprovider";
+const VERSION="brian.breaking-scout.v4-fast-fallback";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
@@ -59,13 +59,16 @@ function parseXml(xml:string,feed:Feed):Article[]{
   const out:Article[]=[];
   for(const m of xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)){
     const b=m[1],title=tag(b,"title"),url=tag(b,"link")||tag(b,"guid"),pub=iso(tag(b,"pubDate")||tag(b,"dc:date"));
-    const sourceName=tag(b,"source");
+    const sourceName=tag(b,"source")||tag(b,"News:Source")||tag(b,"news:source");
     const sourceUrl=attr(b,"source","url");
     if(!title||!url)continue;
     let sourceId=feed.id;
-    if(feed.kind==="GOOGLE"){
-      sourceId=sourceName||"google-news";
-      try{sourceId=new URL(sourceUrl||url).hostname.replace(/^www\./,"")||sourceId}catch{}
+    if(feed.kind==="GOOGLE"||feed.kind==="BING"){
+      sourceId=sourceName||(feed.kind==="GOOGLE"?"google-news":"bing-news");
+      try{
+        const host=new URL(sourceUrl||url).hostname.replace(/^www\./,"");
+        if(host&&!/^(news\.google\.com|www\.bing\.com|bing\.com)$/i.test(host))sourceId=host;
+      }catch{}
     }
     out.push({title,url,publishedAt:pub,sourceId,theme:feed.theme,trust:feed.trust,provider:feed.kind==="GOOGLE"?"google_news_rss":feed.kind==="BING"?"bing_news_rss":"official_rss"});
     if(out.length>=30)break;
@@ -96,24 +99,27 @@ async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
 }
 async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbackQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
   const providerErrors:string[]=[];
-  try{
-    const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
-    const articles=await fetchFeed({
-      id:row.id+":google",
-      url:`https://news.google.com/rss/search?${params}`,
-      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-    },4200);
-    return {articles,provider:"google_news_rss",providerErrors};
-  }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
+  // Supabase Edge has repeatedly timed out against Google News while Bing RSS is
+  // healthy. Use the healthy provider first so the fast lane does not spend ~4s
+  // waiting on a known-slow upstream. Google remains a true fallback.
   try{
     const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
     const articles=await fetchFeed({
       id:row.id+":bing",
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },5000);
+    },3500);
     return {articles,provider:"bing_news_rss",providerErrors};
   }catch(e){providerErrors.push("bing:"+errorText(e).slice(0,180))}
+  try{
+    const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
+    const articles=await fetchFeed({
+      id:row.id+":google",
+      url:`https://news.google.com/rss/search?${params}`,
+      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
+    },3500);
+    return {articles,provider:"google_news_rss",providerErrors};
+  }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
   throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
 }
 async function recordRun(startedAt:string,status:string,observed:number,stored:number,degraded:string[],metadata:Record<string,unknown>={}){
@@ -192,16 +198,24 @@ Deno.serve(async(req:Request)=>{
         }
       });
     }
+    let stored=0;
     if(events.length){
-      const q=await db.from("brian_intel_events").upsert(events,{onConflict:"event_id",ignoreDuplicates:true});
+      const q=await db.from("brian_intel_events")
+        .upsert(events,{onConflict:"event_id",ignoreDuplicates:true})
+        .select("event_id");
       if(q.error)throw q.error;
+      stored=Array.isArray(q.data)?q.data.length:0;
     }
     const totalSources=officialSettled.length+discoverySettled.length;
     const status=degraded.length===totalSources?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
-    await recordRun(startedAt,status,articles.length,events.length,degraded,{provider_errors:providerErrors,discovery_providers:discoveryProviders});
+    await recordRun(startedAt,status,articles.length,stored,degraded,{
+      provider_errors:providerErrors,
+      discovery_providers:discoveryProviders,
+      candidate_records:events.length
+    });
     return out({
       status,version:VERSION,scheduler,slot:selected.slot,feeds:totalSources,
-      observed:articles.length,candidates:events.length,degraded_sources:degraded,
+      observed:articles.length,candidates:events.length,stored,degraded_sources:degraded,
       discovery_providers:discoveryProviders,provider_errors:providerErrors,
       fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false
     },status==="FAILED"?503:200);
