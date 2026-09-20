@@ -6,6 +6,8 @@ BRANCH_NAME=""
 BASE_SHA=""
 CANDIDATE_SHA=""
 CURRENT_STAGE="BOOTSTRAP"
+SELECTED_PROVIDER=""
+SELECTED_MODEL=""
 PROVIDER_STATUS_FILE="/tmp/brian-provider-status.json"
 PROVIDER_ATTEMPTS_FILE="/tmp/brian-provider-attempts.jsonl"
 : > "$PROVIDER_ATTEMPTS_FILE"
@@ -41,6 +43,7 @@ run_copilot_attempt() {
   local stdout_file="/tmp/brian-ai-${phase}-${provider//[^a-zA-Z0-9]/_}-${model//[^a-zA-Z0-9]/_}.out"
   local stderr_file="${stdout_file}.err"
   local rc=0 err_class="NONE"
+  local timeout_seconds
   local -a args
   args=(-p "$(cat "$prompt_file")" -s --disable-builtin-mcps)
   if [[ "$mode" == "code" ]]; then
@@ -49,10 +52,17 @@ run_copilot_attempt() {
     args+=(--available-tools=view,grep,glob)
   fi
 
-  echo "AI provider attempt: phase=$phase provider=$provider model=$model" >> "$GITHUB_STEP_SUMMARY"
+  if [[ "$provider" == "COPILOT_HOSTED" ]]; then
+    timeout_seconds="${BRIAN_HOSTED_ATTEMPT_TIMEOUT_SECONDS:-120}"
+  elif [[ "$provider" == "OPENAI_BYOK" && "${BRIAN_OPENAI_BASE_URL:-}" == http://127.0.0.1:* ]]; then
+    timeout_seconds="${BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS:-300}"
+  else
+    timeout_seconds="${BRIAN_BYOK_ATTEMPT_TIMEOUT_SECONDS:-180}"
+  fi
+  echo "AI provider attempt: phase=$phase provider=$provider model=$model timeout=${timeout_seconds}s" >> "$GITHUB_STEP_SUMMARY"
 
   if [[ "$provider" == "COPILOT_HOSTED" ]]; then
-    if env \
+    if timeout --foreground --signal=TERM --kill-after=15s "$timeout_seconds" env \
       -u COPILOT_PROVIDER_BASE_URL -u COPILOT_PROVIDER_TYPE -u COPILOT_PROVIDER_API_KEY -u COPILOT_MODEL -u COPILOT_OFFLINE \
       copilot "${args[@]}" --model "$model" >"$stdout_file" 2>"$stderr_file"; then
       rc=0
@@ -60,7 +70,7 @@ run_copilot_attempt() {
       rc=$?
     fi
   elif [[ "$provider" == "OPENAI_BYOK" ]]; then
-    if env \
+    if timeout --foreground --signal=TERM --kill-after=15s "$timeout_seconds" env \
       COPILOT_PROVIDER_TYPE=openai \
       COPILOT_PROVIDER_BASE_URL="${BRIAN_OPENAI_BASE_URL:-https://api.openai.com/v1}" \
       COPILOT_PROVIDER_API_KEY="$BRIAN_OPENAI_API_KEY" \
@@ -71,7 +81,7 @@ run_copilot_attempt() {
       rc=$?
     fi
   elif [[ "$provider" == "ANTHROPIC_BYOK" ]]; then
-    if env \
+    if timeout --foreground --signal=TERM --kill-after=15s "$timeout_seconds" env \
       COPILOT_PROVIDER_TYPE=anthropic \
       COPILOT_PROVIDER_BASE_URL="${BRIAN_ANTHROPIC_BASE_URL:-https://api.anthropic.com}" \
       COPILOT_PROVIDER_API_KEY="$BRIAN_ANTHROPIC_API_KEY" \
@@ -85,8 +95,14 @@ run_copilot_attempt() {
     return 2
   fi
 
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    printf 'provider attempt timed out after %ss\n' "$timeout_seconds" >> "$stderr_file"
+  fi
+
   if [[ "$rc" -eq 0 && -s "$stdout_file" ]]; then
     cp "$stdout_file" "$output_file"
+    SELECTED_PROVIDER="$provider"
+    SELECTED_MODEL="$model"
     append_provider_attempt "$phase" "$provider" "$model" 0 NONE
     jq -s --arg selected_provider "$provider" --arg selected_model "$model" --arg phase "$phase" \
       '{all_exhausted:false,phase:$phase,selected_provider:$selected_provider,selected_model:$selected_model,attempts:.}' \
@@ -106,7 +122,16 @@ ai_call() {
   local phase="$1" prompt_file="$2" output_file="$3" mode="$4"
   local hosted_model
 
-  for hosted_model in gpt-5.3-codex claude-haiku-4.5 gemini-3.7-flash auto; do
+  if [[ -n "$SELECTED_PROVIDER" && -n "$SELECTED_MODEL" ]]; then
+    if run_copilot_attempt "$phase" "$SELECTED_PROVIDER" "$SELECTED_MODEL" "$prompt_file" "$output_file" "$mode"; then
+      return 0
+    fi
+    echo "Previously selected AI provider failed; reopening bounded failover search." >> "$GITHUB_STEP_SUMMARY"
+    SELECTED_PROVIDER=""
+    SELECTED_MODEL=""
+  fi
+
+  for hosted_model in auto gpt-5.3-codex claude-haiku-4.5 gemini-3.7-flash; do
     if run_copilot_attempt "$phase" COPILOT_HOSTED "$hosted_model" "$prompt_file" "$output_file" "$mode"; then
       return 0
     fi
