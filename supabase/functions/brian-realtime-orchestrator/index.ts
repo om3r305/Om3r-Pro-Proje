@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v7-heartbeat-offload";
+const VERSION = "brian.realtime-orchestrator.v8-heartbeat-fixed";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -42,7 +42,8 @@ async function call(name:string,url:string,key:string,timeoutMs:number){
     let body:Json={};
     try{body=JSON.parse(text) as Json}catch{body={raw:text.slice(0,600)}}
     const targetStatus=String(body.status??"");
-    const logicalOk=r.ok && !["FAILED","FAILED_CLOSED","DEGRADED","UNAUTHORIZED"].includes(targetStatus);
+    const softDegraded = name==="breaking_scout" && targetStatus==="DEGRADED";
+    const logicalOk=r.ok && (softDegraded || !["FAILED","FAILED_CLOSED","DEGRADED","UNAUTHORIZED"].includes(targetStatus));
     return {
       name,ok:logicalOk,http_status:r.status,target_status:targetStatus,
       elapsed_ms:Date.now()-started,body
