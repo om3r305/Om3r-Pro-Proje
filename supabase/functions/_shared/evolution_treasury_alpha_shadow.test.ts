@@ -4,7 +4,7 @@ import {
   buildCanonicalAlphaShadowOpportunities,
   type CanonicalAlphaDecisionRow,
 } from "./evolution_treasury_alpha_shadow.ts";
-import { initialTreasuryState } from "./evolution_treasury.ts";
+import { initialTreasuryState, type TreasuryPosition } from "./evolution_treasury.ts";
 
 function alpha(overrides: Partial<CanonicalAlphaDecisionRow> = {}): CanonicalAlphaDecisionRow {
   return {
@@ -35,7 +35,7 @@ const closedGate = {
   decidedAt: "2026-09-15T20:00:00Z",
 };
 
-Deno.test("closed EXPECTED_EDGE gate may open only ALPHA's tiny canonical SHADOW ticket", () => {
+Deno.test("canonical ALPHA remains a research candidate but cannot charge main SHADOW treasury", () => {
   const state = initialTreasuryState("2026-09-15T20:11:00Z", 5000);
   const fallbacks = buildCanonicalAlphaShadowOpportunities([alpha()], state.positions, "2026-09-15T20:12:00Z");
   if (fallbacks.length !== 1 || !fallbacks[0].actionable || fallbacks[0].requestedCapitalUsd !== 3) throw new Error(JSON.stringify(fallbacks));
@@ -48,75 +48,49 @@ Deno.test("closed EXPECTED_EDGE gate may open only ALPHA's tiny canonical SHADOW
     promotionGate: closedGate,
     positionIdFor: () => "normal-unused",
   });
-  const open = plan.actions.find((action) => action.kind === "OPEN");
-  if (!open || open.reason !== "CANONICAL_ALPHA_SHADOW_SIGNAL" || open.capitalUsd !== 3) throw new Error(JSON.stringify(plan.actions));
-  if (!String(open.positionId).startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX)) throw new Error(String(open.positionId));
-  if (plan.promotionGate.authorized || !plan.blockedReasons.some((row) => row.includes("promotion gate closed"))) throw new Error(JSON.stringify(plan));
-  if (plan.state.positions.length !== 1 || plan.state.positions[0].capitalUsd !== 3) throw new Error(JSON.stringify(plan.state.positions));
-  if (plan.state.cashUsd >= 4997 || plan.state.cashUsd < 4996.9) throw new Error(`unexpected cash ${plan.state.cashUsd}`);
-  if (!plan.canonicalAlphaShadow.enabled || plan.canonicalAlphaShadow.actions < 1) throw new Error(JSON.stringify(plan.canonicalAlphaShadow));
+
+  if (plan.actions.length !== 0 || plan.state.positions.length !== 0) throw new Error(JSON.stringify(plan));
+  if (plan.state.cashUsd !== 5000 || plan.state.realizedPnlUsd !== 0 || plan.state.cumulativeCostsUsd !== 0) throw new Error(JSON.stringify(plan.state));
+  if (plan.canonicalAlphaShadow.enabled) throw new Error(JSON.stringify(plan.canonicalAlphaShadow));
+  if (!plan.blockedReasons.some((row) => row.includes("canonical ALPHA micro-entry paused"))) throw new Error(JSON.stringify(plan.blockedReasons));
 });
 
-Deno.test("fresh same-direction canonical ALPHA refresh holds the tiny shadow position without duplicate OPEN", () => {
-  const initial = initialTreasuryState("2026-09-15T20:11:00Z", 5000);
-  const firstFallback = buildCanonicalAlphaShadowOpportunities([alpha()], initial.positions, "2026-09-15T20:12:00Z");
-  const opened = planPromotionGatedTreasuryCycle({
-    state: initial,
-    opportunities: [],
-    shadowFallbackOpportunities: firstFallback,
-    observedAt: "2026-09-15T20:12:00Z",
-    promotionGate: closedGate,
-    positionIdFor: () => "normal-unused",
-  });
-  const refresh = alpha({ decisionId: "alpha-short-2", observedAt: "2026-09-15T20:14:41Z", referencePrice: 85.635, independentGroupCount: 3 });
-  const refreshedFallback = buildCanonicalAlphaShadowOpportunities([refresh], opened.state.positions, "2026-09-15T20:15:00Z");
-  const held = planPromotionGatedTreasuryCycle({
-    state: opened.state,
-    opportunities: [],
-    shadowFallbackOpportunities: refreshedFallback,
-    observedAt: "2026-09-15T20:15:00Z",
-    promotionGate: closedGate,
-    positionIdFor: () => "normal-unused",
-  });
-  if (held.actions.length !== 0 || held.state.positions.length !== 1 || held.state.positions[0].direction !== -1) throw new Error(JSON.stringify(held));
-});
-
-Deno.test("canonical ALPHA WAIT revokes and closes its fallback SHADOW position", () => {
-  const initial = initialTreasuryState("2026-09-15T20:11:00Z", 5000);
-  const firstFallback = buildCanonicalAlphaShadowOpportunities([alpha()], initial.positions, "2026-09-15T20:12:00Z");
-  const opened = planPromotionGatedTreasuryCycle({
-    state: initial,
-    opportunities: [],
-    shadowFallbackOpportunities: firstFallback,
-    observedAt: "2026-09-15T20:12:00Z",
-    promotionGate: closedGate,
-    positionIdFor: () => "normal-unused",
-  });
-  const wait = alpha({
-    decisionId: "alpha-wait-1",
-    observedAt: "2026-09-15T20:17:59Z",
-    referencePrice: 85.77,
-    action: "WAIT",
+Deno.test("an already-open canonical ALPHA probe is flattened once without allowing a reopen", () => {
+  const state = initialTreasuryState("2026-09-15T20:11:00Z", 5000);
+  const position: TreasuryPosition = {
+    positionId: `${CANONICAL_ALPHA_SHADOW_POSITION_PREFIX}alpha-short-1`,
+    assetId: "crypto:CRCLBUSDT",
     direction: -1,
-    requestedVirtualNotionalUsd: null,
-    estimatedRoundTripCostBps: null,
-    costQuality: null,
-    l2RuntimeStatus: null,
-  });
-  const waitFallback = buildCanonicalAlphaShadowOpportunities([wait], opened.state.positions, "2026-09-15T20:18:05Z");
-  if (waitFallback.length !== 1 || waitFallback[0].actionable) throw new Error(JSON.stringify(waitFallback));
-  const closed = planPromotionGatedTreasuryCycle({
-    state: opened.state,
+    openedAt: "2026-09-15T20:10:00Z",
+    entryPrice: 85.5,
+    capitalUsd: 3,
+    entryExpectedNetEdgeBps: 0,
+    latestExpectedNetEdgeBps: 0,
+    roundTripCostBps: 21.168,
+    sourceDecisionId: "alpha-short-1",
+    highWaterPnlBps: 0,
+  };
+  state.positions=[position];
+  state.cashUsd=4996.9968248;
+
+  const fallbacks = buildCanonicalAlphaShadowOpportunities([
+    alpha({decisionId:"alpha-short-2",observedAt:"2026-09-15T20:11:50Z",referencePrice:85.55})
+  ], state.positions, "2026-09-15T20:12:00Z");
+
+  const plan = planPromotionGatedTreasuryCycle({
+    state,
     opportunities: [],
-    shadowFallbackOpportunities: waitFallback,
-    observedAt: "2026-09-15T20:18:05Z",
+    shadowFallbackOpportunities: fallbacks,
+    observedAt: "2026-09-15T20:12:00Z",
     promotionGate: closedGate,
     positionIdFor: () => "normal-unused",
   });
-  if (closed.state.positions.length !== 0 || closed.actions[0]?.kind !== "EXIT" || closed.actions[0]?.reason !== "ALPHA_SIGNAL_REVOKED") throw new Error(JSON.stringify(closed.actions));
+
+  if (plan.state.positions.length !== 0) throw new Error(JSON.stringify(plan.state.positions));
+  if (plan.actions.length !== 1 || plan.actions[0].kind !== "EXIT" || plan.actions[0].reason !== "ALPHA_SIGNAL_REVOKED") throw new Error(JSON.stringify(plan.actions));
 });
 
-Deno.test("open EXPECTED_EDGE promotion never allows canonical fallback lane to add a position", () => {
+Deno.test("open EXPECTED_EDGE promotion never allows canonical research fallback to add a position", () => {
   const state = initialTreasuryState("2026-09-15T20:11:00Z", 5000);
   const fallbacks = buildCanonicalAlphaShadowOpportunities([alpha()], state.positions, "2026-09-15T20:12:00Z");
   const plan = planPromotionGatedTreasuryCycle({
