@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v9-or-web-fallback";
+const VERSION="brian.breaking-scout.v10-coverage-truth";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"|"BING_WEB"};
@@ -306,16 +306,19 @@ Deno.serve(async(req:Request)=>{
     const totalSources=officialSettled.length+discoverySettled.length;
     const selectedCritical=selected.discovery.filter((row)=>row.priority==="CRITICAL").map((row)=>row.id);
     const failedCritical=selectedCritical.filter((id)=>degraded.includes(id));
+    const partialCritical=selectedCritical.filter((id)=>["critical_scan_with_web","critical_partial_provider"].includes(discoveryProviders[id]||""));
     const criticalCandidates=events.filter((row:any)=>row.metadata?.critical_watch===true).length;
     const criticalSources=[...new Set(events.filter((row:any)=>row.metadata?.critical_watch===true).map((row:any)=>String(row.source_id||"")).filter(Boolean))];
-    const coverageState=failedCritical.length?"DEGRADED":criticalCandidates>0?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA";
-    const status=degraded.length===totalSources?"FAILED":degraded.length||failedCritical.length?"DEGRADED":"SUCCESS";
+    const allCriticalPartial=selectedCritical.length>0&&partialCritical.length===selectedCritical.length;
+    const coverageState=failedCritical.length?"DEGRADED":allCriticalPartial?"PARTIAL_PROVIDER":criticalCandidates>0?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA";
+    const status=degraded.length===totalSources?"FAILED":degraded.length||failedCritical.length||allCriticalPartial?"DEGRADED":"SUCCESS";
     await recordRun(startedAt,status,articles.length,stored,degraded,{
       provider_errors:providerErrors,
       discovery_providers:discoveryProviders,
       candidate_records:events.length,
       critical_lanes_expected:selectedCritical.length,
       critical_lanes_failed:failedCritical,
+      critical_lanes_partial:partialCritical,
       critical_candidates:criticalCandidates,
       critical_sources:criticalSources.slice(0,12),
       coverage_state:coverageState
@@ -326,7 +329,7 @@ Deno.serve(async(req:Request)=>{
       discovery_providers:discoveryProviders,provider_errors:providerErrors,
       critical_lanes:selected.discovery.filter((row)=>row.priority==="CRITICAL").map((row)=>row.id),
       critical_candidates:events.filter((row:any)=>row.metadata?.critical_watch===true).length,
-      coverage_state:selected.discovery.some((row)=>row.priority==="CRITICAL"&&degraded.includes(row.id))?"DEGRADED":events.some((row:any)=>row.metadata?.critical_watch===true)?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA",
+      coverage_state:failedCritical.length?"DEGRADED":partialCritical.length===selectedCritical.length&&selectedCritical.length>0?"PARTIAL_PROVIDER":events.some((row:any)=>row.metadata?.critical_watch===true)?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA",
       fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false
     },status==="FAILED"?503:200);
   }catch(e){
