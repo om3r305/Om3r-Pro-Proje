@@ -161,6 +161,21 @@ async function resolveRecoveredRuntimeGaps(
     if (id && !latest.has(id)) latest.set(id, row);
   }
 
+  const existingIds = capabilities.map((row) => row.capabilityId);
+  const plannedQ = existingIds.length
+    ? await db.from("brian_evolution_gap_snapshots")
+        .select("gap_id,capability_id,domain,severity,observed_at,evidence_refs")
+        .in("capability_id", existingIds)
+        .like("gap_id", "planned:%")
+        .order("observed_at", { ascending: false })
+        .limit(500)
+    : { data: [], error: null } as any;
+  if (plannedQ.error) throw new Error(`resolved_planned_gaps_lookup:${plannedQ.error.message}`);
+  for (const row of plannedQ.data ?? []) {
+    const id = String(row.gap_id ?? "");
+    if (id && !latest.has(id)) latest.set(id, row);
+  }
+
   const rows: Record<string, unknown>[] = [];
   for (const row of latest.values()) {
     if (String(row.severity ?? "").toUpperCase() === "LOW") continue;
@@ -171,8 +186,10 @@ async function resolveRecoveredRuntimeGaps(
       capability_id: row.capability_id,
       domain: row.domain,
       severity: "LOW",
-      reason: "Resolved: the latest evidence snapshot is HEALTHY.",
-      suggested_action: "No repair action required. Keep monitoring freshness and provider health.",
+      reason: String(row.gap_id).startsWith("planned:")
+        ? "Resolved: this planned capability now exists in the canonical capability graph."
+        : "Resolved: the latest evidence snapshot is HEALTHY.",
+      suggested_action: "No repair action required. Keep monitoring evidence quality and freshness.",
       evidence_refs: Array.isArray(row.evidence_refs) ? row.evidence_refs : [],
       metadata: {
         resolved: true,
