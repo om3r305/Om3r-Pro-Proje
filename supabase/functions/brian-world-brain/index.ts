@@ -14,6 +14,7 @@ const EVENT_OVERLAP_MS = 15 * 60 * 1000;
 const MAX_INCREMENTAL_EVENTS = 200;
 const WRITE_CHUNK = 10;
 const CLASSIFICATION_GUARD_VERSION = "world-brain-classifier-guard.v1";
+const SEMANTIC_DEDUPE_VERSION = "world-semantic-dedupe.v1";
 
 function out(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -56,6 +57,67 @@ async function persistRows(table: string, rows: Record<string, unknown>[], onCon
 
 function fromIso(ms: number): string {
   return new Date(ms).toISOString();
+}
+
+function semanticText(value: unknown): string {
+  return String(value ?? "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim().slice(0, 700);
+}
+function semanticTrustRank(event: WorldBrainInputEvent): number {
+  const trust = String(event.trust_class ?? "").toUpperCase();
+  if (trust === "OFFICIAL_PRIMARY") return 4;
+  if (trust === "INDEPENDENT_PROFESSIONAL") return 3;
+  if (trust === "VERIFIED_SECONDARY") return 2;
+  return 1;
+}
+function semanticKindRank(event: WorldBrainInputEvent): number {
+  const kind = String(event.event_kind ?? "").toUpperCase();
+  if (/^OFFICIAL_SOURCE_ITEM$|^OFFICIAL_PRIMARY_RELEASE$|^OFFICIAL_EXCHANGE_STATUS$/.test(kind)) return 4;
+  if (/INSTITUTIONAL_RELEASE/.test(kind)) return 3;
+  if (/BREAKING_SCOUT/.test(kind)) return 2;
+  return 1;
+}
+function dedupeSemanticEvents(events: WorldBrainInputEvent[]): WorldBrainInputEvent[] {
+  const groups = new Map<string, { winner: WorldBrainInputEvent; earliest: string; ids: string[] }>();
+  for (const event of events) {
+    const claim = semanticText(event.claim);
+    if (!claim) continue;
+    const source = semanticText(event.source_id || "unknown");
+    const dateBasis = String(event.published_at ?? event.first_observed_at ?? "").slice(0, 10);
+    const key = `${source}|${dateBasis}|${claim}`;
+    const prior = groups.get(key);
+    if (!prior) {
+      groups.set(key, { winner: event, earliest: String(event.first_observed_at ?? ""), ids: [event.event_id] });
+      continue;
+    }
+    prior.ids.push(event.event_id);
+    const eventAt = String(event.first_observed_at ?? "");
+    if (eventAt && (!prior.earliest || eventAt < prior.earliest)) prior.earliest = eventAt;
+    const a = prior.winner;
+    const better =
+      semanticTrustRank(event) > semanticTrustRank(a) ||
+      (semanticTrustRank(event) === semanticTrustRank(a) && semanticKindRank(event) > semanticKindRank(a)) ||
+      (semanticTrustRank(event) === semanticTrustRank(a) && semanticKindRank(event) === semanticKindRank(a) &&
+       eventAt && String(a.first_observed_at ?? "") && eventAt < String(a.first_observed_at));
+    if (better) prior.winner = event;
+  }
+  const out: WorldBrainInputEvent[] = [];
+  for (const group of groups.values()) {
+    const meta = (group.winner.metadata && typeof group.winner.metadata === "object")
+      ? group.winner.metadata as Record<string, unknown> : {};
+    out.push({
+      ...group.winner,
+      first_observed_at: group.earliest || group.winner.first_observed_at,
+      metadata: {
+        ...meta,
+        semantic_dedupe: {
+          version: SEMANTIC_DEDUPE_VERSION,
+          collapsed_count: group.ids.length,
+          source_event_ids: group.ids.slice(0, 24),
+        },
+      },
+    });
+  }
+  return out.sort((a,b)=>String(a.first_observed_at ?? "").localeCompare(String(b.first_observed_at ?? "")));
 }
 
 function narrativeAllowed(event: WorldBrainInputEvent | undefined, narrativeId: string): boolean {
@@ -204,6 +266,7 @@ async function runReceipt(args: {
     metadata: {
       version: WORLD_BRAIN_VERSION,
       classification_guard_version: CLASSIFICATION_GUARD_VERSION,
+      semantic_dedupe_version: SEMANTIC_DEDUPE_VERSION,
       incremental_strategy: "latest_window_idempotent_v2",
       max_incremental_events: MAX_INCREMENTAL_EVENTS,
       lookback_hours: LOOKBACK_MS / 3600000,
@@ -233,7 +296,7 @@ async function runReceipt(args: {
     evidence_class: EVOLUTION_EVIDENCE_CLASS,
     shadow_only: true,
     live_execution: false,
-    metadata: { version: WORLD_BRAIN_VERSION, classification_guard_version: CLASSIFICATION_GUARD_VERSION, direct_alpha_influence: false },
+    metadata: { version: WORLD_BRAIN_VERSION, classification_guard_version: CLASSIFICATION_GUARD_VERSION, semantic_dedupe_version: SEMANTIC_DEDUPE_VERSION, direct_alpha_influence: false },
   });
   if (c.error) console.error("world brain collector receipt", c.error.message);
 }
@@ -251,8 +314,10 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const now = Date.now();
       const observedAt = new Date(now).toISOString();
-      const contextEvents = await loadContextEvents(now);
-      const incrementalEvents = await loadIncrementalEvents(now);
+      const contextRawEvents = await loadContextEvents(now);
+      const incrementalRawEvents = await loadIncrementalEvents(now);
+      const contextEvents = dedupeSemanticEvents(contextRawEvents);
+      const incrementalEvents = dedupeSemanticEvents(incrementalRawEvents);
       const contextBatch = applyClassificationGuard(buildWorldBrainBatch(contextEvents, observedAt), contextEvents);
       const eventBatch = applyClassificationGuard(buildWorldBrainBatch(incrementalEvents, observedAt), incrementalEvents);
 
@@ -326,9 +391,14 @@ Deno.serve(async (req: Request) => {
         observed_at: observedAt,
         world_brain_version: WORLD_BRAIN_VERSION,
         classification_guard_version: CLASSIFICATION_GUARD_VERSION,
+        semantic_dedupe_version: SEMANTIC_DEDUPE_VERSION,
         incremental_strategy: "latest_window_idempotent_v2",
+        raw_input_events: contextRawEvents.length,
         input_events: contextEvents.length,
+        semantic_duplicates_collapsed: contextRawEvents.length-contextEvents.length,
+        raw_incremental_events: incrementalRawEvents.length,
         incremental_events: incrementalEvents.length,
+        incremental_duplicates_collapsed: incrementalRawEvents.length-incrementalEvents.length,
         ...counts,
         causal_claims_are_research_hypotheses: true,
         direct_alpha_influence: false,
