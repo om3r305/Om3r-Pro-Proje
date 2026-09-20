@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(SUPABASE_URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 
-const VERSION = "brian.realtime-official-eye.v1";
+const VERSION = "brian.realtime-official-eye.v2-insert-accounting";
 const COLLECTOR_ID = "brian-realtime-official-eye-v1";
 const BUCKET = "brian-intelligence-raw";
 const INTERNAL_KEY_SHA256 = "b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a";
@@ -362,13 +362,23 @@ async function observe(endpoint: Endpoint) {
     });
   }
 
+  let stored = 0;
+  const insertedIds = new Set<string>();
   if (events.length) {
-    const q = await db.from("brian_intel_events").upsert(events, { onConflict: "event_id", ignoreDuplicates: true });
+    const q = await db.from("brian_intel_events")
+      .upsert(events, { onConflict: "event_id", ignoreDuplicates: true })
+      .select("event_id");
     if (q.error) throw q.error;
+    for (const row of q.data ?? []) {
+      const id = String((row as Json).event_id ?? "");
+      if (id) insertedIds.add(id);
+    }
+    stored = insertedIds.size;
   }
 
   let catalysts = 0;
   for (const event of events) {
+    if (!insertedIds.has(String(event.event_id ?? ""))) continue;
     const binding = catalystBinding(event);
     if (!binding.relevant) continue;
     const rpc = await db.rpc("brian_catalyst_ingest_official_event_v23", {
@@ -380,7 +390,15 @@ async function observe(endpoint: Endpoint) {
   }
 
   await setState(endpoint, payloadHash, fetched.status, true);
-  return { endpoint_id: endpoint.endpoint_id, unchanged: false, parsed: items.length, selected: selected.length, stored: events.length, catalysts };
+  return {
+    endpoint_id: endpoint.endpoint_id,
+    unchanged: false,
+    parsed: items.length,
+    selected: selected.length,
+    candidates: events.length,
+    stored,
+    catalysts,
+  };
 }
 async function run() {
   const startedAt = new Date().toISOString();
