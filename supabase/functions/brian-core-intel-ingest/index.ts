@@ -4,7 +4,7 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.core-intel-ingest.v1";
+const VERSION="brian.core-intel-ingest.v2-direct-wire";
 const COLLECTOR_ID="brian-core-intel-ingest-v1";
 
 type Json=Record<string,unknown>;
@@ -39,15 +39,21 @@ Deno.serve(async(req:Request)=>{
       const eventKind=String(row.event_kind??"").trim();
       const trust=String(row.trust_class??"").trim();
       const claim=String(row.claim??"").trim();
-      if(!eventId||!claim||trust!=="OFFICIAL_PRIMARY"||!/^OFFICIAL_/i.test(eventKind))continue;
       const meta=(row.metadata&&typeof row.metadata==="object"?row.metadata:{}) as Json;
+      const officialAllowed=trust==="OFFICIAL_PRIMARY" && /^OFFICIAL_/i.test(eventKind);
+      const wireAllowed=trust==="INDEPENDENT_PROFESSIONAL" &&
+        eventKind==="DIRECT_WIRE_DISCOVERY" &&
+        String(row.source_kind??"")==="DIRECT_WIRE_INDEPENDENT" &&
+        meta.direct_wire===true &&
+        meta.discovery_only===true;
+      if(!eventId||!claim||(!officialAllowed&&!wireAllowed))continue;
       accepted.push({
         event_id:eventId,asset:row.asset??"GLOBAL",event_kind:eventKind,
-        source_kind:row.source_kind??"REALTIME_OFFICIAL",source_id:row.source_id??"unknown",
+        source_kind:row.source_kind??(officialAllowed?"REALTIME_OFFICIAL":"DIRECT_WIRE_INDEPENDENT"),source_id:row.source_id??"unknown",
         published_at:row.published_at??null,first_observed_at:row.first_observed_at??startedAt,
         captured_at:row.captured_at??startedAt,claim:claim.slice(0,2000),
         direction:Number(row.direction??0),magnitude:Number(row.magnitude??0),
-        trust_class:"OFFICIAL_PRIMARY",entity_confidence:Number(row.entity_confidence??1),
+        trust_class:trust,entity_confidence:Number(row.entity_confidence??(officialAllowed?1:.72)),
         content_fingerprint:row.content_fingerprint??null,corroboration_key:row.corroboration_key??null,
         provenance_uri:row.provenance_uri??null,pit_verified:row.pit_verified!==false,raw_capture_id:null,
         metadata:{...meta,realtime_raw_capture_id:row.raw_capture_id??null,cross_project_sync:true,synced_from:"brian-realtime",synced_at:startedAt,direct_alpha_influence:false}
