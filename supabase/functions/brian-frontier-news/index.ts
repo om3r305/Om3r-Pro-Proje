@@ -137,11 +137,54 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origin) });
   if (req.method !== "POST") return out({ error: "POST required" }, 405, origin);
   try { await auth(req); } catch (error) { return out({ error: String(error) }, 401, origin); }
-  const q = await db.from("brian_world_event_frames")
-    .select("frame_id,event_id,observed_at,published_at,event_kind,source_id,claim,primary_asset,entity_ids,narrative_ids,source_trust_class,provenance_uri")
-    .order("observed_at", { ascending: false }).limit(140);
-  if (q.error) return out({ status: "DEGRADED", error: q.error.message, items: [], shadow_only: true, live_execution: false }, 500, origin);
-  const items = ((q.data ?? []) as Frame[])
+  const [q, scoutQ] = await Promise.all([
+    db.from("brian_world_event_frames")
+      .select("frame_id,event_id,observed_at,published_at,event_kind,source_id,claim,primary_asset,entity_ids,narrative_ids,source_trust_class,provenance_uri")
+      .order("observed_at", { ascending: false }).limit(140),
+    db.from("brian_intel_events")
+      .select("event_id,first_observed_at,published_at,source_id,claim,trust_class,provenance_uri,metadata")
+      .eq("event_kind","BREAKING_SCOUT")
+      .gte("first_observed_at", new Date(Date.now()-45*60_000).toISOString())
+      .order("first_observed_at",{ascending:false})
+      .limit(80),
+  ]);
+  if (q.error || scoutQ.error) return out({ status: "DEGRADED", error: q.error?.message ?? scoutQ.error?.message, items: [], shadow_only: true, live_execution: false }, 500, origin);
+  const worldClaims = new Set((q.data ?? []).map((row:any)=>String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
+  const earlyItems = (scoutQ.data ?? [])
+    .filter((row:any)=>!worldClaims.has(String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()))
+    .slice(0,10)
+    .map((row:any)=>{
+      const official=String(row.trust_class)==="OFFICIAL_PRIMARY";
+      const published=row.published_at??row.first_observed_at;
+      const ageMinutes=Math.max(0,(Date.now()-Date.parse(String(published)))/60000);
+      return {
+        id:`scout:${row.event_id}`,
+        observed_at:row.first_observed_at,
+        published_at:row.published_at,
+        display_time:published,
+        freshness_state:"ERKEN",
+        freshness_label_tr:official?"ERKEN · RESMÎ":"ERKEN · DOĞRULANIYOR",
+        age_minutes:Math.round(ageMinutes),
+        urgency:official?"HIGH":"MEDIUM",
+        importance:official?0.78:0.62,
+        title_tr:String(row.claim??"Brian erken uyarı"),
+        summary_tr:official
+          ?"Brian bu gelişmeyi doğrudan birincil/resmî kaynaktan erken yakaladı; World Brain sınıflandırması ve piyasa etkisi eşlemesi devam ediyor."
+          :"Brian bu gelişmeyi hızlı haber keşif hattında yakaladı; bağımsız/resmî doğrulama bekleniyor ve henüz yön oyu üretmiyor.",
+        original_claim:row.claim,
+        event_kind:"BREAKING_SCOUT",
+        source_id:row.source_id,
+        source_trust_class:row.trust_class,
+        primary_asset:null,
+        entity_ids:[],
+        narrative_ids:[],
+        provenance_uri:row.provenance_uri,
+        scout_latency_seconds:row.metadata?.source_latency_seconds??null,
+        fast_lane:true,
+      };
+    });
+
+  const worldItems = ((q.data ?? []) as Frame[])
     .map((row) => {
       const score = importantScore(row);
       const f = freshness(row);
@@ -170,6 +213,8 @@ Deno.serve(async (req: Request) => {
       entity_ids: row.entity_ids ?? [],
       narrative_ids: row.narrative_ids ?? [],
       provenance_uri: row.provenance_uri,
+      fast_lane:false,
     }));
-  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, freshness_states: ["YENI","TAKIPTE","BAGLAM"], main_feed_max_age_hours: 24, old_important_events_remain_world_context: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
+  const items=[...earlyItems,...worldItems].slice(0,24);
+  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, freshness_states: ["ERKEN","YENI","TAKIPTE","BAGLAM"], breaking_fast_lane: true, main_feed_max_age_hours: 24, old_important_events_remain_world_context: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
 });
