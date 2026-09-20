@@ -233,6 +233,17 @@ const MAIN_CAPABILITIES: CapabilityDefinition[] = [
     limitations: ["runtime inventory is evidence-based, not filesystem omniscience"],
     expectedStage: "EXPERIMENTAL",
   },
+  {
+    capabilityId: "portfolio.treasury",
+    domain: "PORTFOLIO",
+    name: "Brian Treasury",
+    description: "Runs the unified SHADOW treasury, capital allocation, realized PnL and cost accounting that already exists in Core.",
+    collectorIds: ["brian-evolution-treasury-v1"],
+    staleAfterSeconds: 600,
+    dependencies: ["alpha.compiler"],
+    limitations: ["shadow only", "capital allocation remains gated by evidence quality and expected edge"],
+    expectedStage: "ACTIVE",
+  },
 ];
 
 const FUTURE_REQUIRED: Array<Omit<CapabilityDefinition, "collectorIds" | "staleAfterSeconds">> = [
@@ -297,15 +308,6 @@ const FUTURE_REQUIRED: Array<Omit<CapabilityDefinition, "collectorIds" | "staleA
     description: "Estimates gross move minus cost, uncertainty and decay before action.",
     dependencies: ["research.calibration"],
     limitations: ["Layer 4 target"],
-    expectedStage: "DISCOVERED",
-  },
-  {
-    capabilityId: "portfolio.treasury",
-    domain: "PORTFOLIO",
-    name: "Brian Treasury",
-    description: "Allocates a unified shadow cash pool by opportunity cost and risk.",
-    dependencies: ["alpha.expected-edge"],
-    limitations: ["Layer 5 target", "shadow only"],
     expectedStage: "DISCOVERED",
   },
   {
