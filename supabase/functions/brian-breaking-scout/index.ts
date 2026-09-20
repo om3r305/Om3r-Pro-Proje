@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v7-critical-dual-provider";
+const VERSION="brian.breaking-scout.v8-freshness-filter";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
@@ -88,7 +88,7 @@ function parseXml(xml:string,feed:Feed):Article[]{
   return out;
 }
 
-async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
+async function fetchFeed(feed:Feed,timeoutMs=5500,allowEmpty=false):Promise<Article[]>{
   const r=await fetch(feed.url,{
     headers:{
       accept:"application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
@@ -97,8 +97,13 @@ async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
     signal:AbortSignal.timeout(timeoutMs)
   });
   if(!r.ok)throw new Error(`${feed.id}:HTTP_${r.status}`);
-  const rows=parseXml(await r.text(),feed);
-  if(!rows.length)throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
+  const body=await r.text();
+  const rows=parseXml(body,feed);
+  if(!rows.length){
+    const looksLikeFeed=/<rss\b|<feed\b|<channel\b/i.test(body);
+    if(allowEmpty&&looksLikeFeed)return [];
+    throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
+  }
   return rows;
 }
 function freshDiscoveryArticles(rows:Article[],maxAgeMs=2*60*60_000){
@@ -125,19 +130,19 @@ async function fetchDiscovery(row:{id:string;theme:string;priority:string;google
   // Critical lanes use two independent discovery paths in parallel. A provider
   // returning only stale rows no longer counts as useful coverage.
   if(row.priority==="CRITICAL"){
-    const bingParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
+    const bingParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
     const googleParams=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
     const [bingResult,googleResult]=await Promise.allSettled([
       fetchFeed({
         id:row.id+":bing",
         url:`https://www.bing.com/news/search?${bingParams}`,
         theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-      },2200),
+      },2200,true),
       fetchFeed({
         id:row.id+":google",
         url:`https://news.google.com/rss/search?${googleParams}`,
         theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-      },1800)
+      },1800,true)
     ]);
     const merged:Article[]=[];
     if(bingResult.status==="fulfilled"){
@@ -153,29 +158,34 @@ async function fetchDiscovery(row:{id:string;theme:string;priority:string;google
     if(merged.length){
       return {articles:uniqueArticles(merged),provider:"bing+google_critical",providerErrors};
     }
+    let compactAvailable=false;
     try{
-      const compactParams=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us"});
-      const fresh=tagRows(await fetchFeed({
+      const compactParams=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
+      const raw=await fetchFeed({
         id:row.id+":bing-compact",
         url:`https://www.bing.com/news/search?${compactParams}`,
         theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-      },1800));
+      },1800,true);
+      compactAvailable=true;
+      const fresh=tagRows(raw);
       if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_news_rss_compact",providerErrors};
-      providerErrors.push("bing-compact:STALE_ONLY");
     }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
-    throw new Error(`${row.id}:NO_FRESH_CRITICAL_DISCOVERY:${providerErrors.join("|")}`);
+    const primaryAvailable=bingResult.status==="fulfilled"||googleResult.status==="fulfilled";
+    if(primaryAvailable||compactAvailable){
+      return {articles:[],provider:bingResult.status==="fulfilled"&&googleResult.status==="fulfilled"?"bing+google_critical":"critical_partial_provider",providerErrors};
+    }
+    throw new Error(`${row.id}:ALL_CRITICAL_PROVIDERS_FAILED:${providerErrors.join("|")}`);
   }
 
   // Normal lanes stay cheap: Bing first, Google only when Bing is unusable.
   try{
-    const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
+    const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
     const articles=tagRows(await fetchFeed({
       id:row.id+":bing",
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },3000));
-    if(articles.length)return {articles:uniqueArticles(articles),provider:"bing_news_rss",providerErrors};
-    providerErrors.push("bing-full:STALE_ONLY");
+    },3000,true));
+    return {articles:uniqueArticles(articles),provider:"bing_news_rss",providerErrors};
   }catch(e){providerErrors.push("bing-full:"+errorText(e).slice(0,180))}
   try{
     const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
@@ -183,9 +193,8 @@ async function fetchDiscovery(row:{id:string;theme:string;priority:string;google
       id:row.id+":google",
       url:`https://news.google.com/rss/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-    },2200));
-    if(articles.length)return {articles:uniqueArticles(articles),provider:"google_news_rss",providerErrors};
-    providerErrors.push("google:STALE_ONLY");
+    },2200,true));
+    return {articles:uniqueArticles(articles),provider:"google_news_rss",providerErrors};
   }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
   throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
 }
