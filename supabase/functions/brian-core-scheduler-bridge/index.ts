@@ -12,7 +12,7 @@ const ALLOWED_ACTIONS=new Set([
   "alpha_sync","world","treasury","discovery",
   "official_primary","source_observer","source_registry","meeting_sync",
   "recovery","watchdog","dip","multiasset",
-  "universe_heartbeat","sensor_heartbeat","intrabar_heartbeat","derivatives_heartbeat"
+  "universe_heartbeat","sensor_heartbeat","intrabar_heartbeat","derivatives_heartbeat","fx_heartbeat"
 ]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -37,6 +37,7 @@ Deno.serve(async(req:Request)=>{
       sensor_heartbeat:"market.sensor-mesh",
       intrabar_heartbeat:"market.intrabar",
       derivatives_heartbeat:"market.derivatives",
+      fx_heartbeat:"world.fx",
     };
     const q=heartbeatMap[action]
       ? await db.rpc("brian_external_capability_heartbeat_v1",{p_capability:heartbeatMap[action]})
