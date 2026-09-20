@@ -140,6 +140,54 @@ async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[
   };
 }
 
+async function resolveRecoveredRuntimeGaps(
+  observedAt: string,
+  capabilities: ReturnType<typeof deriveCapabilitySnapshots>,
+): Promise<number> {
+  const healthyIds = capabilities.filter((row) => row.health === "HEALTHY").map((row) => row.capabilityId);
+  if (!healthyIds.length) return 0;
+
+  const q = await db.from("brian_evolution_gap_snapshots")
+    .select("gap_id,capability_id,domain,severity,observed_at,evidence_refs")
+    .in("capability_id", healthyIds)
+    .like("gap_id", "runtime:%")
+    .order("observed_at", { ascending: false })
+    .limit(1000);
+  if (q.error) throw new Error(`resolved_gaps_lookup:${q.error.message}`);
+
+  const latest = new Map<string, any>();
+  for (const row of q.data ?? []) {
+    const id = String(row.gap_id ?? "");
+    if (id && !latest.has(id)) latest.set(id, row);
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (const row of latest.values()) {
+    if (String(row.severity ?? "").toUpperCase() === "LOW") continue;
+    rows.push({
+      snapshot_id: await sha256(`${row.gap_id}|resolved|${observedAt}`),
+      gap_id: row.gap_id,
+      observed_at: observedAt,
+      capability_id: row.capability_id,
+      domain: row.domain,
+      severity: "LOW",
+      reason: "Resolved: the latest evidence snapshot is HEALTHY.",
+      suggested_action: "No repair action required. Keep monitoring freshness and provider health.",
+      evidence_refs: Array.isArray(row.evidence_refs) ? row.evidence_refs : [],
+      metadata: {
+        resolved: true,
+        resolved_by: EVOLUTION_CORE_VERSION,
+        architecture: "brian-realtime + brian-market-intelligence",
+        direct_alpha_influence: false,
+      },
+      evidence_class: EVOLUTION_EVIDENCE_CLASS,
+      shadow_only: true,
+      live_execution: false,
+    });
+  }
+  return await insertRows("brian_evolution_gap_snapshots", rows);
+}
+
 async function persistJournal(
   observedAt: string,
   capabilityRows: ReturnType<typeof deriveCapabilitySnapshots>,
@@ -355,6 +403,7 @@ Deno.serve(async (req: Request) => {
 
       const storedCapabilities = await insertRows("brian_evolution_capability_snapshots", capabilityRows);
       const storedGaps = await insertRows("brian_evolution_gap_snapshots", gapRows);
+      const resolvedGaps = await resolveRecoveredRuntimeGaps(observedAt, capabilities);
       const storedSources = await insertRows("brian_world_source_candidates", sourceRows);
       const storedAssessments = await insertRows("brian_world_source_assessments", assessmentRows);
       const storedJournal = await persistJournal(observedAt, capabilities, gaps, discoveredSources.length);
@@ -366,7 +415,7 @@ Deno.serve(async (req: Request) => {
         finishedAt,
         status: "SUCCESS",
         capabilities: storedCapabilities,
-        gaps: storedGaps,
+        gaps: storedGaps + resolvedGaps,
         sources: storedSources,
         assessments: storedAssessments,
         journal: storedJournal,
@@ -378,7 +427,7 @@ Deno.serve(async (req: Request) => {
         observed_at: observedAt,
         core_version: EVOLUTION_CORE_VERSION,
         capability_snapshots: storedCapabilities,
-        gap_snapshots: storedGaps,
+        gap_snapshots: storedGaps + resolvedGaps,
         source_candidates: storedSources,
         source_assessments: storedAssessments,
         journal_events: storedJournal,
