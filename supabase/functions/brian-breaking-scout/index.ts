@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v6-critical-coverage";
+const VERSION="brian.breaking-scout.v7-critical-dual-provider";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
@@ -101,37 +101,91 @@ async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
   if(!rows.length)throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
   return rows;
 }
+function freshDiscoveryArticles(rows:Article[],maxAgeMs=2*60*60_000){
+  const now=Date.now();
+  return rows.filter((a)=>{
+    if(!a.publishedAt)return true;
+    const t=Date.parse(a.publishedAt);
+    return !Number.isFinite(t)||now-t<=maxAgeMs;
+  });
+}
+function uniqueArticles(rows:Article[]){
+  const seen=new Set<string>();
+  return rows.filter((a)=>{
+    const k=(a.url||"")+"|"+a.title.toLowerCase();
+    if(seen.has(k))return false;
+    seen.add(k);
+    return true;
+  });
+}
 async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
   const providerErrors:string[]=[];
-  // Supabase Edge has repeatedly timed out against Google News while Bing RSS is
-  // healthy. Use the healthy provider first so the fast lane does not spend ~4s
-  // waiting on a known-slow upstream. Google remains a true fallback.
+  const tagRows=(rows:Article[])=>freshDiscoveryArticles(rows).map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"}));
+
+  // Critical lanes use two independent discovery paths in parallel. A provider
+  // returning only stale rows no longer counts as useful coverage.
+  if(row.priority==="CRITICAL"){
+    const bingParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
+    const googleParams=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
+    const [bingResult,googleResult]=await Promise.allSettled([
+      fetchFeed({
+        id:row.id+":bing",
+        url:`https://www.bing.com/news/search?${bingParams}`,
+        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
+      },2200),
+      fetchFeed({
+        id:row.id+":google",
+        url:`https://news.google.com/rss/search?${googleParams}`,
+        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
+      },1800)
+    ]);
+    const merged:Article[]=[];
+    if(bingResult.status==="fulfilled"){
+      const fresh=tagRows(bingResult.value);
+      if(fresh.length)merged.push(...fresh);
+      else providerErrors.push("bing-full:STALE_ONLY");
+    }else providerErrors.push("bing-full:"+errorText(bingResult.reason).slice(0,180));
+    if(googleResult.status==="fulfilled"){
+      const fresh=tagRows(googleResult.value);
+      if(fresh.length)merged.push(...fresh);
+      else providerErrors.push("google:STALE_ONLY");
+    }else providerErrors.push("google:"+errorText(googleResult.reason).slice(0,180));
+    if(merged.length){
+      return {articles:uniqueArticles(merged),provider:"bing+google_critical",providerErrors};
+    }
+    try{
+      const compactParams=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us"});
+      const fresh=tagRows(await fetchFeed({
+        id:row.id+":bing-compact",
+        url:`https://www.bing.com/news/search?${compactParams}`,
+        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
+      },1800));
+      if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_news_rss_compact",providerErrors};
+      providerErrors.push("bing-compact:STALE_ONLY");
+    }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
+    throw new Error(`${row.id}:NO_FRESH_CRITICAL_DISCOVERY:${providerErrors.join("|")}`);
+  }
+
+  // Normal lanes stay cheap: Bing first, Google only when Bing is unusable.
   try{
     const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
-    const articles=await fetchFeed({
+    const articles=tagRows(await fetchFeed({
       id:row.id+":bing",
       url:`https://www.bing.com/news/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },3000);
-    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"bing_news_rss",providerErrors};
+    },3000));
+    if(articles.length)return {articles:uniqueArticles(articles),provider:"bing_news_rss",providerErrors};
+    providerErrors.push("bing-full:STALE_ONLY");
   }catch(e){providerErrors.push("bing-full:"+errorText(e).slice(0,180))}
   try{
-    const params=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us"});
-    const articles=await fetchFeed({
-      id:row.id+":bing-compact",
-      url:`https://www.bing.com/news/search?${params}`,
-      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },3000);
-    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"bing_news_rss_compact",providerErrors};
-  }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
-  try{
     const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
-    const articles=await fetchFeed({
+    const articles=tagRows(await fetchFeed({
       id:row.id+":google",
       url:`https://news.google.com/rss/search?${params}`,
       theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-    },3500);
-    return {articles:articles.map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"})),provider:"google_news_rss",providerErrors};
+    },2200));
+    if(articles.length)return {articles:uniqueArticles(articles),provider:"google_news_rss",providerErrors};
+    providerErrors.push("google:STALE_ONLY");
   }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
   throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
 }
