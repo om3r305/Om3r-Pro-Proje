@@ -101,18 +101,35 @@ function freshnessBoost(state: string): number {
   return state === "YENI" ? 0.20 : state === "TAKIPTE" ? 0.10 : state === "BAGLAM" ? 0 : -0.10;
 }
 
+type PolicySemantic = "OFFICIAL_POLICY_ACTION"|"OFFICIAL_POLICY_SIGNAL"|"MARKET_EXPECTATION_SHIFT"|"MONETARY_POLICY_CONTEXT"|"OTHER";
+
+function policySemantic(row: Frame): PolicySemantic {
+  const narratives=row.narrative_ids??[];
+  if(!narratives.includes("narrative:MONETARY_POLICY")) return "OTHER";
+  const official=/PRIMARY|OFFICIAL|REGULATOR/i.test(String(row.source_trust_class??"")) || /^OFFICIAL_/i.test(String(row.event_kind??""));
+  const claim=String(row.claim??"");
+  const hardAction=/\b(raises?|raised|hikes?|hiked|cuts?|cut|holds?|held|maintains?|maintained|sets?|set|target range|policy rate|rate decision|votes? to|announces? a rate|emergency rate)\b/i.test(claim);
+  const officialSignal=/\b(says?|said|speech|remarks?|testimony|minutes|expects?|projects?|forecast|outlook|guidance|inflation|labor market|economic outlook)\b/i.test(claim);
+  if(official&&hardAction) return "OFFICIAL_POLICY_ACTION";
+  if(official&&officialSignal) return "OFFICIAL_POLICY_SIGNAL";
+  if(!official) return "MARKET_EXPECTATION_SHIFT";
+  return "MONETARY_POLICY_CONTEXT";
+}
 function importantScore(row: Frame): number {
   const narratives = row.narrative_ids ?? [];
   const entities = row.entity_ids ?? [];
   let score = 0.25;
   if (narratives.some((id) => ["narrative:GEOPOLITICS", "narrative:MONETARY_POLICY", "narrative:INFLATION", "narrative:ENERGY_SUPPLY", "narrative:EARNINGS", "narrative:PRODUCT_LAUNCH", "narrative:CYBERSECURITY", "narrative:CRYPTO_REGULATION"].includes(id))) score += 0.28;
   if (entities.some((id) => id === "person:TRUMP" || id === "person:MUSK" || id.startsWith("centralbank:") || id === "regulator:SEC")) score += 0.22;
-  if (row.primary_asset) score += 0.12;
+  if (row.primary_asset && !/^GLOBAL/i.test(String(row.primary_asset))) score += 0.12;
   if (/PRIMARY|OFFICIAL|REGULATOR|EXCHANGE|FILING/i.test(row.source_trust_class)) score += 0.10;
   if (/war|conflict|missile|sanction|rate|inflation|cpi|earnings|launch|hack|exploit|tariff|election|regulat/i.test(row.claim)) score += 0.12;
-  return Math.min(1, score);
+  const semantic=policySemantic(row);
+  if(semantic==="MARKET_EXPECTATION_SHIFT") score-=0.22;
+  if(semantic==="OFFICIAL_POLICY_ACTION") score+=0.08;
+  return Math.max(0,Math.min(1, score));
 }
-function turkishSummary(row: Frame): { title: string; summary: string } {
+function turkishSummary(row: Frame): { title: string; summary: string; semanticClass: PolicySemantic } {
   const narratives = row.narrative_ids ?? [];
   const entities = row.entity_ids ?? [];
   const person = entities.find((id) => id === "person:TRUMP" || id === "person:MUSK");
@@ -125,11 +142,27 @@ function turkishSummary(row: Frame): { title: string; summary: string } {
   if (person === "person:TRUMP") { title = "Donald Trump kaynaklı piyasa etkisi taşıyan gelişme"; summary = "Trump ile ilişkili yeni açıklama/gelişme; Brian olası politika, risk iştahı ve varlık fiyatlama etkisini izliyor."; }
   else if (person === "person:MUSK") { title = "Elon Musk / teknoloji kaynaklı gelişme"; summary = "Musk ile ilişkili yeni gelişme; Brian teknoloji anlatısı, şirket beklentileri ve crowd tepkisini izliyor."; }
   else if (narrative === "narrative:GEOPOLITICS") { title = "Jeopolitik riskte önemli gelişme"; summary = "Savaş, yaptırım, çatışma veya güvenlik riskiyle ilişkili gelişme; enerji, güvenli limanlar ve risk iştahı etkileri izleniyor."; }
-  else if (narrative === "narrative:MONETARY_POLICY") { title = `${central ? ENTITY_TR[central] : "Merkez bankası"}: politika beklentisi değişiyor`; summary = "Faiz/likidite beklentisini etkileyebilecek gelişme; tahvil, dolar, altın ve risk varlıklarına geçiş etkisi izleniyor."; }
+  else if (narrative === "narrative:MONETARY_POLICY") {
+    const semantic=policySemantic(row);
+    const bank=central ? ENTITY_TR[central] : "Merkez bankası";
+    if(semantic==="OFFICIAL_POLICY_ACTION"){
+      title=`${bank}: resmî politika kararı / değişikliği`;
+      summary="Bu kayıt resmî merkez bankası kaynağından gelen politika eylemi olarak sınıflandı; faiz, tahvil, kur, altın ve risk varlığı etkileri doğrulama katmanlarında izleniyor.";
+    }else if(semantic==="OFFICIAL_POLICY_SIGNAL"){
+      title=`${bank}: resmî politika sinyali / konuşması`;
+      summary="Bu kayıt resmî merkez bankası açıklaması veya konuşmasıdır; doğrudan faiz kararı değildir. Politika beklentilerine etkisi ayrıca ölçülür.";
+    }else if(semantic==="MARKET_EXPECTATION_SHIFT"){
+      title=`${bank}: piyasa politika beklentisi değişiyor`;
+      summary="Bu bir resmî faiz kararı değildir; profesyonel haber/piyasa kaynağının merkez bankası beklentisine ilişkin gözlemidir. Tahvil, dolar, altın ve risk varlığı fiyatlamasına etkisi doğrulanıyor.";
+    }else{
+      title=`${bank}: para politikası bağlamı izleniyor`;
+      summary="Merkez bankasıyla ilişkili gelişme var; bunun resmî karar, resmî sinyal veya piyasa beklentisi olup olmadığı kanıt katmanlarında ayrıştırılıyor.";
+    }
+  }
   else if (narrative === "narrative:EARNINGS") { title = "Şirket sonuçları / beklenti sürprizi"; summary = "Gelir, kâr veya yönlendirme kaynaklı beklenti farkı; fiyatlanmış kısım ile yeni bilgi ayrıştırılıyor."; }
   else if (narrative === "narrative:PRODUCT_LAUNCH") { title = "Yeni teknoloji / ürün katalizörü"; summary = "Ürün veya teknoloji gelişmesinin beklenti, tedarik zinciri ve ilgili hisseler üzerindeki etkisi izleniyor."; }
   else if (narrative === "narrative:ENERGY_SUPPLY") { title = "Enerji arzı / petrol dengesi değişimi"; summary = "Fiziksel arz ve lojistik etkileri; petrol, enflasyon, faiz ve risk varlıklarına ikinci-order geçiş izleniyor."; }
-  return { title, summary };
+  return { title, summary, semanticClass: policySemantic(row) };
 }
 
 Deno.serve(async (req: Request) => {
@@ -205,6 +238,7 @@ Deno.serve(async (req: Request) => {
       importance: score,
       title_tr: tr.title,
       summary_tr: tr.summary,
+      semantic_class: tr.semanticClass,
       original_claim: row.claim,
       event_kind: row.event_kind,
       source_id: row.source_id,
@@ -216,5 +250,5 @@ Deno.serve(async (req: Request) => {
       fast_lane:false,
     }));
   const items=[...earlyItems,...worldItems].slice(0,24);
-  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, freshness_states: ["ERKEN","YENI","TAKIPTE","BAGLAM"], breaking_fast_lane: true, main_feed_max_age_hours: 24, old_important_events_remain_world_context: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
+  return out({ status: "ONLINE", observed_at: new Date().toISOString(), items, semantics: { filtered_for_brian_relevance: true, freshness_states: ["ERKEN","YENI","TAKIPTE","BAGLAM"], breaking_fast_lane: true, main_feed_max_age_hours: 24, old_important_events_remain_world_context: true, turkish_summary_is_structured_paraphrase_not_literal_translation: true, monetary_policy_semantics: ["OFFICIAL_POLICY_ACTION","OFFICIAL_POLICY_SIGNAL","MARKET_EXPECTATION_SHIFT","MONETARY_POLICY_CONTEXT"], original_claim_preserved: true }, shadow_only: true, live_execution: false }, 200, origin);
 });
