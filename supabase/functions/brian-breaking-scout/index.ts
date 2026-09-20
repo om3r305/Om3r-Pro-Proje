@@ -4,10 +4,10 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v2-realtime-scheduled";
+const VERSION="brian.breaking-scout.v3-multiprovider";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
-type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"};
+type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"};
 type Article={title:string;url:string;publishedAt:string|null;sourceId:string;theme:string;trust:string;provider:string};
 
 const FEEDS:Feed[]=[
@@ -21,11 +21,11 @@ const FEEDS:Feed[]=[
   {id:"official:bundesbank:general",url:"https://www.bundesbank.de/service/rss/de/633290/feed.rss",theme:"macro_rates",trust:"OFFICIAL_PRIMARY",kind:"RSS"},
 ];
 
-const GOOGLE=[
-  {id:"google:geopolitics",theme:"geopolitics",q:'(war OR missile OR sanctions OR ceasefire OR invasion OR Red Sea OR Taiwan OR shipping OR attack) when:1h'},
-  {id:"google:macro",theme:"macro_rates",q:'("Federal Reserve" OR ECB OR inflation OR CPI OR payrolls OR "interest rate" OR yields) when:1h'},
-  {id:"google:energy",theme:"commodities_energy",q:'(oil OR Brent OR WTI OR OPEC OR natural gas OR refinery OR pipeline OR energy supply) when:1h'},
-  {id:"google:ai",theme:"technology_ai",q:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR AI datacenter) when:1h'},
+const DISCOVERY=[
+  {id:"discovery:geopolitics",theme:"geopolitics",googleQ:'(war OR missile OR sanctions OR ceasefire OR invasion OR "Red Sea" OR Taiwan OR shipping OR attack) when:1h',fallbackQ:'war missile sanctions ceasefire invasion Red Sea Taiwan shipping attack'},
+  {id:"discovery:macro",theme:"macro_rates",googleQ:'("Federal Reserve" OR ECB OR inflation OR CPI OR payrolls OR "interest rate" OR yields) when:1h',fallbackQ:'Federal Reserve ECB inflation CPI payrolls interest rate yields'},
+  {id:"discovery:energy",theme:"commodities_energy",googleQ:'(oil OR Brent OR WTI OR OPEC OR "natural gas" OR refinery OR pipeline OR "energy supply") when:1h',fallbackQ:'oil Brent WTI OPEC natural gas refinery pipeline energy supply'},
+  {id:"discovery:ai",theme:"technology_ai",googleQ:'(NVIDIA OR OpenAI OR semiconductor OR GPU OR TSMC OR "AI datacenter") when:1h',fallbackQ:'NVIDIA OpenAI semiconductor GPU TSMC AI datacenter'},
 ];
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -50,7 +50,7 @@ function selectedFeeds(){
   const slot=Math.floor(Date.now()/120000);
   return {
     feeds:FEEDS.filter((_,i)=>i%2===slot%2),
-    google:GOOGLE.filter((_,i)=>i%2===slot%2),
+    discovery:DISCOVERY.filter((_,i)=>i%2===slot%2),
     slot
   };
 }
@@ -67,7 +67,7 @@ function parseXml(xml:string,feed:Feed):Article[]{
       sourceId=sourceName||"google-news";
       try{sourceId=new URL(sourceUrl||url).hostname.replace(/^www\./,"")||sourceId}catch{}
     }
-    out.push({title,url,publishedAt:pub,sourceId,theme:feed.theme,trust:feed.trust,provider:feed.kind==="GOOGLE"?"google_news_rss":"official_rss"});
+    out.push({title,url,publishedAt:pub,sourceId,theme:feed.theme,trust:feed.trust,provider:feed.kind==="GOOGLE"?"google_news_rss":feed.kind==="BING"?"bing_news_rss":"official_rss"});
     if(out.length>=30)break;
   }
   for(const m of xml.matchAll(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi)){
@@ -81,23 +81,49 @@ function parseXml(xml:string,feed:Feed):Article[]{
   return out;
 }
 
-async function fetchFeed(feed:Feed):Promise<Article[]>{
-  const r=await fetch(feed.url,{headers:{accept:"application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1","user-agent":"Mozilla/5.0 BrianBreakingScout/1.0"},signal:AbortSignal.timeout(7000)});
+async function fetchFeed(feed:Feed,timeoutMs=5500):Promise<Article[]>{
+  const r=await fetch(feed.url,{
+    headers:{
+      accept:"application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
+      "user-agent":"Mozilla/5.0 (compatible; BrianBreakingScout/3.0; +market-intelligence)"
+    },
+    signal:AbortSignal.timeout(timeoutMs)
+  });
   if(!r.ok)throw new Error(`${feed.id}:HTTP_${r.status}`);
-  return parseXml(await r.text(),feed);
+  const rows=parseXml(await r.text(),feed);
+  if(!rows.length)throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
+  return rows;
 }
-async function fetchGoogle(row:{id:string;theme:string;q:string}):Promise<Article[]>{
-  const params=new URLSearchParams({q:row.q,hl:"en-US",gl:"US",ceid:"US:en"});
-  return fetchFeed({id:row.id,url:`https://news.google.com/rss/search?${params}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"});
+async function fetchDiscovery(row:{id:string;theme:string;googleQ:string;fallbackQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
+  const providerErrors:string[]=[];
+  try{
+    const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
+    const articles=await fetchFeed({
+      id:row.id+":google",
+      url:`https://news.google.com/rss/search?${params}`,
+      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
+    },4200);
+    return {articles,provider:"google_news_rss",providerErrors};
+  }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
+  try{
+    const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us"});
+    const articles=await fetchFeed({
+      id:row.id+":bing",
+      url:`https://www.bing.com/news/search?${params}`,
+      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
+    },5000);
+    return {articles,provider:"bing_news_rss",providerErrors};
+  }catch(e){providerErrors.push("bing:"+errorText(e).slice(0,180))}
+  throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
 }
-async function recordRun(startedAt:string,status:string,observed:number,stored:number,degraded:string[]){
+async function recordRun(startedAt:string,status:string,observed:number,stored:number,degraded:string[],metadata:Record<string,unknown>={}){
   const finishedAt=new Date().toISOString();
   const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
   await db.from("brian_collector_runs").insert({
     run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,
     observed_records:observed,stored_records:stored,degraded_sources:degraded,
     error_class:status==="FAILED"?"BREAKING_SCOUT_ERROR":null,error_message:null,
-    metadata:{version:VERSION,fast_lane:true,discovery_only:true,directional_vote:false,before_bbc_goal:true},
+    metadata:{version:VERSION,fast_lane:true,discovery_only:true,directional_vote:false,before_bbc_goal:true,...metadata},
     evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
   });
 }
@@ -112,15 +138,33 @@ Deno.serve(async(req:Request)=>{
   }
   try{
     const selected=selectedFeeds();
-    const settled=await Promise.allSettled([
-      ...selected.feeds.map(fetchFeed),
-      ...selected.google.map(fetchGoogle),
+    const [officialSettled,discoverySettled]=await Promise.all([
+      Promise.allSettled(selected.feeds.map((feed)=>fetchFeed(feed))),
+      Promise.allSettled(selected.discovery.map((row)=>fetchDiscovery(row))),
     ]);
     const degraded:string[]=[];
     const articles:Article[]=[];
-    settled.forEach((s,i)=>{
+    const providerErrors:Record<string,string[]|string>={};
+    const discoveryProviders:Record<string,string>={};
+
+    officialSettled.forEach((s,i)=>{
+      const id=selected.feeds[i].id;
       if(s.status==="fulfilled")articles.push(...s.value);
-      else degraded.push(i<selected.feeds.length?selected.feeds[i].id:selected.google[i-selected.feeds.length].id);
+      else{
+        degraded.push(id);
+        providerErrors[id]=errorText(s.reason).slice(0,240);
+      }
+    });
+    discoverySettled.forEach((s,i)=>{
+      const id=selected.discovery[i].id;
+      if(s.status==="fulfilled"){
+        articles.push(...s.value.articles);
+        discoveryProviders[id]=s.value.provider;
+        if(s.value.providerErrors.length)providerErrors[id]=s.value.providerErrors;
+      }else{
+        degraded.push(id);
+        providerErrors[id]=errorText(s.reason).slice(0,320);
+      }
     });
 
     const now=Date.now();
@@ -152,11 +196,17 @@ Deno.serve(async(req:Request)=>{
       const q=await db.from("brian_intel_events").upsert(events,{onConflict:"event_id",ignoreDuplicates:true});
       if(q.error)throw q.error;
     }
-    const status=degraded.length===settled.length?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
-    await recordRun(startedAt,status,articles.length,events.length,degraded);
-    return out({status,version:VERSION,scheduler,slot:selected.slot,feeds:settled.length,observed:articles.length,candidates:events.length,degraded_sources:degraded,fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false},status==="FAILED"?503:200);
+    const totalSources=officialSettled.length+discoverySettled.length;
+    const status=degraded.length===totalSources?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
+    await recordRun(startedAt,status,articles.length,events.length,degraded,{provider_errors:providerErrors,discovery_providers:discoveryProviders});
+    return out({
+      status,version:VERSION,scheduler,slot:selected.slot,feeds:totalSources,
+      observed:articles.length,candidates:events.length,degraded_sources:degraded,
+      discovery_providers:discoveryProviders,provider_errors:providerErrors,
+      fast_lane:true,direct_alpha_influence:false,shadow_only:true,live_execution:false
+    },status==="FAILED"?503:200);
   }catch(e){
-    await recordRun(startedAt,"FAILED",0,0,[]);
+    await recordRun(startedAt,"FAILED",0,0,[],{fatal_error:errorText(e).slice(0,500)});
     return out({status:"FAILED",error:errorText(e),shadow_only:true,live_execution:false},500);
   }
 });
