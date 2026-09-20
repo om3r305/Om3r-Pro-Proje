@@ -8,6 +8,7 @@
   const fmt=v=>M.number(v)===null?'—':Number(v).toLocaleString('tr-TR',{maximumFractionDigits:1});
   const percent=v=>M.pct(v)===null?'—':`${fmt(v)}%`;
   const time=v=>Number.isFinite(Date.parse(v))?new Date(v).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
+  const dateTime=v=>Number.isFinite(Date.parse(v))?new Date(v).toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
   const stateName={live:'AKIŞ GÜNCEL',degraded:'KISMİ AKIŞ',error:'AKIŞ HATASI',unknown:'GÜNCEL VERİ YOK'};
   const D={data:null,error:null,busy:false,lastAttempt:0,selected:'alpha',open:false,paused:false,opener:null,stamps:{},signature:'',frame:0,scroll:null};
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
@@ -70,7 +71,55 @@
       D.data=data;D.error=null;
     }catch(e){D.error=String(e?.message||e);}finally{D.busy=false;render();}
   }
-  const metricNames={gross_direction_hit_pct:'Brüt yön isabeti',after_cost_favorable_pct:'Maliyet sonrası olumlu sonuç',cost_matched_samples:'Maliyet eşleşmeli örnek',prospective_hit_pct:'İleriye dönük sensör isabeti',calibration_samples:'Kalibrasyon örneği',data_exchange_health_pct:'Veri aktarım sağlığı',discovered_sources:'Keşfedilen kaynak',assessed_sample:'Değerlendirilen örnek',average_trust_pct:'Kaynak güven endeksi',eligible_for_research_pct:'Araştırmaya uygun',eligible_for_decision_evidence_pct:'Karar kanıtına uygun',world_core_health_pct:'Dünya çekirdeği çalışma sağlığı',discovery_eye_health_pct:'Keşif çalışma sağlığı',discovery_eye_runs_24h:'24 saatte keşif çalışması',experiment_results:'Deney sonucu',clean_experiment_pct:'Temiz deney oranı',artifacts:'Kod/test artefaktı',safe_artifact_pass_pct:'Güvenli test geçişi',codegen_requests:'Kod üretim isteği',promotion_decisions:'Terfi kararı',promoted:'Adaylığa terfi',kept_experimental:'Deneyde tutulan',rejected:'Reddedilen',opens:'Açılış',exits:'Tamamlanmış çıkış',starting_equity_usd:'Başlangıç özkaynağı',equity_usd:'Özkaynak',treasury_return_pct:'Hazine getirisi',deployment_pct:'Sermaye kullanımı',realized_pnl_usd:'Gerçekleşen kâr/zarar',cumulative_costs_usd:'Birikmiş maliyet'};
+  const metricNames={
+    current_regime_samples:'Yeni rejim örneği',
+    current_cost_matched_samples:'Yeni rejim maliyet eşleşmeli örnek',
+    current_gross_direction_hit_pct:'Yeni rejim brüt yön isabeti',
+    current_after_cost_favorable_pct:'Yeni rejim maliyet sonrası olumlu',
+    current_regime_evidence_pct:'Yeni rejim kanıt olgunluğu',
+    current_avg_round_trip_cost_bps:'Yeni rejim ort. round-trip maliyeti',
+    current_avg_signed_move_bps:'Yeni rejim ort. yönlü hareket',
+    current_5m_after_cost_pct:'5 dk maliyet sonrası olumlu',
+    current_15m_after_cost_pct:'15 dk maliyet sonrası olumlu',
+    current_60m_after_cost_pct:'60 dk maliyet sonrası olumlu',
+    legacy_samples:'Tarihsel örnek',
+    legacy_gross_direction_hit_pct:'Tarihsel brüt yön isabeti',
+    legacy_after_cost_favorable_pct:'Tarihsel maliyet sonrası olumlu',
+    lifetime_outcomes:'Toplam outcome',
+    lifetime_decisions:'Toplam karar',
+    lifetime_evidence_pct:'Yaşam boyu kanıt kapsamı',
+    gross_direction_hit_pct:'Brüt yön isabeti',
+    after_cost_favorable_pct:'Maliyet sonrası olumlu sonuç',
+    cost_matched_samples:'Maliyet eşleşmeli örnek',
+    prospective_hit_pct:'İleriye dönük sensör isabeti',
+    calibration_samples:'Kalibrasyon örneği',
+    data_exchange_health_pct:'Veri aktarım sağlığı',
+    discovered_sources:'Keşfedilen kaynak',
+    assessed_sample:'Değerlendirilen örnek',
+    average_trust_pct:'Kaynak güven endeksi',
+    eligible_for_research_pct:'Araştırmaya uygun',
+    eligible_for_decision_evidence_pct:'Karar kanıtına uygun',
+    world_core_health_pct:'Dünya çekirdeği çalışma sağlığı',
+    discovery_eye_health_pct:'Keşif çalışma sağlığı',
+    discovery_eye_runs_24h:'24 saatte keşif çalışması',
+    experiment_results:'Deney sonucu',
+    clean_experiment_pct:'Temiz deney oranı',
+    artifacts:'Kod/test artefaktı',
+    safe_artifact_pass_pct:'Güvenli test geçişi',
+    codegen_requests:'Kod üretim isteği',
+    promotion_decisions:'Terfi kararı',
+    promoted:'Adaylığa terfi',
+    kept_experimental:'Deneyde tutulan',
+    rejected:'Reddedilen',
+    opens:'Açılış',
+    exits:'Tamamlanmış çıkış',
+    starting_equity_usd:'Başlangıç özkaynağı',
+    equity_usd:'Özkaynak',
+    treasury_return_pct:'Hazine getirisi',
+    deployment_pct:'Sermaye kullanımı',
+    realized_pnl_usd:'Gerçekleşen kâr/zarar',
+    cumulative_costs_usd:'Birikmiş maliyet'
+  };
   function render(){
     if(!D.open)return;
     const hb=heartbeat(),v=M.project(D.data,hb,Date.now(),D.error,heartbeatError());
@@ -88,8 +137,13 @@
     const sig=JSON.stringify([D.data,hb,D.selected,v.reportFresh,v.heartbeatFresh,v.organs.map(o=>o.state)]);
     if(sig===D.signature)return;D.signature=sig;
     const o=v.organs.find(x=>x.id===D.selected),c=o.component,metrics=Object.entries(c?.metrics||{}).filter(([k,val])=>metricNames[k]&&M.number(val)!==null);
+    const alphaMetrics=c?.metrics||{};
+    const alphaRegime=o.id==='alpha'
+      ? `<dl class="an-detail-list"><div><dt>Yeni rejim başlangıcı</dt><dd>${dateTime(alphaMetrics.current_regime_started_at)}</dd></div><div><dt>Yeni rejim net kalite</dt><dd>${percent(alphaMetrics.current_after_cost_favorable_pct)}</dd></div><div><dt>Tarihsel net kalite</dt><dd>${percent(alphaMetrics.legacy_after_cost_favorable_pct)}</dd></div><div><dt>Yaşam boyu kanıt</dt><dd>${fmt(alphaMetrics.lifetime_outcomes)} outcome</dd></div></dl>`
+      : '';
+    const metricValue=(k,value)=>k.endsWith('_pct')?percent(value):k.endsWith('_bps')?`${fmt(value)} bps`:fmt(value)+(k.endsWith('_usd')?' USD':'');
     const details=$('#an-detail'),expanded=$('details',details)?.open,restoreSummary=document.activeElement?.matches('#an-detail summary');details.style.setProperty('--selected',o.color);
-    details.innerHTML=`<div class="an-card-top"><span class="an-eyebrow">ORGAN / ${String(M.organs.findIndex(x=>x.id===o.id)+1).padStart(2,'0')}</span><span class="an-chip">${stateName[o.state]}</span></div><h3>${E(o.name)}</h3><p style="margin-top:4px">${E(o.subtitle)}</p><div class="an-score-row"><strong class="an-selected-score">${percent(o.maturity)}</strong><small>GELİŞİM ENDEKSİ<br>${o.maturity===null?'Yeterli kanıt yok':v.reportFresh?'Son gelişim raporu':'Eski rapor'}</small></div>${[['Ölçülen kalite',o.quality],['Kanıt kapsamı',o.evidence]].map(([name,value])=>`<div class="an-bar"><div><span>${name}</span><span>${percent(value)}</span></div><i><em style="width:${value??0}%"></em></i></div>`).join('')}<dl class="an-detail-list"><div><dt>Örnek sayısı</dt><dd>${fmt(o.samples)}</dd></div><div><dt>Güncel başarılı kol</dt><dd>${fmt(o.healthy)} / ${o.runs.length}</dd></div></dl><p>${E(c?.rationale||'Bu organın gelişim ölçümü henüz alınmadı. Servis durumu, gelişim puanının yerine kullanılmaz.')}</p><details class="an-disclosure" ${expanded?'open':''}><summary>Ölçüm kanıtları ve yöntem</summary>${metrics.length?`<dl class="an-detail-list">${metrics.map(([k,value])=>`<div><dt>${metricNames[k]}</dt><dd>${k.endsWith('_pct')?percent(value):fmt(value)+(k.endsWith('_usd')?' USD':'')}</dd></div>`).join('')}</dl>`:'Bu organ için ölçüm detayı yok.'}<p>Endeks, sunucunun kalite × kanıt hesabıdır; zekâ seviyesi veya gelecekteki başarı olasılığı değildir. Veri dönemleri organa göre değişir.</p></details><div class="an-source">Kaynak: brian-development-status · ${E(o.id)}<br>Rapor: ${time(D.data?.observed_at)} · Son kol: ${time(o.stamp)}</div>`;
+    details.innerHTML=`<div class="an-card-top"><span class="an-eyebrow">ORGAN / ${String(M.organs.findIndex(x=>x.id===o.id)+1).padStart(2,'0')}</span><span class="an-chip">${stateName[o.state]}</span></div><h3>${E(o.name)}</h3><p style="margin-top:4px">${E(o.subtitle)}</p><div class="an-score-row"><strong class="an-selected-score">${percent(o.maturity)}</strong><small>GELİŞİM ENDEKSİ<br>${o.maturity===null?'Yeterli kanıt yok':v.reportFresh?'Son gelişim raporu':'Eski rapor'}</small></div>${[['Ölçülen kalite',o.quality],['Kanıt kapsamı',o.evidence]].map(([name,value])=>`<div class="an-bar"><div><span>${name}</span><span>${percent(value)}</span></div><i><em style="width:${value??0}%"></em></i></div>`).join('')}<dl class="an-detail-list"><div><dt>Örnek sayısı</dt><dd>${fmt(o.samples)}</dd></div><div><dt>Güncel başarılı kol</dt><dd>${fmt(o.healthy)} / ${o.runs.length}</dd></div></dl>${alphaRegime}<p>${E(c?.rationale||'Bu organın gelişim ölçümü henüz alınmadı. Servis durumu, gelişim puanının yerine kullanılmaz.')}</p><details class="an-disclosure" ${expanded?'open':''}><summary>Ölçüm kanıtları ve yöntem</summary>${metrics.length?`<dl class="an-detail-list">${metrics.map(([k,value])=>`<div><dt>${metricNames[k]}</dt><dd>${metricValue(k,value)}</dd></div>`).join('')}</dl>`:'Bu organ için ölçüm detayı yok.'}<p>Endeks, güncel rejimin ölçülen kalitesi × güncel rejim kanıt derinliğidir. Eski rejim silinmez; karşılaştırma için ayrıca tutulur.</p></details><div class="an-source">Kaynak: brian-development-status · ${E(o.id)}<br>Rapor: ${time(D.data?.observed_at)} · Son kol: ${time(o.stamp)}</div>`;
     if(restoreSummary)$('summary',details)?.focus();
     $('#an-pulse').innerHTML=v.organs.map(x=>`<div><dt>${E(x.name)}</dt><dd style="color:${x.state==='live'?'#9edabe':x.state==='error'?'#eea1b2':'#a39aad'}">${stateName[x.state]}</dd></div>`).join('');
     const stats=[['Bütünsel gelişim endeksi',percent(v.overall?.brain_development_pct),'Sunucunun bileşik endeksi'],['Kanıt kapsamı',percent(v.overall?.evidence_confidence_pct),'Örnek derinliği · başarı olasılığı değil'],['Ölçülen kalite',percent(v.overall?.measured_quality_pct),'Organ sonuçlarının ağırlıklı ölçümü'],['Veri aktarım sağlığı',percent(v.overall?.data_exchange_health_pct),'Son 24 saat çalışma kayıtları']];
