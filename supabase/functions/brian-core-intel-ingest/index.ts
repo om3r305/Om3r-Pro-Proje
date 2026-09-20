@@ -42,40 +42,20 @@ Deno.serve(async(req:Request)=>{
       if(!eventId||!claim||trust!=="OFFICIAL_PRIMARY"||!/^OFFICIAL_/i.test(eventKind))continue;
       const meta=(row.metadata&&typeof row.metadata==="object"?row.metadata:{}) as Json;
       accepted.push({
-        event_id:eventId,
-        asset:row.asset??"GLOBAL",
-        event_kind:eventKind,
-        source_kind:row.source_kind??"REALTIME_OFFICIAL",
-        source_id:row.source_id??"unknown",
-        published_at:row.published_at??null,
-        first_observed_at:row.first_observed_at??startedAt,
-        captured_at:row.captured_at??startedAt,
-        claim:claim.slice(0,2000),
-        direction:Number(row.direction??0),
-        magnitude:Number(row.magnitude??0),
-        trust_class:"OFFICIAL_PRIMARY",
-        entity_confidence:Number(row.entity_confidence??1),
-        content_fingerprint:row.content_fingerprint??null,
-        corroboration_key:row.corroboration_key??null,
-        provenance_uri:row.provenance_uri??null,
-        pit_verified:row.pit_verified!==false,
-        raw_capture_id:null,
-        metadata:{
-          ...meta,
-          realtime_raw_capture_id:row.raw_capture_id??null,
-          cross_project_sync:true,
-          synced_from:"brian-realtime",
-          synced_at:startedAt,
-          direct_alpha_influence:false
-        }
+        event_id:eventId,asset:row.asset??"GLOBAL",event_kind:eventKind,
+        source_kind:row.source_kind??"REALTIME_OFFICIAL",source_id:row.source_id??"unknown",
+        published_at:row.published_at??null,first_observed_at:row.first_observed_at??startedAt,
+        captured_at:row.captured_at??startedAt,claim:claim.slice(0,2000),
+        direction:Number(row.direction??0),magnitude:Number(row.magnitude??0),
+        trust_class:"OFFICIAL_PRIMARY",entity_confidence:Number(row.entity_confidence??1),
+        content_fingerprint:row.content_fingerprint??null,corroboration_key:row.corroboration_key??null,
+        provenance_uri:row.provenance_uri??null,pit_verified:row.pit_verified!==false,raw_capture_id:null,
+        metadata:{...meta,realtime_raw_capture_id:row.raw_capture_id??null,cross_project_sync:true,synced_from:"brian-realtime",synced_at:startedAt,direct_alpha_influence:false}
       });
     }
-
     let stored=0;
     if(accepted.length){
-      const q=await db.from("brian_intel_events")
-        .upsert(accepted,{onConflict:"event_id",ignoreDuplicates:true})
-        .select("event_id");
+      const q=await db.from("brian_intel_events").upsert(accepted,{onConflict:"event_id",ignoreDuplicates:true}).select("event_id");
       if(q.error)throw q.error;
       stored=Array.isArray(q.data)?q.data.length:0;
     }
