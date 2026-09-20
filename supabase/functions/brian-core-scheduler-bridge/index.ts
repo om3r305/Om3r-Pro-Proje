@@ -11,7 +11,8 @@ const ALLOWED_SHA256=new Set([
 const ALLOWED_ACTIONS=new Set([
   "alpha_sync","world","treasury","discovery",
   "official_primary","source_observer","source_registry","meeting_sync",
-  "recovery","watchdog","dip","multiasset","derivatives_heartbeat"
+  "recovery","watchdog","dip","multiasset",
+  "universe_heartbeat","sensor_heartbeat","intrabar_heartbeat","derivatives_heartbeat"
 ]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -31,8 +32,14 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json().catch(()=>({}));
     const action=String(body?.action??"").trim().toLowerCase();
     if(!ALLOWED_ACTIONS.has(action))return out({status:"INVALID_ACTION",action},400);
-    const q=action==="derivatives_heartbeat"
-      ? await db.rpc("brian_external_capability_heartbeat_v1",{p_capability:"market.derivatives"})
+    const heartbeatMap:Record<string,string>={
+      universe_heartbeat:"market.universe",
+      sensor_heartbeat:"market.sensor-mesh",
+      intrabar_heartbeat:"market.intrabar",
+      derivatives_heartbeat:"market.derivatives",
+    };
+    const q=heartbeatMap[action]
+      ? await db.rpc("brian_external_capability_heartbeat_v1",{p_capability:heartbeatMap[action]})
       : await db.rpc("brian_scheduler_bridge_v1",{p_action:action});
     if(q.error)throw new Error(q.error.message);
     return out({status:"SUCCESS",version:VERSION,action,result:q.data,shadow_only:true,live_execution:false});
