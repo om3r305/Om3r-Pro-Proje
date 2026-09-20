@@ -7,7 +7,7 @@ import {
   type WorldSourceCandidate,
 } from "./evolution_contract.ts";
 
-export const EVOLUTION_CORE_VERSION = "brian.evolution-core.v1";
+export const EVOLUTION_CORE_VERSION = "brian.evolution-core.v2-split-truth";
 
 export interface CollectorRunLike {
   collector_id: string;
@@ -150,7 +150,7 @@ const MAIN_CAPABILITIES: CapabilityDefinition[] = [
     domain: "NEWS_MACRO",
     name: "Global News Discovery",
     description: "Discovers market-relevant public news and event candidates through the current World Discovery and Breaking Scout lanes.",
-    collectorIds: ["brian-world-discovery-aggregate", "brian-world-discovery-eye-v1", "brian-breaking-scout-v1", "phase39-gdelt-news", "brian-news-eye"],
+    collectorIds: ["brian-world-discovery-aggregate"],
     staleAfterSeconds: 1200,
     dependencies: [],
     limitations: ["headline discovery is not source truth", "corroboration required"],
