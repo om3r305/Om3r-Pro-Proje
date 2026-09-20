@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v4-behavior-heartbeat";
+const VERSION="brian.realtime-core-scheduler.v5-direct-wire";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -15,7 +15,10 @@ function err(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:Stri
 async function runAction(action:string,key:string,timeoutMs=12000):Promise<Result>{
   const started=Date.now();
   try{
-    const r=await fetch(CORE_BRIDGE,{
+    const targetUrl=action==="direct_wire"
+      ? RT_URL+"/functions/v1/brian-direct-wire-eye"
+      : CORE_BRIDGE;
+    const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
       body:JSON.stringify({action}),
@@ -52,7 +55,9 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 }
 
 function planned(minute:number){
-  const actions:string[]=["dip"];
+  const actions:string[]=[];
+  if(minute%2===0) actions.push("direct_wire");
+  actions.push("dip");
 
   if(minute%3===1) actions.push("alpha_sync");
   if(includes(minute,[2,7,12,17,22,27,32,37,42,47,52,57])) actions.push("treasury");
