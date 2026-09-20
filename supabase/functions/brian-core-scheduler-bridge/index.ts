@@ -11,7 +11,7 @@ const ALLOWED_SHA256=new Set([
 const ALLOWED_ACTIONS=new Set([
   "alpha_sync","world","treasury","discovery",
   "official_primary","source_observer","source_registry","meeting_sync",
-  "recovery","watchdog","dip","multiasset"
+  "recovery","watchdog","dip","multiasset","derivatives_heartbeat"
 ]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -31,7 +31,9 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json().catch(()=>({}));
     const action=String(body?.action??"").trim().toLowerCase();
     if(!ALLOWED_ACTIONS.has(action))return out({status:"INVALID_ACTION",action},400);
-    const q=await db.rpc("brian_scheduler_bridge_v1",{p_action:action});
+    const q=action==="derivatives_heartbeat"
+      ? await db.rpc("brian_external_capability_heartbeat_v1",{p_capability:"market.derivatives"})
+      : await db.rpc("brian_scheduler_bridge_v1",{p_action:action});
     if(q.error)throw new Error(q.error.message);
     return out({status:"SUCCESS",version:VERSION,action,result:q.data,shadow_only:true,live_execution:false});
   }catch(e){
