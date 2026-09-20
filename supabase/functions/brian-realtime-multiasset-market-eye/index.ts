@@ -1,10 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
-import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
+import { requireRealtimeInternal } from "./realtime_internal_auth.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-multiasset-market-eye.v2-registry";
+const VERSION="brian.realtime-multiasset-market-eye.v3-market-hours";
 const COLLECTOR_ID="brian-realtime-multiasset-market-eye-v1";
 
 type Spec={asset_id:string;asset_class:string;symbol:string;themes:string[];priority:number};
@@ -26,6 +26,11 @@ function n(v:unknown):number|null{if(v==null||v==="")return null;const x=Number(
 function clip(v:number,lo=-1,hi=1){return Math.max(lo,Math.min(hi,v))}
 async function sha(s:string){const d=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)));return [...d].map(b=>b.toString(16).padStart(2,"0")).join("")}
 function errorText(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
+function expectedMarketClosed(spec:Spec,at=new Date()){
+  if(spec.asset_class==="crypto")return false;
+  const day=at.getUTCDay(),hour=at.getUTCHours();
+  return day===6 || (day===0 && hour<21);
+}
 
 async function loadSpecs():Promise<Spec[]>{
   const q=await db.from("brian_multiasset_instruments")
@@ -95,14 +100,14 @@ async function fetchOne(spec:Spec){
     shadow_only:true,live_execution:false
   };
 }
-async function recordRun(startedAt:string,status:"SUCCESS"|"DEGRADED"|"FAILED",observed:number,stored:number,degraded:string[],error?:unknown){
+async function recordRun(startedAt:string,status:"SUCCESS"|"DEGRADED"|"FAILED",observed:number,stored:number,degraded:string[],marketClosed:string[],error?:unknown){
   const finishedAt=new Date().toISOString();
   const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
   await db.from("brian_collector_runs").insert({
     run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,
     observed_records:observed,stored_records:stored,degraded_sources:degraded,
     error_class:error?"MULTIASSET_MARKET_EYE_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,
-    metadata:{version:VERSION,execution_grade:false,provider:"yahoo_chart_public",shadow_only:true,live_execution:false},
+    metadata:{version:VERSION,execution_grade:false,provider:"yahoo_chart_public",market_closed_sources:marketClosed,shadow_only:true,live_execution:false},
     evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
   });
 }
@@ -112,25 +117,30 @@ Deno.serve(async(req:Request)=>{
   const startedAt=new Date().toISOString();
   try{
     const specs=await loadSpecs();
-    const rows:any[]=[];const degraded:string[]=[];
+    const rows:any[]=[];const degraded:string[]=[];const marketClosed:string[]=[];
     for(let i=0;i<specs.length;i+=4){
       const batch=specs.slice(i,i+4);
       const settled=await Promise.allSettled(batch.map(fetchOne));
-      settled.forEach((s,j)=>{if(s.status==="fulfilled")rows.push(s.value);else degraded.push(`${batch[j].asset_id}:${errorText(s.reason)}`)});
+      settled.forEach((s,j)=>{
+        if(s.status==="fulfilled"){rows.push(s.value);return}
+        const spec=batch[j],message=errorText(s.reason);
+        if(expectedMarketClosed(spec)&&/:NO_PRICE/.test(message))marketClosed.push(`${spec.asset_id}:MARKET_CLOSED`);
+        else degraded.push(`${spec.asset_id}:${message}`);
+      });
     }
     if(rows.length){
       const q=await db.from("brian_multiasset_market_marks").upsert(rows,{onConflict:"mark_id",ignoreDuplicates:true});
       if(q.error)throw new Error(`persist:${q.error.message}`);
     }
     const status=rows.length===0?"FAILED":degraded.length?"DEGRADED":"SUCCESS";
-    await recordRun(startedAt,status,specs.length,rows.length,degraded,status==="FAILED"?new Error("no multiasset marks"):undefined);
+    await recordRun(startedAt,status,specs.length,rows.length,degraded,marketClosed,status==="FAILED"?new Error("no multiasset marks"):undefined);
     return out({
-      status,version:VERSION,requested:specs.length,stored:rows.length,degraded_sources:degraded,
+      status,version:VERSION,requested:specs.length,stored:rows.length,degraded_sources:degraded,market_closed_sources:marketClosed,
       marks:rows.map(r=>({asset_id:r.asset_id,price:r.price,provider_time:r.provider_time,session_state:r.session_state,data_latency_seconds:r.data_latency_seconds})),
       execution_grade:false,shadow_only:true,live_execution:false
     },status==="FAILED"?503:200);
   }catch(e){
-    await recordRun(startedAt,"FAILED",specs.length,0,[],e);
+    await recordRun(startedAt,"FAILED",0,0,[],[],e);
     return out({status:"FAILED_CLOSED",error:errorText(e),shadow_only:true,live_execution:false},500);
   }
 });
