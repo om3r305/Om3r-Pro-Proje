@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v3-capability-heartbeat";
+const VERSION="brian.realtime-core-scheduler.v4-behavior-heartbeat";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -80,16 +80,18 @@ Deno.serve(async(req:Request)=>{
   const minute=now.getUTCMinutes();
   const actions=planned(minute);
   if(minute%5===2){
-    const [u,s,i,d]=await Promise.all([
+    const [u,s,i,d,b]=await Promise.all([
       tableFresh("brian_universe_snapshots",12*60_000),
       tableFresh("brian_sensor_observations",12*60_000),
       tableFresh("brian_intrabar_reaction_events",6*60_000),
       collectorFresh("phase39-binance-usdm-derivatives",12*60_000),
+      tableFresh("brian_crowd_behavior_frames",12*60_000),
     ]);
     if(u) actions.push("universe_heartbeat");
     if(s) actions.push("sensor_heartbeat");
     if(i) actions.push("intrabar_heartbeat");
     if(d) actions.push("derivatives_heartbeat");
+    if(b) actions.push("behavior_heartbeat");
   }
   if(minute%15===7 && await collectorFresh("phase39-ecb-fx",90*60_000)){
     actions.push("fx_heartbeat");
