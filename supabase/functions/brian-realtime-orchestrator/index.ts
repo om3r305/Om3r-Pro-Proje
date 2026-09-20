@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v8-heartbeat-fixed";
+const VERSION = "brian.realtime-orchestrator.v9-intel-sync";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -17,6 +17,7 @@ const ENDPOINTS = {
   multiasset: BASE + "/brian-realtime-multiasset-market-eye",
   breakingScout: "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-breaking-scout",
   heartbeatRefresh: "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-frontier-heartbeat-refresh",
+  intelSync: BASE + "/brian-realtime-intel-sync",
 };
 
 type Json = Record<string, unknown>;
@@ -115,15 +116,16 @@ Deno.serve(async(req:Request)=>{
   const minute=Math.floor(Date.now()/60000);
 
   const eyePromise=call("official_eye",ENDPOINTS.eye,key,50000);
+  const intelSyncPromise=eyePromise.then(()=>call("intel_sync",ENDPOINTS.intelSync,key,15000));
   const marketPromise=marketLane(key,minute);
   const scoutPromise=minute%2===0
     ? call("breaking_scout",ENDPOINTS.breakingScout,key,30000)
     : Promise.resolve(null);
   const heartbeatPromise=call("frontier_heartbeat_refresh",ENDPOINTS.heartbeatRefresh,key,9000);
 
-  const [eye,market,scout,heartbeat]=await Promise.all([eyePromise,marketPromise,scoutPromise,heartbeatPromise]);
+  const [eye,intelSync,market,scout,heartbeat]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise]);
   const catalyst=await call("catalyst_reaction",ENDPOINTS.catalyst,key,50000);
-  const results=[eye,...market,...(scout?[scout]:[]),heartbeat,catalyst];
+  const results=[eye,intelSync,...market,...(scout?[scout]:[]),heartbeat,catalyst];
 
   const failed=results.filter((r:any)=>r.ok===false);
   return out({
