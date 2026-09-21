@@ -147,7 +147,8 @@ function forecastUtility(m:Market){
   const structure=(m.recovery?.055:-.04)+(m.trendOk?.04:-.045);
   const rawBear=(f.ret15_bps<-55?1:0)+(f.ret30_bps<-75?1:0)+(f.ret60_bps<-120?1:0),
     validatedReset=Boolean(m.recovery&&m.trendOk&&m.pullbackPct>=Math.max(.80,m.atrPct*.60)&&m.bouncePct>=Math.max(.22,m.atrPct*.16)&&f.ret1_bps>=-22&&f.ret3_bps>=-35),
-    longMismatch=rawBear>=2&&f.expected_15m_bps>20&&f.expected_30m_bps>20&&!validatedReset,
+    longMismatch=(rawBear>=2&&f.expected_15m_bps>20&&f.expected_30m_bps>20&&!validatedReset)||
+      (f.ret60_bps<-180&&f.ret30_bps<0&&f.trend_bps<-20&&f.expected_30m_bps>25&&!validatedReset),
     shortMismatch=f.ret1_bps<0&&f.ret3_bps<0&&rawBear>=1&&f.expected_15m_bps>30,
     contradictionPenalty=(longMismatch?.20:0)+(shortMismatch?.10:0);
   return clip(.50+cont*.25+horizon*.50+trend*.07+structure-contradictionPenalty,0,1);
@@ -170,6 +171,7 @@ function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
     rawBearCount=(f.ret15_bps<-55?1:0)+(f.ret30_bps<-75?1:0)+(f.ret60_bps<-120?1:0),
     validatedReset=Boolean(m.recovery&&m.trendOk&&m.pullbackPct>=Math.max(.80,m.atrPct*.60)&&m.bouncePct>=Math.max(.22,m.atrPct*.16)&&f.ret1_bps>=-22&&f.ret3_bps>=-35),
     horizonMismatch=Boolean((rawBearCount>=2&&f.expected_15m_bps>20&&f.expected_30m_bps>20&&!validatedReset)||
+      (f.ret60_bps<-180&&f.ret30_bps<0&&f.trend_bps<-20&&f.expected_30m_bps>25&&!validatedReset)||
       (f.ret30_bps<-120&&f.ret60_bps<-180&&f.ret3_bps<0&&f.expected_30m_bps>35&&!validatedReset)),
     regimeConflict=f.ret15_bps<-80&&f.ret30_bps<-100&&f.ret60_bps<-180&&f.trend_bps<-20,
     shockLimit=Math.max(240,atrBps*1.35),shockMemoryBlock=m.shock_up_15m_bps>=shockLimit&&m.shock_age_min<=12&&m.pullbackPct<Math.max(1.5,m.atrPct*.80),
