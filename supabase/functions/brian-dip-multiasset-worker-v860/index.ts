@@ -5,9 +5,9 @@ declare const Deno: any;
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
-const ENGINE_VERSION='V8.9.0';
-const POLICY_VERSION='dip-v890-thesis-utility-brain-20260921.1';
-const RISK_ENGINE='V890_THESIS_UTILITY_BRAIN';
+const ENGINE_VERSION='V8.9.1';
+const POLICY_VERSION='dip-v891-parallel-aggressive-arena-20260921.1';
+const RISK_ENGINE='V891_THESIS_BRAIN_ARENA';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
 const HOSTS=['https://api.binance.com','https://api1.binance.com','https://api2.binance.com'];
@@ -375,7 +375,7 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
     else if(thesisBreak)await close(symbol,'ARENA_THESIS_BREAK');
   }
 
-  const candidates=ready.filter(x=>!positions[x.c.symbol]).map(x=>({
+  const candidates=ready.filter(x=>x.rec?.ready!==false&&!positions[x.c.symbol]).map(x=>({
     ...x,arenaScore:clip(x.ev.brainUtility*.55+x.ev.forecastUtility*.25+x.ev.explosionScore*.20)
   })).sort((a,b)=>b.arenaScore-a.arenaScore);
 
