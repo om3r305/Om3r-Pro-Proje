@@ -6,10 +6,10 @@ const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
 const RUN_HOURS=18;
-const STATUS_VERSION='dip-v893-direct-status-arena-20260921.1';
-const POLICY_VERSION='dip-v893-breadth-brain-independent-arena-20260921.1';
-const ENGINE_VERSION='V8.9.3';
-const RISK_ENGINE='V893_BREADTH_BRAIN_ARENA';
+const STATUS_VERSION='dip-v895-direct-status-arena-20260921.1';
+const POLICY_VERSION='dip-v895-arena-independent-evidence-sizing-20260921.1';
+const ENGINE_VERSION='V8.9.5';
+const RISK_ENGINE='V895_ARENA_EVIDENCE_SIZING';
 const CORS={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-brian-dashboard-key','access-control-allow-methods':'POST,OPTIONS','cache-control':'no-store','content-type':'application/json; charset=utf-8'};
 type J=Record<string,unknown>;
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -17,7 +17,7 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,
 const db=()=>postgres(DB_URL,{prepare:false,max:1,idle_timeout:1,connect_timeout:8,max_lifetime:30});
 async function sha256Hex(value:string){const d=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,'0')).join('');}
 function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
-function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v893-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
+function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v895-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
 async function requireDashboard(sql:any,req:Request){const supplied=(req.headers.get('x-brian-dashboard-key')||'').trim();if(!supplied)throw Error('UNAUTHORIZED_DASHBOARD');const rows=await sql`select dashboard_key_sha256 from public.brian_dashboard_auth where auth_id='control-v3' limit 1`;const expected=String(rows[0]?.dashboard_key_sha256||'');if(!expected)throw Error('AUTH_UNAVAILABLE');if(!same(await sha256Hex(supplied),expected))throw Error('UNAUTHORIZED_DASHBOARD');}
 async function resetSession(sql:any,startingEquity:unknown){
   const amount=Number(startingEquity);if(!Number.isFinite(amount)||amount<10||amount>1_000_000)throw Error('INVALID_TEST_CAPITAL');
@@ -42,7 +42,7 @@ async function statusPayload(sql:any){const rows=await sql`select engine_id,sour
   arena=a?{status:a.enabled===true&&(aAge===null||aAge<120)?'RUNNING':'STALE',engine_id:ARENA_ID,mode:String(ascan.mode||'AGGRESSIVE_ARENA'),source:String(ascan.source||'SHARED_MAIN_SCAN'),
     source_session_id:a.source_session_id??null,starting_equity:num(a.starting_equity,starting),cash:num(a.cash),equity:num(ascan.equity,num(a.cash)),realized_pnl:num(a.realized_pnl),
     trade_count:num(a.trade_count),win_count:num(a.win_count),loss_count:num(a.loss_count),positions:Array.isArray(ascan.open_positions)?ascan.open_positions:[],
-    recent_events:Array.isArray(ascan.recent_events)?ascan.recent_events:[],arena_watch:Array.isArray(ascan.arena_watch)?ascan.arena_watch:[],selection_mode:String(ascan.selection_mode||'EXPLOSION_FIRST_ADAPTIVE'),adaptive_explosion_threshold:num(ascan.adaptive_explosion_threshold,.70),explosion_p90:num(ascan.explosion_p90,.65),confirmation_cycles:num(ascan.confirmation_cycles,2),breadth:ascan.breadth??null,
+    recent_events:Array.isArray(ascan.recent_events)?ascan.recent_events:[],arena_watch:Array.isArray(ascan.arena_watch)?ascan.arena_watch:[],selection_mode:String(ascan.selection_mode||'EXPLOSION_FIRST_ADAPTIVE'),adaptive_explosion_threshold:num(ascan.adaptive_explosion_threshold,.70),explosion_p90:num(ascan.explosion_p90,.65),confirmation_cycles:num(ascan.confirmation_cycles,2),confirmation_requires_distinct_closed_bar:ascan.confirmation_requires_distinct_closed_bar===true,regular_allocation:String(ascan.regular_allocation||'22-70% conviction-scaled'),breadth:ascan.breadth??null,
     updated_at:aUpdated,age_seconds:aAge,no_extra_full_scan:ascan.no_extra_full_scan===true,no_evaluation_writes:ascan.no_evaluation_writes===true,
     max_regular_positions:num(ascan.max_regular_positions,2),max_positions_with_monster:num(ascan.max_positions_with_monster,3),monster_override:ascan.monster_override===true,
     
