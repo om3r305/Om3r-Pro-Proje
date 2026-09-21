@@ -5,9 +5,9 @@ declare const Deno: any;
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
-const ENGINE_VERSION='V8.9.6';
-const POLICY_VERSION='dip-v896-arena-peak-turn-guardian-20260921.1';
-const RISK_ENGINE='V896_ARENA_PEAK_TURN_GUARDIAN';
+const ENGINE_VERSION='V8.9.7';
+const POLICY_VERSION='dip-v897-forecast-calibration-wave-memory-20260921.1';
+const RISK_ENGINE='V897_FORECAST_CALIBRATION_WAVE_MEMORY';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
 const HOSTS=['https://api.binance.com','https://api1.binance.com','https://api2.binance.com'];
@@ -145,7 +145,12 @@ function forecastUtility(m:Market){
   const horizon=h5*.16+h15*.27+h30*.31+h60*.10;
   const cont=(f.continuation-.5)*2,trend=Math.tanh(f.trend_bps/85);
   const structure=(m.recovery?.055:-.04)+(m.trendOk?.04:-.045);
-  return clip(.50+cont*.25+horizon*.50+trend*.07+structure,0,1);
+  const rawBear=(f.ret15_bps<-55?1:0)+(f.ret30_bps<-75?1:0)+(f.ret60_bps<-120?1:0),
+    validatedReset=Boolean(m.recovery&&m.trendOk&&m.pullbackPct>=Math.max(.80,m.atrPct*.60)&&m.bouncePct>=Math.max(.22,m.atrPct*.16)&&f.ret1_bps>=-22&&f.ret3_bps>=-35),
+    longMismatch=rawBear>=2&&f.expected_15m_bps>20&&f.expected_30m_bps>20&&!validatedReset,
+    shortMismatch=f.ret1_bps<0&&f.ret3_bps<0&&rawBear>=1&&f.expected_15m_bps>30,
+    contradictionPenalty=(longMismatch?.20:0)+(shortMismatch?.10:0);
+  return clip(.50+cont*.25+horizon*.50+trend*.07+structure-contradictionPenalty,0,1);
 }
 function decisionUtility(ev:{score:number;opp:number;explosionScore:number;net:number},m:Market){
   const fu=forecastUtility(m),netU=.5+.5*Math.tanh(ev.net/55);
@@ -162,6 +167,10 @@ function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
     explosionScore=clip(score*.28+opp*.24+m.forecast.continuation*.16+clip(net/140)*.16+clip(gross/Math.max(cost*2,1))*.08+clip(c.volatility_score)*.04+clip(c.momentum_score)*.04),
     impulse5=Math.max(180,atrBps*1.50),impulse3=Math.max(125,atrBps*1.05),impulse1=Math.max(85,atrBps*.75),f=m.forecast,
     rawConflict=(f.ret15_bps<-150&&f.expected_15m_bps>15)||(f.ret5_bps<-70&&f.ret3_bps<-45)||(f.ret3_bps<-80&&f.ret5_bps<20),
+    rawBearCount=(f.ret15_bps<-55?1:0)+(f.ret30_bps<-75?1:0)+(f.ret60_bps<-120?1:0),
+    validatedReset=Boolean(m.recovery&&m.trendOk&&m.pullbackPct>=Math.max(.80,m.atrPct*.60)&&m.bouncePct>=Math.max(.22,m.atrPct*.16)&&f.ret1_bps>=-22&&f.ret3_bps>=-35),
+    horizonMismatch=Boolean((rawBearCount>=2&&f.expected_15m_bps>20&&f.expected_30m_bps>20&&!validatedReset)||
+      (f.ret30_bps<-120&&f.ret60_bps<-180&&f.ret3_bps<0&&f.expected_30m_bps>35&&!validatedReset)),
     regimeConflict=f.ret15_bps<-80&&f.ret30_bps<-100&&f.ret60_bps<-180&&f.trend_bps<-20,
     shockLimit=Math.max(240,atrBps*1.35),shockMemoryBlock=m.shock_up_15m_bps>=shockLimit&&m.shock_age_min<=12&&m.pullbackPct<Math.max(1.5,m.atrPct*.80),
     postPumpFade=f.ret15_bps>=Math.max(120,atrBps*.70)&&f.ret1_bps<0&&f.ret3_bps<-15&&f.expected_5m_bps<15&&m.pullbackPct<Math.max(1.25,m.atrPct*.70),
@@ -176,7 +185,7 @@ function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
     pullback:m.pullbackPct>=reqPull,bounce:m.bouncePct>=reqBounce,recovery:m.recovery,trend:m.trendOk,
     not_chasing:m.mid<=m.recentHigh*(1-Math.max(.0015,m.atrPct*.10/100)),
     forecast:f.continuation>=.60&&f.expected_15m_bps>=4&&f.expected_30m_bps>=0,
-    forecast_consistency:!rawConflict,regime_guard:!regimeConflict,shock_memory:!shockMemoryBlock,post_pump_reset:!postPumpFade,market_breadth:!breadth.riskOff||breadthException,
+    forecast_consistency:!rawConflict,horizon_alignment:!horizonMismatch,regime_guard:!regimeConflict,shock_memory:!shockMemoryBlock,post_pump_reset:!postPumpFade,market_breadth:!breadth.riskOff||breadthException,
     impulse:f.ret5_bps<=impulse5&&f.ret3_bps<=impulse3&&f.ret1_bps<=impulse1,
     extension:m.bouncePct<=Math.max(3.0,m.atrPct*2.0),
     long_extension:(f.ret30_bps<=long30||pullbackOverride)&&(f.ret60_bps<=long60||pullbackOverride),
@@ -186,7 +195,7 @@ function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
   const failed=Object.entries(gates).filter(([,v])=>!v).map(([k])=>k),allGates=failed.length===0,
     coreRaw=!mode.frozen&&score>=mode.minScore&&opp>=mode.minOpp&&allGates,
     winnerRaw=!mode.frozen&&!coreRaw&&allGates&&score>=Math.max(.79,mode.minScore-.01)&&opp>=Math.max(.73,mode.minOpp-.012)&&f.continuation>=.63&&f.expected_15m_bps>=8&&f.expected_30m_bps>=5&&net>=Math.max(18,cost*.55),
-    critical=['spread','day_move','bounce','recovery','trend','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','market_breadth','extension','long_extension'],
+    critical=['spread','day_move','bounce','recovery','trend','forecast','forecast_consistency','horizon_alignment','regime_guard','shock_memory','post_pump_reset','market_breadth','extension','long_extension'],
     criticalOk=critical.every(k=>gates[k]),
     hunterAllowed=failed.every(k=>['radar','economics','pullback','not_chasing','impulse'].includes(k)),
     hunterRaw=!mode.frozen&&!coreRaw&&!winnerRaw&&criticalOk&&hunterAllowed&&score>=.80&&opp>=.76&&explosionScore>=.72&&f.continuation>=.72&&net>=14&&cost<=42&&gross>=cost*1.60&&
@@ -198,7 +207,7 @@ function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
       (failed.length===0&&score>=.74&&opp>=.64&&explosionScore>=.62&&f.continuation>=.66&&net>=20&&cost<=38&&gross>=cost*1.45)
     );
 
-  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','market_breadth','impulse','extension','long_extension','economics']
+  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast','forecast_consistency','horizon_alignment','regime_guard','shock_memory','post_pump_reset','market_breadth','impulse','extension','long_extension','economics']
     .every(k=>gates[k]);
   const surgeRaw=!mode.frozen&&failed.length===1&&failed[0]==='radar'&&(c.lane==='BURST'||c.lane==='INTERRUPT')&&safetyExceptRadar&&
     c.radar_score>=.64&&score>=.75&&opp>=.68&&explosionScore>=.67&&f.continuation>=.76&&net>=25&&cost<=42;
