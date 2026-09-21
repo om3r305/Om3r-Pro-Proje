@@ -322,9 +322,7 @@ for(const c of radar.rows){
       emergency_scout:emergencyReady,surge_scout:surgeReady,reason,gates:ev.gates,policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_mode:mode.name};
   evals.push(rec);if(isReady)ready.push({c,m,ev,style,reentry,rec});
 }
-ready.sort((a,b)=>(a.style==='EMERGENCY_SCOUT'?1:0)-(b.style==='EMERGENCY_SCOUT'?1:0)||b.ev.capitalScore-a.ev.capitalScore||b.ev.opp-a.ev.opp||b.ev.net-a.ev.net);m,ev,style,reentry,rec});
-}
-ready.sort((a,b)=>b.ev.capitalScore-a.ev.capitalScore||b.ev.opp-a.ev.opp||b.ev.net-a.ev.net);
+ready.sort((a,b)=>(b.style==='EMERGENCY_SCOUT'?1:0)-(a.style==='EMERGENCY_SCOUT'?1:0)||b.ev.capitalScore-a.ev.capitalScore||b.ev.opp-a.ev.opp||b.ev.net-a.ev.net);
 for(const x of ready){
   if(Object.keys(positions).length>=MAX_POSITIONS)break;
   if(mode.frozen&&x.style!=='EMERGENCY_SCOUT')continue;
