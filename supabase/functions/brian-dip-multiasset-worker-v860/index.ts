@@ -322,28 +322,103 @@ function monsterScalePulseOk(p:EntryPulse,stage:number){
 async function insertEvent(sql:any,row:any){await sql`insert into public.brian_dip_multiasset_events (engine_id,observed_at,symbol,action,price,qty,notional,pnl,reason,metadata) values (${ENGINE_ID},${new Date(row.observed_at)},${row.symbol},${row.action},${row.price},${row.qty},${row.notional},${row.pnl},${row.reason},${sql.json(row.metadata||{})})`;}
 async function learnMissed(sql:any,state:State,now:number){const prev=(state.last_scan as any)?.learning_summary??{},lastAt=Date.parse(String((state.last_scan as any)?.learning_at||''));if(Number.isFinite(lastAt)&&now-lastAt<5*60_000)return{at:String((state.last_scan as any)?.learning_at||iso()),summary:prev};try{const from=new Date(now-80*60_000),to=new Date(now-62*60_000),rows=await sql`select distinct on (symbol) evaluation_id,observed_at,symbol,price,signal_score,reason,metadata from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and action='WAIT' and signal_score>=0.70 and observed_at>=${from} and observed_at<=${to} and coalesce(metadata->>'outcome_checked','false')<>'true' order by symbol,signal_score desc limit 4`;for(const r of rows){try{const start=Date.parse(String(r.observed_at)),end=start+60*60_000,raw=await marketJson(`/api/v3/klines?symbol=${encodeURIComponent(String(r.symbol))}&interval=1m&startTime=${start}&endTime=${end}&limit=65`,4500);if(!Array.isArray(raw)||!raw.length)continue;const entry=num(r.price),hi=Math.max(...raw.map((x:any)=>num(x[2]))),lo=Math.min(...raw.map((x:any)=>num(x[3]))),up=pct(hi,entry),down=pct(lo,entry),label=up>=5?'MISSED_A_PLUS':up>=2.5?'MISSED_WINNER':down<=-2.5?'GOOD_REJECT':'NEUTRAL',meta={...((r.metadata||{}) as J),outcome_checked:true,outcome_label:label,future_max_60m_pct:up,future_min_60m_pct:down,outcome_checked_at:iso()};await sql`update public.brian_dip_multiasset_evaluations set metadata=${sql.json(meta)} where evaluation_id=${r.evaluation_id}`;}catch{}}const since=new Date(now-24*60*60_000),stats=await sql`select count(*) filter(where metadata->>'outcome_label'='MISSED_A_PLUS')::int as missed_a_plus,count(*) filter(where metadata->>'outcome_label'='MISSED_WINNER')::int as missed_winner,count(*) filter(where metadata->>'outcome_label'='GOOD_REJECT')::int as good_reject,count(*) filter(where metadata->>'outcome_checked'='true')::int as checked from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and observed_at>=${since}`;return{at:iso(),summary:{...(stats[0]||prev),window_hours:24}};}catch{return{at:iso(),summary:prev};}}
 function triggerFill(reason:string,p:Position,m:Market,slip:number){const extra=slip+2;if(reason==='STOP')return p.stop*(1-extra/10000);if((reason==='HARVEST_TRAIL'||reason==='PROTECT_TRAIL'||reason==='PROFIT_RATCHET')&&p.trail)return p.trail*(1-extra/10000);return m.bid*(1-slip/10000);}
-function cooldownMs(reason:string,pnl:number){if(pnl<0){if(reason==='THESIS_BREAK'||reason==='FORECAST_THESIS_BREAK')return 12*60_000;return 30*60_000;}if(reason==='PROFIT_RATCHET'||reason==='PROTECT_TRAIL')return 3*60_000;if(reason==='HARVEST_TRAIL'||reason==='PEAK_REVERSAL'||reason==='FORECAST_REVERSAL')return 7*60_000;return 10*60_000;}
+function cooldownMs(reason:string,pnl:number){if(pnl<0){if(reason==='THESIS_BREAK'||reason==='FORECAST_THESIS_BREAK'||reason==='BRAIN_THESIS_BREAK')return 12*60_000;return 30*60_000;}if(reason==='PROFIT_RATCHET'||reason==='PROTECT_TRAIL')return 3*60_000;if(reason==='HARVEST_TRAIL'||reason==='PEAK_REVERSAL'||reason==='FORECAST_REVERSAL')return 7*60_000;return 10*60_000;}
 async function run(sql:any){const state=await loadState(sql),now=Date.now();if(!state.enabled||now>=Date.parse(state.run_until)){const scan={status:'WINDOW_COMPLETE',policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION};await sql`update public.brian_dip_multiasset_state set enabled=false,updated_at=now(),last_scan=${sql.json(scan)} where engine_id=${ENGINE_ID}`;return{status:'WINDOW_COMPLETE',engine_version:ENGINE_VERSION};}const radar=await loadUniverse(state),symbols=[...new Set([...Object.keys(state.positions||{}),...radar.rows.map((x:Candidate)=>x.symbol)])].slice(0,MAX_DEEP_SCAN+MAX_POSITIONS),pairs=await Promise.all(symbols.map(async s=>{try{return[s,await loadMarket(s,radar.books.get(s))] as const;}catch(e){return[s,{error:e instanceof Error?e.message:String(e)}] as const;}})),markets=new Map<string,Market>(),marketErrors:J={};for(const[s,v]of pairs){if('error'in v)marketErrors[s]=v.error;else markets.set(s,v);}const positions={...(state.positions||{})},cooldowns={...(state.cooldowns||{})};let cash=num(state.cash),realized=num(state.realized_pnl),trades=num(state.trade_count),wins=num(state.win_count),losses=num(state.loss_count),lossStreak=num((state.last_scan as any)?.loss_streak),lastLossAt=num((state.last_scan as any)?.last_loss_at);const actions:any[]=[];
-for(const[s,p]of Object.entries(positions)){const m=markets.get(s);if(!m)continue;const held=now-Date.parse(p.opened_at),slip=Math.max(2,m.spreadBps/2),cost=num(p.estimated_cost_bps,25),cont=m.forecast.continuation,prevCont=num(p.last_continuation,cont),prevExp15=num(p.last_expected_15m_bps,m.forecast.expected_15m_bps),prevExp30=num(p.last_expected_30m_bps,m.forecast.expected_30m_bps);p.last_continuation=cont;p.last_expected_15m_bps=m.forecast.expected_15m_bps;p.last_expected_30m_bps=m.forecast.expected_30m_bps;p.peak_continuation=Math.max(num(p.peak_continuation,cont),cont);p.peak_expected_15m_bps=Math.max(num(p.peak_expected_15m_bps,m.forecast.expected_15m_bps),m.forecast.expected_15m_bps);p.peak_expected_30m_bps=Math.max(num(p.peak_expected_30m_bps,m.forecast.expected_30m_bps),m.forecast.expected_30m_bps);p.max_price=Math.max(num(p.max_price,p.entry),m.bid);const atrBps=m.atrPct*100,mfe=(p.max_price-p.entry)/p.entry*10000,peakDrawBps=p.max_price>0?(p.max_price-m.bid)/p.max_price*10000:0,targetDist=Math.max(1e-12,p.target-p.entry),progress=clip((p.max_price-p.entry)/targetDist,0,2);const maxGrossNow=p.qty*p.max_price,maxFeeNow=maxGrossNow*FEE_BPS/10000,maxNetPnlNow=maxGrossNow-maxFeeNow-p.cost_basis;if(!p.harvest_armed&&m.bid>=p.target){p.harvest_armed=true;p.runner_mode=true;p.harvest_at=iso();p.winner_expansion=true;}if(p.harvest_armed){const exp15=m.forecast.expected_15m_bps,exp30=m.forecast.expected_30m_bps,explosive=cont>=.82&&exp15>=55&&exp30>=70&&m.forecast.ret3_bps>-25&&m.forecast.trend_bps>-15,strong=cont>=.72&&exp15>=25&&exp30>=35&&m.forecast.ret3_bps>-40,decay=(num(p.peak_continuation)>=.80&&(cont<=num(p.peak_continuation)-.18||exp15<=num(p.peak_expected_15m_bps)*.48)||prevCont>=.80&&cont<=prevCont-.16||prevExp15>=60&&exp15<=prevExp15*.45)&&m.forecast.ret1_bps<-25;p.runner_regime=explosive?'EXPLOSIVE_RUNNER':strong?'STRONG_RUNNER':decay?'FORECAST_DECAY':'PROTECT_RUNNER';const gap=explosive?Math.max(m.atr*1.45,p.max_price*.0115):strong?Math.max(m.atr*1.08,p.max_price*.0075):decay?Math.max(m.atr*.38,p.max_price*.0028):Math.max(m.atr*.62,p.max_price*.0045),explosiveProtect=explosive&&peakDrawBps>=28,keep=explosive?(explosiveProtect?.72:.48):strong?.75:decay?.90:.84,fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000),profitFloor=(p.cost_basis+Math.max(0,maxNetPnlNow)*keep)/Math.max(1e-12,p.qty*fillFactor),costFloor=p.entry*(1+(cost+8)/10000),noRetroCap=m.bid*(1-Math.max(2,m.spreadBps/2)/10000),candidate=Math.min(Math.max(costFloor,p.max_price-gap,profitFloor),noRetroCap);p.runner_trail=Math.max(num(p.runner_trail),candidate);p.trail=Math.max(num(p.trail),num(p.runner_trail));}else{const ratchetEligible=(progress>=.30||maxNetPnlNow>=p.cost_basis*.006)&&maxNetPnlNow>=Math.max(.12,p.cost_basis*.0025);if(ratchetEligible){const strong=cont>=.78&&m.forecast.expected_15m_bps>=25&&m.forecast.expected_30m_bps>=35,healthy=cont>=.68&&m.forecast.expected_15m_bps>=8&&m.forecast.expected_30m_bps>=8,meaningfulPeak=maxNetPnlNow>=Math.max(.12,p.cost_basis*.0040),baseLock=strong?.30:healthy?.46:(cont>=.58&&m.forecast.expected_15m_bps>=0)?.62:.74,drawLock=!meaningfulPeak?baseLock:strong?(peakDrawBps>=16?.78:peakDrawBps>=10?.66:baseLock):healthy?(peakDrawBps>=12?.82:peakDrawBps>=8?.70:baseLock):(peakDrawBps>=10?.86:baseLock),lockRatio=Math.max(baseLock,drawLock),desiredPnl=maxNetPnlNow*lockRatio,fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000),rawTrail=(p.cost_basis+desiredPnl)/Math.max(1e-12,p.qty*fillFactor),noRetroCap=m.bid*(1-Math.max(2,m.spreadBps/2)/10000),candidate=Math.min(rawTrail,noRetroCap);if(candidate>num(p.trail)){p.trail=candidate;}if(!p.profit_lock_active)p.profit_lock_armed_at=iso();p.profit_lock_active=true;p.profit_lock_ratio=lockRatio;p.profit_lock_max_net_pnl=Math.max(num(p.profit_lock_max_net_pnl),maxNetPnlNow);p.winner_expansion=true;}if(progress>=.72&&mfe>=Math.max(cost+45,atrBps*1.05)){p.winner_expansion=true;const floor=p.entry*(1+(cost+3)/10000),candidate=Math.max(floor,p.max_price-Math.max(m.atr*1.18,p.entry*.0090));p.trail=Math.max(num(p.trail),candidate);}}const peakCont=num(p.peak_continuation,cont),peakExp15=num(p.peak_expected_15m_bps,m.forecast.expected_15m_bps),forecastCollapse=Boolean(p.harvest_armed&&peakCont>=.80&&((cont<=peakCont-.18&&m.forecast.ret1_bps<-35)||(peakExp15>=60&&m.forecast.expected_15m_bps<=peakExp15*.45&&m.forecast.ret1_bps<-30))&&peakDrawBps>=Math.max(18,atrBps*.18)),momentumBreak=!m.trendOk&&m.forecast.ret3_bps<-18&&cont<.44,harvestTrail=Boolean(p.harvest_armed&&p.trail&&m.bid<=p.trail&&cont<.64),forecastReversal=Boolean(p.harvest_armed&&((cont<.39&&peakDrawBps>=Math.max(22,atrBps*.26))||forecastCollapse)),profitRatchetTrail=Boolean(!p.harvest_armed&&p.profit_lock_active&&p.trail&&m.bid<=p.trail),preHarvestTrail=Boolean(!p.harvest_armed&&!p.profit_lock_active&&p.trail&&m.bid<=p.trail&&cont<.43&&m.forecast.expected_15m_bps<0&&peakDrawBps>=Math.max(40,atrBps*.45)),
-softForecastBreak=Boolean(!p.harvest_armed&&held>=3*60_000&&cont<.56&&m.forecast.expected_5m_bps<0&&m.forecast.expected_15m_bps<0&&m.forecast.expected_30m_bps<0&&m.forecast.ret3_bps<-20&&m.bid<p.entry*(1-Math.max(8,cost*.20)/10000)),
-hardForecastBreak=Boolean(!p.harvest_armed&&held>=3*60_000&&cont<.49&&m.forecast.expected_5m_bps<=-5&&m.forecast.expected_15m_bps<=-5&&m.forecast.expected_30m_bps<=-5&&m.forecast.ret3_bps<-35&&!m.recovery),
-forecastBreakStreak=softForecastBreak?Math.min(3,num(p.forecast_break_streak)+1):0;
-p.forecast_break_streak=forecastBreakStreak;
-const forecastThesisBreak=Boolean(hardForecastBreak||forecastBreakStreak>=2),
-thesisBreak=Boolean(!p.harvest_armed&&held>=3*60_000&&cont<.36&&m.forecast.expected_15m_bps<-8&&m.forecast.expected_30m_bps<-4&&m.bid<p.entry*(1-Math.max(12,cost*.35)/10000));let reason='';if(m.bid<=p.stop)reason='STOP';else if(forecastThesisBreak)reason='FORECAST_THESIS_BREAK';else if(thesisBreak)reason='THESIS_BREAK';else if(profitRatchetTrail)reason='PROFIT_RATCHET';else if(forecastReversal)reason='FORECAST_REVERSAL';else if(harvestTrail)reason='HARVEST_TRAIL';else if(p.harvest_armed&&momentumBreak&&peakDrawBps>=16)reason='PEAK_REVERSAL';else if(preHarvestTrail)reason='PROTECT_TRAIL';else if(!p.harvest_armed&&held>18*60_000&&cont<.34&&m.bid<p.entry*(1+cost/10000))reason='EDGE_DECAY';else if(p.harvest_armed&&held>=150*60_000)reason='HARVEST_MAX_HOLD';else if(!p.harvest_armed&&held>=80*60_000&&cont<.54)reason='MAX_HOLD';if(!reason)continue;const exit=triggerFill(reason,p,m,slip),gross=p.qty*exit,fee=gross*FEE_BPS/10000,pnl=gross-fee-p.cost_basis,maxGross=p.qty*p.max_price,maxFee=maxGross*FEE_BPS/10000,maxPnl=maxGross-maxFee-p.cost_basis,peakCapture=maxPnl>0?clip(Math.max(0,pnl)/maxPnl,0,1):null;cash+=gross-fee;realized+=pnl;trades++;if(pnl>.01){wins++;lossStreak=0;}else if(pnl<-.01){losses++;lossStreak++;lastLossAt=now;}delete positions[s];const prevGuard:any=cooldowns[s]||{},prevLossAt=num(prevGuard.last_loss_at),sameWindow=pnl<-.01&&prevLossAt>0&&now-prevLossAt<6*60*60_000,
-symbolLossStreak=pnl<-.01?(sameWindow?Math.max(1,num(prevGuard.symbol_loss_streak))+1:1):0,reentryCount=num(p.reentry_attempt),
-waveProfitBank=Math.max(0,num(p.wave_profit_bank)+pnl),waveStartedAt=num(p.wave_started_at,Date.parse(p.opened_at));
-let until=now+cooldownMs(reason,pnl);
-if(pnl<-.01){
-  until=now+(reason==='STOP'?2*60_000:12*60_000);
-  if(symbolLossStreak>=2)until=now+(symbolLossStreak>=3?8*60*60_000:4*60*60_000);
-}else if(pnl>.01){
-  until=now+5*60_000;
+for(const[s,p]of Object.entries(positions)){
+  const m=markets.get(s);if(!m)continue;
+  const held=now-Date.parse(p.opened_at),slip=Math.max(2,m.spreadBps/2),cost=num(p.estimated_cost_bps,25),cont=m.forecast.continuation,
+    prevCont=num(p.last_continuation,cont),prevExp15=num(p.last_expected_15m_bps,m.forecast.expected_15m_bps);
+  p.last_continuation=cont;p.last_expected_15m_bps=m.forecast.expected_15m_bps;p.last_expected_30m_bps=m.forecast.expected_30m_bps;
+  p.peak_continuation=Math.max(num(p.peak_continuation,cont),cont);p.peak_expected_15m_bps=Math.max(num(p.peak_expected_15m_bps,m.forecast.expected_15m_bps),m.forecast.expected_15m_bps);
+  p.peak_expected_30m_bps=Math.max(num(p.peak_expected_30m_bps,m.forecast.expected_30m_bps),m.forecast.expected_30m_bps);p.max_price=Math.max(num(p.max_price,p.entry),m.bid);
+
+  const currentFU=forecastUtility(m),entryFU=num(p.entry_forecast_utility,currentFU),prevFU=num(p.last_forecast_utility,currentFU),peakFU=Math.max(num(p.peak_forecast_utility,entryFU),currentFU),
+    forecastVote=m.forecast.expected_5m_bps*.16+m.forecast.expected_15m_bps*.27+m.forecast.expected_30m_bps*.31+m.forecast.expected_60m_bps*.10,
+    dropFromEntry=entryFU-currentFU,dropFromPeak=peakFU-currentFU,
+    utilitySoftBreak=(dropFromEntry>.10||dropFromPeak>.16)&&forecastVote<0,
+    utilityHardBreak=currentFU<.30&&forecastVote<0,
+    thesisDecayStreak=utilitySoftBreak?Math.min(3,num(p.thesis_decay_streak)+1):Math.max(0,num(p.thesis_decay_streak)-1),
+    brainStrong=currentFU>=Math.max(.58,entryFU-.04)&&forecastVote>0,
+    brainWeak=utilityHardBreak||thesisDecayStreak>=2;
+  p.last_forecast_utility=currentFU;p.peak_forecast_utility=peakFU;p.thesis_decay_streak=thesisDecayStreak;p.last_thesis_at=now;
+
+  const atrBps=m.atrPct*100,mfe=(p.max_price-p.entry)/p.entry*10000,peakDrawBps=p.max_price>0?(p.max_price-m.bid)/p.max_price*10000:0,
+    targetDist=Math.max(1e-12,p.target-p.entry),progress=clip((p.max_price-p.entry)/targetDist,0,2),
+    maxGrossNow=p.qty*p.max_price,maxFeeNow=maxGrossNow*FEE_BPS/10000,maxNetPnlNow=maxGrossNow-maxFeeNow-p.cost_basis;
+
+  if(!p.harvest_armed&&m.bid>=p.target){p.harvest_armed=true;p.runner_mode=true;p.harvest_at=iso();p.winner_expansion=true;}
+
+  if(p.harvest_armed){
+    const exp15=m.forecast.expected_15m_bps,exp30=m.forecast.expected_30m_bps,
+      explosive=currentFU>=.78&&forecastVote>=45,strong=currentFU>=.64&&forecastVote>=15,
+      decay=brainWeak||(prevFU-currentFU>.12&&forecastVote<10)||(prevCont>=.80&&cont<=prevCont-.16)||(prevExp15>=60&&exp15<=prevExp15*.45);
+    p.runner_regime=explosive?'EXPLOSIVE_RUNNER':strong?'STRONG_RUNNER':decay?'FORECAST_DECAY':'PROTECT_RUNNER';
+    const gap=explosive?Math.max(m.atr*1.45,p.max_price*.0115):strong?Math.max(m.atr*1.08,p.max_price*.0075):decay?Math.max(m.atr*.38,p.max_price*.0028):Math.max(m.atr*.62,p.max_price*.0045),
+      keep=explosive?.48:strong?.70:decay?.90:.82,fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000),
+      profitFloor=(p.cost_basis+Math.max(0,maxNetPnlNow)*keep)/Math.max(1e-12,p.qty*fillFactor),costFloor=p.entry*(1+(cost+8)/10000),
+      noRetroCap=m.bid*(1-Math.max(2,m.spreadBps/2)/10000),candidate=Math.min(Math.max(costFloor,p.max_price-gap,profitFloor),noRetroCap);
+    p.runner_trail=Math.max(num(p.runner_trail),candidate);p.trail=Math.max(num(p.trail),num(p.runner_trail));
+  }else{
+    const ratchetEligible=(progress>=.30||maxNetPnlNow>=p.cost_basis*.006)&&maxNetPnlNow>=Math.max(.12,p.cost_basis*.0025);
+    if(ratchetEligible){
+      const baseLock=brainStrong?.32:currentFU>=.55?.52:.72,
+        drawLock=brainStrong?(peakDrawBps>=24?.58:baseLock):brainWeak?(peakDrawBps>=10?.86:.78):(peakDrawBps>=16?.76:baseLock),
+        lockRatio=Math.max(baseLock,drawLock),desiredPnl=maxNetPnlNow*lockRatio,fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000),
+        rawTrail=(p.cost_basis+desiredPnl)/Math.max(1e-12,p.qty*fillFactor),noRetroCap=m.bid*(1-Math.max(2,m.spreadBps/2)/10000),candidate=Math.min(rawTrail,noRetroCap);
+      if(candidate>num(p.trail))p.trail=candidate;
+      if(!p.profit_lock_active)p.profit_lock_armed_at=iso();
+      p.profit_lock_active=true;p.profit_lock_ratio=lockRatio;p.profit_lock_max_net_pnl=Math.max(num(p.profit_lock_max_net_pnl),maxNetPnlNow);p.winner_expansion=true;
+    }
+    if(progress>=.72&&mfe>=Math.max(cost+45,atrBps*1.05)){p.winner_expansion=true;const floor=p.entry*(1+(cost+3)/10000),candidate=Math.max(floor,p.max_price-Math.max(m.atr*1.18,p.entry*.0090));p.trail=Math.max(num(p.trail),candidate);}
+  }
+
+  const momentumBreak=!m.trendOk&&m.forecast.ret3_bps<-18,
+    trailTouched=Boolean(p.trail&&m.bid<=p.trail),
+    brainThesisBreak=Boolean(held>=45_000&&(utilityHardBreak||thesisDecayStreak>=2)),
+    forecastReversal=Boolean(p.harvest_armed&&brainWeak&&dropFromPeak>.14),
+    harvestTrail=Boolean(p.harvest_armed&&trailTouched&&(brainWeak||momentumBreak)),
+    profitRatchetTrail=Boolean(!p.harvest_armed&&p.profit_lock_active&&trailTouched&&brainWeak),
+    preHarvestTrail=Boolean(!p.harvest_armed&&!p.profit_lock_active&&trailTouched&&brainWeak);
+
+  let reason='';
+  if(m.bid<=p.stop)reason='STOP';
+  else if(brainThesisBreak)reason='BRAIN_THESIS_BREAK';
+  else if(forecastReversal)reason='FORECAST_REVERSAL';
+  else if(harvestTrail)reason='HARVEST_TRAIL';
+  else if(profitRatchetTrail)reason='PROFIT_RATCHET';
+  else if(preHarvestTrail)reason='PROTECT_TRAIL';
+  else if(p.harvest_armed&&momentumBreak&&brainWeak)reason='PEAK_REVERSAL';
+  else if(p.harvest_armed&&held>=150*60_000)reason='HARVEST_MAX_HOLD';
+  else if(!p.harvest_armed&&held>=80*60_000&&currentFU<.45)reason='MAX_HOLD';
+  if(!reason)continue;
+
+  const exit=triggerFill(reason,p,m,slip),gross=p.qty*exit,fee=gross*FEE_BPS/10000,pnl=gross-fee-p.cost_basis,
+    maxGross=p.qty*p.max_price,maxFee=maxGross*FEE_BPS/10000,maxPnl=maxGross-maxFee-p.cost_basis,peakCapture=maxPnl>0?clip(Math.max(0,pnl)/maxPnl,0,1):null;
+  cash+=gross-fee;realized+=pnl;trades++;if(pnl>.01){wins++;lossStreak=0;}else if(pnl<-.01){losses++;lossStreak++;lastLossAt=now;}delete positions[s];
+
+  const prevGuard:any=cooldowns[s]||{},prevLossAt=num(prevGuard.last_loss_at),sameWindow=pnl<-.01&&prevLossAt>0&&now-prevLossAt<6*60*60_000,
+    symbolLossStreak=pnl<-.01?(sameWindow?Math.max(1,num(prevGuard.symbol_loss_streak))+1:1):0,reentryCount=num(p.reentry_attempt),
+    waveProfitBank=Math.max(0,num(p.wave_profit_bank)+pnl),waveStartedAt=num(p.wave_started_at,Date.parse(p.opened_at));
+  let until=now+cooldownMs(reason,pnl);
+  if(pnl<-.01){until=now+(reason==='STOP'?2*60_000:12*60_000);if(symbolLossStreak>=2)until=now+(symbolLossStreak>=3?8*60*60_000:4*60*60_000);}
+  else if(pnl>.01){until=now+5*60_000;}
+  const waveExhaustedUntil=reentryCount>=1?now+45*60_000:0;
+  cooldowns[s]={until,reason,exit_price:exit,exit_at:now,pnl,symbol_loss_streak:symbolLossStreak,last_loss_at:pnl<-.01?now:prevLossAt,
+    circuit_breaker:symbolLossStreak>=2,prior_entry:p.entry,post_exit_low:exit,post_exit_high:exit,reentry_count:reentryCount,wave_profit_bank:waveProfitBank,
+    wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil,exit_forecast_utility:currentFU,exit_brain_utility:num(p.entry_brain_utility,currentFU),
+    exit_forecast_vote_bps:forecastVote};
+
+  const row={observed_at:iso(),symbol:s,action:'SELL',price:exit,qty:p.qty,notional:gross,pnl,reason,metadata:{
+    policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE,entry_style:p.entry_style||'CORE',opportunity_tier:p.opportunity_tier||'B',
+    entry:p.entry,harvest_trigger:p.target,harvest_armed:p.harvest_armed===true,winner_expansion:p.winner_expansion===true,profit_lock_active:p.profit_lock_active===true,
+    profit_lock_ratio:p.profit_lock_ratio??null,profit_lock_max_net_pnl:p.profit_lock_max_net_pnl??null,profit_lock_armed_at:p.profit_lock_armed_at??null,harvest_at:p.harvest_at??null,
+    stop:p.stop,trail:p.trail,runner_trail:p.runner_trail??null,max_price:p.max_price,target_progress:progress,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,
+    continuation_at_exit:cont,peak_continuation:p.peak_continuation??null,peak_expected_15m_bps:p.peak_expected_15m_bps??null,peak_expected_30m_bps:p.peak_expected_30m_bps??null,
+    entry_forecast_utility:entryFU,current_forecast_utility:currentFU,peak_forecast_utility:peakFU,forecast_vote_bps:forecastVote,thesis_decay_streak:thesisDecayStreak,
+    brain_strong:brainStrong,brain_weak:brainWeak,runner_regime:p.runner_regime??null,forecast:m.forecast,estimated_cost_bps:cost,symbol_loss_streak:symbolLossStreak,
+    circuit_breaker_until:symbolLossStreak>=2?new Date(until).toISOString():null,shadow_fill_model:'TRIGGER_PLUS_BOUNDED_SLIPPAGE',shadow_only:true,live_execution:false}};
+  await insertEvent(sql,row);actions.push(row);
 }
-const waveExhaustedUntil=reentryCount>=1?now+45*60_000:0;
-cooldowns[s]={until,reason,exit_price:exit,exit_at:now,pnl,symbol_loss_streak:symbolLossStreak,last_loss_at:pnl<-.01?now:prevLossAt,
-  circuit_breaker:symbolLossStreak>=2,prior_entry:p.entry,post_exit_low:exit,post_exit_high:exit,reentry_count:reentryCount,
-  wave_profit_bank:waveProfitBank,wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil};const row={observed_at:iso(),symbol:s,action:'SELL',price:exit,qty:p.qty,notional:gross,pnl,reason,metadata:{policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE,entry_style:p.entry_style||'CORE',opportunity_tier:p.opportunity_tier||'B',entry:p.entry,harvest_trigger:p.target,harvest_armed:p.harvest_armed===true,winner_expansion:p.winner_expansion===true,profit_lock_active:p.profit_lock_active===true,profit_lock_ratio:p.profit_lock_ratio??null,profit_lock_max_net_pnl:p.profit_lock_max_net_pnl??null,profit_lock_armed_at:p.profit_lock_armed_at??null,harvest_at:p.harvest_at??null,stop:p.stop,trail:p.trail,runner_trail:p.runner_trail??null,max_price:p.max_price,target_progress:progress,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,continuation_at_exit:cont,peak_continuation:p.peak_continuation??null,peak_expected_15m_bps:p.peak_expected_15m_bps??null,peak_expected_30m_bps:p.peak_expected_30m_bps??null,runner_regime:p.runner_regime??null,forecast:m.forecast,estimated_cost_bps:cost,symbol_loss_streak: symbolLossStreak,circuit_breaker_until:symbolLossStreak>=2?new Date(until).toISOString():null,shadow_fill_model:'TRIGGER_PLUS_BOUNDED_SLIPPAGE',shadow_only:true,live_execution:false}};await insertEvent(sql,row);actions.push(row);}
 const mode=riskMode({...state,realized_pnl:realized,win_count:wins,loss_count:losses,last_scan:{...state.last_scan,loss_streak:lossStreak,last_loss_at:lastLossAt}} as State,equity(cash,positions,markets),radar.stale),
   evals:any[]=[],ready:any[]=[],openCandidates:any[]=[],
   prevCore=(((state.last_scan as any)?.core_streaks||{}) as Record<string,number>),
