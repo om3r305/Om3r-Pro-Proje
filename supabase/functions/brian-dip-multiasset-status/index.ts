@@ -6,10 +6,10 @@ const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
 const RUN_HOURS=18;
-const STATUS_VERSION='dip-v891-direct-status-arena-20260921.1';
-const POLICY_VERSION='dip-v891-parallel-aggressive-arena-20260921.1';
-const ENGINE_VERSION='V8.9.1';
-const RISK_ENGINE='V891_THESIS_BRAIN_ARENA';
+const STATUS_VERSION='dip-v892-direct-status-arena-20260921.1';
+const POLICY_VERSION='dip-v892-explosion-first-arena-20260921.1';
+const ENGINE_VERSION='V8.9.2';
+const RISK_ENGINE='V892_EXPLOSION_FIRST_ARENA';
 const CORS={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-brian-dashboard-key','access-control-allow-methods':'POST,OPTIONS','cache-control':'no-store','content-type':'application/json; charset=utf-8'};
 type J=Record<string,unknown>;
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -17,7 +17,7 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,
 const db=()=>postgres(DB_URL,{prepare:false,max:1,idle_timeout:1,connect_timeout:8,max_lifetime:30});
 async function sha256Hex(value:string){const d=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,'0')).join('');}
 function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
-function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v891-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
+function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v892-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
 async function requireDashboard(sql:any,req:Request){const supplied=(req.headers.get('x-brian-dashboard-key')||'').trim();if(!supplied)throw Error('UNAUTHORIZED_DASHBOARD');const rows=await sql`select dashboard_key_sha256 from public.brian_dashboard_auth where auth_id='control-v3' limit 1`;const expected=String(rows[0]?.dashboard_key_sha256||'');if(!expected)throw Error('AUTH_UNAVAILABLE');if(!same(await sha256Hex(supplied),expected))throw Error('UNAUTHORIZED_DASHBOARD');}
 async function resetSession(sql:any,startingEquity:unknown){
   const amount=Number(startingEquity);if(!Number.isFinite(amount)||amount<10||amount>1_000_000)throw Error('INVALID_TEST_CAPITAL');
@@ -42,8 +42,10 @@ async function statusPayload(sql:any){const rows=await sql`select engine_id,sour
   arena=a?{status:a.enabled===true&&(aAge===null||aAge<120)?'RUNNING':'STALE',engine_id:ARENA_ID,mode:String(ascan.mode||'AGGRESSIVE_ARENA'),source:String(ascan.source||'SHARED_MAIN_SCAN'),
     source_session_id:a.source_session_id??null,starting_equity:num(a.starting_equity,starting),cash:num(a.cash),equity:num(ascan.equity,num(a.cash)),realized_pnl:num(a.realized_pnl),
     trade_count:num(a.trade_count),win_count:num(a.win_count),loss_count:num(a.loss_count),positions:Array.isArray(ascan.open_positions)?ascan.open_positions:[],
-    recent_events:Array.isArray(ascan.recent_events)?ascan.recent_events:[],updated_at:aUpdated,age_seconds:aAge,no_extra_full_scan:ascan.no_extra_full_scan===true,
-    no_evaluation_writes:ascan.no_evaluation_writes===true,max_regular_positions:num(ascan.max_regular_positions,2),max_positions_with_monster:num(ascan.max_positions_with_monster,3),
-    monster_override:ascan.monster_override===true,shadow_only:true,live_execution:false}:null;
+    recent_events:Array.isArray(ascan.recent_events)?ascan.recent_events:[],arena_watch:Array.isArray(ascan.arena_watch)?ascan.arena_watch:[],selection_mode:String(ascan.selection_mode||'EXPLOSION_FIRST'),
+    updated_at:aUpdated,age_seconds:aAge,no_extra_full_scan:ascan.no_extra_full_scan===true,no_evaluation_writes:ascan.no_evaluation_writes===true,
+    max_regular_positions:num(ascan.max_regular_positions,2),max_positions_with_monster:num(ascan.max_positions_with_monster,3),monster_override:ascan.monster_override===true,
+    min_explosion:num(ascan.min_explosion,.78),min_brain_utility:num(ascan.min_brain_utility,.78),min_opportunity:num(ascan.min_opportunity,.72),min_continuation:num(ascan.min_continuation,.72),
+    monster_target:String(ascan.monster_target||'85%'),ultra_monster_target:String(ascan.ultra_monster_target||'99.5%'),shadow_only:true,live_execution:false}:null;
 return{status,engine_id:ENGINE_ID,status_version:STATUS_VERSION,engine_version:engineVersion,source_session_id:s.source_session_id??null,started_at:s.started_at,run_until:s.run_until,updated_at:updated,age_seconds:age,starting_equity:starting,cash,equity,realized_pnl:num(s.realized_pnl),trade_count:num(s.trade_count),win_count:wins,loss_count:losses,win_rate:closed?wins/closed:null,positions:posRows,recent_events:events,recent_evaluations:recentEvaluations,last_scan:scan,arena,degraded_sources:[],policy_version:policy,risk_engine:String(scan.risk_engine||RISK_ENGINE),risk_mode:String(scan.risk_mode||'DEFENSIVE'),risk_reason:String(scan.risk_reason||'LOW_SAMPLE'),radar_source:radarSource,radar_age_seconds:num(scan.radar_age_seconds),radar_soft_stale:scan.radar_soft_stale===true,drawdown_pct:num(scan.drawdown_pct),gross_cap_pct:num(scan.gross_cap_pct),risk_cap_pct:num(scan.risk_cap_pct),max_positions:num(scan.max_positions,3),max_total_gross_pct:num(scan.max_total_gross_pct,.30),loss_streak:num(scan.loss_streak),learning_summary:scan.learning_summary??{},error:scan.error??null,shadow_only:s.shadow_only!==false,live_execution:s.live_execution===true,standalone_guardian:true,direct_db:true};}
 Deno.serve(async(req:Request)=>{if(req.method==='OPTIONS')return new Response(null,{status:204,headers:CORS});if(req.method!=='POST')return json({error:'METHOD_NOT_ALLOWED'},405);const sql=db();try{await requireDashboard(sql,req);let body:J={};try{body=await req.json();}catch{}const action=String(body.action??'status').toLowerCase();if(action==='restart'){const row=await resetSession(sql,body.starting_equity);return json({status:'STARTED',engine_id:ENGINE_ID,status_version:STATUS_VERSION,engine_version:ENGINE_VERSION,source_session_id:row.source_session_id,started_at:row.started_at,run_until:row.run_until,starting_equity:num(row.starting_equity),policy_version:POLICY_VERSION,risk_engine:RISK_ENGINE,risk_mode:'DEFENSIVE',shadow_only:true,live_execution:false,standalone_guardian:true,direct_db:true});}if(action!=='status')return json({error:'ACTION_NOT_ALLOWED'},400);return json(await statusPayload(sql));}catch(e){const message=e instanceof Error?e.message:String(e),status=message.includes('UNAUTHORIZED')?401:message.includes('INVALID_')||message.includes('OPEN_POSITION_MULTI')?409:500;return json({status:'ERROR',error:message,engine_id:ENGINE_ID,status_version:STATUS_VERSION,engine_version:ENGINE_VERSION,shadow_only:true,live_execution:false,direct_db:true},status);}finally{try{await sql.end({timeout:1});}catch{}}});
