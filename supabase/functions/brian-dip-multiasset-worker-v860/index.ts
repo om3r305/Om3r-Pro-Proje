@@ -5,9 +5,9 @@ declare const Deno: any;
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
-const ENGINE_VERSION='V8.9.1';
-const POLICY_VERSION='dip-v891-parallel-aggressive-arena-20260921.1';
-const RISK_ENGINE='V891_THESIS_BRAIN_ARENA';
+const ENGINE_VERSION='V8.9.2';
+const POLICY_VERSION='dip-v892-explosion-first-arena-20260921.1';
+const RISK_ENGINE='V892_EXPLOSION_FIRST_ARENA';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
 const HOSTS=['https://api.binance.com','https://api1.binance.com','https://api2.binance.com'];
@@ -375,9 +375,13 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
     else if(thesisBreak)await close(symbol,'ARENA_THESIS_BREAK');
   }
 
-  const candidates=ready.filter(x=>x.rec?.ready!==false&&!positions[x.c.symbol]).map(x=>({
-    ...x,arenaScore:clip(x.ev.brainUtility*.55+x.ev.forecastUtility*.25+x.ev.explosionScore*.20)
-  })).sort((a,b)=>b.arenaScore-a.arenaScore);
+  const allCandidates=ready.filter(x=>x.rec?.ready!==false&&!positions[x.c.symbol]).map(x=>{
+    const f=x.ev.forecast,
+      qualified=x.ev.explosionScore>=.78&&x.ev.brainUtility>=.78&&x.ev.forecastUtility>=.72&&x.ev.opp>=.72&&f.continuation>=.72&&x.ev.net>=35&&f.expected_15m_bps>=25&&f.expected_30m_bps>=45,
+      arenaScore=clip(x.ev.explosionScore*.44+x.ev.brainUtility*.25+x.ev.forecastUtility*.14+x.ev.opp*.10+f.continuation*.07);
+    return{...x,arenaScore,arenaQualified:qualified};
+  }).sort((a,b)=>b.arenaScore-a.arenaScore);
+  const candidates=allCandidates.filter(x=>x.arenaQualified);
 
   const posScore=(p:any)=>{
     const m=markets.get(String(p.symbol));if(!m)return num(p.last_forecast_utility,.5);
@@ -388,7 +392,8 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
     const gross=num(p.qty)*m.bid,fee=gross*FEE_BPS/10000;return gross-fee-num(p.cost_basis);
   };
 
-  const monster=candidates.find(x=>x.arenaScore>=.88&&x.ev.brainUtility>=.85&&x.ev.forecastUtility>=.82&&x.ev.explosionScore>=.84);
+  const monster=candidates.find(x=>x.ev.explosionScore>=.88&&x.ev.brainUtility>=.86&&x.ev.forecastUtility>=.82&&x.ev.opp>=.82&&x.ev.forecast.continuation>=.84&&x.ev.net>=75&&x.ev.forecast.expected_15m_bps>=60&&x.ev.forecast.expected_30m_bps>=100);
+  const ultraMonster=monster&&monster.ev.explosionScore>=.93&&monster.ev.brainUtility>=.90&&monster.ev.forecastUtility>=.88&&monster.ev.forecast.continuation>=.88&&monster.ev.forecast.expected_15m_bps>=90&&monster.ev.forecast.expected_30m_bps>=140;
   let monsterOverride=false;
   if(monster){
     const current=Object.values(positions),bestOpen=current.length?Math.max(...current.map(posScore)):0;
@@ -401,7 +406,8 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
       const equity=arenaEquity(cash,positions,markets),freeFrac=equity>0?cash/equity:0;
       if(!positions[monster.c.symbol]&&cash>=MIN_SHADOW_NOTIONAL&&(Object.keys(positions).length<3||freeFrac>=.20)){
         const fullConcentration=Object.keys(positions).length===0;
-        const grossBudget=Math.min(cash*.995,equity*(fullConcentration?.985:freeFrac*.99));
+        const monsterTarget=ultraMonster?.995:.85;
+        const grossBudget=Math.min(cash*.995,equity*(fullConcentration?monsterTarget:Math.min(monsterTarget,freeFrac*.99)));
         if(grossBudget>=MIN_SHADOW_NOTIONAL){
           const m=monster.m,slip=Math.max(2,m.spreadBps/2),gross=grossBudget/(1+FEE_BPS/10000),entry=m.ask*(1+slip/10000),qty=gross/entry,fee=gross*FEE_BPS/10000,costBasis=gross+fee,
             stopGap=Math.max(.05,m.atrPct*2.5/100),p:any={symbol:monster.c.symbol,entry,qty,cost_basis:costBasis,opened_at:iso(),max_price:entry,disaster_stop:entry*(1-stopGap),
@@ -421,7 +427,10 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
     for(const x of candidates){
       const count=Object.keys(positions).length;if(count>=2)break;if(positions[x.c.symbol])continue;
       const equity=arenaEquity(cash,positions,markets);if(!(equity>0&&cash>=MIN_SHADOW_NOTIONAL))break;
-      const firstFrac=.55+.10*clip((x.ev.brainUtility-.68)/.25),targetFrac=count===0?firstFrac:Math.min(.45,cash/equity*.995),
+      const explosionConv=clip((x.ev.explosionScore-.78)/.10),brainConv=clip((x.ev.brainUtility-.78)/.14),
+        firstFrac=.50+.20*(explosionConv*.72+brainConv*.28),
+        secondAllowed=count===0||x.arenaScore>=Math.max(.79,(candidates[0]?.arenaScore||0)-.08),
+        targetFrac=count===0?firstFrac:(secondAllowed?Math.min(.48,cash/equity*.995):0),
         budget=Math.min(cash*.995,equity*targetFrac);
       if(budget<MIN_SHADOW_NOTIONAL)continue;
       const m=x.m,slip=Math.max(2,m.spreadBps/2),gross=budget/(1+FEE_BPS/10000),entry=m.ask*(1+slip/10000),qty=gross/entry,fee=gross*FEE_BPS/10000,costBasis=gross+fee,
@@ -429,7 +438,7 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
           entry_brain_utility:x.ev.brainUtility,entry_forecast_utility:x.ev.forecastUtility,last_forecast_utility:x.ev.forecastUtility,peak_forecast_utility:x.ev.forecastUtility,
           entry_explosion_score:x.ev.explosionScore,allocation_fraction:gross/equity,slot_kind:'REGULAR',thesis_decay_streak:0};
       positions[p.symbol]=p;cash-=costBasis;
-      const ev={observed_at:iso(),symbol:p.symbol,action:'BUY',price:entry,qty,notional:gross,pnl:null,reason:count===0?'ARENA_TOP1_CONVICTION':'ARENA_TOP2_CONVICTION',metadata:{
+      const ev={observed_at:iso(),symbol:p.symbol,action:'BUY',price:entry,qty,notional:gross,pnl:null,reason:count===0?'ARENA_EXPLOSION_TOP1':'ARENA_EXPLOSION_TOP2',metadata:{
         arena:true,arena_mode:'TOP2_CONCENTRATED',arena_score:clip(x.ev.brainUtility*.55+x.ev.forecastUtility*.25+x.ev.explosionScore*.20),brain_utility:x.ev.brainUtility,
         forecast_utility:x.ev.forecastUtility,explosion_score:x.ev.explosionScore,allocation_fraction:p.allocation_fraction,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false}};
       await insertArenaEvent(sql,ev);actions.push(ev);recentEvents.unshift(ev);recentEvents.splice(20);
@@ -440,9 +449,12 @@ async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Mar
     return{symbol:p.symbol,entry:num(p.entry),mark,qty:num(p.qty),notional:num(p.qty)*num(p.entry),allocation_fraction:num(p.allocation_fraction),slot_kind:p.slot_kind||'REGULAR',
       brain_utility:num(p.last_forecast_utility,p.entry_brain_utility),entry_brain_utility:num(p.entry_brain_utility),forecast_utility:num(p.last_forecast_utility),explosion_score:num(p.entry_explosion_score),
       unrealized_pnl:gross-fee-num(p.cost_basis),max_price:num(p.max_price),opened_at:p.opened_at};});
+  const arenaWatch=allCandidates.slice(0,6).map(x=>({symbol:x.c.symbol,qualified:x.arenaQualified,arena_score:x.arenaScore,brain_utility:x.ev.brainUtility,forecast_utility:x.ev.forecastUtility,
+    explosion_score:x.ev.explosionScore,opportunity_score:x.ev.opp,continuation:x.ev.forecast.continuation,forecast_net_bps:x.ev.net,expected_15m_bps:x.ev.forecast.expected_15m_bps,expected_30m_bps:x.ev.forecast.expected_30m_bps}));
   const scan={status:'RUNNING',mode:'AGGRESSIVE_ARENA',engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,source:'SHARED_MAIN_SCAN',heartbeat_at:iso(),
-    no_extra_full_scan:true,no_evaluation_writes:true,max_regular_positions:2,max_positions_with_monster:3,monster_override:true,top1_target:'55-65%',top2_uses_remaining_cash:true,
-    equity:eq,open_positions:marks,recent_events:recentEvents.slice(0,20),actions:actions.slice(0,8)};
+    no_extra_full_scan:true,no_evaluation_writes:true,max_regular_positions:2,max_positions_with_monster:3,monster_override:true,selection_mode:'EXPLOSION_FIRST',
+    min_explosion:.78,min_brain_utility:.78,min_opportunity:.72,min_continuation:.72,top1_target:'50-70%',top2_only_if_qualified:true,monster_target:'85%',ultra_monster_target:'99.5%',
+    equity:eq,open_positions:marks,arena_watch:arenaWatch,recent_events:recentEvents.slice(0,20),actions:actions.slice(0,8)};
   await sql`update public.brian_dip_multiasset_state set cash=${cash},realized_pnl=${realized},trade_count=${trades},win_count=${wins},loss_count=${losses},
     positions=${sql.json(positions)},last_scan=${sql.json(scan)},updated_at=now(),enabled=true,shadow_only=true,live_execution=false,run_until=${new Date(arena.run_until)}
     where engine_id=${ARENA_ID}`;
