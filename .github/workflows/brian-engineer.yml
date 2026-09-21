@@ -56,7 +56,7 @@ jobs:
           OLLAMA_VERSION: v0.34.0
           OLLAMA_ARCHIVE_SHA256: cf95886728959aa09910bb34de5cca1cc5a8f68003b5597197d3f2c2d57c0804
           OLLAMA_HOST: 127.0.0.1:11434
-          OLLAMA_CONTEXT_LENGTH: '16384'
+          OLLAMA_CONTEXT_LENGTH: '8192'
           OLLAMA_NUM_PARALLEL: '1'
           OLLAMA_MODELS: ${{ runner.temp }}/brian-ollama-models
         run: |
@@ -80,8 +80,8 @@ jobs:
             sleep 1
           done
           curl -fsS "http://${OLLAMA_HOST}/api/tags" >/dev/null
-          OLLAMA_HOST="$OLLAMA_HOST" OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen3:4b
-          echo 'Quota-independent local fallback ready: Ollama qwen3:4b.' >> "$GITHUB_STEP_SUMMARY"
+          OLLAMA_HOST="$OLLAMA_HOST" OLLAMA_MODELS="$OLLAMA_MODELS" ollama pull qwen2.5-coder:1.5b
+          echo 'Quota-independent local fallback ready: Ollama qwen2.5-coder:1.5b.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Brian Engineer provider-continuity pipeline
         env:
@@ -91,11 +91,11 @@ jobs:
           REQUEST_ID: ${{ inputs.request_id || '' }}
           BRIAN_OPENAI_API_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY || 'ollama-local' }}
           BRIAN_OPENAI_BASE_URL: ${{ secrets.BRIAN_OPENAI_BASE_URL || 'http://127.0.0.1:11434/v1' }}
-          BRIAN_OPENAI_MODEL: ${{ vars.BRIAN_OPENAI_MODEL || 'qwen3:4b' }}
+          BRIAN_OPENAI_MODEL: ${{ vars.BRIAN_OPENAI_MODEL || 'qwen2.5-coder:1.5b' }}
           BRIAN_ANTHROPIC_API_KEY: ${{ secrets.BRIAN_ANTHROPIC_API_KEY }}
           BRIAN_ANTHROPIC_BASE_URL: ${{ secrets.BRIAN_ANTHROPIC_BASE_URL }}
           BRIAN_ANTHROPIC_MODEL: ${{ vars.BRIAN_ANTHROPIC_MODEL }}
           BRIAN_HOSTED_ATTEMPT_TIMEOUT_SECONDS: '120'
           BRIAN_BYOK_ATTEMPT_TIMEOUT_SECONDS: '180'
-          BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS: '300'
+          BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS: '150'
         run: bash scripts/brian_engineer_runner.sh
