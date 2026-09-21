@@ -175,7 +175,18 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
       (failed.length===0&&score>=.74&&opp>=.64&&explosionScore>=.62&&f.continuation>=.66&&net>=20&&cost<=38&&gross>=cost*1.45)
     );
 
-  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast',function capitalProfile(mode:any,ev:Eval,style:string){
+  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast','forecast_consistency','regime_guard','shock_memory','impulse','extension','long_extension','economics']
+    .every(k=>gates[k]);
+  const surgeRaw=!mode.frozen&&failed.length===1&&failed[0]==='radar'&&(c.lane==='BURST'||c.lane==='INTERRUPT')&&safetyExceptRadar&&
+    c.radar_score>=.64&&score>=.75&&opp>=.68&&explosionScore>=.67&&f.continuation>=.76&&net>=25&&cost<=42;
+  const emergencyStrength=(score>=.86&&opp>=.81&&f.continuation>=.78&&net>=55)||(score>=.80&&opp>=.75&&f.continuation>=.67&&net>=80&&explosionScore>=.60);
+  const emergencyRaw=mode.frozen&&mode.reason==='LOSS_STREAK'&&safetyExceptRadar&&c.radar_score>=.64&&emergencyStrength&&cost<=45;
+
+  const tier=tierOf(score,opp,net,f.continuation),capitalScore=clip(score*.34+opp*.30+f.continuation*.20+clip(net/100)*.16);
+  const reason=emergencyRaw?'V880_EMERGENCY_SCOUT_CONFIRM':surgeRaw?'V880_SURGE_SCOUT_CONFIRM':coreRaw?'V873_CORE_CONFIRM':winnerRaw?'V873_WINNER_SCOUT_CONFIRM':mode.frozen?`RISK_FROZEN_${mode.reason}`:`WAIT_${failed.join('+')||'SCORE'}`;
+  return{coreRaw,winnerRaw,scoutRaw,hunterRaw,surgeRaw,emergencyRaw,score,opp,cost,gross,net,tier,capitalScore,explosionScore,forecast:f,reason,gates};
+}
+function capitalProfile(mode:any,ev:Eval,style:string){
   let gross=mode.gross,risk=mode.risk;
   if(mode.name==='DEFENSIVE'){gross=ev.tier==='A+'?.060:ev.tier==='A'?.055:ev.tier==='B+'?.050:.045;risk=ev.tier==='A+'?.0032:ev.tier==='A'?.0030:ev.tier==='B+'?.0028:.0025;}
   else if(mode.name==='COLD'){gross=ev.tier==='A+'?.11:ev.tier==='A'?.09:ev.tier==='B+'?.075:.065;risk=ev.tier==='A+'?.0045:ev.tier==='A'?.0042:ev.tier==='B+'?.0038:.0035;}
