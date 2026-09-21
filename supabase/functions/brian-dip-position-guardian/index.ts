@@ -5,7 +5,7 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v2-reentry-state";
+const GUARDIAN_VERSION="dip-position-guardian-v3-dynamic-profit-lock";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -145,7 +145,9 @@ async function tick(heavy:boolean){
 
       const regime=inferRegime(p);
       p.runner_regime=regime;
-      const keep=regime==="EXPLOSIVE_RUNNER"?.45:regime==="STRONG_RUNNER"?.72:.82;
+      const microSoft=Boolean(heavy&&row.m&&(row.m.ret5<=-8||row.m.ret15<=-12||row.m.buyRatio<.48));
+      const explosiveProtect=regime==="EXPLOSIVE_RUNNER"&&(peakDrawBps>=28||microSoft);
+      const keep=regime==="EXPLOSIVE_RUNNER"?(explosiveProtect?.72:.48):regime==="STRONG_RUNNER"?.75:.84;
       const fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000);
       const noRetroCap=bid*(1-slip/10000);
 
@@ -179,7 +181,7 @@ async function tick(heavy:boolean){
         if(microBreak)reason="PEAK_REVERSAL";
       }
 
-      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,micro:row.m??null,decision:reason||"HOLD"});
+      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,profit_keep_ratio:keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,micro:row.m??null,decision:reason||"HOLD"});
 
       if(!reason)continue;
 
@@ -201,7 +203,7 @@ async function tick(heavy:boolean){
       const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
         guardian_version:GUARDIAN_VERSION,engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
         guardian_fast_exit:true,guardian_interval_target_seconds:5,entry,stop:p.stop,harvest_trigger:p.target,trail:p.trail??null,max_price:p.max_price,
-        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,
+        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,profit_keep_ratio:keep,explosive_protect_phase:explosiveProtect,
         micro:row.m??null,spread_bps:spreadBps,reentry_type:p.reentry_type??"FRESH",reentry_attempt:num(p.reentry_attempt),wave_profit_bank:Math.max(0,num(p.wave_profit_bank)+pnl),
         shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
       }};
