@@ -4,9 +4,9 @@ declare const Deno: any;
 
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
-const ENGINE_VERSION='V8.8.4';
-const POLICY_VERSION='dip-v884-forecast-veto-runner-reclaim-20260921.1';
-const RISK_ENGINE='V884_FORECAST_VETO_RUNNER_RECLAIM';
+const ENGINE_VERSION='V8.9.0';
+const POLICY_VERSION='dip-v890-thesis-utility-brain-20260921.1';
+const RISK_ENGINE='V890_THESIS_UTILITY_BRAIN';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
 const HOSTS=['https://api.binance.com','https://api1.binance.com','https://api2.binance.com'];
@@ -18,9 +18,9 @@ type Bar={h:number;l:number;c:number;v:number;closeTime:number};
 type Book={bid:number;ask:number;spreadBps:number};
 type HorizonForecast={continuation:number;reversal:number;ret1_bps:number;ret3_bps:number;ret5_bps:number;ret15_bps:number;ret30_bps:number;ret60_bps:number;trend_bps:number;expected_5m_bps:number;expected_15m_bps:number;expected_30m_bps:number;expected_60m_bps:number};
 type Market={symbol:string;bid:number;ask:number;mid:number;spreadBps:number;atr:number;atrPct:number;ema8:number;ema21:number;recentLow:number;recentHigh:number;pullbackPct:number;bouncePct:number;lastClose:number;prevClose:number;recovery:boolean;trendOk:boolean;forecast:HorizonForecast;shock_up_15m_bps:number;shock_age_min:number};
-type Position={symbol:string;entry:number;qty:number;opened_at:string;stop:number;target:number;trail:number|null;max_price:number;cost_basis:number;radar_score:number;estimated_cost_bps:number;policy_version:string;entry_reason:string;entry_style?:string;opportunity_tier?:string;entry_signal?:number;entry_opportunity?:number;entry_forecast_net_bps?:number;entry_continuation?:number;capital_fraction?:number;harvest_armed?:boolean;harvest_at?:string|null;runner_mode?:boolean;runner_trail?:number|null;last_continuation?:number;initial_risk_usd?:number;winner_expansion?:boolean;profit_lock_active?:boolean;profit_lock_ratio?:number;profit_lock_max_net_pnl?:number;profit_lock_armed_at?:string|null;last_expected_15m_bps?:number;last_expected_30m_bps?:number;entry_explosion_score?:number;peak_continuation?:number;peak_expected_15m_bps?:number;peak_expected_30m_bps?:number;runner_regime?:string;reentry_type?:string;reentry_attempt?:number;wave_profit_bank?:number;wave_started_at?:number;prior_exit_reason?:string;prior_exit_price?:number;scale_stage?:number;scale_count?:number;last_scale_at?:number;last_scale_price?:number;scale_total_added?:number;scale_peak_explosion?:number;scale_peak_continuation?:number;scale_target_fraction?:number;forecast_break_streak?:number;peak_giveback_streak?:number};
+type Position={symbol:string;entry:number;qty:number;opened_at:string;stop:number;target:number;trail:number|null;max_price:number;cost_basis:number;radar_score:number;estimated_cost_bps:number;policy_version:string;entry_reason:string;entry_style?:string;opportunity_tier?:string;entry_signal?:number;entry_opportunity?:number;entry_forecast_net_bps?:number;entry_continuation?:number;capital_fraction?:number;harvest_armed?:boolean;harvest_at?:string|null;runner_mode?:boolean;runner_trail?:number|null;last_continuation?:number;initial_risk_usd?:number;winner_expansion?:boolean;profit_lock_active?:boolean;profit_lock_ratio?:number;profit_lock_max_net_pnl?:number;profit_lock_armed_at?:string|null;last_expected_15m_bps?:number;last_expected_30m_bps?:number;entry_explosion_score?:number;peak_continuation?:number;peak_expected_15m_bps?:number;peak_expected_30m_bps?:number;runner_regime?:string;reentry_type?:string;reentry_attempt?:number;wave_profit_bank?:number;wave_started_at?:number;prior_exit_reason?:string;prior_exit_price?:number;scale_stage?:number;scale_count?:number;last_scale_at?:number;last_scale_price?:number;scale_total_added?:number;scale_peak_explosion?:number;scale_peak_continuation?:number;scale_target_fraction?:number;forecast_break_streak?:number;peak_giveback_streak?:number;entry_forecast_utility?:number;entry_brain_utility?:number;last_forecast_utility?:number;peak_forecast_utility?:number;thesis_decay_streak?:number;last_thesis_at?:number};
 type State={engine_id:string;started_at:string;run_until:string;starting_equity:number;cash:number;realized_pnl:number;trade_count:number;win_count:number;loss_count:number;positions:Record<string,Position>;cooldowns:Record<string,any>;last_scan:J;last_eval_minute:string|null;enabled:boolean};
-type Eval={coreRaw:boolean;winnerRaw:boolean;scoutRaw:boolean;hunterRaw:boolean;surgeRaw?:boolean;emergencyRaw?:boolean;score:number;opp:number;cost:number;gross:number;net:number;tier:string;capitalScore:number;explosionScore:number;forecast:HorizonForecast;reason:string;gates:Record<string,boolean>};
+type Eval={coreRaw:boolean;winnerRaw:boolean;scoutRaw:boolean;hunterRaw:boolean;surgeRaw?:boolean;emergencyRaw?:boolean;score:number;opp:number;cost:number;gross:number;net:number;tier:string;capitalScore:number;explosionScore:number;forecastUtility:number;brainUtility:number;forecast:HorizonForecast;reason:string;gates:Record<string,boolean>};
 type MemoryItem={symbol:string;until:number;last_seen:number;score:number;opp:number;cont:number;lane:string};
 
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -130,6 +130,18 @@ async function loadState(sql:any):Promise<State>{const rows=await sql`select * f
 function equity(cash:number,positions:Record<string,Position>,markets:Map<string,Market>){let e=cash;for(const p of Object.values(positions))e+=p.qty*(markets.get(p.symbol)?.bid??p.entry);return e;}
 function riskMode(state:State,current:number,radarStale:boolean){const start=Math.max(1,num(state.starting_equity,1000)),dd=(start-current)/start,closed=num(state.win_count)+num(state.loss_count),wr=closed?num(state.win_count)/closed:0,streak=num((state.last_scan as any)?.loss_streak),lastLoss=num((state.last_scan as any)?.last_loss_at);if(dd>=.025||(streak>=3&&Date.now()-lastLoss<LOSS_STREAK_PAUSE_MS))return{name:'FROZEN',gross:0,risk:0,minScore:.99,minOpp:.99,frozen:true,reason:dd>=.025?'SESSION_DRAWDOWN':'LOSS_STREAK',dd,wr};if(radarStale)return{name:'DEFENSIVE',gross:.035,risk:.0020,minScore:.80,minOpp:.78,frozen:false,reason:'RADAR_STALE_FALLBACK',dd,wr};if(closed<12||wr<.40||num(state.realized_pnl)<0)return{name:'DEFENSIVE',gross:.045,risk:.0025,minScore:.78,minOpp:.76,frozen:false,reason:'EARN_SCALING_RIGHTS',dd,wr};if(closed<30)return{name:'COLD',gross:.065,risk:.0035,minScore:.75,minOpp:.73,frozen:false,reason:'CALIBRATING',dd,wr};return{name:'NORMAL',gross:.09,risk:.0045,minScore:.72,minOpp:.71,frozen:false,reason:'WARM',dd,wr};}
 function tierOf(score:number,opp:number,net:number,cont:number){if(score>=.91&&opp>=.87&&net>=65&&cont>=.78)return'A+';if(score>=.86&&opp>=.81&&net>=32&&cont>=.72)return'A';if(score>=.81&&opp>=.76&&net>=14&&cont>=.66)return'B+';return'B';}
+function forecastUtility(m:Market){
+  const f=m.forecast;
+  const h5=Math.tanh(f.expected_5m_bps/35),h15=Math.tanh(f.expected_15m_bps/60),h30=Math.tanh(f.expected_30m_bps/95),h60=Math.tanh(f.expected_60m_bps/145);
+  const horizon=h5*.16+h15*.27+h30*.31+h60*.10;
+  const cont=(f.continuation-.5)*2,trend=Math.tanh(f.trend_bps/85);
+  const structure=(m.recovery?.055:-.04)+(m.trendOk?.04:-.045);
+  return clip(.50+cont*.25+horizon*.50+trend*.07+structure,0,1);
+}
+function decisionUtility(ev:{score:number;opp:number;explosionScore:number;net:number},m:Market){
+  const fu=forecastUtility(m),netU=.5+.5*Math.tanh(ev.net/55);
+  return clip(fu*.52+ev.score*.16+ev.opp*.13+ev.explosionScore*.10+netU*.09,0,1);
+}
 function evaluate(c:Candidate,m:Market,mode:any):Eval{
   const atrBps=m.atrPct*100,slip=Math.max(2,m.spreadBps/2),cost=2*FEE_BPS+m.spreadBps+2*slip,
     reqPull=Math.max(.45,m.atrPct*.60),reqBounce=Math.max(.12,m.atrPct*.13),
@@ -183,26 +195,24 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
   const emergencyStrength=(score>=.86&&opp>=.81&&f.continuation>=.78&&net>=55)||(score>=.80&&opp>=.75&&f.continuation>=.67&&net>=80&&explosionScore>=.60);
   const emergencyRaw=mode.frozen&&mode.reason==='LOSS_STREAK'&&safetyExceptRadar&&c.radar_score>=.64&&emergencyStrength&&cost<=45;
 
-  const tier=tierOf(score,opp,net,f.continuation),capitalScore=clip(score*.34+opp*.30+f.continuation*.20+clip(net/100)*.16);
+  const tier=tierOf(score,opp,net,f.continuation),capitalScore=clip(score*.34+opp*.30+f.continuation*.20+clip(net/100)*.16),
+    forecastU=forecastUtility(m),brainUtility=decisionUtility({score,opp,explosionScore,net},m);
   const reason=emergencyRaw?'V880_EMERGENCY_SCOUT_CONFIRM':surgeRaw?'V880_SURGE_SCOUT_CONFIRM':coreRaw?'V873_CORE_CONFIRM':winnerRaw?'V873_WINNER_SCOUT_CONFIRM':mode.frozen?`RISK_FROZEN_${mode.reason}`:`WAIT_${failed.join('+')||'SCORE'}`;
-  return{coreRaw,winnerRaw,scoutRaw,hunterRaw,surgeRaw,emergencyRaw,score,opp,cost,gross,net,tier,capitalScore,explosionScore,forecast:f,reason,gates};
+  return{coreRaw,winnerRaw,scoutRaw,hunterRaw,surgeRaw,emergencyRaw,score,opp,cost,gross,net,tier,capitalScore,explosionScore,forecastUtility:forecastU,brainUtility,forecast:f,reason,gates};
 }
 function capitalProfile(mode:any,ev:Eval,style:string){
-  let gross=mode.gross,risk=mode.risk;
-  if(mode.name==='DEFENSIVE'){gross=ev.tier==='A+'?.060:ev.tier==='A'?.055:ev.tier==='B+'?.050:.045;risk=ev.tier==='A+'?.0032:ev.tier==='A'?.0030:ev.tier==='B+'?.0028:.0025;}
-  else if(mode.name==='COLD'){gross=ev.tier==='A+'?.11:ev.tier==='A'?.09:ev.tier==='B+'?.075:.065;risk=ev.tier==='A+'?.0045:ev.tier==='A'?.0042:ev.tier==='B+'?.0038:.0035;}
-  else if(mode.name==='NORMAL'){gross=ev.tier==='A+'?.16:ev.tier==='A'?.13:ev.tier==='B+'?.10:.09;risk=ev.tier==='A+'?.0060:ev.tier==='A'?.0055:ev.tier==='B+'?.0050:.0045;}
-  if(style==='EMERGENCY_SCOUT')return{gross:.015,risk:.0006};
-  if(style==='SURGE_SCOUT')return{gross:Math.min(.025,Math.max(.018,gross*.45)),risk:Math.min(.0010,Math.max(.0007,risk*.40))};
-  if(style==='RECOVERY_SCOUT'||style==='EARLY_SCOUT'){gross*=.45;risk*=.45;}
-  else if(style==='HUNTER'){gross*=.80;risk*=.80;}
-  else if(style==='WINNER_SCOUT'){gross*=.52;risk*=.52;}
-  if(ev.explosionScore>=.90)gross=Math.max(gross,mode.name==='DEFENSIVE'?.13:.16);
-  else if(ev.explosionScore>=.86)gross=Math.max(gross,mode.name==='DEFENSIVE'?.10:.13);
-  else if(ev.explosionScore>=.82)gross=Math.max(gross,mode.name==='DEFENSIVE'?.075:.10);
-  return{gross:Math.min(.18,gross),risk:Math.min(.006,risk)};
+  const u=clip(num(ev.brainUtility,.5)),curve=Math.pow(clip((u-.46)/.50),1.18);
+  let minGross=.012,maxGross=.075,minRisk=.0008,maxRisk=.0030;
+  if(mode.name==='COLD'){minGross=.018;maxGross=.14;minRisk=.0010;maxRisk=.0045;}
+  else if(mode.name==='NORMAL'){minGross=.022;maxGross=.18;minRisk=.0012;maxRisk=.0060;}
+  else if(mode.name==='FROZEN'){minGross=0;maxGross=0;minRisk=0;maxRisk=0;}
+  let gross=minGross+(maxGross-minGross)*curve,risk=minRisk+(maxRisk-minRisk)*curve;
+  const styleFactor=style==='EMERGENCY_SCOUT'?.28:style==='SURGE_SCOUT'?.42:(style==='RECOVERY_SCOUT'||style==='EARLY_SCOUT')?.58:style==='WINNER_SCOUT'?.68:style==='HUNTER'?.84:1;
+  gross*=styleFactor;risk*=styleFactor;
+  const explosionBoost=.88+clip(ev.explosionScore)*.24,forecastBoost=.90+clip(ev.forecastUtility)*.20;
+  gross*=explosionBoost*forecastBoost;risk*=.92+clip(ev.forecastUtility)*.16;
+  return{gross:Math.min(.18,Math.max(0,gross)),risk:Math.min(.006,Math.max(0,risk)),brainUtility:u,forecastUtility:ev.forecastUtility};
 }
-
 function reentryContext(guard:any,m:Market,ev:Eval,now:number){
   if(!guard||num(guard.exit_at)<=0||now-num(guard.exit_at)>120*60_000)return{active:false,eligible:false,type:'FRESH',reason:'FRESH',guard};
   const exitAt=num(guard.exit_at),exitPrice=num(guard.exit_price),age=now-exitAt;
