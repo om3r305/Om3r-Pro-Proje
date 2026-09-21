@@ -17,7 +17,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
       TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      VERIFIED_SHA: 15e28c14597d8f33551adb8306b07754263899e3
+      VERIFIED_SHA: d421d06ed77b0dc5455267d575b4bd3ecc72b1d5
     steps:
       - name: Check deployment credential
         run: |
