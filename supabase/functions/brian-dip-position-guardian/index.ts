@@ -6,12 +6,12 @@ const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,auto
 
 const ENGINE_ID="dip-multiasset-v1";
 const ARENA_ID="dip-aggressive-arena-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v8-confirmed-turn-wave-memory";
+const GUARDIAN_VERSION="dip-position-guardian-v9-worker-friendly-window";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
-const OFFSETS_MS=[0,5000,10000,15000,20000,25000,30000,35000,40000,45000,50000];
-const HEAVY_TICKS=new Set([2,5,8]);
+const OFFSETS_MS=[0,5000,10000,15000,20000,25000,30000,35000];
+const HEAVY_TICKS=new Set([2,5]);
 
 type Pos=Record<string,any>;
 const num=(v:any,f=0)=>Number.isFinite(Number(v))?Number(v):f;
