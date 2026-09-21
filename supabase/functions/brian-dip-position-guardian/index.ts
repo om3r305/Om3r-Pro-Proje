@@ -5,7 +5,7 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v5-forecast-veto-reclaim";
+const GUARDIAN_VERSION="dip-position-guardian-v6-safety-belt";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -145,9 +145,15 @@ async function tick(heavy:boolean){
 
       const regime=inferRegime(p);
       p.runner_regime=regime;
+      const cont=num(p.last_continuation,p.entry_continuation),e15=num(p.last_expected_15m_bps),e30=num(p.last_expected_30m_bps),
+        fallbackU=clip(.24+cont*.46+Math.tanh(e15/60)*.14+Math.tanh(e30/95)*.16),
+        brainU=num(p.last_forecast_utility,fallbackU),entryU=num(p.entry_forecast_utility,brainU),peakU=Math.max(num(p.peak_forecast_utility,brainU),brainU),
+        brainFresh=num(p.last_thesis_at)>0&&Date.now()-num(p.last_thesis_at)<=95_000,
+        brainStrong=Boolean(brainFresh&&brainU>=Math.max(.56,entryU-.05)&&brainU>=peakU-.16&&num(p.thesis_decay_streak)<2),
+        brainWeak=Boolean(!brainFresh||brainU<=entryU-.12||brainU<=peakU-.20||num(p.thesis_decay_streak)>=2),
+        ageMs=Math.max(0,Date.now()-Date.parse(String(p.opened_at||iso())));
       const microSoft=Boolean(heavy&&row.m&&(row.m.ret5<=-8||row.m.ret15<=-12||row.m.buyRatio<.48));
-      const explosiveProtect=regime==="EXPLOSIVE_RUNNER"&&(peakDrawBps>=28||microSoft);
-      const keep=regime==="EXPLOSIVE_RUNNER"?(explosiveProtect?.72:.48):regime==="STRONG_RUNNER"?.75:.84;
+      const keep=brainStrong?(regime==="EXPLOSIVE_RUNNER"?.45:.62):brainWeak?.86:.76;
       const fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000);
       const noRetroCap=bid*(1-slip/10000);
       const peakCaptureNow=maxNet>0?clip(currentNet/maxNet,0,1.25):0;
@@ -159,55 +165,41 @@ async function tick(heavy:boolean){
         const candidate=Math.min(raw,noRetroCap);
         if(candidate>num(p.trail)){p.trail=candidate;p.runner_trail=Math.max(num(p.runner_trail),candidate);}
       }else if(!p.harvest_armed&&maxNet>=Math.max(.12,costBasis*.0025)&&progress>=.30){
-        const cont=num(p.last_continuation,p.entry_continuation),e15=num(p.last_expected_15m_bps),e30=num(p.last_expected_30m_bps);
-        const baseKeep=cont>=.78&&e15>=25&&e30>=35?.30:cont>=.68&&e15>=8&&e30>=8?.46:.65;
-        const drawKeep=!meaningfulPeak?baseKeep:
-          regime==="EXPLOSIVE_RUNNER"?(peakDrawBps>=20?.72:peakDrawBps>=12?.60:baseKeep):
-          regime==="STRONG_RUNNER"?(peakDrawBps>=16?.78:peakDrawBps>=10?.66:baseKeep):
-          (peakDrawBps>=12?.84:peakDrawBps>=8?.72:baseKeep);
-        const microKeep=meaningfulPeak&&microSoft?.82:baseKeep;
-        const earlyKeep=Math.max(baseKeep,drawKeep,microKeep);
-        const raw=(costBasis+maxNet*earlyKeep)/Math.max(1e-12,qty*fillFactor);
-        const candidate=Math.min(raw,noRetroCap);
+        const baseKeep=brainStrong?.34:brainWeak?.80:.58,
+          drawKeep=brainStrong?(peakDrawBps>=26?.58:baseKeep):brainWeak?(peakDrawBps>=10?.88:.82):(peakDrawBps>=18?.78:baseKeep),
+          microKeep=meaningfulPeak&&microSoft?.84:baseKeep,earlyKeep=Math.max(baseKeep,drawKeep,microKeep),
+          raw=(costBasis+maxNet*earlyKeep)/Math.max(1e-12,qty*fillFactor),candidate=Math.min(raw,noRetroCap);
         if(candidate>num(p.trail))p.trail=candidate;
         p.profit_lock_active=true;p.profit_lock_ratio=earlyKeep;p.profit_lock_max_net_pnl=Math.max(num(p.profit_lock_max_net_pnl),maxNet);p.profit_lock_armed_at=p.profit_lock_armed_at||iso();
       }
 
-      const cont=num(p.last_continuation,p.entry_continuation),e15=num(p.last_expected_15m_bps),e30=num(p.last_expected_30m_bps);
-      const brainStrong=cont>=.74&&e15>=35&&e30>=55;
-      const brainExplosive=cont>=.84&&e15>=65&&e30>=90;
-      const rawPeakGiveback=Boolean(!p.harvest_armed&&meaningfulPeak&&currentNet>0&&(
-        (regime==="EXPLOSIVE_RUNNER"&&peakDrawBps>=20&&peakCaptureNow<=.72)||
-        (regime==="STRONG_RUNNER"&&peakDrawBps>=16&&peakCaptureNow<=.78)||
-        (regime==="PROTECT_RUNNER"&&peakDrawBps>=12&&peakCaptureNow<=.84)||
-        (microSoft&&peakDrawBps>=10&&peakCaptureNow<=.84)
-      ));
-      const prevGivebackStreak=num(p.peak_giveback_streak);
-      const peakGivebackStreak=rawPeakGiveback?Math.min(3,prevGivebackStreak+1):0;
+      const rawPeakGiveback=Boolean(!p.harvest_armed&&meaningfulPeak&&currentNet>0&&peakDrawBps>=12&&peakCaptureNow<=.84),
+        prevGivebackStreak=num(p.peak_giveback_streak),peakGivebackStreak=rawPeakGiveback?Math.min(3,prevGivebackStreak+1):0;
       p.peak_giveback_streak=peakGivebackStreak;
-      const forecastVeto=Boolean(brainStrong&&!microSoft&&peakGivebackStreak<2);
-      const peakGiveback=Boolean(rawPeakGiveback&&!forecastVeto);
-      const ratchetTouched=Boolean(!p.harvest_armed&&p.profit_lock_active&&num(p.trail)>0&&bid<=num(p.trail));
-      const ratchetExit=Boolean(ratchetTouched&&(!brainStrong||microSoft||peakGivebackStreak>=2));
+      const forecastVeto=Boolean(brainStrong&&!microSoft);
+      const peakGiveback=Boolean(rawPeakGiveback&&!forecastVeto&&(brainWeak||microSoft));
+      const ratchetTouched=Boolean(!p.harvest_armed&&p.profit_lock_active&&num(p.trail)>0&&bid<=num(p.trail)),
+        harvestTouched=Boolean(p.harvest_armed&&num(p.trail)>0&&bid<=num(p.trail)),
+        ratchetExit=Boolean(ratchetTouched&&(brainWeak||microSoft)),
+        harvestExit=Boolean(harvestTouched&&(brainWeak||microSoft)),
+        noMfe=Boolean(num(p.max_price,entry)<=entry*1.0015),
+        earlyMicroFailure=Boolean(heavy&&row.m&&!p.harvest_armed&&ageMs<=120_000&&currentNet<0&&noMfe&&row.m.ret5<=-18&&row.m.ret15<=-28&&row.m.buyRatio<.40);
 
       let reason="";
       if(bid<=num(p.stop))reason="STOP";
-      else if(p.harvest_armed&&num(p.trail)>0&&bid<=num(p.trail))reason="HARVEST_TRAIL";
+      else if(earlyMicroFailure)reason="MICRO_THESIS_BREAK";
+      else if(harvestExit)reason="HARVEST_TRAIL";
       else if(peakGiveback)reason="PEAK_PROFIT_LOCK";
       else if(ratchetExit)reason="PROFIT_RATCHET";
 
       let microBreak=false;
       if(!reason&&heavy&&p.harvest_armed&&row.m&&currentNet>0){
         const m=row.m;
-        microBreak=regime==="EXPLOSIVE_RUNNER"
-          ? peakDrawBps>=38&&m.ret5<=-18&&m.ret15<=-24&&m.buyRatio<.42
-          : regime==="STRONG_RUNNER"
-            ? peakDrawBps>=22&&m.ret5<=-12&&m.ret15<=-18&&m.buyRatio<.45
-            : peakDrawBps>=18&&m.ret5<=-10&&m.ret15<=-14&&m.buyRatio<.48;
+        microBreak=peakDrawBps>=18&&m.ret5<=-12&&m.ret15<=-18&&m.buyRatio<.45;
         if(microBreak)reason="PEAK_REVERSAL";
       }
 
-      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,peak_net_pnl:maxNet,peak_capture_now:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,brain_strong:brainStrong,brain_explosive:brainExplosive,peak_giveback_raw:rawPeakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,ratchet_touched:ratchetTouched,peak_giveback_exit:peakGiveback,micro:row.m??null,decision:reason||"HOLD"});
+      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,peak_net_pnl:maxNet,peak_capture_now:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,micro_softening:microSoft,brain_fresh:brainFresh,brain_utility:brainU,entry_brain_utility:entryU,peak_brain_utility:peakU,brain_strong:brainStrong,brain_weak:brainWeak,peak_giveback_raw:rawPeakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,ratchet_touched:ratchetTouched,harvest_touched:harvestTouched,early_micro_failure:earlyMicroFailure,peak_giveback_exit:peakGiveback,micro:row.m??null,decision:reason||"HOLD"});
 
       if(!reason)continue;
 
@@ -226,12 +218,12 @@ async function tick(heavy:boolean){
         circuit_breaker:symbolLossStreak>=2,prior_entry:entry,post_exit_low:exit,post_exit_high:exit,reentry_count:reentryCount,
         wave_profit_bank:waveProfitBank,wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil,
         exit_continuation:cont,exit_expected_15m_bps:e15,exit_expected_30m_bps:e30,exit_runner_regime:regime,exit_peak_capture:peakCapture,
-        exit_brain_strong:brainStrong,exit_brain_explosive:brainExplosive};
+        exit_forecast_utility:brainU,exit_brain_strong:brainStrong,exit_brain_weak:brainWeak};
 
       const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
         guardian_version:GUARDIAN_VERSION,engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
         guardian_fast_exit:true,guardian_interval_target_seconds:5,entry,stop:p.stop,harvest_trigger:p.target,trail:p.trail??null,max_price:p.max_price,
-        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,peak_capture_before_exit:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,peak_giveback_exit:peakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,brain_strong:brainStrong,brain_explosive:brainExplosive,explosive_protect_phase:explosiveProtect,
+        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,peak_capture_before_exit:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,peak_giveback_exit:peakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,brain_fresh:brainFresh,brain_utility:brainU,entry_brain_utility:entryU,peak_brain_utility:peakU,brain_strong:brainStrong,brain_weak:brainWeak,early_micro_failure:earlyMicroFailure,
         micro:row.m??null,spread_bps:spreadBps,reentry_type:p.reentry_type??"FRESH",reentry_attempt:num(p.reentry_attempt),wave_profit_bank:Math.max(0,num(p.wave_profit_bank)+pnl),
         shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
       }};
