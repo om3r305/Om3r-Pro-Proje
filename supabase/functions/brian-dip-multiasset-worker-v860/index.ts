@@ -136,7 +136,7 @@ function marketBreadth(markets:Map<string,Market>):Breadth{
   const xs=[...markets.values()].filter(m=>Number.isFinite(m.forecast?.ret5_bps)&&Number.isFinite(m.forecast?.ret15_bps)&&Number.isFinite(m.forecast?.ret30_bps));
   const n=xs.length||1,p5=xs.filter(m=>m.forecast.ret5_bps>0).length/n,p15=xs.filter(m=>m.forecast.ret15_bps>0).length/n,p30=xs.filter(m=>m.forecast.ret30_bps>0).length/n,
     avg5=xs.reduce((s,m)=>s+m.forecast.ret5_bps,0)/n,avg15=xs.reduce((s,m)=>s+m.forecast.ret15_bps,0)/n,
-    score=clip(p5*.55+p15*.30+p30*.15),riskOff=xs.length>=12&&(score<.46||p5<.40&&p15<.46),supportive=xs.length>=12&&p5>=.56&&score>=.53;
+    score=clip(p5*.55+p15*.30+p30*.15),riskOff=xs.length>=12&&((p5<.50&&score<.50)||p5<.38||(p5<.45&&p15<.45)),supportive=xs.length>=12&&p5>=.56&&score>=.50;
   return{n:xs.length,p5,p15,p30,avg5,avg15,score,riskOff,supportive};
 }
 function forecastUtility(m:Market){
