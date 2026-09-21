@@ -5,7 +5,7 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v4-peak-profit-defense";
+const GUARDIAN_VERSION="dip-position-guardian-v5-forecast-veto-reclaim";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -173,18 +173,28 @@ async function tick(heavy:boolean){
         p.profit_lock_active=true;p.profit_lock_ratio=earlyKeep;p.profit_lock_max_net_pnl=Math.max(num(p.profit_lock_max_net_pnl),maxNet);p.profit_lock_armed_at=p.profit_lock_armed_at||iso();
       }
 
-      const peakGiveback=Boolean(!p.harvest_armed&&meaningfulPeak&&currentNet>0&&(
+      const cont=num(p.last_continuation,p.entry_continuation),e15=num(p.last_expected_15m_bps),e30=num(p.last_expected_30m_bps);
+      const brainStrong=cont>=.74&&e15>=35&&e30>=55;
+      const brainExplosive=cont>=.84&&e15>=65&&e30>=90;
+      const rawPeakGiveback=Boolean(!p.harvest_armed&&meaningfulPeak&&currentNet>0&&(
         (regime==="EXPLOSIVE_RUNNER"&&peakDrawBps>=20&&peakCaptureNow<=.72)||
         (regime==="STRONG_RUNNER"&&peakDrawBps>=16&&peakCaptureNow<=.78)||
         (regime==="PROTECT_RUNNER"&&peakDrawBps>=12&&peakCaptureNow<=.84)||
         (microSoft&&peakDrawBps>=10&&peakCaptureNow<=.84)
       ));
+      const prevGivebackStreak=num(p.peak_giveback_streak);
+      const peakGivebackStreak=rawPeakGiveback?Math.min(3,prevGivebackStreak+1):0;
+      p.peak_giveback_streak=peakGivebackStreak;
+      const forecastVeto=Boolean(brainStrong&&!microSoft&&peakGivebackStreak<2);
+      const peakGiveback=Boolean(rawPeakGiveback&&!forecastVeto);
+      const ratchetTouched=Boolean(!p.harvest_armed&&p.profit_lock_active&&num(p.trail)>0&&bid<=num(p.trail));
+      const ratchetExit=Boolean(ratchetTouched&&(!brainStrong||microSoft||peakGivebackStreak>=2));
 
       let reason="";
       if(bid<=num(p.stop))reason="STOP";
       else if(p.harvest_armed&&num(p.trail)>0&&bid<=num(p.trail))reason="HARVEST_TRAIL";
       else if(peakGiveback)reason="PEAK_PROFIT_LOCK";
-      else if(!p.harvest_armed&&p.profit_lock_active&&num(p.trail)>0&&bid<=num(p.trail))reason="PROFIT_RATCHET";
+      else if(ratchetExit)reason="PROFIT_RATCHET";
 
       let microBreak=false;
       if(!reason&&heavy&&p.harvest_armed&&row.m&&currentNet>0){
@@ -197,7 +207,7 @@ async function tick(heavy:boolean){
         if(microBreak)reason="PEAK_REVERSAL";
       }
 
-      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,peak_net_pnl:maxNet,peak_capture_now:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,peak_giveback_exit:peakGiveback,micro:row.m??null,decision:reason||"HOLD"});
+      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,peak_net_pnl:maxNet,peak_capture_now:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,brain_strong:brainStrong,brain_explosive:brainExplosive,peak_giveback_raw:rawPeakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,ratchet_touched:ratchetTouched,peak_giveback_exit:peakGiveback,micro:row.m??null,decision:reason||"HOLD"});
 
       if(!reason)continue;
 
@@ -214,12 +224,14 @@ async function tick(heavy:boolean){
       const waveExhaustedUntil=reentryCount>=1?exitNow+45*60_000:0;
       cooldowns[row.symbol]={until,reason,exit_price:exit,exit_at:exitNow,pnl,symbol_loss_streak:symbolLossStreak,last_loss_at:pnl<-.01?exitNow:prevLossAt,
         circuit_breaker:symbolLossStreak>=2,prior_entry:entry,post_exit_low:exit,post_exit_high:exit,reentry_count:reentryCount,
-        wave_profit_bank:waveProfitBank,wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil};
+        wave_profit_bank:waveProfitBank,wave_started_at:waveStartedAt,wave_exhausted_until:waveExhaustedUntil,
+        exit_continuation:cont,exit_expected_15m_bps:e15,exit_expected_30m_bps:e30,exit_runner_regime:regime,exit_peak_capture:peakCapture,
+        exit_brain_strong:brainStrong,exit_brain_explosive:brainExplosive};
 
       const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
         guardian_version:GUARDIAN_VERSION,engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
         guardian_fast_exit:true,guardian_interval_target_seconds:5,entry,stop:p.stop,harvest_trigger:p.target,trail:p.trail??null,max_price:p.max_price,
-        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,peak_capture_before_exit:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,peak_giveback_exit:peakGiveback,explosive_protect_phase:explosiveProtect,
+        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,peak_capture_before_exit:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,peak_giveback_exit:peakGiveback,peak_giveback_streak:peakGivebackStreak,forecast_veto:forecastVeto,brain_strong:brainStrong,brain_explosive:brainExplosive,explosive_protect_phase:explosiveProtect,
         micro:row.m??null,spread_bps:spreadBps,reentry_type:p.reentry_type??"FRESH",reentry_attempt:num(p.reentry_attempt),wave_profit_bank:Math.max(0,num(p.wave_profit_bank)+pnl),
         shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
       }};
