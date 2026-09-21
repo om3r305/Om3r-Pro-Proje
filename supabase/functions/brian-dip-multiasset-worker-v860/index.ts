@@ -5,9 +5,9 @@ declare const Deno: any;
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
-const ENGINE_VERSION='V8.9.2';
-const POLICY_VERSION='dip-v892-explosion-first-arena-20260921.1';
-const RISK_ENGINE='V892_EXPLOSION_FIRST_ARENA';
+const ENGINE_VERSION='V8.9.3';
+const POLICY_VERSION='dip-v893-breadth-brain-independent-arena-20260921.1';
+const RISK_ENGINE='V893_BREADTH_BRAIN_ARENA';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
 const HOSTS=['https://api.binance.com','https://api1.binance.com','https://api2.binance.com'];
@@ -22,6 +22,7 @@ type Market={symbol:string;bid:number;ask:number;mid:number;spreadBps:number;atr
 type Position={symbol:string;entry:number;qty:number;opened_at:string;stop:number;target:number;trail:number|null;max_price:number;cost_basis:number;radar_score:number;estimated_cost_bps:number;policy_version:string;entry_reason:string;entry_style?:string;opportunity_tier?:string;entry_signal?:number;entry_opportunity?:number;entry_forecast_net_bps?:number;entry_continuation?:number;capital_fraction?:number;harvest_armed?:boolean;harvest_at?:string|null;runner_mode?:boolean;runner_trail?:number|null;last_continuation?:number;initial_risk_usd?:number;winner_expansion?:boolean;profit_lock_active?:boolean;profit_lock_ratio?:number;profit_lock_max_net_pnl?:number;profit_lock_armed_at?:string|null;last_expected_15m_bps?:number;last_expected_30m_bps?:number;entry_explosion_score?:number;peak_continuation?:number;peak_expected_15m_bps?:number;peak_expected_30m_bps?:number;runner_regime?:string;reentry_type?:string;reentry_attempt?:number;wave_profit_bank?:number;wave_started_at?:number;prior_exit_reason?:string;prior_exit_price?:number;scale_stage?:number;scale_count?:number;last_scale_at?:number;last_scale_price?:number;scale_total_added?:number;scale_peak_explosion?:number;scale_peak_continuation?:number;scale_target_fraction?:number;forecast_break_streak?:number;peak_giveback_streak?:number;entry_forecast_utility?:number;entry_brain_utility?:number;last_forecast_utility?:number;peak_forecast_utility?:number;thesis_decay_streak?:number;last_thesis_at?:number};
 type State={engine_id:string;started_at:string;run_until:string;starting_equity:number;cash:number;realized_pnl:number;trade_count:number;win_count:number;loss_count:number;positions:Record<string,Position>;cooldowns:Record<string,any>;last_scan:J;last_eval_minute:string|null;enabled:boolean};
 type Eval={coreRaw:boolean;winnerRaw:boolean;scoutRaw:boolean;hunterRaw:boolean;surgeRaw?:boolean;emergencyRaw?:boolean;score:number;opp:number;cost:number;gross:number;net:number;tier:string;capitalScore:number;explosionScore:number;forecastUtility:number;brainUtility:number;forecast:HorizonForecast;reason:string;gates:Record<string,boolean>};
+type Breadth={n:number;p5:number;p15:number;p30:number;avg5:number;avg15:number;score:number;riskOff:boolean;supportive:boolean};
 type MemoryItem={symbol:string;until:number;last_seen:number;score:number;opp:number;cont:number;lane:string};
 
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -131,6 +132,13 @@ async function loadState(sql:any):Promise<State>{const rows=await sql`select * f
 function equity(cash:number,positions:Record<string,Position>,markets:Map<string,Market>){let e=cash;for(const p of Object.values(positions))e+=p.qty*(markets.get(p.symbol)?.bid??p.entry);return e;}
 function riskMode(state:State,current:number,radarStale:boolean){const start=Math.max(1,num(state.starting_equity,1000)),dd=(start-current)/start,closed=num(state.win_count)+num(state.loss_count),wr=closed?num(state.win_count)/closed:0,streak=num((state.last_scan as any)?.loss_streak),lastLoss=num((state.last_scan as any)?.last_loss_at);if(dd>=.025||(streak>=3&&Date.now()-lastLoss<LOSS_STREAK_PAUSE_MS))return{name:'FROZEN',gross:0,risk:0,minScore:.99,minOpp:.99,frozen:true,reason:dd>=.025?'SESSION_DRAWDOWN':'LOSS_STREAK',dd,wr};if(radarStale)return{name:'DEFENSIVE',gross:.035,risk:.0020,minScore:.80,minOpp:.78,frozen:false,reason:'RADAR_STALE_FALLBACK',dd,wr};if(closed<12||wr<.40||num(state.realized_pnl)<0)return{name:'DEFENSIVE',gross:.045,risk:.0025,minScore:.78,minOpp:.76,frozen:false,reason:'EARN_SCALING_RIGHTS',dd,wr};if(closed<30)return{name:'COLD',gross:.065,risk:.0035,minScore:.75,minOpp:.73,frozen:false,reason:'CALIBRATING',dd,wr};return{name:'NORMAL',gross:.09,risk:.0045,minScore:.72,minOpp:.71,frozen:false,reason:'WARM',dd,wr};}
 function tierOf(score:number,opp:number,net:number,cont:number){if(score>=.91&&opp>=.87&&net>=65&&cont>=.78)return'A+';if(score>=.86&&opp>=.81&&net>=32&&cont>=.72)return'A';if(score>=.81&&opp>=.76&&net>=14&&cont>=.66)return'B+';return'B';}
+function marketBreadth(markets:Map<string,Market>):Breadth{
+  const xs=[...markets.values()].filter(m=>Number.isFinite(m.forecast?.ret5_bps)&&Number.isFinite(m.forecast?.ret15_bps)&&Number.isFinite(m.forecast?.ret30_bps));
+  const n=xs.length||1,p5=xs.filter(m=>m.forecast.ret5_bps>0).length/n,p15=xs.filter(m=>m.forecast.ret15_bps>0).length/n,p30=xs.filter(m=>m.forecast.ret30_bps>0).length/n,
+    avg5=xs.reduce((s,m)=>s+m.forecast.ret5_bps,0)/n,avg15=xs.reduce((s,m)=>s+m.forecast.ret15_bps,0)/n,
+    score=clip(p5*.55+p15*.30+p30*.15),riskOff=xs.length>=12&&(score<.46||p5<.40&&p15<.46),supportive=xs.length>=12&&p5>=.56&&score>=.53;
+  return{n:xs.length,p5,p15,p30,avg5,avg15,score,riskOff,supportive};
+}
 function forecastUtility(m:Market){
   const f=m.forecast;
   const h5=Math.tanh(f.expected_5m_bps/35),h15=Math.tanh(f.expected_15m_bps/60),h30=Math.tanh(f.expected_30m_bps/95),h60=Math.tanh(f.expected_60m_bps/145);
@@ -143,7 +151,7 @@ function decisionUtility(ev:{score:number;opp:number;explosionScore:number;net:n
   const fu=forecastUtility(m),netU=.5+.5*Math.tanh(ev.net/55);
   return clip(fu*.52+ev.score*.16+ev.opp*.13+ev.explosionScore*.10+netU*.09,0,1);
 }
-function evaluate(c:Candidate,m:Market,mode:any):Eval{
+function evaluate(c:Candidate,m:Market,mode:any,breadth:Breadth):Eval{
   const atrBps=m.atrPct*100,slip=Math.max(2,m.spreadBps/2),cost=2*FEE_BPS+m.spreadBps+2*slip,
     reqPull=Math.max(.45,m.atrPct*.60),reqBounce=Math.max(.12,m.atrPct*.13),
     struct=Math.max(0,(m.recentHigh-m.ask)/m.ask*10000),
@@ -157,6 +165,7 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
     regimeConflict=f.ret15_bps<-80&&f.ret30_bps<-100&&f.ret60_bps<-180&&f.trend_bps<-20,
     shockLimit=Math.max(240,atrBps*1.35),shockMemoryBlock=m.shock_up_15m_bps>=shockLimit&&m.shock_age_min<=12&&m.pullbackPct<Math.max(1.5,m.atrPct*.80),
     postPumpFade=f.ret15_bps>=Math.max(120,atrBps*.70)&&f.ret1_bps<0&&f.ret3_bps<-15&&f.expected_5m_bps<15&&m.pullbackPct<Math.max(1.25,m.atrPct*.70),
+    breadthException=explosionScore>=.78&&opp>=.75&&f.continuation>=.75&&net>=55&&f.expected_15m_bps>=35&&f.expected_30m_bps>=55,
     pullbackOverride=m.pullbackPct>=Math.max(1.5,m.atrPct*.85),long30=Math.max(500,atrBps*4.0),long60=Math.max(800,atrBps*6.5);
 
   const radarFloor=mode.name==='DEFENSIVE'?.72:mode.name==='FROZEN'?.72:.68;
@@ -167,7 +176,7 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
     pullback:m.pullbackPct>=reqPull,bounce:m.bouncePct>=reqBounce,recovery:m.recovery,trend:m.trendOk,
     not_chasing:m.mid<=m.recentHigh*(1-Math.max(.0015,m.atrPct*.10/100)),
     forecast:f.continuation>=.60&&f.expected_15m_bps>=4&&f.expected_30m_bps>=0,
-    forecast_consistency:!rawConflict,regime_guard:!regimeConflict,shock_memory:!shockMemoryBlock,post_pump_reset:!postPumpFade,
+    forecast_consistency:!rawConflict,regime_guard:!regimeConflict,shock_memory:!shockMemoryBlock,post_pump_reset:!postPumpFade,market_breadth:!breadth.riskOff||breadthException,
     impulse:f.ret5_bps<=impulse5&&f.ret3_bps<=impulse3&&f.ret1_bps<=impulse1,
     extension:m.bouncePct<=Math.max(3.0,m.atrPct*2.0),
     long_extension:(f.ret30_bps<=long30||pullbackOverride)&&(f.ret60_bps<=long60||pullbackOverride),
@@ -177,7 +186,7 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
   const failed=Object.entries(gates).filter(([,v])=>!v).map(([k])=>k),allGates=failed.length===0,
     coreRaw=!mode.frozen&&score>=mode.minScore&&opp>=mode.minOpp&&allGates,
     winnerRaw=!mode.frozen&&!coreRaw&&allGates&&score>=Math.max(.79,mode.minScore-.01)&&opp>=Math.max(.73,mode.minOpp-.012)&&f.continuation>=.63&&f.expected_15m_bps>=8&&f.expected_30m_bps>=5&&net>=Math.max(18,cost*.55),
-    critical=['spread','day_move','bounce','recovery','trend','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','extension','long_extension'],
+    critical=['spread','day_move','bounce','recovery','trend','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','market_breadth','extension','long_extension'],
     criticalOk=critical.every(k=>gates[k]),
     hunterAllowed=failed.every(k=>['radar','economics','pullback','not_chasing','impulse'].includes(k)),
     hunterRaw=!mode.frozen&&!coreRaw&&!winnerRaw&&criticalOk&&hunterAllowed&&score>=.80&&opp>=.76&&explosionScore>=.72&&f.continuation>=.72&&net>=14&&cost<=42&&gross>=cost*1.60&&
@@ -189,7 +198,7 @@ function evaluate(c:Candidate,m:Market,mode:any):Eval{
       (failed.length===0&&score>=.74&&opp>=.64&&explosionScore>=.62&&f.continuation>=.66&&net>=20&&cost<=38&&gross>=cost*1.45)
     );
 
-  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','impulse','extension','long_extension','economics']
+  const safetyExceptRadar=['spread','day_move','bounce','recovery','trend','not_chasing','forecast','forecast_consistency','regime_guard','shock_memory','post_pump_reset','market_breadth','impulse','extension','long_extension','economics']
     .every(k=>gates[k]);
   const surgeRaw=!mode.frozen&&failed.length===1&&failed[0]==='radar'&&(c.lane==='BURST'||c.lane==='INTERRUPT')&&safetyExceptRadar&&
     c.radar_score>=.64&&score>=.75&&opp>=.68&&explosionScore>=.67&&f.continuation>=.76&&net>=25&&cost<=42;
