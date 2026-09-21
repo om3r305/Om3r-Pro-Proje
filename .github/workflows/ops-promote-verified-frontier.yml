@@ -17,7 +17,7 @@ jobs:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       PROJECT_ID: prj_3uLc3L3N9hMJgUCgzrePkAmDkE9K
       TEAM_ID: team_LFZuncFjJ7gbLY3PuEDN185B
-      VERIFIED_SHA: d421d06ed77b0dc5455267d575b4bd3ecc72b1d5
+      VERIFIED_SHA: ${{ github.sha }}
     steps:
       - name: Check deployment credential
         run: |
@@ -43,6 +43,20 @@ jobs:
         with:
           ref: ${{ env.VERIFIED_SHA }}
           fetch-depth: 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify Frontier behavior before publication
+        run: |
+          node --test tests/frontier-reliability.test.cjs tests/brian-command-model.test.cjs tests/treasury-accounting-model.test.cjs
+          node --check monster-coins-pro/frontier-v3.js
+          node --check monster-coins-pro/frontier-v4.js
+          node --check monster-coins-pro/frontier-status-truth.js
+          node --check monster-coins-pro/frontier-stability.js
+          node --check monster-coins-pro/brian-operations.js
 
       - name: Link exact Vercel project
         run: |

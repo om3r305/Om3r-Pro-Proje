@@ -213,6 +213,6 @@ answer=function(q){
 };
 
 injectV4Panels();
-refreshAutonomyV4();
-setInterval(()=>{if(key()&&document.visibilityState==='visible'&&!S.busy)refreshAutonomyV4()},15000);
+if(!window.__FRONTIER_COMPOSED_BOOT__)refreshAutonomyV4();
+setInterval(()=>{if(!window.__FRONTIER_COMPOSED_BOOT__&&key()&&document.visibilityState==='visible'&&!S.busy)refreshAutonomyV4()},15000);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&key())refreshAutonomyV4()});

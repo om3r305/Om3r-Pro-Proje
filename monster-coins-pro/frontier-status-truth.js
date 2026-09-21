@@ -103,7 +103,7 @@
     }
 
     const hbAge=parseAge(hb.observed_at);
-    const cachedMode=Boolean(hb.__cached);
+    const cachedMode=Boolean(hb.__cached||hb.transport_degraded);
     const freshnessSuffix=cachedMode?` · son doğrulama ${Math.round((now()-Number(hb.__cached_saved_at||now()))/60000)} dk önce`:'';
 
     const alphaAge=parseAge(hb.alpha?.observed_at);
@@ -160,6 +160,11 @@
             ?withEvidence('bad','Davranış pipeline heartbeat ve ALPHA bağlantısı taze değil')
             :withEvidence('warn','Davranış hattı yeni pipeline kanıtı bekliyor');
 
+    const pipeline=hb.news_pipeline;
+    if(!pipeline || !['OK','SUCCESS','HEALTHY'].includes(pipeline.status) || pipeline.pipeline_stalled){
+      if(world.state==='ok')world.state='warn';
+      world.meta+=pipeline?.pipeline_stalled?' · haber işleme kuyruğu gecikiyor':pipeline?' · haber kaynakları kısmi; Direct Wire '+(pipeline.direct_wire?.status==='SUCCESS'&&parseAge(pipeline.direct_wire?.last_run_at)<=360?'canlı':'bekleniyor'):' · haber kapsamı doğrulanamadı';
+    }
     if(cachedMode||hbAge>120){
       [world,behavior,alpha,treasury,research,ocean].forEach(x=>{if(x.state==='ok')x.state='warn';x.meta+=freshnessSuffix||` · heartbeat ${Math.round(hbAge)} sn önce`});
     }
@@ -175,6 +180,22 @@
   }
 
   try{moduleRows=truthRows}catch{}
+
+  const baseNews=renderNews;
+  renderNews=function(){
+    baseNews();
+    const hb=getHB(), pipeline=hb?.news_pipeline;
+    const stale=!hb||hb.__cached||hb.transport_degraded||parseAge(hb.observed_at)>120;
+    const partial=stale||!pipeline||!['OK','SUCCESS','HEALTHY'].includes(pipeline.status)||pipeline.pipeline_stalled;
+    const badge=document.getElementById('newsBadge');
+    if(partial&&badge){badge.textContent=stale?'BAĞLANTI BEKLENİYOR':'KAPSAM KISMİ';badge.className='badge warn';}
+    if(!news().length){
+      const feed=document.getElementById('criticalNews');
+      if(feed)feed.innerHTML='<div class="news"><div class="news-title">'+(partial?'Haber kapsamı tamamlanmadı.':'Doğrulanan akışta yeni kritik gelişme yok.')+'</div><div class="news-meta">'+(partial?'Kaynak veya bağlantı eksikliği sürüyor; boş liste önemli haber olmadığı anlamına gelmez.':'Son başarılı tarama izleniyor.')+'</div></div>';
+      const ticker=document.querySelector('.ticker');
+      if(ticker&&partial)ticker.innerHTML='<span class="radar-label">BRIAN RADAR</span> · Haber kapsamı kısmi · kaynaklar doğrulanıyor';
+    }
+  };
 
   async function directHeartbeat(){
     try{
@@ -211,5 +232,5 @@
   try{if(typeof render==='function')render()}catch{}
   // Single-writer rule: frontier-stability owns heartbeat polling.
   // This layer only supplies truth semantics and last-known-good hydration.
-  if(!getHB()) setTimeout(directHeartbeat,500);
+  if(!getHB()&&!window.__FRONTIER_COMPOSED_BOOT__) setTimeout(directHeartbeat,500);
 })();

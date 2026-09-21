@@ -25,6 +25,7 @@ body.frontier-v4-booting:before{content:"Brian Frontier V4 hazırlanıyor…";po
 <body class="frontier-v4-booting">
 <div style="min-height:100vh;display:grid;place-items:center;background:#020712;color:#8ceeff;font-family:system-ui">Brian Frontier V4 yükleniyor…</div>
 <script>
+window.__FRONTIER_COMPOSED_BOOT__=true;
 (async()=>{
   try{
     const r=await fetch('/frontier-v3.html',{cache:'no-store'});
@@ -64,14 +65,14 @@ body.frontier-v4-booting:before{content:"Brian Frontier V4 hazırlanıyor…";po
     };
 
     const load=(src)=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.body.appendChild(s)});
-    await load('/frontier-v3.js?v=20260920-alpha3');
-    await load('/frontier-v4.js?v=20260912-a1');
+    await load('/frontier-v3.js?v=20260921-boot');
+    await load('/frontier-v4.js?v=20260921-boot');
     await load('/frontier-engineer-console.js?v=20260914-e3');
     await load('/engineering-room-model.js?v=20260916-1');
     await load('/frontier-engineering-room-v2.js?v=20260916-room4');
     await load('/frontier-gpt-approval-ui.js?v=20260915-gpt1');
-    await load('/frontier-stability.js?v=20260919-s5');
-    await load('/frontier-status-truth.js?v=20260920-t11');
+    await load('/frontier-stability.js?v=20260921-s6');
+    await load('/frontier-status-truth.js?v=20260921-t12');
     await load('/brain-anatomy-model.js?v=20260920-alpha2');
     await load('/brain-anatomy-v2.js?v=20260920-alpha2');
     await load('/lab-readiness-v1.js?v=20260919-lr2');
@@ -86,9 +87,11 @@ body.frontier-v4-booting:before{content:"Brian Frontier V4 hazırlanıyor…";po
     await load('/treasury-accounting-room.js?v=20260918-pos2');
     await load('/brian-command-model.js?v=20260920-cm5');
     await load('/brian-command.js?v=20260920-cm5');
-    await load('/brian-operations.js?v=20260918-pos1');
+    await load('/brian-operations.js?v=20260921-pos2');
     await load('/frontier-meeting-v8-shadow-ledger.js?v=20260916-shadow2');
     document.body.classList.remove('frontier-v4-booting');
+    window.__FRONTIER_COMPOSED_BOOT__=false;
+    if(key()){refresh();refreshAutonomyV4();}
   }catch(e){
     document.body.classList.remove('frontier-v4-booting');
     document.body.innerHTML='<div style="padding:24px;color:#ff8d99;background:#020712;font-family:system-ui"><h2>Brian V4 yüklenemedi</h2><pre style="white-space:pre-wrap">'+String(e)+'</pre></div>';

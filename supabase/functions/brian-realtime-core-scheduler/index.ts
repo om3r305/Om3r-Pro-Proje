@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v6-direct-wire-health";
+const VERSION="brian.realtime-core-scheduler.v7-isolated-actions";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -17,7 +17,7 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
   try{
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
-      : CORE_BRIDGE;
+      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
     const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
@@ -28,7 +28,8 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
     let body:any={};
     try{body=JSON.parse(text)}catch{body={raw:text.slice(0,1000)}}
     const target=String(body?.status??"");
-    const ok=r.ok&&!["FAILED","FAILED_CLOSED","UNAUTHORIZED","INVALID_ACTION"].includes(target);
+    const nested=String(body?.result?.status??"");
+    const ok=r.ok&&![target,nested].some(s=>["FAILED","FAILED_CLOSED","UNAUTHORIZED","INVALID_ACTION","DEGRADED"].includes(s));
     return {action,ok,http_status:r.status,target_status:target,elapsed_ms:Date.now()-started,body};
   }catch(e){
     return {action,ok:false,http_status:0,target_status:"FETCH_FAILED",elapsed_ms:Date.now()-started,error:err(e).slice(0,1000)};
@@ -57,7 +58,7 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 function planned(minute:number){
   const actions:string[]=[];
   if(minute%2===0) actions.push("direct_wire");
-  actions.push("dip");
+  // Existing DIP trigger runs last: its failure must not starve Frontier actions.
 
   if(minute%3===1) actions.push("alpha_sync");
   if(includes(minute,[2,7,12,17,22,27,32,37,42,47,52,57])) actions.push("treasury");
@@ -71,10 +72,12 @@ function planned(minute:number){
   if(includes(minute,[0,10,20,30,40,50])) actions.push("recovery");
   if(includes(minute,[5,20,35,50])) actions.push("watchdog");
 
+  if(minute%10===4)actions.push("archive");
+  actions.push("dip");
   return [...new Set(actions)];
 }
 
-Deno.serve(async(req:Request)=>{
+async function handle(req:Request){
   if(req.method==="GET")return out({status:"OK",version:VERSION,role:"REALTIME_SCHEDULER_FOR_CORE",shadow_only:true,live_execution:false});
   if(req.method!=="POST")return out({error:"POST required"},405);
 
@@ -107,7 +110,7 @@ Deno.serve(async(req:Request)=>{
   const results:Result[]=[];
 
   for(const action of [...new Set(actions)]){
-    results.push(await runAction(action,key,action==="recovery"||action==="watchdog"?15000:12000));
+    results.push(await runAction(action,key,action==="archive"?20000:action==="recovery"||action==="watchdog"?15000:12000));
     if(results[results.length-1].ok===false && action==="dip"){
       // A Core transport failure should not create a retry storm in the same minute.
       break;
@@ -128,4 +131,14 @@ Deno.serve(async(req:Request)=>{
     shadow_only:true,
     live_execution:false
   },failed.length?207:200);
+ }
+Deno.serve(async(req:Request)=>{
+  if(req.method!=="POST")return handle(req);
+  try{await requireRealtimeInternal(req);}catch{return out({status:"UNAUTHORIZED"},401);}
+  const token=crypto.randomUUID();
+  const lock=await rtDb.rpc("brian_realtime_acquire_lease",{p_job:"core-scheduler",p_token:token});
+  if(lock.error)return out({status:"FAILED_CLOSED",error:lock.error.message},503);
+  if(!lock.data)return out({status:"SKIPPED_BUSY",version:VERSION});
+  try{return await handle(req);}
+  finally{await rtDb.from("brian_realtime_job_leases").update({expires_at:new Date().toISOString()}).eq("job","core-scheduler").eq("token",token);}
 });

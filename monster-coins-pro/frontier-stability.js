@@ -3,7 +3,7 @@
 /* Frontier stability layer: one lightweight heartbeat every 15s, one detailed service per cycle.
    Keeps last-known-good evidence during transient DB/API timeouts. DIP is not queried or controlled here. */
 const HEARTBEAT_ENDPOINT = '/api/brian/brian-frontier-heartbeat-public';
-const STABILITY = { heartbeat:null, error:null, slowCursor:0, lastSlow:0, lastAutonomyFetch:0 };
+const STABILITY = { heartbeat:null, error:null, slowCursor:0, lastSlow:0, lastAutonomyFetch:0, refreshing:false };
 
 async function frontierPost(url,body={},timeoutMs=20000){
   const k=key();
@@ -53,7 +53,7 @@ function applyHeartbeat(hb){
     S.world={
       status:wr&&String(wr.status)==='SUCCESS'?'ONLINE':'DEGRADED',
       collectors:{world_brain:wr,discovery:disc},
-      summary:{unique_entities:Number(w.entity_observations||0),narratives:Number(w.narrative_snapshots||0),asset_impact_candidates:Number(w.asset_impacts||0)},
+      summary:{unique_entities:Number(w.entity_observations??w.entity_observations_count??0),narratives:Number(w.narrative_snapshots||0),asset_impact_candidates:Number(w.asset_impacts||0)},
       narratives:[]
     };
   }
@@ -129,6 +129,9 @@ const slowServices=[
 
 refresh=async function(){
   if(!key()){unlock(true);return}
+  if(STABILITY.refreshing)return;
+  STABILITY.refreshing=true;
+  try{
   $('syncText').textContent='Brian heartbeat doğrulanıyor…';
   try{
     const hb=await frontierPost(HEARTBEAT_ENDPOINT,{},25000);
@@ -153,6 +156,7 @@ refresh=async function(){
   const c=sysControl(),target=num(c.treasury_target_equity_usd)??num(c.treasury?.starting_equity_usd);
   if(!S.amountDirty&&target!=null)S.selectedAmount=target;
   render();
+  }finally{STABILITY.refreshing=false;}
 };
 
 /* Expensive autonomy console is evidence analytics, not a 15-second heartbeat. */
@@ -165,4 +169,4 @@ refreshAutonomyV4=async function(){
 };
 
 /* Re-render immediately from the authoritative lightweight heartbeat. */
-if(key())refresh();
+if(key()&&!window.__FRONTIER_COMPOSED_BOOT__)refresh();
