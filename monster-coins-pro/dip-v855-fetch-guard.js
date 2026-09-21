@@ -3,9 +3,9 @@
 (()=>{
   const DIRECT='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-dip-multiasset-status';
   const PROXY='/api/brian/brian-dip-multiasset-status';
-  const CACHE_KEY='dip-v855-last-good-status';
+  const CACHE_KEY='dip-v880-last-good-status';
   const nativeFetch=window.fetch.bind(window);
-  const MAX_CACHE_AGE=5*60_000;
+  const MAX_CACHE_AGE=45_000;
   let cachedBody='',cachedAt=0;
 
   try{
@@ -21,10 +21,22 @@
     const isStatus=target&&method==='POST'&&(!body||body.includes('"action":"status"')||body.includes('"action": "status"'));
     return{url,target,isStatus};
   }
-  function save(body){cachedBody=body;cachedAt=Date.now();try{sessionStorage.setItem(CACHE_KEY,JSON.stringify({body,at:cachedAt}));}catch{}}
+  function versionAtLeast880(body){
+    try{
+      const d=JSON.parse(body||'{}'),m=String(d?.engine_version||d?.last_scan?.engine_version||'').match(/^V?(\d+)\.(\d+)\.(\d+)/);
+      if(!m)return false;
+      const major=Number(m[1]),minor=Number(m[2]);
+      return major>8||(major===8&&minor>=8);
+    }catch{return false;}
+  }
+  function save(body){
+    if(!versionAtLeast880(body))return;
+    cachedBody=body;cachedAt=Date.now();
+    try{sessionStorage.setItem(CACHE_KEY,JSON.stringify({body,at:cachedAt}));}catch{}
+  }
   function cachedResponse(){
-    if(!cachedBody||Date.now()-cachedAt>MAX_CACHE_AGE)return null;
-    return new Response(cachedBody,{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-guardian-cache':'last-good'}});
+    if(!cachedBody||Date.now()-cachedAt>MAX_CACHE_AGE||!versionAtLeast880(cachedBody))return null;
+    return new Response(cachedBody,{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-guardian-cache':'last-good-v880'}});
   }
 
   window.fetch=async function guardedFetch(input,init){
