@@ -4,6 +4,7 @@ declare const Deno: any;
 
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
+const ARENA_ID='dip-aggressive-arena-v1';
 const ENGINE_VERSION='V8.9.0';
 const POLICY_VERSION='dip-v890-thesis-utility-brain-20260921.1';
 const RISK_ENGINE='V890_THESIS_UTILITY_BRAIN';
@@ -323,7 +324,132 @@ async function insertEvent(sql:any,row:any){await sql`insert into public.brian_d
 async function learnMissed(sql:any,state:State,now:number){const prev=(state.last_scan as any)?.learning_summary??{},lastAt=Date.parse(String((state.last_scan as any)?.learning_at||''));if(Number.isFinite(lastAt)&&now-lastAt<5*60_000)return{at:String((state.last_scan as any)?.learning_at||iso()),summary:prev};try{const from=new Date(now-80*60_000),to=new Date(now-62*60_000),rows=await sql`select distinct on (symbol) evaluation_id,observed_at,symbol,price,signal_score,reason,metadata from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and action='WAIT' and signal_score>=0.70 and observed_at>=${from} and observed_at<=${to} and coalesce(metadata->>'outcome_checked','false')<>'true' order by symbol,signal_score desc limit 4`;for(const r of rows){try{const start=Date.parse(String(r.observed_at)),end=start+60*60_000,raw=await marketJson(`/api/v3/klines?symbol=${encodeURIComponent(String(r.symbol))}&interval=1m&startTime=${start}&endTime=${end}&limit=65`,4500);if(!Array.isArray(raw)||!raw.length)continue;const entry=num(r.price),hi=Math.max(...raw.map((x:any)=>num(x[2]))),lo=Math.min(...raw.map((x:any)=>num(x[3]))),up=pct(hi,entry),down=pct(lo,entry),label=up>=5?'MISSED_A_PLUS':up>=2.5?'MISSED_WINNER':down<=-2.5?'GOOD_REJECT':'NEUTRAL',meta={...((r.metadata||{}) as J),outcome_checked:true,outcome_label:label,future_max_60m_pct:up,future_min_60m_pct:down,outcome_checked_at:iso()};await sql`update public.brian_dip_multiasset_evaluations set metadata=${sql.json(meta)} where evaluation_id=${r.evaluation_id}`;}catch{}}const since=new Date(now-24*60*60_000),stats=await sql`select count(*) filter(where metadata->>'outcome_label'='MISSED_A_PLUS')::int as missed_a_plus,count(*) filter(where metadata->>'outcome_label'='MISSED_WINNER')::int as missed_winner,count(*) filter(where metadata->>'outcome_label'='GOOD_REJECT')::int as good_reject,count(*) filter(where metadata->>'outcome_checked'='true')::int as checked from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and observed_at>=${since}`;return{at:iso(),summary:{...(stats[0]||prev),window_hours:24}};}catch{return{at:iso(),summary:prev};}}
 function triggerFill(reason:string,p:Position,m:Market,slip:number){const extra=slip+2;if(reason==='STOP')return p.stop*(1-extra/10000);if((reason==='HARVEST_TRAIL'||reason==='PROTECT_TRAIL'||reason==='PROFIT_RATCHET')&&p.trail)return p.trail*(1-extra/10000);return m.bid*(1-slip/10000);}
 function cooldownMs(reason:string,pnl:number){if(pnl<0){if(reason==='THESIS_BREAK'||reason==='FORECAST_THESIS_BREAK'||reason==='BRAIN_THESIS_BREAK')return 12*60_000;return 30*60_000;}if(reason==='PROFIT_RATCHET'||reason==='PROTECT_TRAIL')return 3*60_000;if(reason==='HARVEST_TRAIL'||reason==='PEAK_REVERSAL'||reason==='FORECAST_REVERSAL')return 7*60_000;return 10*60_000;}
-async function run(sql:any){const state=await loadState(sql),now=Date.now();if(!state.enabled||now>=Date.parse(state.run_until)){const scan={status:'WINDOW_COMPLETE',policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION};await sql`update public.brian_dip_multiasset_state set enabled=false,updated_at=now(),last_scan=${sql.json(scan)} where engine_id=${ENGINE_ID}`;return{status:'WINDOW_COMPLETE',engine_version:ENGINE_VERSION};}const radar=await loadUniverse(state),symbols=[...new Set([...Object.keys(state.positions||{}),...radar.rows.map((x:Candidate)=>x.symbol)])].slice(0,MAX_DEEP_SCAN+MAX_POSITIONS),pairs=await Promise.all(symbols.map(async s=>{try{return[s,await loadMarket(s,radar.books.get(s))] as const;}catch(e){return[s,{error:e instanceof Error?e.message:String(e)}] as const;}})),markets=new Map<string,Market>(),marketErrors:J={};for(const[s,v]of pairs){if('error'in v)marketErrors[s]=v.error;else markets.set(s,v);}const positions={...(state.positions||{})},cooldowns={...(state.cooldowns||{})};let cash=num(state.cash),realized=num(state.realized_pnl),trades=num(state.trade_count),wins=num(state.win_count),losses=num(state.loss_count),lossStreak=num((state.last_scan as any)?.loss_streak),lastLossAt=num((state.last_scan as any)?.last_loss_at);const actions:any[]=[];
+
+async function loadArenaState(sql:any,main:State){
+  const rows=await sql`select * from public.brian_dip_multiasset_state where engine_id=${ARENA_ID} limit 1`;
+  if(rows.length)return rows[0] as any;
+  const started=new Date(),runUntil=new Date(main.run_until),source=String((main as any).source_session_id||'')||null,
+    scan={status:'RUNNING',mode:'AGGRESSIVE_ARENA',engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,source:'SHARED_MAIN_SCAN',heartbeat_at:iso(),recent_events:[],no_extra_full_scan:true,no_evaluation_writes:true};
+  const out=await sql`insert into public.brian_dip_multiasset_state
+    (engine_id,source_session_id,started_at,run_until,starting_equity,cash,realized_pnl,trade_count,win_count,loss_count,positions,cooldowns,last_scan,last_eval_minute,updated_at,enabled,shadow_only,live_execution)
+    values (${ARENA_ID},${source},${started},${runUntil},1000,1000,0,0,0,0,${sql.json({})},${sql.json({})},${sql.json(scan)},null,now(),true,true,false)
+    returning *`;
+  return out[0] as any;
+}
+function arenaVote(m:Market){
+  const f=m.forecast;
+  return f.expected_5m_bps*.16+f.expected_15m_bps*.27+f.expected_30m_bps*.31+f.expected_60m_bps*.10;
+}
+function arenaEquity(cash:number,positions:Record<string,any>,markets:Map<string,Market>){
+  let e=cash;
+  for(const p of Object.values(positions)){const m=markets.get(String(p.symbol));const mark=m?.bid||num(p.entry);e+=num(p.qty)*mark*(1-FEE_BPS/10000);}
+  return e;
+}
+async function insertArenaEvent(sql:any,row:any){
+  await sql`insert into public.brian_dip_multiasset_events (engine_id,observed_at,symbol,action,price,qty,notional,pnl,reason,metadata)
+    values (${ARENA_ID},${new Date(row.observed_at)},${row.symbol},${row.action},${row.price},${row.qty},${row.notional},${row.pnl},${row.reason},${sql.json(row.metadata||{})})`;
+}
+async function processArena(sql:any,arena:any,ready:any[],markets:Map<string,Market>,now:number){
+  const positions:{[k:string]:any}={...(arena.positions||{})};
+  let cash=num(arena.cash,1000),realized=num(arena.realized_pnl),trades=num(arena.trade_count),wins=num(arena.win_count),losses=num(arena.loss_count);
+  const previousEvents=Array.isArray(arena.last_scan?.recent_events)?arena.last_scan.recent_events:[],recentEvents:any[]=[...previousEvents].slice(0,20),actions:any[]=[];
+  const close=async(symbol:string,reason:string)=>{
+    const p=positions[symbol],m=markets.get(symbol);if(!p||!m)return false;
+    const slip=Math.max(2,m.spreadBps/2),exit=m.bid*(1-slip/10000),gross=num(p.qty)*exit,fee=gross*FEE_BPS/10000,pnl=gross-fee-num(p.cost_basis);
+    cash+=gross-fee;realized+=pnl;trades++;if(pnl>.01)wins++;else if(pnl<-.01)losses++;
+    const ev={observed_at:iso(),symbol,action:'SELL',price:exit,qty:num(p.qty),notional:gross,pnl,reason,metadata:{
+      arena:true,arena_mode:'TOP2_CONCENTRATED',slot_kind:p.slot_kind||'REGULAR',entry:num(p.entry),entry_brain_utility:num(p.entry_brain_utility),
+      current_forecast_utility:forecastUtility(m),forecast_vote_bps:arenaVote(m),max_price:num(p.max_price),allocation_fraction:num(p.allocation_fraction),
+      engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false}};
+    delete positions[symbol];await insertArenaEvent(sql,ev);actions.push(ev);recentEvents.unshift(ev);recentEvents.splice(20);
+    return true;
+  };
+
+  for(const [symbol,p] of Object.entries(positions)){
+    const m=markets.get(symbol);if(!m)continue;
+    const fu=forecastUtility(m),vote=arenaVote(m),entryU=num(p.entry_forecast_utility,fu),peakU=Math.max(num(p.peak_forecast_utility,entryU),fu),
+      soft=(entryU-fu>.11||peakU-fu>.17)&&vote<0,streak=soft?Math.min(3,num(p.thesis_decay_streak)+1):Math.max(0,num(p.thesis_decay_streak)-1),
+      disaster=m.bid<=num(p.disaster_stop,num(p.entry)*.95),hard=fu<.28&&vote<0,thesisBreak=hard||streak>=2;
+    p.last_forecast_utility=fu;p.peak_forecast_utility=peakU;p.thesis_decay_streak=streak;p.max_price=Math.max(num(p.max_price,p.entry),m.bid);p.last_mark=m.bid;p.last_vote=vote;
+    if(disaster)await close(symbol,'ARENA_DISASTER_STOP');
+    else if(thesisBreak)await close(symbol,'ARENA_THESIS_BREAK');
+  }
+
+  const candidates=ready.filter(x=>!positions[x.c.symbol]).map(x=>({
+    ...x,arenaScore:clip(x.ev.brainUtility*.55+x.ev.forecastUtility*.25+x.ev.explosionScore*.20)
+  })).sort((a,b)=>b.arenaScore-a.arenaScore);
+
+  const posScore=(p:any)=>{
+    const m=markets.get(String(p.symbol));if(!m)return num(p.last_forecast_utility,.5);
+    return clip(forecastUtility(m)*.78+num(p.entry_explosion_score,.5)*.22);
+  };
+  const posPnl=(p:any)=>{
+    const m=markets.get(String(p.symbol));if(!m)return 0;
+    const gross=num(p.qty)*m.bid,fee=gross*FEE_BPS/10000;return gross-fee-num(p.cost_basis);
+  };
+
+  const monster=candidates.find(x=>x.arenaScore>=.88&&x.ev.brainUtility>=.85&&x.ev.forecastUtility>=.82&&x.ev.explosionScore>=.84);
+  let monsterOverride=false;
+  if(monster){
+    const current=Object.values(positions),bestOpen=current.length?Math.max(...current.map(posScore)):0;
+    const dominates=current.length===0||monster.arenaScore>=bestOpen+.08;
+    if(dominates){
+      const profitable=current.filter(p=>posPnl(p)>.01&&monster.arenaScore>=posScore(p)+.08).sort((a,b)=>posScore(a)-posScore(b));
+      if(current.length>=2&&profitable.length){
+        for(const p of profitable)await close(String(p.symbol),'ARENA_MONSTER_ROTATE');
+      }
+      const equity=arenaEquity(cash,positions,markets),freeFrac=equity>0?cash/equity:0;
+      if(!positions[monster.c.symbol]&&cash>=MIN_SHADOW_NOTIONAL&&(Object.keys(positions).length<3||freeFrac>=.20)){
+        const fullConcentration=Object.keys(positions).length===0;
+        const grossBudget=Math.min(cash*.995,equity*(fullConcentration?.985:freeFrac*.99));
+        if(grossBudget>=MIN_SHADOW_NOTIONAL){
+          const m=monster.m,slip=Math.max(2,m.spreadBps/2),gross=grossBudget/(1+FEE_BPS/10000),entry=m.ask*(1+slip/10000),qty=gross/entry,fee=gross*FEE_BPS/10000,costBasis=gross+fee,
+            stopGap=Math.max(.05,m.atrPct*2.5/100),p:any={symbol:monster.c.symbol,entry,qty,cost_basis:costBasis,opened_at:iso(),max_price:entry,disaster_stop:entry*(1-stopGap),
+              entry_brain_utility:monster.ev.brainUtility,entry_forecast_utility:monster.ev.forecastUtility,last_forecast_utility:monster.ev.forecastUtility,peak_forecast_utility:monster.ev.forecastUtility,
+              entry_explosion_score:monster.ev.explosionScore,allocation_fraction:gross/equity,slot_kind:'MONSTER',thesis_decay_streak:0};
+          positions[p.symbol]=p;cash-=costBasis;monsterOverride=true;
+          const ev={observed_at:iso(),symbol:p.symbol,action:'BUY',price:entry,qty,notional:gross,pnl:null,reason:'ARENA_MONSTER_ALLIN',metadata:{
+            arena:true,arena_mode:'TOP2_CONCENTRATED',monster_override:true,arena_score:monster.arenaScore,brain_utility:monster.ev.brainUtility,forecast_utility:monster.ev.forecastUtility,
+            explosion_score:monster.ev.explosionScore,allocation_fraction:p.allocation_fraction,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false}};
+          await insertArenaEvent(sql,ev);actions.push(ev);recentEvents.unshift(ev);recentEvents.splice(20);
+        }
+      }
+    }
+  }
+
+  if(!monsterOverride){
+    for(const x of candidates){
+      const count=Object.keys(positions).length;if(count>=2)break;if(positions[x.c.symbol])continue;
+      const equity=arenaEquity(cash,positions,markets);if(!(equity>0&&cash>=MIN_SHADOW_NOTIONAL))break;
+      const firstFrac=.55+.10*clip((x.ev.brainUtility-.68)/.25),targetFrac=count===0?firstFrac:Math.min(.45,cash/equity*.995),
+        budget=Math.min(cash*.995,equity*targetFrac);
+      if(budget<MIN_SHADOW_NOTIONAL)continue;
+      const m=x.m,slip=Math.max(2,m.spreadBps/2),gross=budget/(1+FEE_BPS/10000),entry=m.ask*(1+slip/10000),qty=gross/entry,fee=gross*FEE_BPS/10000,costBasis=gross+fee,
+        stopGap=Math.max(.05,m.atrPct*2.5/100),p:any={symbol:x.c.symbol,entry,qty,cost_basis:costBasis,opened_at:iso(),max_price:entry,disaster_stop:entry*(1-stopGap),
+          entry_brain_utility:x.ev.brainUtility,entry_forecast_utility:x.ev.forecastUtility,last_forecast_utility:x.ev.forecastUtility,peak_forecast_utility:x.ev.forecastUtility,
+          entry_explosion_score:x.ev.explosionScore,allocation_fraction:gross/equity,slot_kind:'REGULAR',thesis_decay_streak:0};
+      positions[p.symbol]=p;cash-=costBasis;
+      const ev={observed_at:iso(),symbol:p.symbol,action:'BUY',price:entry,qty,notional:gross,pnl:null,reason:count===0?'ARENA_TOP1_CONVICTION':'ARENA_TOP2_CONVICTION',metadata:{
+        arena:true,arena_mode:'TOP2_CONCENTRATED',arena_score:clip(x.ev.brainUtility*.55+x.ev.forecastUtility*.25+x.ev.explosionScore*.20),brain_utility:x.ev.brainUtility,
+        forecast_utility:x.ev.forecastUtility,explosion_score:x.ev.explosionScore,allocation_fraction:p.allocation_fraction,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false}};
+      await insertArenaEvent(sql,ev);actions.push(ev);recentEvents.unshift(ev);recentEvents.splice(20);
+    }
+  }
+
+  const eq=arenaEquity(cash,positions,markets),marks=Object.values(positions).map((p:any)=>{const m=markets.get(String(p.symbol)),mark=m?.bid||num(p.entry),gross=num(p.qty)*mark,fee=gross*FEE_BPS/10000;
+    return{symbol:p.symbol,entry:num(p.entry),mark,qty:num(p.qty),notional:num(p.qty)*num(p.entry),allocation_fraction:num(p.allocation_fraction),slot_kind:p.slot_kind||'REGULAR',
+      brain_utility:num(p.last_forecast_utility,p.entry_brain_utility),entry_brain_utility:num(p.entry_brain_utility),forecast_utility:num(p.last_forecast_utility),explosion_score:num(p.entry_explosion_score),
+      unrealized_pnl:gross-fee-num(p.cost_basis),max_price:num(p.max_price),opened_at:p.opened_at};});
+  const scan={status:'RUNNING',mode:'AGGRESSIVE_ARENA',engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,source:'SHARED_MAIN_SCAN',heartbeat_at:iso(),
+    no_extra_full_scan:true,no_evaluation_writes:true,max_regular_positions:2,max_positions_with_monster:3,monster_override:true,top1_target:'55-65%',top2_uses_remaining_cash:true,
+    equity:eq,open_positions:marks,recent_events:recentEvents.slice(0,20),actions:actions.slice(0,8)};
+  await sql`update public.brian_dip_multiasset_state set cash=${cash},realized_pnl=${realized},trade_count=${trades},win_count=${wins},loss_count=${losses},
+    positions=${sql.json(positions)},last_scan=${sql.json(scan)},updated_at=now(),enabled=true,shadow_only=true,live_execution=false,run_until=${new Date(arena.run_until)}
+    where engine_id=${ARENA_ID}`;
+  return{engine_id:ARENA_ID,starting_equity:num(arena.starting_equity,1000),cash,equity:eq,realized_pnl:realized,trade_count:trades,win_count:wins,loss_count:losses,positions:marks,
+    recent_events:recentEvents.slice(0,20),mode:'AGGRESSIVE_ARENA',source:'SHARED_MAIN_SCAN',no_extra_full_scan:true,monster_override:true};
+}
+async function run(sql:any){const state=await loadState(sql),now=Date.now();if(!state.enabled||now>=Date.parse(state.run_until)){const scan={status:'WINDOW_COMPLETE',policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION};await sql`update public.brian_dip_multiasset_state set enabled=false,updated_at=now(),last_scan=${sql.json(scan)} where engine_id=${ENGINE_ID}`;return{status:'WINDOW_COMPLETE',engine_version:ENGINE_VERSION};}const arena=await loadArenaState(sql,state),radar=await loadUniverse(state),symbols=[...new Set([...Object.keys(state.positions||{}),...Object.keys(arena.positions||{}),...radar.rows.map((x:Candidate)=>x.symbol)])].slice(0,MAX_DEEP_SCAN+MAX_POSITIONS+3),pairs=await Promise.all(symbols.map(async s=>{try{return[s,await loadMarket(s,radar.books.get(s))] as const;}catch(e){return[s,{error:e instanceof Error?e.message:String(e)}] as const;}})),markets=new Map<string,Market>(),marketErrors:J={};for(const[s,v]of pairs){if('error'in v)marketErrors[s]=v.error;else markets.set(s,v);}const positions={...(state.positions||{})},cooldowns={...(state.cooldowns||{})};let cash=num(state.cash),realized=num(state.realized_pnl),trades=num(state.trade_count),wins=num(state.win_count),losses=num(state.loss_count),lossStreak=num((state.last_scan as any)?.loss_streak),lastLossAt=num((state.last_scan as any)?.last_loss_at);const actions:any[]=[];
 for(const[s,p]of Object.entries(positions)){
   const m=markets.get(s);if(!m)continue;
   const held=now-Date.parse(p.opened_at),slip=Math.max(2,m.spreadBps/2),cost=num(p.estimated_cost_bps,25),cont=m.forecast.continuation,
@@ -573,6 +699,7 @@ for(const x of ready){
     prior_exit_reason:p.prior_exit_reason??null,prior_exit_price:p.prior_exit_price??null,shadow_only:true,live_execution:false}};
   await insertEvent(sql,row);actions.push(row);
 }
+const arenaSnapshot=await processArena(sql,arena,ready,markets,now);
 const memMap=new Map<string,MemoryItem>();for(const m of radar.prevMemory){if(num(m.until)>now)memMap.set(String(m.symbol),m);}for(const e of evals){if(e.ready||e.signal_score>=.60||e.continuation_prob>=.60||e.radar_score>=.72){const strength=e.signal_score*.34+e.opportunity_score*.30+e.continuation_prob*.24+e.radar_score*.12;memMap.set(e.symbol,{symbol:e.symbol,until:now+MEMORY_TTL_MS,last_seen:now,score:strength,opp:e.opportunity_score,cont:e.continuation_prob,lane:e.radar_lane});}}const radarMemory=[...memMap.values()].sort((a,b)=>(b.score+b.opp*.3+b.cont*.2)-(a.score+a.opp*.3+a.cont*.2)).slice(0,MEMORY_MAX),learning=await learnMissed(sql,state,now),minute=new Date(Math.floor(now/60000)*60000).toISOString();
 if(state.last_eval_minute!==minute){
   if(evals.length){for(const e of evals){try{await sql`insert into public.brian_dip_multiasset_evaluations (engine_id,observed_at,symbol,price,radar_score,signal_score,action,reason,metadata) values (${ENGINE_ID},now(),${e.symbol},${e.price},${e.radar_score},${e.signal_score},${e.ready?'READY':'WAIT'},${e.reason},${sql.json(e)})`;}catch{}}}
@@ -580,5 +707,5 @@ if(state.last_eval_minute!==minute){
     await sql`insert into public.brian_dip_light_radar_history (engine_id,observed_minute,universe_count,snapshot) values (${ENGINE_ID},${new Date(minute)},${radar.universeCount},${sql.json((radar as any).lightSnapshot||[])}) on conflict (engine_id,observed_minute) do update set universe_count=excluded.universe_count,snapshot=excluded.snapshot`;
     if(new Date(now).getUTCMinutes()%15===0)await sql`delete from public.brian_dip_light_radar_history where observed_minute<now()-interval '7 days'`;
   }catch{}
-}const finalEq=equity(cash,positions,markets),scan={status:'RUNNING',policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE,risk_mode:mode.name,risk_reason:mode.reason,drawdown_pct:mode.dd,win_rate:mode.wr,loss_streak:lossStreak,last_loss_at:lastLossAt,radar_source:radar.source,radar_observed_at:radar.observedAt,radar_age_seconds:radar.ageSec,radar_soft_stale:radar.stale,universe_watch_count:radar.universeCount,deep_scan_count:evals.length,radar_lane_counts:radar.laneCounts,deep_scan_selection:(radar as any).selectionPlan,radar_memory_count:radarMemory.length,radar_memory:radarMemory,universe_prices:radar.priceSnapshot,position_guardian:(state.last_scan as any)?.position_guardian??null,core_streaks:coreStreaks,winner_streaks:winnerStreaks,hunter_streaks:hunterStreaks,scout_streaks:scoutStreaks,surge_streaks:surgeStreaks,learning_at:learning.at,learning_summary:learning.summary,hardening:{all_market_light_watch:true,multi_radar_universe:true,radar_memory_60m:true,deep_scan_32:true,opportunity_interrupt_slots:true,rotating_explorer_slots:true,two_cycle_core_confirm:true,forecast_consensus_gate:true,forecast_raw_consistency:true,multi_horizon_regime_guard:true,shock_memory_15m:true,reentry_chase_guard:true,reentry_reset_state_machine:true,stop_reclaim_reentry:true,profit_reset_reentry:true,new_wave_reset_reentry:true,entry_pulse_15s:true,size_aware_entry_pulse:true,wave_profit_protection:true,frozen_emergency_scout:true,radar_surge_override:true,light_radar_history_7d:true,explosion_score:true,conviction_sizing:true,long_horizon_extension_veto:true,per_symbol_circuit_breaker:true,impulse_chase_veto:true,earned_scaling:true,monster_conviction_scale_v1:true,winner_only_scaling:true,risk_neutral_pyramiding:true,max_scale_stage:3,preharvest_peak_profit_defense:true,dynamic_giveback_lock:true,forecast_veto_peak_exit:true,two_tick_giveback_confirm:true,runner_reclaim_v1:true,thesis_utility_brain:true,continuous_conviction_sizing:true,brain_authoritative_exit:true,guardian_safety_belt:true,post_pump_fade_veto:true,forecast_thesis_break_v1:true,trigger_fill_model:true,winner_expansion:true,profit_ratchet:true,mfe_profit_lock:true,forecast_adaptive_trail:true,no_retroactive_fill:true,near_miss_three_cycle:true,adaptive_profit_cooldown:true,thesis_break:true},scanned:evals,ranked_ready:ready.slice(0,8).map(x=>({symbol:x.c.symbol,radar_lane:x.c.lane||'UNKNOWN',entry_style:x.style,opportunity_tier:x.ev.tier,capital_score:x.ev.capitalScore,explosion_score:x.ev.explosionScore,continuation_prob:x.ev.forecast.continuation,opportunity_score:x.ev.opp,forecast_net_bps:x.ev.net,radar_score:x.c.radar_score})),actions,market_errors:marketErrors,equity:finalEq,position_count:Object.keys(positions).length,max_positions:MAX_POSITIONS,max_total_gross_pct:MAX_TOTAL_GROSS_PCT,gross_cap_pct:mode.gross,risk_cap_pct:mode.risk,heartbeat_at:iso()};await sql`update public.brian_dip_multiasset_state set cash=${cash},realized_pnl=${realized},trade_count=${trades},win_count=${wins},loss_count=${losses},positions=${sql.json(positions)},cooldowns=${sql.json(cooldowns)},last_eval_minute=${new Date(minute)},last_scan=${sql.json(scan)},updated_at=now(),enabled=true,shadow_only=true,live_execution=false where engine_id=${ENGINE_ID}`;return{status:'RUNNING',engine_id:ENGINE_ID,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,risk_engine:RISK_ENGINE,risk_mode:mode.name,risk_reason:mode.reason,radar_source:radar.source,universe_watch_count:radar.universeCount,deep_scan_count:evals.length,radar_memory_count:radarMemory.length,equity:finalEq,cash,realized_pnl:realized,trade_count:trades,positions:Object.keys(positions),learning_summary:learning.summary,actions,shadow_only:true,live_execution:false};}
+}const finalEq=equity(cash,positions,markets),scan={status:'RUNNING',policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE,risk_mode:mode.name,risk_reason:mode.reason,drawdown_pct:mode.dd,win_rate:mode.wr,loss_streak:lossStreak,last_loss_at:lastLossAt,radar_source:radar.source,radar_observed_at:radar.observedAt,radar_age_seconds:radar.ageSec,radar_soft_stale:radar.stale,universe_watch_count:radar.universeCount,deep_scan_count:evals.length,radar_lane_counts:radar.laneCounts,deep_scan_selection:(radar as any).selectionPlan,radar_memory_count:radarMemory.length,radar_memory:radarMemory,universe_prices:radar.priceSnapshot,position_guardian:(state.last_scan as any)?.position_guardian??null,aggressive_arena:arenaSnapshot,core_streaks:coreStreaks,winner_streaks:winnerStreaks,hunter_streaks:hunterStreaks,scout_streaks:scoutStreaks,surge_streaks:surgeStreaks,learning_at:learning.at,learning_summary:learning.summary,hardening:{all_market_light_watch:true,multi_radar_universe:true,radar_memory_60m:true,deep_scan_32:true,opportunity_interrupt_slots:true,rotating_explorer_slots:true,two_cycle_core_confirm:true,forecast_consensus_gate:true,forecast_raw_consistency:true,multi_horizon_regime_guard:true,shock_memory_15m:true,reentry_chase_guard:true,reentry_reset_state_machine:true,stop_reclaim_reentry:true,profit_reset_reentry:true,new_wave_reset_reentry:true,entry_pulse_15s:true,size_aware_entry_pulse:true,wave_profit_protection:true,frozen_emergency_scout:true,radar_surge_override:true,light_radar_history_7d:true,explosion_score:true,conviction_sizing:true,long_horizon_extension_veto:true,per_symbol_circuit_breaker:true,impulse_chase_veto:true,earned_scaling:true,monster_conviction_scale_v1:true,winner_only_scaling:true,risk_neutral_pyramiding:true,max_scale_stage:3,preharvest_peak_profit_defense:true,dynamic_giveback_lock:true,forecast_veto_peak_exit:true,two_tick_giveback_confirm:true,runner_reclaim_v1:true,thesis_utility_brain:true,continuous_conviction_sizing:true,brain_authoritative_exit:true,guardian_safety_belt:true,post_pump_fade_veto:true,forecast_thesis_break_v1:true,trigger_fill_model:true,winner_expansion:true,profit_ratchet:true,mfe_profit_lock:true,forecast_adaptive_trail:true,no_retroactive_fill:true,near_miss_three_cycle:true,adaptive_profit_cooldown:true,thesis_break:true},scanned:evals,ranked_ready:ready.slice(0,8).map(x=>({symbol:x.c.symbol,radar_lane:x.c.lane||'UNKNOWN',entry_style:x.style,opportunity_tier:x.ev.tier,capital_score:x.ev.capitalScore,explosion_score:x.ev.explosionScore,continuation_prob:x.ev.forecast.continuation,opportunity_score:x.ev.opp,forecast_net_bps:x.ev.net,radar_score:x.c.radar_score})),actions,market_errors:marketErrors,equity:finalEq,position_count:Object.keys(positions).length,max_positions:MAX_POSITIONS,max_total_gross_pct:MAX_TOTAL_GROSS_PCT,gross_cap_pct:mode.gross,risk_cap_pct:mode.risk,heartbeat_at:iso()};await sql`update public.brian_dip_multiasset_state set cash=${cash},realized_pnl=${realized},trade_count=${trades},win_count=${wins},loss_count=${losses},positions=${sql.json(positions)},cooldowns=${sql.json(cooldowns)},last_eval_minute=${new Date(minute)},last_scan=${sql.json(scan)},updated_at=now(),enabled=true,shadow_only=true,live_execution=false where engine_id=${ENGINE_ID}`;return{status:'RUNNING',engine_id:ENGINE_ID,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,risk_engine:RISK_ENGINE,risk_mode:mode.name,risk_reason:mode.reason,radar_source:radar.source,universe_watch_count:radar.universeCount,deep_scan_count:evals.length,radar_memory_count:radarMemory.length,equity:finalEq,cash,realized_pnl:realized,trade_count:trades,positions:Object.keys(positions),learning_summary:learning.summary,actions,shadow_only:true,live_execution:false};}
 Deno.serve(async(req:Request)=>{if(req.method!=='POST')return new Response('method',{status:405});const sql=db();let lease:any=null;try{await requireCron(sql,req);lease=await acquireLease(sql);if(!lease)return Response.json({status:'WAIT_LEASE',engine_id:ENGINE_ID,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,shadow_only:true,live_execution:false});return Response.json(await run(sql),{headers:{'cache-control':'no-store'}});}catch(e){const message=e instanceof Error?e.message:String(e);try{const rows=await sql`select last_scan from public.brian_dip_multiasset_state where engine_id=${ENGINE_ID} limit 1`;const scan={...((rows[0]?.last_scan||{}) as J),status:'FAILED_CLOSED',error:message,error_at:iso(),policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE};await sql`update public.brian_dip_multiasset_state set last_scan=${sql.json(scan)},updated_at=now() where engine_id=${ENGINE_ID}`;}catch{}return Response.json({status:'FAILED_CLOSED',engine_id:ENGINE_ID,engine_version:ENGINE_VERSION,policy_version:POLICY_VERSION,error:message,shadow_only:true,live_execution:false},{status:message.includes('UNAUTHORIZED')?401:500});}finally{await releaseLease(sql,lease);try{await sql.end({timeout:1});}catch{}}});
