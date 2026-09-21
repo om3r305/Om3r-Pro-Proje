@@ -1,10 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
 
-const URL=Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v11-bounded-provider-recovery";
+const db=createClient(SUPABASE_URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
+const VERSION="brian.breaking-scout.v12-authenticated-news-transport";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"|"BING_WEB"};
@@ -88,9 +88,10 @@ function parseXml(xml:string,feed:Feed):Article[]{
   return out;
 }
 
-async function fetchFeed(feed:Feed,timeoutMs=5500,allowEmpty=false):Promise<Article[]>{
+async function fetchFeed(feed:Feed,timeoutMs=5500,allowEmpty=false,internalKey=""):Promise<Article[]>{
   const r=await fetch(feed.url,{
     headers:{
+      ...(internalKey?{"x-brian-internal-key":internalKey}:{}),
       accept:"application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
       "user-agent":"Mozilla/5.0 (compatible; BrianBreakingScout/3.0; +market-intelligence)"
     },
@@ -123,7 +124,7 @@ function uniqueArticles(rows:Article[]){
     return true;
   });
 }
-async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[];covered:boolean}>{
+async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string},internalKey=""):Promise<{articles:Article[];provider:string;providerErrors:string[];covered:boolean}>{
   const providerErrors:string[]=[];
   const tagRows=(rows:Article[])=>freshDiscoveryArticles(rows).map(a=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"}));
   // Search responses routinely take longer than 1.8s. Keep both independent
@@ -133,7 +134,7 @@ async function fetchDiscovery(row:{id:string;theme:string;priority:string;google
   const providers=["bing","google"];
   const results=await Promise.allSettled([
     fetchFeed({id:row.id+":bing",url:`https://www.bing.com/news/search?${bingParams}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"},6000,true),
-    fetchFeed({id:row.id+":google",url:`https://news.google.com/rss/search?${googleParams}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"},12000,true)
+    fetchFeed({id:row.id+":google",url:internalKey?`https://monster-coins-pro-seven.vercel.app/api/scout-feed?lane=${encodeURIComponent(row.id)}`:`https://news.google.com/rss/search?${googleParams}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"},internalKey?18000:12000,true,internalKey)
   ]);
   const articles:Article[]=[],usable:string[]=[];
   results.forEach((result,i)=>{
@@ -179,7 +180,7 @@ Deno.serve(async(req:Request)=>{
     const selected=selectedFeeds();
     const [officialSettled,discoverySettled]=await Promise.all([
       Promise.allSettled(selected.feeds.map((feed)=>fetchFeed(feed))),
-      Promise.allSettled(selected.discovery.map((row)=>fetchDiscovery(row))),
+      Promise.allSettled(selected.discovery.map((row)=>fetchDiscovery(row,(req.headers.get("x-brian-internal-key")??"").trim()))),
     ]);
     const degraded:string[]=[];
     const articles:Article[]=[];
@@ -252,6 +253,7 @@ Deno.serve(async(req:Request)=>{
     const status=degraded.length===totalSources?"FAILED":degraded.length||failedCritical.length||allCriticalPartial?"DEGRADED":"SUCCESS";
     await recordRun(startedAt,status,articles.length,stored,degraded,{
       provider_errors:providerErrors,
+      google_transport:"AUTHENTICATED_VERCEL",
       discovery_providers:discoveryProviders,
       candidate_records:events.length,
       critical_lanes_expected:selectedCritical.length,
@@ -265,6 +267,7 @@ Deno.serve(async(req:Request)=>{
       status,version:VERSION,scheduler,slot:selected.slot,feeds:totalSources,
       observed:articles.length,candidates:events.length,stored,degraded_sources:degraded,
       discovery_providers:discoveryProviders,provider_errors:providerErrors,
+      google_transport:"AUTHENTICATED_VERCEL",
       critical_lanes:selected.discovery.filter((row)=>row.priority==="CRITICAL").map((row)=>row.id),
       critical_candidates:events.filter((row:any)=>row.metadata?.critical_watch===true).length,
       coverage_state:failedCritical.length?"DEGRADED":partialCritical.length===selectedCritical.length&&selectedCritical.length>0?"PARTIAL_PROVIDER":events.some((row:any)=>row.metadata?.critical_watch===true)?"ACTIVE":"SCANNING_NO_CRITICAL_NEW_DATA",

@@ -32,3 +32,9 @@ test('provider deadline permits an eight-second response while bounding each req
  ctx.AbortSignal={timeout:budget=>{budgets.push(budget);return {budget}}};
  assert.equal((await ctx.fetchDiscovery(lane)).covered,true);assert.ok(budgets.every(x=>x<=12000));
 });
+test('internal authentication is sent only to fixed relay, never news providers',async()=>{
+ const requests=[];const ctx=setup(async(url,init)=>{requests.push({url,headers:init.headers});return {ok:true,text:async()=>xml()};});
+ await ctx.fetchDiscovery(lane,'test-internal');
+ for(const r of requests){const relay=new URL(r.url).hostname==='monster-coins-pro-seven.vercel.app';assert.equal(r.headers['x-brian-internal-key'],relay?'test-internal':undefined);}
+ assert.ok(requests.some(r=>r.url.includes('/api/scout-feed?lane=discovery%3Atest')));
+});
