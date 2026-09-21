@@ -6,3 +6,8 @@ test('blocked and failed never animate',()=>{for(const status of ['BLOCKED','FAI
 test('test flag and unrelated candidate cannot turn green',()=>{const v=project({...data,current_run:{...run,tests_passed:true,recent_events:[{event_kind:'TEST',commit_sha:'other',passed:true}]}},null,null,now);assert.equal(v.checks.find(x=>x.phase==='TEST').state,'unknown')});
 test('exact candidate test recognizes fail and pass, null unknown',()=>{for(const passed of [true,false,null]){const v=project({...data,current_run:{...run,recent_events:[{event_kind:'TEST',commit_sha:'sha-a',passed}]}},null,null,now);assert.equal(v.checks.find(x=>x.phase==='TEST').state,passed===true?'pass':passed===false?'fail':'unknown')}});
 test('transport error disables live presentation',()=>assert.equal(project(data,null,'error',now).animate,false));
+test('provider outage explains quota and timeout without inventing test failure',()=>{
+ const v=project({...data,current_run:{...run,status:'BLOCKED',commit_sha:null,recent_events:[{event_kind:'BLOCKED',passed:false,payload:{provider_exhausted:true,provider_state:{attempts:[{error_class:'QUOTA_EXHAUSTED'},{exit_code:124}]}}}]}},null,null,now);
+ assert.match(v.failure,/kotası dolmuş/);assert.match(v.failure,/yanıt süresini aşmış/);
+ assert.match(v.next,/yeniden deneme bütçesi/);assert.ok(v.checks.every(c=>c.state==='unknown'));assert.equal(v.animate,false);
+});

@@ -192,8 +192,8 @@
     if(!news().length){
       const feed=document.getElementById('criticalNews');
       if(feed)feed.innerHTML='<div class="news"><div class="news-title">'+(partial?'Haber kapsamı tamamlanmadı.':'Doğrulanan akışta yeni kritik gelişme yok.')+'</div><div class="news-meta">'+(partial?'Kaynak veya bağlantı eksikliği sürüyor; boş liste önemli haber olmadığı anlamına gelmez.':'Son başarılı tarama izleniyor.')+'</div></div>';
-      const ticker=document.querySelector('.ticker');
-      if(ticker&&partial)ticker.innerHTML='<span class="radar-label">BRIAN RADAR</span> · Haber kapsamı kısmi · kaynaklar doğrulanıyor';
+      const ticker=document.getElementById('tickerTrack');
+      if(ticker&&partial)ticker.innerHTML='<div class="ticker-item"><span class="radar-label">BRIAN RADAR</span><span>Haber kapsamı kısmi · kaynaklar doğrulanıyor</span></div>';
     }
   };
 

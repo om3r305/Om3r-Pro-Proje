@@ -51,7 +51,7 @@ jobs:
 
       - name: Verify Frontier behavior before publication
         run: |
-          node --test tests/frontier-reliability.test.cjs tests/brian-command-model.test.cjs tests/treasury-accounting-model.test.cjs
+          node --test tests/frontier-reliability.test.cjs tests/brian-command-model.test.cjs tests/treasury-accounting-model.test.cjs tests/engineering-room-model.test.cjs
           node --check monster-coins-pro/frontier-v3.js
           node --check monster-coins-pro/frontier-v4.js
           node --check monster-coins-pro/frontier-status-truth.js
