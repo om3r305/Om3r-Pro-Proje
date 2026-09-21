@@ -6,10 +6,10 @@ const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
 const RUN_HOURS=18;
-const STATUS_VERSION='dip-v895-direct-status-arena-20260921.1';
-const POLICY_VERSION='dip-v895-arena-independent-evidence-sizing-20260921.1';
-const ENGINE_VERSION='V8.9.5';
-const RISK_ENGINE='V895_ARENA_EVIDENCE_SIZING';
+const STATUS_VERSION='dip-v897-direct-status-arena-20260921.1';
+const POLICY_VERSION='dip-v897-forecast-calibration-wave-memory-20260921.1';
+const ENGINE_VERSION='V8.9.7';
+const RISK_ENGINE='V897_FORECAST_CALIBRATION_WAVE_MEMORY';
 const CORS={'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-brian-dashboard-key','access-control-allow-methods':'POST,OPTIONS','cache-control':'no-store','content-type':'application/json; charset=utf-8'};
 type J=Record<string,unknown>;
 const num=(v:unknown,f=0)=>Number.isFinite(Number(v))?Number(v):f;
@@ -17,7 +17,7 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,
 const db=()=>postgres(DB_URL,{prepare:false,max:1,idle_timeout:1,connect_timeout:8,max_lifetime:30});
 async function sha256Hex(value:string){const d=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)));return[...d].map(b=>b.toString(16).padStart(2,'0')).join('');}
 function same(a:string,b:string){if(a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
-function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v895-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
+function sessionId(){const stamp=new Date().toISOString().replace(/[-:.TZ]/g,'').slice(0,14);return `dip-v897-${stamp}-${crypto.randomUUID().slice(0,8)}`;}
 async function requireDashboard(sql:any,req:Request){const supplied=(req.headers.get('x-brian-dashboard-key')||'').trim();if(!supplied)throw Error('UNAUTHORIZED_DASHBOARD');const rows=await sql`select dashboard_key_sha256 from public.brian_dashboard_auth where auth_id='control-v3' limit 1`;const expected=String(rows[0]?.dashboard_key_sha256||'');if(!expected)throw Error('AUTH_UNAVAILABLE');if(!same(await sha256Hex(supplied),expected))throw Error('UNAUTHORIZED_DASHBOARD');}
 async function resetSession(sql:any,startingEquity:unknown){
   const amount=Number(startingEquity);if(!Number.isFinite(amount)||amount<10||amount>1_000_000)throw Error('INVALID_TEST_CAPITAL');
