@@ -5,7 +5,7 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v3-dynamic-profit-lock";
+const GUARDIAN_VERSION="dip-position-guardian-v4-peak-profit-defense";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -150,6 +150,8 @@ async function tick(heavy:boolean){
       const keep=regime==="EXPLOSIVE_RUNNER"?(explosiveProtect?.72:.48):regime==="STRONG_RUNNER"?.75:.84;
       const fillFactor=(1-(slip+2)/10000)*(1-FEE_BPS/10000);
       const noRetroCap=bid*(1-slip/10000);
+      const peakCaptureNow=maxNet>0?clip(currentNet/maxNet,0,1.25):0;
+      const meaningfulPeak=maxNet>=Math.max(.12,costBasis*.0040);
 
       if(p.harvest_armed&&maxNet>0){
         const desired=maxNet*keep;
@@ -158,16 +160,30 @@ async function tick(heavy:boolean){
         if(candidate>num(p.trail)){p.trail=candidate;p.runner_trail=Math.max(num(p.runner_trail),candidate);}
       }else if(!p.harvest_armed&&maxNet>=Math.max(.12,costBasis*.0025)&&progress>=.30){
         const cont=num(p.last_continuation,p.entry_continuation),e15=num(p.last_expected_15m_bps),e30=num(p.last_expected_30m_bps);
-        const earlyKeep=cont>=.78&&e15>=25&&e30>=35?.25:cont>=.68&&e15>=8&&e30>=8?.42:.62;
+        const baseKeep=cont>=.78&&e15>=25&&e30>=35?.30:cont>=.68&&e15>=8&&e30>=8?.46:.65;
+        const drawKeep=!meaningfulPeak?baseKeep:
+          regime==="EXPLOSIVE_RUNNER"?(peakDrawBps>=20?.72:peakDrawBps>=12?.60:baseKeep):
+          regime==="STRONG_RUNNER"?(peakDrawBps>=16?.78:peakDrawBps>=10?.66:baseKeep):
+          (peakDrawBps>=12?.84:peakDrawBps>=8?.72:baseKeep);
+        const microKeep=meaningfulPeak&&microSoft?.82:baseKeep;
+        const earlyKeep=Math.max(baseKeep,drawKeep,microKeep);
         const raw=(costBasis+maxNet*earlyKeep)/Math.max(1e-12,qty*fillFactor);
         const candidate=Math.min(raw,noRetroCap);
         if(candidate>num(p.trail))p.trail=candidate;
         p.profit_lock_active=true;p.profit_lock_ratio=earlyKeep;p.profit_lock_max_net_pnl=Math.max(num(p.profit_lock_max_net_pnl),maxNet);p.profit_lock_armed_at=p.profit_lock_armed_at||iso();
       }
 
+      const peakGiveback=Boolean(!p.harvest_armed&&meaningfulPeak&&currentNet>0&&(
+        (regime==="EXPLOSIVE_RUNNER"&&peakDrawBps>=20&&peakCaptureNow<=.72)||
+        (regime==="STRONG_RUNNER"&&peakDrawBps>=16&&peakCaptureNow<=.78)||
+        (regime==="PROTECT_RUNNER"&&peakDrawBps>=12&&peakCaptureNow<=.84)||
+        (microSoft&&peakDrawBps>=10&&peakCaptureNow<=.84)
+      ));
+
       let reason="";
       if(bid<=num(p.stop))reason="STOP";
       else if(p.harvest_armed&&num(p.trail)>0&&bid<=num(p.trail))reason="HARVEST_TRAIL";
+      else if(peakGiveback)reason="PEAK_PROFIT_LOCK";
       else if(!p.harvest_armed&&p.profit_lock_active&&num(p.trail)>0&&bid<=num(p.trail))reason="PROFIT_RATCHET";
 
       let microBreak=false;
@@ -181,7 +197,7 @@ async function tick(heavy:boolean){
         if(microBreak)reason="PEAK_REVERSAL";
       }
 
-      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,profit_keep_ratio:keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,micro:row.m??null,decision:reason||"HOLD"});
+      telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,trail:p.trail??null,harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,current_net_pnl:currentNet,peak_net_pnl:maxNet,peak_capture_now:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,explosive_protect_phase:explosiveProtect,micro_softening:microSoft,peak_giveback_exit:peakGiveback,micro:row.m??null,decision:reason||"HOLD"});
 
       if(!reason)continue;
 
@@ -203,7 +219,7 @@ async function tick(heavy:boolean){
       const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
         guardian_version:GUARDIAN_VERSION,engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
         guardian_fast_exit:true,guardian_interval_target_seconds:5,entry,stop:p.stop,harvest_trigger:p.target,trail:p.trail??null,max_price:p.max_price,
-        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,profit_keep_ratio:keep,explosive_protect_phase:explosiveProtect,
+        harvest_armed:p.harvest_armed===true,runner_regime:regime,peak_draw_bps:peakDrawBps,peak_capture_ratio:peakCapture,peak_capture_before_exit:peakCaptureNow,meaningful_peak:meaningfulPeak,profit_keep_ratio:p.profit_lock_ratio??keep,peak_giveback_exit:peakGiveback,explosive_protect_phase:explosiveProtect,
         micro:row.m??null,spread_bps:spreadBps,reentry_type:p.reentry_type??"FRESH",reentry_attempt:num(p.reentry_attempt),wave_profit_bank:Math.max(0,num(p.wave_profit_bank)+pnl),
         shadow_fill_model:"GUARDIAN_CURRENT_OR_TRIGGER_WORSE",shadow_only:true,live_execution:false
       }};
