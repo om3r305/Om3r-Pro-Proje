@@ -37,20 +37,43 @@ jobs:
           ref: brian-2026
           fetch-depth: 0
 
+      - name: Check Brian Engineer queue
+        id: preflight
+        shell: bash
+        run: |
+          set +e
+          oidc_json="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ENGINEERING_AUDIENCE}")"
+          token="$(printf '%s' "$oidc_json" | jq -er '.value')"
+          response="$(curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data '{"action":"preflight"}')"
+          rc=$?
+          if [ "$rc" -ne 0 ] || [ -z "$response" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Brian Engineer preflight unavailable; deferring safely without consuming a worker." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          should_run="$(printf '%s' "$response" | jq -r '.should_run // false')"
+          reason="$(printf '%s' "$response" | jq -r '.reason // "UNKNOWN"')"
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "Brian Engineer preflight: should_run=$should_run reason=$reason" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Set up Deno
+        if: steps.preflight.outputs.should_run == 'true'
         uses: denoland/setup-deno@v2
         with:
           deno-version: '2.1.4'
 
       - name: Set up Python
+        if: steps.preflight.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install GitHub Copilot CLI
+        if: steps.preflight.outputs.should_run == 'true'
         run: npm install -g @github/copilot@latest
 
       - name: Prepare quota-independent local AI fallback
+        if: steps.preflight.outputs.should_run == 'true'
         env:
           EXTERNAL_OPENAI_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY }}
           OLLAMA_VERSION: v0.34.0
@@ -84,6 +107,7 @@ jobs:
           echo 'Quota-independent local fallback ready: Ollama qwen2.5-coder:1.5b.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run Brian Engineer provider-continuity pipeline
+        if: steps.preflight.outputs.should_run == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ github.token }}
