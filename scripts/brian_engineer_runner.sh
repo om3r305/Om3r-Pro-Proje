@@ -8,6 +8,7 @@ CANDIDATE_SHA=""
 CURRENT_STAGE="BOOTSTRAP"
 SELECTED_PROVIDER=""
 SELECTED_MODEL=""
+HOSTED_QUOTA_EXHAUSTED=false
 PROVIDER_STATUS_FILE="/tmp/brian-provider-status.json"
 PROVIDER_ATTEMPTS_FILE="/tmp/brian-provider-attempts.jsonl"
 : > "$PROVIDER_ATTEMPTS_FILE"
@@ -113,6 +114,9 @@ run_copilot_attempt() {
 
   cat "$stdout_file" "$stderr_file" > "${stderr_file}.combined"
   err_class="$(classify_provider_error "${stderr_file}.combined")"
+  if [[ "$provider" == "COPILOT_HOSTED" && "$err_class" == "QUOTA_EXHAUSTED" ]]; then
+    HOSTED_QUOTA_EXHAUSTED=true
+  fi
   append_provider_attempt "$phase" "$provider" "$model" "$rc" "$err_class"
   echo "AI provider failed over: $provider / $model ($err_class)" >> "$GITHUB_STEP_SUMMARY"
   return 1
@@ -131,11 +135,20 @@ ai_call() {
     SELECTED_MODEL=""
   fi
 
-  for hosted_model in auto gpt-5.3-codex claude-haiku-4.5 gemini-3.7-flash; do
-    if run_copilot_attempt "$phase" COPILOT_HOSTED "$hosted_model" "$prompt_file" "$output_file" "$mode"; then
+  if [[ "$HOSTED_QUOTA_EXHAUSTED" != true ]]; then
+    if run_copilot_attempt "$phase" COPILOT_HOSTED auto "$prompt_file" "$output_file" "$mode"; then
       return 0
     fi
-  done
+    if [[ "$HOSTED_QUOTA_EXHAUSTED" != true ]]; then
+      for hosted_model in gpt-5.3-codex claude-haiku-4.5 gemini-3.7-flash; do
+        if run_copilot_attempt "$phase" COPILOT_HOSTED "$hosted_model" "$prompt_file" "$output_file" "$mode"; then
+          return 0
+        fi
+      done
+    else
+      echo "Hosted Copilot quota is exhausted; skipping duplicate hosted-model attempts and moving to independent fallback." >> "$GITHUB_STEP_SUMMARY"
+    fi
+  fi
 
   if [[ -n "${BRIAN_OPENAI_API_KEY:-}" ]]; then
     if run_copilot_attempt "$phase" OPENAI_BYOK "${BRIAN_OPENAI_MODEL:-gpt-4.1}" "$prompt_file" "$output_file" "$mode"; then
@@ -177,6 +190,11 @@ on_error() {
   local rc=$?
   trap - ERR
   record_blocked "$rc"
+  if [[ "$rc" -eq 75 ]]; then
+    echo "::notice::Brian Engineer deferred: all AI providers are temporarily unavailable; checkpoint preserved and provider circuit opened."
+    echo "Provider outage is recorded as a deferred engineering state, not a repository/system failure. No merge or deploy occurred." >> "$GITHUB_STEP_SUMMARY"
+    exit 0
+  fi
   exit "$rc"
 }
 trap on_error ERR
