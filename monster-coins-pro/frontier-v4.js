@@ -140,7 +140,7 @@ moduleRows = function(){
 
 renderAlerts = function(rows){
   const alerts=[];
-  rows.forEach(m=>{if(m.state==='bad'||m.state==='warn')alerts.push({state:m.state,title:`${m.name}: ${stateText(m.state)}`,meta:m.meta})});
+  rows.forEach(m=>{if(m.state==='bad'||m.state==='warn')alerts.push({state:m.state,title:`${m.name}: ${m.label||stateText(m.state)}`,meta:m.meta})});
   const disc=S.world?.collectors?.discovery;
   if(disc && String(disc.status)==='FAILED') alerts.push({state:'warn',title:'Dünya Keşif Sensörü: harici kaynak gecikmesi',meta:disc.error_message||disc.error_class||'Keşif gözü başarısız'});
   if(V4.error) alerts.push({state:'warn',title:'Yazılımcı Brian görünümü gecikti',meta:V4.error});

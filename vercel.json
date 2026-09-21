@@ -11,5 +11,10 @@
       "source": "/api/brian/:path*",
       "destination": "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/:path*"
     }
-  ]
+  ],
+  "functions": {
+    "api/scout-feed.js": {
+      "maxDuration": 20
+    }
+  }
 }

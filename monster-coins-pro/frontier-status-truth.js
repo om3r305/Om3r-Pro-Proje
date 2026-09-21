@@ -162,11 +162,11 @@
 
     const pipeline=hb.news_pipeline;
     if(!pipeline || !['OK','SUCCESS','HEALTHY'].includes(pipeline.status) || pipeline.pipeline_stalled){
-      if(world.state==='ok')world.state='warn';
+      if(world.state==='ok'){world.state='warn';world.label='Çalışıyor · kapsam kısmi';}
       world.meta+=pipeline?.pipeline_stalled?' · haber işleme kuyruğu gecikiyor':pipeline?' · haber kaynakları kısmi; Direct Wire '+(pipeline.direct_wire?.status==='SUCCESS'&&parseAge(pipeline.direct_wire?.last_run_at)<=360?'canlı':'bekleniyor'):' · haber kapsamı doğrulanamadı';
     }
     if(cachedMode||hbAge>120){
-      [world,behavior,alpha,treasury,research,ocean].forEach(x=>{if(x.state==='ok')x.state='warn';x.meta+=freshnessSuffix||` · heartbeat ${Math.round(hbAge)} sn önce`});
+      [world,behavior,alpha,treasury,research,ocean].forEach(x=>{delete x.label;if(x.state==='ok')x.state='warn';x.meta+=freshnessSuffix||` · heartbeat ${Math.round(hbAge)} sn önce`});
     }
 
     return [

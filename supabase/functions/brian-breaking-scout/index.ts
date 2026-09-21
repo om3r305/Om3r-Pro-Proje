@@ -4,7 +4,7 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.breaking-scout.v10-coverage-truth";
+const VERSION="brian.breaking-scout.v11-bounded-provider-recovery";
 const COLLECTOR_ID="brian-breaking-scout-v1";
 
 type Feed={id:string;url:string;theme:string;trust:"OFFICIAL_PRIMARY"|"UNVERIFIED_DISCOVERY";kind:"RSS"|"ATOM"|"GOOGLE"|"BING"|"BING_WEB"};
@@ -101,7 +101,7 @@ async function fetchFeed(feed:Feed,timeoutMs=5500,allowEmpty=false):Promise<Arti
   const rows=parseXml(body,feed);
   if(!rows.length){
     const looksLikeFeed=/<rss\b|<feed\b|<channel\b/i.test(body);
-    if(allowEmpty&&looksLikeFeed)return [];
+    if(allowEmpty&&looksLikeFeed&&!/<item\b|<entry\b/i.test(body))return [];
     throw new Error(`${feed.id}:EMPTY_OR_UNPARSEABLE`);
   }
   return rows;
@@ -109,9 +109,9 @@ async function fetchFeed(feed:Feed,timeoutMs=5500,allowEmpty=false):Promise<Arti
 function freshDiscoveryArticles(rows:Article[],maxAgeMs=2*60*60_000){
   const now=Date.now();
   return rows.filter((a)=>{
-    if(!a.publishedAt)return true;
+    if(!a.publishedAt)return false;
     const t=Date.parse(a.publishedAt);
-    return !Number.isFinite(t)||now-t<=maxAgeMs;
+    return Number.isFinite(t)&&t<=now+60_000&&now-t<=maxAgeMs;
   });
 }
 function uniqueArticles(rows:Article[]){
@@ -123,100 +123,37 @@ function uniqueArticles(rows:Article[]){
     return true;
   });
 }
-const TRUSTED_WEB_DISCOVERY_DOMAINS=[
-  "reuters.com","apnews.com","bbc.com","bbc.co.uk","bloomberg.com","ft.com","wsj.com",
-  "cnbc.com","cnn.com","theguardian.com","aljazeera.com"
-];
-function trustedWebDiscovery(a:Article){
-  const s=String(a.sourceId||"").toLowerCase().replace(/^www\./,"");
-  return TRUSTED_WEB_DISCOVERY_DOMAINS.some((d)=>s===d||s.endsWith("."+d));
-}
-async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[]}>{
+async function fetchDiscovery(row:{id:string;theme:string;priority:string;googleQ:string;fallbackQ:string;compactQ:string}):Promise<{articles:Article[];provider:string;providerErrors:string[];covered:boolean}>{
   const providerErrors:string[]=[];
-  const tagRows=(rows:Article[])=>freshDiscoveryArticles(rows).map((a)=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"}));
-
-  // Critical lanes use two independent discovery paths in parallel. A provider
-  // returning only stale rows no longer counts as useful coverage.
-  if(row.priority==="CRITICAL"){
-    const bingParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
-    const googleParams=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
-    const [bingResult,googleResult]=await Promise.allSettled([
-      fetchFeed({
-        id:row.id+":bing",
-        url:`https://www.bing.com/news/search?${bingParams}`,
-        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-      },2200,true),
-      fetchFeed({
-        id:row.id+":google",
-        url:`https://news.google.com/rss/search?${googleParams}`,
-        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-      },1800,true)
-    ]);
-    const merged:Article[]=[];
-    if(bingResult.status==="fulfilled"){
-      const fresh=tagRows(bingResult.value);
-      if(fresh.length)merged.push(...fresh);
-      else providerErrors.push("bing-full:STALE_ONLY");
-    }else providerErrors.push("bing-full:"+errorText(bingResult.reason).slice(0,180));
-    if(googleResult.status==="fulfilled"){
-      const fresh=tagRows(googleResult.value);
-      if(fresh.length)merged.push(...fresh);
-      else providerErrors.push("google:STALE_ONLY");
-    }else providerErrors.push("google:"+errorText(googleResult.reason).slice(0,180));
-    if(merged.length){
-      return {articles:uniqueArticles(merged),provider:"bing+google_critical",providerErrors};
-    }
-    let compactAvailable=false;
-    try{
-      const compactParams=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
-      const raw=await fetchFeed({
-        id:row.id+":bing-compact",
-        url:`https://www.bing.com/news/search?${compactParams}`,
-        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-      },1800,true);
-      compactAvailable=true;
-      const fresh=tagRows(raw);
-      if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_news_rss_compact",providerErrors};
-    }catch(e){providerErrors.push("bing-compact:"+errorText(e).slice(0,180))}
-    let webAvailable=false;
-    try{
-      const webParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US"});
-      const raw=await fetchFeed({
-        id:row.id+":bing-web",
-        url:`https://www.bing.com/search?${webParams}`,
-        theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING_WEB"
-      },1800,true);
-      webAvailable=true;
-      const fresh=tagRows(raw).filter(trustedWebDiscovery);
-      if(fresh.length)return {articles:uniqueArticles(fresh),provider:"bing_web_rss",providerErrors};
-    }catch(e){providerErrors.push("bing-web:"+errorText(e).slice(0,180))}
-    const primaryAvailable=bingResult.status==="fulfilled"||googleResult.status==="fulfilled";
-    if(primaryAvailable||compactAvailable||webAvailable){
-      return {articles:[],provider:webAvailable?"critical_scan_with_web":bingResult.status==="fulfilled"&&googleResult.status==="fulfilled"?"bing+google_critical":"critical_partial_provider",providerErrors};
-    }
-    throw new Error(`${row.id}:ALL_CRITICAL_PROVIDERS_FAILED:${providerErrors.join("|")}`);
-  }
-
-  // Normal lanes stay cheap: Bing first, Google only when Bing is unusable.
+  const tagRows=(rows:Article[])=>freshDiscoveryArticles(rows).map(a=>({...a,laneId:row.id,critical:row.priority==="CRITICAL"}));
+  // Search responses routinely take longer than 1.8s. Keep both independent
+  // providers bounded, in parallel, within the orchestrator's 30s deadline.
+  const bingParams=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
+  const googleParams=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
+  const providers=["bing","google"];
+  const results=await Promise.allSettled([
+    fetchFeed({id:row.id+":bing",url:`https://www.bing.com/news/search?${bingParams}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"},6000,true),
+    fetchFeed({id:row.id+":google",url:`https://news.google.com/rss/search?${googleParams}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"},12000,true)
+  ]);
+  const articles:Article[]=[],usable:string[]=[];
+  results.forEach((result,i)=>{
+    const provider=providers[i];
+    if(result.status==='rejected'){providerErrors.push(provider+":"+errorText(result.reason).slice(0,180));return;}
+    const fresh=tagRows(result.value);
+    // A valid empty time-bounded Google feed is a completed scan. Old or
+    // undated search results do not prove current coverage.
+    if(fresh.length||(provider==='google'&&result.value.length===0)){
+      usable.push(provider);articles.push(...fresh);
+    }else providerErrors.push(provider+":NO_FRESH_DATED_RESULTS");
+  });
+  if(usable.length)return {articles:uniqueArticles(articles),provider:usable.join('+')+'_news_rss',providerErrors,covered:true};
   try{
-    const params=new URLSearchParams({q:row.fallbackQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
-    const articles=tagRows(await fetchFeed({
-      id:row.id+":bing",
-      url:`https://www.bing.com/news/search?${params}`,
-      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"
-    },3000,true));
-    return {articles:uniqueArticles(articles),provider:"bing_news_rss",providerErrors};
-  }catch(e){providerErrors.push("bing-full:"+errorText(e).slice(0,180))}
-  try{
-    const params=new URLSearchParams({q:row.googleQ,hl:"en-US",gl:"US",ceid:"US:en"});
-    const articles=tagRows(await fetchFeed({
-      id:row.id+":google",
-      url:`https://news.google.com/rss/search?${params}`,
-      theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"GOOGLE"
-    },2200,true));
-    return {articles:uniqueArticles(articles),provider:"google_news_rss",providerErrors};
-  }catch(e){providerErrors.push("google:"+errorText(e).slice(0,180))}
-  throw new Error(`${row.id}:ALL_DISCOVERY_PROVIDERS_FAILED:${providerErrors.join("|")}`);
+    const params=new URLSearchParams({q:row.compactQ,format:"rss",setlang:"en-us",mkt:"en-US",qft:'sortbydate="1" interval="4"',form:"YFNR"});
+    const fresh=tagRows(await fetchFeed({id:row.id+":bing-compact",url:`https://www.bing.com/news/search?${params}`,theme:row.theme,trust:"UNVERIFIED_DISCOVERY",kind:"BING"},3000,true));
+    if(fresh.length)return {articles:uniqueArticles(fresh),provider:'bing_news_rss_compact',providerErrors,covered:true};
+    providerErrors.push('bing-compact:NO_FRESH_DATED_RESULTS');
+  }catch(e){providerErrors.push('bing-compact:'+errorText(e).slice(0,180));}
+  return {articles:[],provider:'discovery_unavailable',providerErrors,covered:false};
 }
 async function recordRun(startedAt:string,status:string,observed:number,stored:number,degraded:string[],metadata:Record<string,unknown>={}){
   const finishedAt=new Date().toISOString();
@@ -263,6 +200,7 @@ Deno.serve(async(req:Request)=>{
         articles.push(...s.value.articles);
         discoveryProviders[id]=s.value.provider;
         if(s.value.providerErrors.length)providerErrors[id]=s.value.providerErrors;
+        if(!s.value.covered)degraded.push(id);
       }else{
         degraded.push(id);
         providerErrors[id]=errorText(s.reason).slice(0,320);
@@ -273,7 +211,7 @@ Deno.serve(async(req:Request)=>{
     const events:any[]=[];
     for(const a of articles){
       const pubMs=a.publishedAt?Date.parse(a.publishedAt):NaN;
-      if(Number.isFinite(pubMs)&&now-pubMs>2*60*60_000)continue;
+      if(!Number.isFinite(pubMs)||pubMs>now+60_000||now-pubMs>2*60*60_000)continue;
       const observedAt=new Date().toISOString();
       const fingerprint=await sha(`${a.sourceId}|${a.url}|${a.title}`);
       const eventId=await sha(`${COLLECTOR_ID}|${fingerprint}`);

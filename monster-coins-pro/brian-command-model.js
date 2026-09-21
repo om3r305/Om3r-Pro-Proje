@@ -20,7 +20,7 @@
     const state=!evidenceFresh?'unknown':!enabled?'off':r?.state==='bad'?'error':r?.state==='ok'&&recent?(transportFresh?'live':'waiting'):'waiting';
     const baseMeta=!evidenceFresh?'Güncel heartbeat doğrulanamadı.':!enabled?'Sistem operatör tarafından durduruldu.':r?.meta||'Modül kanıtı bekleniyor.';
     const meta=evidenceFresh&&!transportFresh?baseMeta+' · Canlı bağlantı yenileniyor; son sağlam kanıt korunuyor.':baseMeta;
-    return {...m,state,stamp:stamps[m.key]||null,meta};
+    return {...m,state,label:transportFresh&&enabled&&recent?r?.label:null,stamp:stamps[m.key]||null,meta};
   });
   const number=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
   return {modules:result,heartbeatFresh:transportFresh,evidenceFresh,transportFresh,transportDegraded:evidenceFresh&&!transportFresh,enabled,live:result.filter(x=>x.state==='live').length,waiting:result.filter(x=>x.state==='waiting').length,heartbeatAt:hb?.observed_at||null,equity:number(treasury?.equity_usd),treasuryFresh:evidenceFresh&&fresh(treasury?.observed_at,now,600),positions:Array.isArray(treasury?.positions)?treasury.positions.length:null,action:hb?.alpha?.action||null,asset:hb?.alpha?.asset_id||null};
