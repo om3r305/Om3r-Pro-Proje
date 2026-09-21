@@ -379,7 +379,7 @@ for(const x of openCandidates){
     safeStop=(newCost-allowedLoss)/Math.max(1e-12,newQty*exitFactor),
     newStop=Math.max(p.stop,safeStop),
     targetGap=Math.max(x.m.atr*(sig.stage===1?1.25:1.40),newAvg*(Math.max(x.ev.cost*1.65,35)/10000)),
-    oldQty=p.qty,oldEntry=p.entry,oldCost=p.cost_basis;
+    oldQty=p.qty,oldEntry=p.entry,oldCost=p.cost_basis,oldStop=p.stop;
 
   if(newStop>=x.m.bid*(1-8/10000)){x.rec.scale_reason='WAIT_MONSTER_SCALE_STOP_TOO_CLOSE';continue;}
 
@@ -394,7 +394,7 @@ for(const x of openCandidates){
   const row={observed_at:iso(),symbol:x.c.symbol,action:'BUY',price:scaleEntry,qty:addQty,notional:addGross,pnl:null,reason:`V881_MONSTER_SCALE_${sig.stage}`,metadata:{
     policy_version:POLICY_VERSION,engine_version:ENGINE_VERSION,risk_engine:RISK_ENGINE,scale_add:true,scale_stage:sig.stage,scale_count:p.scale_count,
     target_total_fraction:sig.targetFraction,capital_fraction_after:p.capital_fraction,previous_entry:oldEntry,average_entry_after:newAvg,previous_qty:oldQty,qty_after:newQty,
-    previous_cost_basis:oldCost,cost_basis_after:newCost,allowed_loss_usd:allowedLoss,risk_neutral_stop:newStop,previous_stop:p.stop,
+    previous_cost_basis:oldCost,cost_basis_after:newCost,allowed_loss_usd:allowedLoss,risk_neutral_stop:newStop,previous_stop:oldStop,
     winner_bps:sig.winnerBps,step_bps:sig.stepBps,signal_score:x.ev.score,opportunity_score:x.ev.opp,explosion_score:x.ev.explosionScore,
     continuation_prob:x.ev.forecast.continuation,forecast_net_bps:x.ev.net,forecast:x.ev.forecast,entry_pulse:pulse,estimated_cost_bps:x.ev.cost,
     shadow_only:true,live_execution:false}};
