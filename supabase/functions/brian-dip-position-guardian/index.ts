@@ -5,7 +5,8 @@ const SERVICE_ROLE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(SUPABASE_URL,SERVICE_ROLE,{auth:{persistSession:false,autoRefreshToken:false}});
 
 const ENGINE_ID="dip-multiasset-v1";
-const GUARDIAN_VERSION="dip-position-guardian-v6-safety-belt";
+const ARENA_ID="dip-aggressive-arena-v1";
+const GUARDIAN_VERSION="dip-position-guardian-v7-arena-peak-turn";
 const LEASE_KEY="brian-dip-multiasset-worker-v1";
 const FEE_BPS=10;
 const HOSTS=["https://api.binance.com","https://api1.binance.com","https://api2.binance.com"];
@@ -95,25 +96,131 @@ function fillPrice(reason:string,p:Pos,bid:number,spreadBps:number){
   else if((reason==="HARVEST_TRAIL"||reason==="PROFIT_RATCHET")&&num(p.trail)>0)trigger=Math.min(bid,num(p.trail));
   return trigger*(1-extra/10000);
 }
-async function insertEvent(row:any){
+async function insertEventFor(engineId:string,row:any){
   const q=await db.from("brian_dip_multiasset_events").insert({
-    engine_id:ENGINE_ID,observed_at:row.observed_at,symbol:row.symbol,action:row.action,price:row.price,qty:row.qty,
+    engine_id:engineId,observed_at:row.observed_at,symbol:row.symbol,action:row.action,price:row.price,qty:row.qty,
     notional:row.notional,pnl:row.pnl,reason:row.reason,metadata:row.metadata
   });
   if(q.error)throw q.error;
+}
+async function insertEvent(row:any){return insertEventFor(ENGINE_ID,row);}
+
+async function processArenaGuardian(heavy:boolean){
+  const q=await db.from("brian_dip_multiasset_state").select("*").eq("engine_id",ARENA_ID).maybeSingle();
+  if(q.error)throw q.error;
+  const state:any=q.data;
+  if(!state||!state.enabled)return{status:"ARENA_IDLE_DISABLED",checked:0,actions:0};
+  const positions:{[k:string]:Pos}={...(state.positions||{})},symbols=Object.keys(positions);
+  if(!symbols.length){
+    const scan={...(state.last_scan||{}),arena_guardian:{status:"IDLE_NO_POSITIONS",version:GUARDIAN_VERSION,heartbeat_at:iso(),heavy_tick:heavy,checked_symbols:[],telemetry:[],actions:[]}};
+    const u=await db.from("brian_dip_multiasset_state").update({last_scan:scan,updated_at:iso(),shadow_only:true,live_execution:false}).eq("engine_id",ARENA_ID);
+    if(u.error)throw u.error;
+    return{status:"ARENA_IDLE_NO_POSITIONS",checked:0,actions:0};
+  }
+
+  const rows=await Promise.all(symbols.map(async symbol=>{
+    try{return{symbol,b:await book(symbol),m:heavy?await micro(symbol):null};}
+    catch(e){return{symbol,error:e instanceof Error?e.message:String(e)};}
+  }));
+
+  let cash=num(state.cash),realized=num(state.realized_pnl),trades=num(state.trade_count),wins=num(state.win_count),losses=num(state.loss_count);
+  const actions:any[]=[],telemetry:any[]=[],quotes:Record<string,any>={};
+  let recent=Array.isArray(state.last_scan?.recent_events)?[...state.last_scan.recent_events]:[];
+
+  for(const row of rows){
+    const p=positions[row.symbol];
+    if(!p||row.error||!row.b){telemetry.push({symbol:row.symbol,status:"MARKET_ERROR",error:row.error});continue;}
+    const now=Date.now(),bid=row.b.bid,spreadBps=row.b.spreadBps,slip=Math.max(2,spreadBps/2),qty=num(p.qty),entry=num(p.entry),costBasis=num(p.cost_basis);
+    p.max_price=Math.max(num(p.max_price,entry),bid);
+    const maxGross=qty*p.max_price,maxFee=maxGross*FEE_BPS/10000,maxNet=Math.max(0,maxGross-maxFee-costBasis),
+      curGross=qty*bid,curFee=curGross*FEE_BPS/10000,currentNet=curGross-curFee-costBasis,
+      peakCapture=maxNet>0?clip(currentNet/maxNet,0,1.25):0,peakDrawBps=p.max_price>0?(p.max_price-bid)/p.max_price*10000:0,
+      meaningfulPeak=maxNet>=Math.max(.30,costBasis*.0045),
+      brainU=num(p.last_forecast_utility,p.entry_forecast_utility),entryU=num(p.entry_forecast_utility,brainU),peakU=Math.max(num(p.peak_forecast_utility,brainU),brainU),
+      brainWeak=brainU<=entryU-.10||brainU<=peakU-.16||num(p.thesis_decay_streak)>=1,
+      vote=num(p.last_vote),age=Math.max(0,now-Date.parse(String(p.opened_at||iso())));
+
+    let softMicro=false,hardMicro=false;
+    if(heavy&&row.m){
+      softMicro=(row.m.ret5<0&&row.m.ret15<0&&row.m.buyRatio<.48)||row.m.buyRatio<.40;
+      hardMicro=row.m.ret5<=-12||(row.m.ret5<=-6&&row.m.ret15<=-10&&row.m.buyRatio<.44);
+      p.arena_last_micro_at=now;
+      p.arena_micro_soft=softMicro;
+      p.arena_micro_hard=hardMicro;
+      p.arena_last_micro=row.m;
+    }
+    const microFresh=now-num(p.arena_last_micro_at)<20_000,
+      microSoftFresh=microFresh&&p.arena_micro_soft===true,
+      microHardFresh=microFresh&&p.arena_micro_hard===true,
+      peakGiveback=maxNet>0?1-clip(currentNet/maxNet,0,1):0,
+      actualTurn=Boolean(meaningfulPeak&&currentNet>0&&(
+        (microHardFresh&&peakDrawBps>=6)||
+        (microSoftFresh&&(peakDrawBps>=10||peakGiveback>=.10))||
+        (brainWeak&&peakDrawBps>=8)||
+        (vote<0&&peakDrawBps>=8)
+      )),
+      rapidTurn=Boolean(age>=30_000&&meaningfulPeak&&currentNet>0&&microHardFresh&&peakGiveback>=.06);
+
+    let reason="";
+    if(rapidTurn||actualTurn)reason="ARENA_PEAK_REVERSAL";
+
+    telemetry.push({symbol:row.symbol,bid,spread_bps:spreadBps,max_price:p.max_price,current_net_pnl:currentNet,peak_net_pnl:maxNet,
+      peak_capture_now:peakCapture,peak_draw_bps:peakDrawBps,peak_giveback_ratio:peakGiveback,meaningful_peak:meaningfulPeak,
+      brain_utility:brainU,entry_brain_utility:entryU,peak_brain_utility:peakU,brain_weak:brainWeak,forecast_vote_bps:vote,
+      micro_fresh:microFresh,micro_soft:microSoftFresh,micro_hard:microHardFresh,micro:row.m??p.arena_last_micro??null,decision:reason||"HOLD"});
+    quotes[row.symbol]={bid,spreadBps,currentNet};
+
+    if(!reason)continue;
+
+    const exit=bid*(1-(slip+2)/10000),gross=qty*exit,fee=gross*FEE_BPS/10000,pnl=gross-fee-costBasis;
+    cash+=gross-fee;realized+=pnl;trades++;if(pnl>.01)wins++;else if(pnl<-.01)losses++;
+    delete positions[row.symbol];
+
+    const event={observed_at:iso(),symbol:row.symbol,action:"SELL",price:exit,qty,notional:gross,pnl,reason,metadata:{
+      arena:true,arena_guardian_fast_exit:true,guardian_version:GUARDIAN_VERSION,guardian_interval_target_seconds:5,
+      engine_version:state.last_scan?.engine_version||null,policy_version:state.last_scan?.policy_version||null,
+      entry,max_price:p.max_price,peak_net_pnl:maxNet,peak_capture_ratio:maxNet>0?clip(Math.max(0,pnl)/maxNet,0,1):null,
+      peak_capture_before_exit:peakCapture,peak_draw_bps:peakDrawBps,peak_giveback_ratio:peakGiveback,
+      brain_utility:brainU,entry_brain_utility:entryU,peak_brain_utility:peakU,brain_weak:brainWeak,forecast_vote_bps:vote,
+      micro:row.m??p.arena_last_micro??null,spread_bps:spreadBps,shadow_fill_model:"ARENA_GUARDIAN_CURRENT_BID_SLIPPAGE",shadow_only:true,live_execution:false
+    }};
+    await insertEventFor(ARENA_ID,event);actions.push(event);recent.unshift(event);recent=recent.slice(0,20);
+  }
+
+  let equity=cash;
+  const openPositions:any[]=[];
+  for(const p of Object.values(positions)){
+    const q=quotes[String(p.symbol)],mark=q?.bid||num(p.last_mark,p.entry),gross=num(p.qty)*mark,fee=gross*FEE_BPS/10000,unrealized=gross-fee-num(p.cost_basis);
+    equity+=gross-fee;
+    p.last_mark=mark;
+    openPositions.push({symbol:p.symbol,entry:num(p.entry),mark,qty:num(p.qty),notional:num(p.qty)*num(p.entry),allocation_fraction:num(p.allocation_fraction),
+      slot_kind:p.slot_kind||"REGULAR",brain_utility:num(p.last_forecast_utility,p.entry_brain_utility),entry_brain_utility:num(p.entry_brain_utility),
+      forecast_utility:num(p.last_forecast_utility),explosion_score:num(p.entry_explosion_score),unrealized_pnl:unrealized,max_price:num(p.max_price),opened_at:p.opened_at});
+  }
+
+  const scan={...(state.last_scan||{}),equity,open_positions:openPositions,recent_events:recent,arena_guardian:{
+    status:"RUNNING",version:GUARDIAN_VERSION,heartbeat_at:iso(),heavy_tick:heavy,open_positions:openPositions.length,checked_symbols:symbols,
+    strategy:"PEAK_PROFIT + FORECAST/MICRO TURN DETECTION",telemetry,actions:actions.map(a=>({symbol:a.symbol,reason:a.reason,pnl:a.pnl,price:a.price}))
+  }};
+  const u=await db.from("brian_dip_multiasset_state").update({
+    cash,realized_pnl:realized,trade_count:trades,win_count:wins,loss_count:losses,positions,last_scan:scan,updated_at:iso(),shadow_only:true,live_execution:false
+  }).eq("engine_id",ARENA_ID);
+  if(u.error)throw u.error;
+  return{status:"ARENA_RUNNING",checked:symbols.length,heavy,actions:actions.length};
 }
 
 async function tick(heavy:boolean){
   const lease=await acquireLease();
   if(!lease)return{status:"WAIT_LEASE"};
   try{
+    const arena=await processArenaGuardian(heavy);
     const q=await db.from("brian_dip_multiasset_state").select("*").eq("engine_id",ENGINE_ID).maybeSingle();
     if(q.error)throw q.error;
     const state:any=q.data;
-    if(!state||!state.enabled)return{status:"IDLE_DISABLED"};
+    if(!state||!state.enabled)return{status:"IDLE_DISABLED",arena};
     const positions:{[k:string]:Pos}={...(state.positions||{})};
     const symbols=Object.keys(positions);
-    if(!symbols.length)return{status:"IDLE_NO_POSITIONS"};
+    if(!symbols.length)return{status:"IDLE_NO_POSITIONS",arena};
 
     const marketRows=await Promise.all(symbols.map(async symbol=>{
       try{
@@ -237,7 +344,7 @@ async function tick(heavy:boolean){
       cash,realized_pnl:realized,trade_count:trades,win_count:wins,loss_count:losses,positions,cooldowns,last_scan:scan,updated_at:iso(),shadow_only:true,live_execution:false
     }).eq("engine_id",ENGINE_ID);
     if(u.error)throw u.error;
-    return{status:"RUNNING",checked:symbols.length,heavy,actions:actions.length};
+    return{status:"RUNNING",checked:symbols.length,heavy,actions:actions.length,arena};
   }finally{await releaseLease(lease);}
 }
 
