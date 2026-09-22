@@ -61,3 +61,22 @@ This document records external open-source behaviors studied for Brian. It is no
   - existing `reason_market` behavior is unchanged unless `selected_experts` is explicitly supplied;
   - Phase 43 remains shadow-only and cannot self-promote or execute.
 - Brian deliberately does not copy TradingAgents' prompts or LangChain orchestration. The behavior is reimplemented against Brian's existing evidence, sensor, and expert contracts.
+
+
+## Phase 44 — Conviction Portfolio Brain + Hard Risk Clamps
+
+- Brian file: `brian2026/phase44_portfolio_brain.py`
+- Reference project: ai-hedge-fund (`virattt/ai-hedge-fund`).
+- Reference revision inspected: `7d897a002c263f106201154d877a4bcf74efae03`.
+- Upstream behavior inspected:
+  - `hedge_fund/portfolio/construction.py`: per-asset conviction is a model-weighted mean; abstained signals are excluded from both numerator and denominator; an explicit non-abstained zero is a real neutral vote; optional market-neutral mode cross-sectionally demeans convictions; nonzero books normalize to a requested gross target.
+  - `hedge_fund/risk/limits.py`: hard deterministic risk stage applies per-position caps first, then a proportional portfolio gross cap; risk may only shrink positions and never redistributes removed exposure.
+  - Upstream tests explicitly verify weighted means, abstention semantics, market-neutral demeaning, per-position clamps, gross clamps, shorts, idempotence, and that released capital remains cash.
+- Brian adaptation:
+  - Phase 43 grounded analyst claims translate into signed conviction signals while preserving evidence lineage;
+  - portfolio blending is pure deterministic arithmetic;
+  - hard limits are structurally independent of analyst/model requests;
+  - risk clamps cannot increase any requested absolute position;
+  - capital removed by a clamp remains unallocated cash;
+  - output is a shadow-only book plan and is not wired to the production Treasury execution path.
+- This phase copies the documented arithmetic behavior, not branding or persona agents.
