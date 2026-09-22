@@ -9,6 +9,10 @@ type CronAuthLookupResult = {
   error: { message?: string } | null;
 };
 
+type AbortableCronAuthQuery = {
+  abortSignal?: (signal: AbortSignal) => Promise<CronAuthLookupResult>;
+};
+
 function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
   let diff = 0;
@@ -75,8 +79,9 @@ export async function requireCronAuth(
       .select("cron_key_sha256")
       .eq("auth_id", authId)
       .single();
-    const resolved = typeof authQuery.abortSignal === "function"
-      ? await authQuery.abortSignal(AbortSignal.timeout(4_000))
+    const abortable = authQuery as unknown as AbortableCronAuthQuery;
+    const resolved = typeof abortable.abortSignal === "function"
+      ? await abortable.abortSignal(AbortSignal.timeout(4_000))
       : await Promise.race([
         Promise.resolve(authQuery),
         new Promise<never>((_, reject) =>
