@@ -80,3 +80,24 @@ This document records external open-source behaviors studied for Brian. It is no
   - capital removed by a clamp remains unallocated cash;
   - output is a shadow-only book plan and is not wired to the production Treasury execution path.
 - This phase copies the documented arithmetic behavior, not branding or persona agents.
+
+
+## Phase 45 — Execution Contract + Shadow Position Accounting
+
+- Brian file: `brian2026/phase45_execution_contract.py`
+- Reference project: Hummingbot (`hummingbot/hummingbot`, Apache-2.0).
+- Reference revision inspected: `9af100d6822da7d2d0291a906c730ef172284ee2` (master v2.17 sync).
+- Upstream behavior inspected:
+  - `strategy_v2/models/executor_actions.py`: controllers emit explicit Create / Stop / Store executor actions rather than placing exchange orders directly.
+  - `strategy_v2/executors/executor_orchestrator.py`: orchestrator owns executor lifecycle and position-hold accounting independently of controller logic.
+  - `strategy_v2/executors/position_executor/data_types.py`: position executor config validates side, amount, leverage, entry-price and triple-barrier constraints; stop-loss/time-limit exits must be market-capable.
+  - `strategy_v2/models/base.py`: executor lifecycle is NOT_STARTED -> RUNNING -> SHUTTING_DOWN -> TERMINATED.
+  - Hummingbot PositionHold incrementally realizes PnL when exposure is reduced, preserves average entry on partial reduction, and resets/changes average entry when a fill flips the net position.
+- Brian adaptation:
+  - intelligence emits immutable, time-bounded `TradeIntent` objects with evidence lineage;
+  - execution config is a separate object and Phase 45 hard-forces connector_name=`shadow`;
+  - explicit Create / Stop / Store actions drive a separate shadow executor lifecycle;
+  - incremental fills support weighted-average entry, partial reductions, realized PnL, position flips, cumulative fees/volume, unrealized PnL, and duplicate-fill idempotency;
+  - Phase 44 portfolio weights can be translated into evidence-lineaged TradeIntents;
+  - there is deliberately no exchange transport, API key surface, or live order function in Phase 45.
+- A later adapter may map this contract to Hummingbot itself; Phase 45 does not reimplement Hummingbot connectors.
