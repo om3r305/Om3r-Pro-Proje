@@ -101,3 +101,25 @@ This document records external open-source behaviors studied for Brian. It is no
   - Phase 44 portfolio weights can be translated into evidence-lineaged TradeIntents;
   - there is deliberately no exchange transport, API key surface, or live order function in Phase 45.
 - A later adapter may map this contract to Hummingbot itself; Phase 45 does not reimplement Hummingbot connectors.
+
+
+## Phase 46 — Tiered Execution Simulator + Latency/Fill Models
+
+- Brian file: `brian2026/phase46_execution_simulator.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, LGPL-3.0).
+- Reference revision inspected: `fb2b45e330853d1cc598cf1961aab05fc5ccb287`.
+- Upstream behavior inspected:
+  - `crates/execution/src/models/fill.rs`: seeded probabilistic limit-fill decisions, seeded slippage decisions, best-price / one-tick / tiered-liquidity fill models, and size-aware synthetic depth.
+  - `crates/execution/src/models/latency.rs`: base latency is added to operation-specific insert/update/delete latency.
+  - `crates/execution/src/matching_engine/inflight.rs`: submitted client-order ids stay inflight until venue receipt; the first receipt releases duplicate submits idempotently.
+  - `crates/execution/src/matching_engine/config.rs`: matching behavior explicitly separates execution, liquidity consumption, queue-position and acknowledgement concerns.
+- Brian clean-room implementation:
+  - no Nautilus source code is copied;
+  - static latency keeps separate base + insert/update/delete components;
+  - probabilistic limit-fill and one-tick adverse slippage are seeded and reproducible;
+  - tiered bid/ask levels are walked in price priority and may produce partial fills;
+  - execution chooses the first point-in-time book snapshot available after simulated venue arrival;
+  - intent-level maximum slippage can veto a projected fill before it is applied;
+  - inflight receipt state is idempotent under duplicate submits;
+  - all receipts remain shadow-only with no exchange transport.
+- License boundary: NautilusTrader is used strictly as a behavioral reference for this phase; implementation is independent.
