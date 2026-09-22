@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from brian2026.phase41_robustness_lab import (
     RobustnessPolicy,
     block_bootstrap_monte_carlo,
@@ -15,8 +17,8 @@ def test_trade_order_monte_carlo_is_reproducible_and_preserves_total_return() ->
     second = trade_order_monte_carlo(pnls, trials=250, seed=7, starting_equity=1000.0)
     assert first == second
     expected = sum(pnls) / 1000.0 * 100.0
-    assert first.p05_return_pct == expected
-    assert first.p95_return_pct == expected
+    assert first.p05_return_pct == pytest.approx(expected)
+    assert first.p95_return_pct == pytest.approx(expected)
     assert first.p95_max_drawdown_pct >= first.median_max_drawdown_pct
 
 
