@@ -10,6 +10,7 @@ from brian2026.state_fingerprint import portable_state_fingerprint
 ROOT = Path(__file__).resolve().parents[1]
 CHECKPOINT = ROOT / "supabase/functions/brian-live-shadow/checkpoint.json"
 SOURCE = ROOT / "supabase/functions/brian-live-shadow/index.ts"
+LOGIC = ROOT / "supabase/functions/brian-live-shadow/logic.ts"
 MIGRATION = ROOT / "supabase/migrations/202609030003_brian_phase37_live_shadow.sql"
 RAW_STATE_ID = "de90c35af3525d591f17e2489e64e9c5ebd84f8124e344927d7c829623688d36"
 PORTABLE_FINGERPRINT = "b534b611543fcf449a371faad208be20ccf7782343996d08b2bd554ed7f720b9"
@@ -29,7 +30,9 @@ def test_phase37_pins_exact_phase35_frozen_checkpoint() -> None:
 
 
 def test_phase37_runtime_is_forward_only_and_shadow_only() -> None:
-    source = SOURCE.read_text(encoding="utf-8")
+    # The deployed runtime is index.ts (the HTTP handler) plus logic.ts (the pure feature/
+    # allocation/accounting functions it imports) -- split for testability, see logic.test.ts.
+    source = SOURCE.read_text(encoding="utf-8") + "\n" + LOGIC.read_text(encoding="utf-8")
     assert 'PROSPECTIVE_DEVELOPMENT_SHADOW' in source
     assert 'historical_backfill: false' in source
     assert 'learning_enabled: false' in source

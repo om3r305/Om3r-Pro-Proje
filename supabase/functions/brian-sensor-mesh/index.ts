@@ -1,6 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import {
+  type Book, clip, confidenceFromRadar, finite, mean, parseBars, type RadarCandidate,
+  signalMeanReversion, signalMomentum, signalStructure, TEMPLATES, ticketFor,
+} from "./logic.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -18,15 +22,6 @@ const FEE_BPS = 10.0;
 const SLIPPAGE_BPS = 1.0;
 const LOGICAL_TEMPLATE_COUNT = 10;
 
-const TEMPLATES = [
-  { id: "structure-fast", family: "price_structure", group: "price_structure", ticket: 5.0 },
-  { id: "momentum-fast", family: "price_structure", group: "price_momentum", ticket: 5.0 },
-  { id: "mean-reversion-fast", family: "price_structure", group: "price_mean_reversion", ticket: 3.0 },
-] as const;
-
-type Bar = { closeTime: number; open: number; high: number; low: number; close: number; volume: number };
-type Book = { bid: number; ask: number; mid: number; spreadBps: number };
-type RadarCandidate = { symbol: string; radar_score?: number; liquidity_score?: number; activity_score?: number; spread_bps?: number | null };
 type Observation = {
   observation_id: string; eye_id: string; template_id: string; asset_id: string; market_domain: string;
   sensor_family: string; horizon: string; independent_group: string; observed_at: string; direction: number;
@@ -42,10 +37,6 @@ type PriorTick = {
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 }
-function finite(value: unknown, fallback = 0): number { const n = Number(value); return Number.isFinite(n) ? n : fallback; }
-function clip(value: number, low = 0, high = 1): number { return Math.max(low, Math.min(high, value)); }
-function mean(values: number[]): number { return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0; }
-function std(values: number[]): number { if (values.length <= 1) return 0; const m = mean(values); return Math.sqrt(mean(values.map((v) => (v - m) ** 2))); }
 function utf8(text: string): Uint8Array { return new TextEncoder().encode(text); }
 async function sha256(value: string | Uint8Array): Promise<string> {
   const bytes = typeof value === "string" ? utf8(value) : value;
@@ -75,40 +66,6 @@ async function persistRaw(payload: unknown, observedAt: string): Promise<string>
     payload_hash: payloadHash, payload: { storage_bucket: RAW_BUCKET, storage_path: path, content_type: "application/json", content_encoding: "gzip", uncompressed_byte_length: bytes.byteLength, compressed_byte_length: compressed.byteLength },
   });
   if (ins.error) throw ins.error; return captureId;
-}
-
-function parseBars(payload: unknown, cutoffMs: number): Bar[] {
-  if (!Array.isArray(payload)) throw new Error("invalid kline payload");
-  return payload.map((k) => {
-    if (!Array.isArray(k) || k.length < 7) throw new Error("invalid kline row");
-    return { closeTime: finite(k[6]), open: finite(k[1]), high: finite(k[2]), low: finite(k[3]), close: finite(k[4]), volume: finite(k[5]) };
-  }).filter((bar) => bar.closeTime <= cutoffMs && bar.open > 0 && bar.high > 0 && bar.low > 0 && bar.close > 0);
-}
-
-function signalStructure(bars: Bar[]): { direction: number; strength: number; reason: string } {
-  const current = bars.at(-1)!; const prior = bars.slice(-13, -1); if (prior.length < 8) return { direction: 0, strength: 0, reason: "insufficient structure context" };
-  const high = Math.max(...prior.map((b) => b.high)); const low = Math.min(...prior.map((b) => b.low));
-  const ranges = prior.map((b) => Math.max(1e-12, b.high - b.low)); const avgRange = mean(ranges);
-  if (current.close > high * 1.0005) return { direction: 1, strength: clip((current.close - high) / Math.max(avgRange * 2, 1e-12)), reason: "closed breakout above prior structure" };
-  if (current.close < low * 0.9995) return { direction: -1, strength: clip((low - current.close) / Math.max(avgRange * 2, 1e-12)), reason: "closed breakdown below prior structure" };
-  return { direction: 0, strength: 0, reason: "no closed structure break" };
-}
-function signalMomentum(bars: Bar[]): { direction: number; strength: number; reason: string } {
-  const closes = bars.slice(-10).map((b) => b.close); if (closes.length < 6) return { direction: 0, strength: 0, reason: "insufficient momentum context" };
-  const returns = closes.slice(1).map((v, i) => Math.log(v / closes[i])); const r4 = Math.log(closes.at(-1)! / closes.at(-5)!); const vol = Math.max(0.0004, std(returns)); const threshold = Math.max(0.0015, vol * 1.5);
-  if (Math.abs(r4) <= threshold) return { direction: 0, strength: 0, reason: "4-bar momentum below preregistered threshold" };
-  return { direction: r4 > 0 ? 1 : -1, strength: clip(Math.abs(r4) / (threshold * 3)), reason: "4-bar momentum impulse" };
-}
-function signalMeanReversion(bars: Bar[]): { direction: number; strength: number; reason: string } {
-  const closes = bars.slice(-12).map((b) => b.close); if (closes.length < 10) return { direction: 0, strength: 0, reason: "insufficient mean-reversion context" };
-  const m = mean(closes); const s = std(closes); if (s <= 1e-12) return { direction: 0, strength: 0, reason: "flat mean-reversion context" };
-  const z = (closes.at(-1)! - m) / s; if (Math.abs(z) < 2.0) return { direction: 0, strength: 0, reason: "price not statistically stretched" };
-  return { direction: z > 0 ? -1 : 1, strength: clip((Math.abs(z) - 1.5) / 2.5), reason: `mean-reversion stretch z=${z.toFixed(3)}` };
-}
-function ticketFor(templateId: string): number { return Number(TEMPLATES.find((x) => x.id === templateId)?.ticket ?? 5); }
-function confidenceFromRadar(candidate: RadarCandidate, book: Book): number {
-  const liquidity = clip(finite(candidate.liquidity_score, 0.5)); const activity = clip(finite(candidate.activity_score, 0.5)); const spreadQuality = 1 / (1 + Math.max(0, book.spreadBps) / 10);
-  return clip(0.45 * liquidity + 0.35 * activity + 0.20 * spreadQuality);
 }
 
 Deno.serve(async (req: Request) => {

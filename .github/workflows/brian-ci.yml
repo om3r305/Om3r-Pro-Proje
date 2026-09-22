@@ -73,16 +73,35 @@ jobs:
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
+          supabase/functions/brian-sensor-mesh/logic.ts
           supabase/functions/brian-sensor-mesh/index.ts
+          supabase/functions/brian-sensor-mesh/logic.test.ts
+          supabase/functions/brian-universe-collector/logic.ts
           supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-universe-collector/logic.test.ts
+          supabase/functions/brian-derivatives-eye/logic.ts
           supabase/functions/brian-derivatives-eye/index.ts
+          supabase/functions/brian-derivatives-eye/logic.test.ts
+          supabase/functions/brian-fx-eye/logic.ts
           supabase/functions/brian-fx-eye/index.ts
+          supabase/functions/brian-fx-eye/logic.test.ts
+          supabase/functions/brian-news-eye/logic.ts
           supabase/functions/brian-news-eye/index.ts
-      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting, collector lease)
+          supabase/functions/brian-news-eye/logic.test.ts
+          supabase/functions/brian-live-shadow/logic.ts
+          supabase/functions/brian-live-shadow/index.ts
+          supabase/functions/brian-live-shadow/logic.test.ts
+      - name: Run behavioral Deno tests (consensus, late-chase, signal helpers, micro-book accounting, collector lease, sensor-mesh/universe/derivatives/fx/news/live-shadow scoring and allocation)
         run: >-
           deno test --allow-read
           supabase/functions/_shared
           supabase/functions/brian-intrabar-eye
+          supabase/functions/brian-sensor-mesh
+          supabase/functions/brian-universe-collector
+          supabase/functions/brian-derivatives-eye
+          supabase/functions/brian-fx-eye
+          supabase/functions/brian-news-eye
+          supabase/functions/brian-live-shadow
       - name: Lint changed edge-function TS
         run: >-
           deno lint
@@ -93,11 +112,24 @@ jobs:
           supabase/functions/brian-intrabar-eye/logic.ts
           supabase/functions/brian-intrabar-eye/index.ts
           supabase/functions/brian-intrabar-eye/logic.test.ts
+          supabase/functions/brian-sensor-mesh/logic.ts
           supabase/functions/brian-sensor-mesh/index.ts
+          supabase/functions/brian-sensor-mesh/logic.test.ts
+          supabase/functions/brian-universe-collector/logic.ts
           supabase/functions/brian-universe-collector/index.ts
+          supabase/functions/brian-universe-collector/logic.test.ts
+          supabase/functions/brian-derivatives-eye/logic.ts
           supabase/functions/brian-derivatives-eye/index.ts
+          supabase/functions/brian-derivatives-eye/logic.test.ts
+          supabase/functions/brian-fx-eye/logic.ts
           supabase/functions/brian-fx-eye/index.ts
+          supabase/functions/brian-fx-eye/logic.test.ts
+          supabase/functions/brian-news-eye/logic.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-news-eye/logic.test.ts
+          supabase/functions/brian-live-shadow/logic.ts
+          supabase/functions/brian-live-shadow/index.ts
+          supabase/functions/brian-live-shadow/logic.test.ts
 
   verify-collector-lease:
     # Real-Postgres proof that the Item 1 collector lease primitive

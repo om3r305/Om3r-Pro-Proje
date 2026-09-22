@@ -1,22 +1,17 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { gzip } from "npm:pako@2.1.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
+import { asset, clip, parseSeen, pressure, sign } from "./logic.ts";
 
 const SUPABASE_URL=Deno.env.get("SUPABASE_URL")!; const SERVICE_ROLE_KEY=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase=createClient(SUPABASE_URL,SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const COLLECTOR_ID="phase39-gdelt-news"; const EVIDENCE="PROSPECTIVE_DEVELOPMENT_SHADOW"; const BUCKET="brian-intelligence-raw";
 const LEASE_SECONDS=300;
 const GDELT="https://api.gdeltproject.org/api/v2/doc/doc?query=(bitcoin%20OR%20ethereum%20OR%20solana%20OR%20xrp%20OR%20cryptocurrency%20OR%20crypto%20OR%20binance%20OR%20gold%20OR%20silver%20OR%20oil%20OR%20Federal%20Reserve%20OR%20ECB)&mode=ArtList&maxrecords=75&format=json&sort=HybridRel&timespan=30min";
-const POS=["approval","approved","partnership","launch","record high","inflow","rally","surge","upgrade","adoption","buyback"];
-const NEG=["hack","hacked","exploit","ban","lawsuit","outflow","crash","fraud","liquidation","breach","attack","downgrade"];
 
 type Article={url?:string;title?:string;seendate?:string;domain?:string;language?:string;sourcecountry?:string};
 function out(x:unknown,s=200){return new Response(JSON.stringify(x),{status:s,headers:{"content-type":"application/json","cache-control":"no-store"}})}
 function bytes(s:string){return new TextEncoder().encode(s)} async function sha(v:string|Uint8Array){const b=typeof v==="string"?bytes(v):v;const d=new Uint8Array(await crypto.subtle.digest("SHA-256",b));return [...d].map(x=>x.toString(16).padStart(2,"0")).join("")}
-function clip(v:number){return Math.max(0,Math.min(1,v))} function sign(v:number){return v>0?1:v<0?-1:0}
-function parseSeen(v?:string){if(!v)return null;const m=v.match(/^(\d{4})(\d{2})(\d{2})T?(\d{2})(\d{2})(\d{2})Z?$/);if(!m)return null;const d=new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`);return Number.isFinite(d.getTime())?d.toISOString():null}
-function asset(title:string){const t=title.toLowerCase();if(/bitcoin|\bbtc\b/.test(t))return "BTCUSDT";if(/ethereum|\beth\b/.test(t))return "ETHUSDT";if(/solana|\bsol\b/.test(t))return "SOLUSDT";if(/\bxrp\b|ripple/.test(t))return "XRPUSDT";if(/binance coin|\bbnb\b/.test(t))return "BNBUSDT";if(/gold/.test(t))return "GOLD";if(/silver/.test(t))return "SILVER";if(/\boil\b|brent|wti/.test(t))return "OIL";if(/federal reserve|\bfed\b|ecb|interest rate|inflation/.test(t))return "MACRO";return "CRYPTO_MARKET"}
-function pressure(title:string){const t=title.toLowerCase();const p=POS.filter(w=>t.includes(w)).length,n=NEG.filter(w=>t.includes(w)).length;if(p>0&&n===0)return 1;if(n>0&&p===0)return -1;return 0}
 async function rawCapture(payload:unknown,at:string){const canonical=JSON.stringify(payload),raw=bytes(canonical),hash=await sha(raw),z=gzip(raw,{level:6});const path=`gdelt/phase39_news/${at.slice(0,10)}/${hash}.json.gz`;const up=await supabase.storage.from(BUCKET).upload(path,z,{contentType:"application/gzip",upsert:false,cacheControl:"31536000"});if(up.error&&!String(up.error.message).toLowerCase().match(/exist|duplicate/))throw up.error;const id=await sha(`gdelt|phase39_news|${at}|${hash}`);const ins=await supabase.from("brian_raw_captures").insert({capture_id:id,provider:"gdelt_doc2",record_type:"phase39_news",observed_at:at,captured_at:new Date().toISOString(),provenance_uri:"https://api.gdeltproject.org/api/v2/doc/doc",payload_hash:hash,payload:{storage_bucket:BUCKET,storage_path:path,content_type:"application/json",content_encoding:"gzip"}});if(ins.error)throw ins.error;return id}
 async function recordRun(start:string,status:string,observed:number,stored:number,error?:unknown){const end=new Date().toISOString(),id=await sha(`${COLLECTOR_ID}|${start}|${end}|${status}`);await supabase.from("brian_collector_runs").insert({run_id:id,collector_id:COLLECTOR_ID,started_at:start,finished_at:end,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"COLLECTOR_ERROR":null,error_message:error?String(error).slice(0,1000):null,evidence_class:EVIDENCE,shadow_only:true,live_execution:false})}
 

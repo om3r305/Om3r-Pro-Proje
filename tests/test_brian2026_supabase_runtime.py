@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_MEMORY = ROOT / "supabase/migrations/202609030001_brian_intelligence_memory.sql"
 MIGRATION_RUNTIME = ROOT / "supabase/migrations/202609030002_brian_collector_runtime.sql"
 COLLECTOR = ROOT / "supabase/functions/brian-universe-collector/index.ts"
+COLLECTOR_LOGIC = ROOT / "supabase/functions/brian-universe-collector/logic.ts"
 DOC = ROOT / "docs/BRIAN_PHASE32_SUPABASE_RUNTIME.md"
 
 
@@ -81,7 +82,9 @@ def test_scheduler_uses_vault_names_not_literal_project_credentials() -> None:
 
 
 def test_typescript_universe_thresholds_match_python_defaults() -> None:
-    source = _read(COLLECTOR)
+    # The deployed runtime is index.ts (the HTTP handler) plus logic.ts (the pure filtering/
+    # scoring functions and CONFIG it imports) -- split for testability, see logic.test.ts.
+    source = _read(COLLECTOR) + "\n" + _read(COLLECTOR_LOGIC)
     config = UniverseConfig()
     assert _ts_number(source, "min_quote_volume") == config.min_quote_volume
     assert int(_ts_number(source, "min_trades_24h")) == config.min_trades_24h
@@ -91,7 +94,7 @@ def test_typescript_universe_thresholds_match_python_defaults() -> None:
 
 
 def test_book_ticker_degrades_instead_of_becoming_required() -> None:
-    source = _read(COLLECTOR)
+    source = _read(COLLECTOR) + "\n" + _read(COLLECTOR_LOGIC)
     assert "fetchJson(BOOK_TICKER, false)" in source
     assert 'degraded_sources: book.degraded ? ["book_ticker"] : []' in source
     assert "spread === null ? 0.50" in source
