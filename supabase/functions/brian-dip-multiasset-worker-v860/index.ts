@@ -644,7 +644,7 @@ for(const c of radar.rows){
   coreStreaks[c.symbol]=coreStreak;winnerStreaks[c.symbol]=winnerStreak;hunterStreaks[c.symbol]=hunterStreak;scoutStreaks[c.symbol]=scoutStreak;surgeStreaks[c.symbol]=surgeStreak;
 
   const lateCore=ev.coreRaw&&(m.pullbackPct<.10||ev.forecast.ret1_bps>95||ev.forecast.ret3_bps>180)&&ev.forecast.expected_15m_bps<95,
-    coreReady=ev.coreRaw&&coreStreak>=2&&!lateCore,winnerReady=ev.winnerRaw&&winnerStreak>=3,hunterReady=ev.hunterRaw&&hunterStreak>=2,scoutReady=ev.scoutRaw&&scoutStreak>=2,
+    coreReady=ev.coreRaw&&coreStreak>=2&&!lateCore,winnerReady=ev.winnerRaw&&winnerStreak>=3,hunterReady=ev.hunterRaw&&hunterStreak>=2,scoutReady=false /* EARLY_SCOUT disabled 2026-09-22: 16.7% win rate (3/18) vs CORE's 50% (21/42) over trailing 7d on live V8.9.8 -- see brian_dip_multiasset_events */,
     emergencyReady=Boolean(ev.emergencyRaw&&surgeStreak>=1),surgeReady=Boolean(ev.surgeRaw&&surgeStreak>=1),
     normalReady=!reentry.active&&(emergencyReady||surgeReady||coreReady||winnerReady||hunterReady||scoutReady),reentryReady=reentry.active&&reentry.eligible,
     isReady=!open&&(normalReady||reentryReady),
