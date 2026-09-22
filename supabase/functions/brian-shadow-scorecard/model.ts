@@ -62,5 +62,10 @@ export function alphaSummary(decisions: Row[], now=Date.now()) {
   }
   return {sampled_decisions:rows.length,truncated,wait_or_veto:wait,pending,overdue,resolved:count,missing_cost:missingCost,
     mean_net_bps:count&&versions.size===1?netSum/count:null,compiler_versions:[...versions],horizon_seconds:3600,
-    interpretation:'FIXED_HORIZON_COUNTERFACTUAL_NOT_PORTFOLIO_PROFIT',recent:rows.slice(-10).reverse().map(d=>({decision_id:d.decision_id,asset_id:d.asset_id,action:d.action,reason:d.reason,observed_at:d.observed_at,net_edge_bps:d.net_edge_bps}))};
+    interpretation:'FIXED_HORIZON_COUNTERFACTUAL_NOT_PORTFOLIO_PROFIT',recent:rows.slice(-10).reverse().map(d=>{
+      const action=['OPEN_LONG','OPEN_SHORT'].includes(d.action),ret=number(d.direction_adjusted_return),cost=number(d.estimated_round_trip_cost_bps);
+      return {decision_id:d.decision_id,asset_id:d.asset_id,action:d.action,reason:d.reason,observed_at:d.observed_at,net_edge_bps:d.net_edge_bps,
+        result_status:!action?'NO_TRADE':ret===null?'PENDING':cost===null||cost<0?'MISSING_COST':'RESOLVED',
+        resolved_net_bps:action&&ret!==null&&cost!==null&&cost>=0?ret*10000-cost:null};
+    })};
 }

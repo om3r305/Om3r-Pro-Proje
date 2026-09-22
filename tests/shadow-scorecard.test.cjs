@@ -44,6 +44,7 @@ test('ALPHA uses decision-time costs once, excludes WAIT and exposes unresolved 
  const row={action:'OPEN_LONG',compiler_version:'v1',observed_at:iso(0),direction_adjusted_return:.01,estimated_round_trip_cost_bps:20};
  const a=alphaSummary([row,{...row,action:'WAIT'},{...row,direction_adjusted_return:null},{...row,estimated_round_trip_cost_bps:null}],start+7200000);
  assert.equal(a.mean_net_bps,80);assert.equal(a.resolved,1);assert.equal(a.pending,1);assert.equal(a.overdue,1);assert.equal(a.wait_or_veto,1);assert.equal(a.missing_cost,1);
+ assert.equal(a.recent[0].result_status,'MISSING_COST');assert.equal(a.recent[1].result_status,'PENDING');assert.equal(a.recent[2].result_status,'NO_TRADE');assert.equal(a.recent[3].resolved_net_bps,80);
 });
 test('non-shadow trades and observations fail closed',()=>{
  const p=point(0);p.live_execution=true;const r=summarize(protocol,[p],[{...trade(100),shadow_only:false}],false,start);

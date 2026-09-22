@@ -1,4 +1,5 @@
 name: Ops Promote Verified Frontier
+# Includes prospective per-decision outcome visibility.
 
 on:
   push:
