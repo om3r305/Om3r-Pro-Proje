@@ -779,3 +779,38 @@ This document records external open-source behaviors studied for Brian. It is no
   - after `SUBMITTED`, a later HALT belongs to the post-submission cancel/kill-switch lifecycle, providing a clean boundary for the next phase.
 - Real Postgres 16 CI covers successful submit, exact and concurrent duplicate submit, missing authorization, risk-head advance, runtime-head advance, dispatch-id conflict and direct mutation denial.
 - Phase76 remains shadow/paper-only; it does not transmit an order to an exchange or broker.
+
+
+## Phase 77 — Fenced Execution Claim + Pre-Execution Kill-Switch Lifecycle
+
+- Brian files:
+  - `brian2026/phase77_execution_claim_lifecycle.py`
+  - `supabase/migrations/202609230945_brian_phase77_execution_claim_lifecycle.sql`
+- This phase introduces no new alpha/trading algorithm. It extends the Phase70 lease/fencing and Phase68 risk-state semantics to the worker-consumption boundary after a Phase76 durable dispatch.
+- Claim ownership:
+  - a `SUBMITTED` dispatch cannot advance into Phase67/71 paper execution until a worker owns a DB-persisted claim;
+  - claims have an independent worker token, monotonically increasing claim fencing token and TTL;
+  - a second worker is blocked while an existing claim is live;
+  - an expired claim can be taken over with a higher claim fence;
+  - claim renewal requires exact runtime lease/fence + worker token + claim fence + an unexpired current claim.
+- Fresh pre-execution risk recheck:
+  - the claim RPC reads the current persisted Phase73 head receipt and the immutable Phase57 cycle body under the same runtime advisory lock;
+  - current `HALTED` cancels a fresh `CYCLE_CREATED` dispatch before paper execution;
+  - current `REDUCING` cancels a fresh cycle only when it still contains an allowed non-reduce-only leg;
+  - current `ACTIVE` with newly blocked/cooldown assets cancels only when the cycle contains allowed new risk for one of those assets;
+  - reduce-only work remains claimable under REDUCING or per-asset cooldown;
+  - missing/malformed risk state fails closed.
+- Crash/resume semantics:
+  - if the current durable journal is already beyond `CYCLE_CREATED`, an expired-worker takeover is `resume_only`; it does not erase or re-run an already-started side effect and instead relies on the Phase67 idempotent recovery/reconciliation path;
+  - if the durable journal is already `COMMITTED`, a claim request recovers terminal `COMPLETED` state without executing again;
+  - if the journal is `ABORTED`, the claim state becomes terminal `CANCELLED_BEFORE_EXECUTION`.
+- Completion semantics:
+  - a worker cannot mark its claim complete merely because local work returned;
+  - completion requires the exact worker/claim fence and a current durable runtime checkpoint whose journal stage for that cycle is `COMMITTED`;
+  - completion retries are idempotent;
+  - if completion metadata is lost after the durable runtime commit, a later claim request reconstructs `COMPLETED` from the committed journal rather than re-executing.
+- Python supervisor behavior:
+  - Phase76 is split into explicit authorize+submit and advance-submitted boundaries;
+  - `PersistedClaimedRuntimeSupervisor` claims first, advances only when claim ownership is proven, persists a risk cancellation through Phase75's ABORTED path, and calls claim completion only after durable runtime commit.
+- Real Postgres 16 CI covers competing workers, exact re-claim, expired takeover/fencing, HALTED/REDUCING/cooldown cancellation, reduce-only exceptions, resume-only recovery, claim renewal, completion gating/retry, committed recovery and direct mutation denial.
+- Phase77 remains shadow/paper-only and does not transmit orders to an external venue.
