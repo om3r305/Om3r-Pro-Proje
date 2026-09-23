@@ -1257,3 +1257,38 @@ This document records external open-source behaviors studied for Brian. It is no
   - `BRIAN_RUNTIME_LEASE_SECONDS` defaults to 60 and is restricted to 10–300.
 - Red-team coverage includes normal gate delegation/cleanup, idempotent close, gate exceptions, release errors with transport cleanup, stack-assembly failure cleanup, unsafe lease bounds, missing runtime id, generated process owner identity, one-shot failure cleanup, plus Phase71-specific lease release on missing initial runtime, checkpoint-load failure and bootstrap commit conflict.
 - Phase92 remains hard shadow/paper-only and introduces no migration of its own.
+
+
+## Phase 93 — Machine-Readable Recovery Worker Entrypoint
+
+- Brian file:
+  - `brian2026/phase93_recovery_worker_entrypoint.py`
+- Phase93 adds no alpha, SQL, scheduler or live execution. It is the executable one-shot backend entrypoint above the Phase92 lease-owned session.
+- Invocation / input contract:
+  - runnable as `python -m brian2026.phase93_recovery_worker_entrypoint`;
+  - recovery market/risk/mark evidence is supplied as one JSON object through stdin or an explicit `--input` file;
+  - supported input keys are exactly `markets`, `risk_limits_by_asset` and `marks`; unknown fields fail closed;
+  - market snapshots are converted into the existing Phase46 order-book model and must preserve non-crossed bid/ask ordering;
+  - risk limits are converted into the existing Phase56 instrument limits; marks must be finite/positive;
+  - empty input is permitted only as an empty evidence set, so an IDLE probe can succeed while any actual recovery that needs market/mark evidence still fails through the existing Phase56/57/84 contracts.
+- Worker controls:
+  - `max_items` is bounded to 1–32;
+  - recovery claim TTL is bounded to 10–300 seconds;
+  - recovery intent TTL is bounded to 10–900 seconds;
+  - an explicit recovery worker token may be supplied, otherwise a process-unique Phase93 token is generated;
+  - no initial Phase70 runtime is implicitly invented; the Phase92/71 bootstrap still requires an existing durable head unless the caller explicitly supplies an initial runtime through the lower-level API.
+- Machine output:
+  - success/nonterminal results emit exactly one bounded JSON status line containing runtime id, Phase89 status, admission status/barrier identity, processed-item count and step outcomes;
+  - exit 0 means `READY_FOR_NORMAL_WORK`;
+  - exit 20 means recovery remains blocked/nonterminal;
+  - exit 21 means manual review is required;
+  - exit 22 means the bounded recovery budget was exhausted;
+  - exit 30 means invocation/input/config parsing failed;
+  - exit 40 means lease/transport/runtime/durable recovery execution failed.
+- Error safety:
+  - CLI parser errors are converted to JSON exit-30 responses instead of unstructured `argparse` termination;
+  - runtime `ValueError` and other post-bootstrap failures remain worker errors rather than being mislabeled as input errors;
+  - modern, legacy and hosted Supabase secret values are redacted from worker diagnostics before stderr JSON is emitted;
+  - Phase92 remains responsible for lease + HTTP cleanup on every normal/exceptional exit.
+- Red-team tests cover exact market/risk/mark parsing, malformed/crossed books, invalid marks, one-line READY output, block/manual/budget exit-code separation, safe empty-TTY IDLE probes, invalid JSON/bounds, runtime-vs-input error classification, secret redaction, generated worker-token identity, file-vs-stdin precedence and machine-readable unknown-argument errors.
+- Phase93 remains hard shadow/paper-only and introduces no migration of its own.
