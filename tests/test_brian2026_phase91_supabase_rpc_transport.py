@@ -173,7 +173,7 @@ def test_remote_plain_http_project_url_is_rejected_but_localhost_is_allowed() ->
     assert config.project_url.startswith("http://127.0.0.1")
 
 
-def test_only_phase81_to_phase87_recovery_rpc_surface_is_allowed() -> None:
+def test_only_exact_phase70_and_phase81_to_phase87_rpc_surface_is_allowed() -> None:
     transport = SupabaseRecoveryRpcTransport(
         config=SupabaseRecoveryRpcConfig(
             project_url=URL,
@@ -182,6 +182,11 @@ def test_only_phase81_to_phase87_recovery_rpc_surface_is_allowed() -> None:
         api_key=SECRET,
         client=_client(lambda request: httpx.Response(200, json={"ok": True})),
     )
+    assert transport(
+        "brian_read_shadow_runtime_checkpoint",
+        {"p_runtime_id": "runtime-91"},
+    ) == {"ok": True}
+
     with pytest.raises(SupabaseRecoveryRpcConfigurationError, match="not allowed"):
         transport("dangerous_admin_rpc", {})
 
