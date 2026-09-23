@@ -1020,7 +1020,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - Phase61 applies the already-validated reduce-only recovery cycle;
   - the existing local projection + Phase50 reconciliation + Phase60 authoritative ledger + Phase67 journal flow is reused unchanged;
   - intermediate `PAPER_APPLIED`, `LOCAL_PROJECTED`, `RECONCILIATION_REQUIRED`, `RECONCILED` or `ABORTED` progress can be checkpointed under the same current recovery claim fence;
-  - the recovery claim becomes `COMPLETED` atomically only when the recovery cycle's journal stage is `COMMITTED` and the Phase60 head equals that recovery cycle's `RECONCILED_COMMIT.after_state_id`;
+  - the recovery claim becomes `COMPLETED` atomically only when the recovery cycle's journal stage is `COMMITTED` and the Phase60 head equals that recovery cycle's `RECONCILED_COMMIT.after_state_id`; Phase84 now stops at `RECOVERY_COMMITTED_PENDING_AUDIT` and leaves the recovery claim open for Phase85's authoritative quantity/exposure audit;
   - exact lost-response retry of the final atomic transaction returns `DUPLICATE_CURRENT`.
 - Phase82 hardening introduced with Phase84:
   - recovery claims now carry nullable durable-progress anchors;
@@ -1035,3 +1035,38 @@ This document records external open-source behaviors studied for Brian. It is no
   - malformed/missing JSON fields fail closed rather than passing through PostgreSQL three-valued NULL logic.
 - Real Postgres 16 CI covers durable recovery write-ahead, progress-anchor resume through Phase82 renewal, final atomic claim completion, final lost-response retry, invalid/non-reduce-only recovery rejection, concurrent exact write-ahead commit, stale-worker rejection and direct event-table mutation denial.
 - Phase84 SQL remains draft/undeployed outside `supabase/migrations`. At rollout freeze it must be converted with `supabase migration new` and the entire real-Postgres suite rerun before any deployment.
+
+
+## Phase 85 — Authoritative Recovery Completion Audit
+
+- Brian files:
+  - `brian2026/phase85_recovery_completion_audit.py`
+  - `brian2026/sql/phase85_recovery_completion_audit.sql`
+- Phase85 is the only boundary that may turn a Phase84 terminal recovery checkpoint into a `COMPLETED` recovery claim.
+- Evidence chain:
+  - current Phase70 runtime lease/fence must still own the runtime;
+  - the current runtime version/head/checkpoint must exactly equal the Phase84 recovery progress anchors stored on the Phase82 claim;
+  - the recovery journal must end in `COMMITTED`;
+  - an immutable Phase84 `RECOVERY_COMMITTED_PENDING_AUDIT` event must exist for the exact recovery cycle/checkpoint;
+  - Phase83 STARTED recovery legs, Phase63 final paper checkpoint and Phase60 final authoritative state are all required.
+- Quantity reconstruction:
+  - Phase85 reads the final Phase63 `final_positions` quantity for each recovery asset;
+  - it sums only fills whose `cycle_id` equals the exact recovery cycle and reconstructs pre-recovery quantity as `final_quantity - recovery_delta_quantity`;
+  - the reconstructed pre-recovery paper direction must match the Phase83 current direction;
+  - recovery fills must oppose existing exposure;
+  - recovery fill quantity may not exceed the pre-recovery paper position;
+  - final paper position may be flat or preserve the original direction, but may never flip;
+  - final paper absolute quantity must be strictly smaller than reconstructed pre-recovery quantity.
+- Phase60 cross-check:
+  - the final authoritative position weight may be absent/zero or preserve the original direction;
+  - an opposite-sign final authoritative weight fails certification even if raw paper quantity looked safe.
+- Weight target handling:
+  - exact target-weight equality is recorded as evidence but is not the safety gate because fees, slippage and mark-to-market equity can legitimately alter final portfolio-weight percentages;
+  - the hard completion gate is actual paper quantity reduction without direction flip, backed by a fully reconciled Phase60 state.
+- Completion:
+  - passing audits are stored in append-only `brian_shadow_recovery_completion_certificates`;
+  - the claim becomes `COMPLETED` atomically in the same transaction as certificate creation;
+  - `completion_ref` remains the exact terminal Phase84 checkpoint id, so an exact Phase84 lost-response retry after certification is still recognized;
+  - failed audits leave the claim open and emit immutable failure evidence instead of declaring success.
+- Real Postgres 16 CI covers valid long reduction, valid short reduction, flattening, over-reduction/direction flip, missing recovery fills, Phase60 sign mismatch, checkpoint/head drift, claim-progress drift, exact duplicate certification, concurrent certification and direct certificate-history mutation denial.
+- Phase85 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the entire real-Postgres suite rerun before deployment.
