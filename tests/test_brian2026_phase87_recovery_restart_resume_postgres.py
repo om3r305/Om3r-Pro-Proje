@@ -526,6 +526,7 @@ def test_idle_without_unresolved_after_start_cancel():
             "has_work": False,
             "status": "IDLE",
             "runtime_id": runtime_id,
+            "work_state": "IDLE",
         }
     finally:
         conn.close()
