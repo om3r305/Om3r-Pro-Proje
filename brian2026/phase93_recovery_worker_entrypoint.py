@@ -33,6 +33,11 @@ class RecoveryWorkerEntrypointError(RuntimeError):
     pass
 
 
+class _JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise RecoveryWorkerEntrypointError(f"invalid worker arguments: {message}")
+
+
 @dataclass(frozen=True, slots=True)
 class RecoveryWorkerInput:
     markets: Mapping[str, ExecutionMarketInput]
@@ -321,26 +326,26 @@ def main(
     worker_runner=run_recovery_startup_once_from_env,
     clock=time.time,
 ) -> int:
-    parser = argparse.ArgumentParser(
-        description="Brian shadow recovery one-shot backend worker"
-    )
-    parser.add_argument(
-        "--input",
-        help="JSON file with markets/risk_limits_by_asset/marks; defaults to stdin",
-    )
-    parser.add_argument("--max-items", type=int, default=None)
-    parser.add_argument("--claim-seconds", type=int, default=None)
-    parser.add_argument("--intent-ttl-seconds", type=int, default=None)
-    parser.add_argument("--worker-token", default=None)
-    parser.add_argument("--source-ref", default="phase93:backend-worker")
-    args = parser.parse_args(argv)
-
     source = os.environ if env is None else env
     input_stream = sys.stdin if stdin is None else stdin
     output_stream = sys.stdout if stdout is None else stdout
     error_stream = sys.stderr if stderr is None else stderr
 
     try:
+        parser = _JsonArgumentParser(
+            description="Brian shadow recovery one-shot backend worker"
+        )
+        parser.add_argument(
+            "--input",
+            help="JSON file with markets/risk_limits_by_asset/marks; defaults to stdin",
+        )
+        parser.add_argument("--max-items", type=int, default=None)
+        parser.add_argument("--claim-seconds", type=int, default=None)
+        parser.add_argument("--intent-ttl-seconds", type=int, default=None)
+        parser.add_argument("--worker-token", default=None)
+        parser.add_argument("--source-ref", default="phase93:backend-worker")
+        args = parser.parse_args(argv)
+
         max_items = _positive_int(
             args.max_items
             if args.max_items is not None
