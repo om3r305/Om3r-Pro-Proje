@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 import uuid
@@ -285,6 +286,31 @@ def _error_payload(kind: str, message: str) -> dict[str, object]:
     }
 
 
+def _safe_worker_error(exc: Exception, env: Mapping[str, str]) -> str:
+    message = str(exc)
+    secrets: list[str] = []
+    for name in ("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"):
+        value = env.get(name, "").strip()
+        if value:
+            secrets.append(value)
+    raw_keys = env.get("SUPABASE_SECRET_KEYS", "").strip()
+    if raw_keys:
+        try:
+            parsed = json.loads(raw_keys)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, Mapping):
+            secrets.extend(
+                str(value)
+                for value in parsed.values()
+                if isinstance(value, str) and value
+            )
+    for secret in sorted(set(secrets), key=len, reverse=True):
+        message = message.replace(secret, "<redacted>")
+    message = re.sub(r"sb_secret_[A-Za-z0-9._-]+", "<redacted>", message)
+    return f"{type(exc).__name__}: {message[:420]}"
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -350,25 +376,6 @@ def main(
         worker_input = parse_worker_input(
             _load_json_input(args.input, input_stream)
         )
-        receipt = worker_runner(
-            max_items=max_items,
-            recovery_worker_token=worker_token,
-            recovery_claim_seconds=claim_seconds,
-            recovery_markets=worker_input.markets,
-            recovery_risk_limits_by_asset=worker_input.risk_limits_by_asset,
-            recovery_ttl_seconds=intent_ttl,
-            marks=worker_input.marks,
-            observed_at=float(clock()),
-            source_ref=str(args.source_ref),
-            env=source,
-        )
-        payload = _summary(receipt)
-        print(
-            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
-            file=output_stream,
-            flush=True,
-        )
-        return _exit_code(receipt)
     except (
         RecoveryWorkerEntrypointError,
         ValueError,
@@ -383,17 +390,39 @@ def main(
             flush=True,
         )
         return EXIT_INPUT_ERROR
+
+    try:
+        receipt = worker_runner(
+            max_items=max_items,
+            recovery_worker_token=worker_token,
+            recovery_claim_seconds=claim_seconds,
+            recovery_markets=worker_input.markets,
+            recovery_risk_limits_by_asset=worker_input.risk_limits_by_asset,
+            recovery_ttl_seconds=intent_ttl,
+            marks=worker_input.marks,
+            observed_at=float(clock()),
+            source_ref=str(args.source_ref),
+            env=source,
+        )
     except Exception as exc:
-        # Runtime, lease, transport and durable recovery failures are all
-        # machine-visible hard failures. Never serialize repr/traceback because
-        # transport exceptions may chain objects that contain secret headers.
-        payload = _error_payload("WORKER_ERROR", f"{type(exc).__name__}: {str(exc)}")
+        # Runtime, lease, transport and durable recovery failures are hard
+        # machine-visible failures. Redact configured and modern Supabase
+        # secret forms before emitting the bounded diagnostic.
+        payload = _error_payload("WORKER_ERROR", _safe_worker_error(exc, source))
         print(
             json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
             file=error_stream,
             flush=True,
         )
         return EXIT_WORKER_ERROR
+
+    payload = _summary(receipt)
+    print(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
+        file=output_stream,
+        flush=True,
+    )
+    return _exit_code(receipt)
 
 
 if __name__ == "__main__":
