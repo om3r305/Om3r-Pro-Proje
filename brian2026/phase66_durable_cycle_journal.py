@@ -261,6 +261,10 @@ class DurableCycleJournal:
     def entries(self) -> tuple[CycleJournalEntry, ...]:
         return tuple(self._entries)
 
+    @property
+    def cycle_ids(self) -> tuple[str, ...]:
+        return tuple(sorted(self._cycles))
+
     def cycle(self, cycle_id: str) -> ShadowExecutionCycle:
         try:
             return self._cycles[cycle_id]
