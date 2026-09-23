@@ -167,7 +167,7 @@ def test_terminal_checkpoint_contract_requires_committed_recovery_stage() -> Non
         current_version=7,
         fencing_token=1,
         recovery_claim_fencing_token=3,
-        status="RECOVERY_COMPLETED",
+        status="RECOVERY_COMMITTED_PENDING_AUDIT",
         committed=True,
         duplicate=False,
         terminal=True,
