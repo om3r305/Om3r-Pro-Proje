@@ -411,3 +411,26 @@ This document records external open-source behaviors studied for Brian. It is no
   - cycle evidence is append-only and content-addressed; identical repeats are idempotent while conflicting reuse of a cycle id is rejected;
   - the ledger evaluates by calling the real Phase 49 `evaluate_shadow_paper_parity` implementation rather than recreating parity thresholds.
 - Phase 62 remains shadow/paper evidence only and exposes no execution transport.
+
+
+## Phase 63 — Crash-Safe Paper/Shadow Checkpoint + Recovery
+
+- Brian file: `brian2026/phase63_crash_recovery.py`
+- Reference project: NautilusTrader cache persistence and event-store replay (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - persisted cache state can be restored before execution reconciliation;
+  - execution/event state is retained in durable sequence order;
+  - snapshot anchors are content-hashed and recovery replays the tail after the snapshot;
+  - replay divergence, missing payloads and invalid sequencing are surfaced as recovery errors rather than silently accepted.
+- Brian clean-room adaptation:
+  - Phase 61 exports a content-addressed paper checkpoint containing ordered fills, applied-cycle receipts, cash, state version and final positions;
+  - paper restore **replays fills from starting cash** and recomputes positions instead of trusting serialized cash/position fields;
+  - every fill id and cycle receipt id is recomputed and verified;
+  - cycle state-version ordering, cash-before/cash-after continuity, fill ownership and fill ordering are validated;
+  - orphan, reordered, duplicated or content-modified fills fail recovery;
+  - Phase 60 ledger manifests are restored by rebuilding content-addressed states and transitions, verifying ledger hash, genesis payload hash, transition ids, sequence order, previous-transition links and state continuity;
+  - recovery rebuilds the cycle idempotency indexes and pending-cycle state, so a process crash does not permit a duplicate cycle to execute again;
+  - a runtime checkpoint verifies the paper venue and shadow ledger use the same account identity;
+  - the critical crash window where a paper fill exists but Phase 50 reconciliation/Phase 60 commit has not yet completed is preserved as a pending cycle and can be reconciled after restart.
+- Phase 63 recovery is entirely local shadow/paper state recovery; no live adapter, API key or real-money execution surface is introduced.
