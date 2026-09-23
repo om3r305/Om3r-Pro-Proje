@@ -154,6 +154,7 @@ def run_governed_integrated_shadow_execution_cycle(
     barrier: TripleBarrierPolicy = TripleBarrierPolicy(),
     latency: StaticLatencyModel = StaticLatencyModel(),
     fill_models_by_asset: Mapping[str, ProbabilisticFillModel] | None = None,
+    blocked_new_risk_assets: Sequence[str] = (),
 ) -> GovernedShadowExecution:
     plan = compile_from_integrated_decision(
         decision,
