@@ -111,6 +111,8 @@ class CancelRecoveryDirectiveReceipt:
     unsafe_assets: tuple[Mapping[str, object], ...] = ()
     journal_stage: str | None = None
     reason: str | None = None
+    foreign_cycle_id: str | None = None
+    foreign_cycle_stage: str | None = None
     schema_version: str = PHASE81_SCHEMA_VERSION
     shadow_only: bool = True
     live_execution: bool = False
@@ -306,6 +308,7 @@ class CancelRecoveryDirectiveStore:
         if status in {
             "NO_CANCEL_REQUEST",
             "WAIT_ORIGINAL_COMMIT",
+            "FOREIGN_CYCLE_ACTIVE",
             "HEAD_MOVED",
             "LEASE_LOST",
             "RUNTIME_VERSION_CONFLICT",
@@ -389,6 +392,15 @@ class CancelRecoveryDirectiveStore:
                 None if row.get("journal_stage") is None else str(row.get("journal_stage"))
             ),
             reason=None if row.get("reason") is None else str(row.get("reason")),
+            foreign_cycle_id=_optional_hash(
+                row.get("foreign_cycle_id"),
+                "foreign_cycle_id",
+            ),
+            foreign_cycle_stage=(
+                None
+                if row.get("foreign_cycle_stage") is None
+                else str(row.get("foreign_cycle_stage"))
+            ),
         )
 
         if receipt.fencing_token != lease.fencing_token:
@@ -464,6 +476,29 @@ class PersistedRecoveryObligationSupervisor:
             expected_runtime_version=supervisor.persisted_version,
         )
 
+        quarantined_foreign_cycle = False
+        if recovery.status == "FOREIGN_CYCLE_ACTIVE":
+            if (
+                recovery.foreign_cycle_id is not None
+                and recovery.foreign_cycle_stage == "CYCLE_CREATED"
+            ):
+                phase75 = (
+                    self.execution_supervisor
+                    .claimed_supervisor
+                    .dispatched_supervisor
+                    .governed_supervisor
+                )
+                phase75.abort_authorized_cycle(
+                    cycle_id=recovery.foreign_cycle_id,
+                    reason="phase86:recovery_admission_interlock",
+                )
+                quarantined_foreign_cycle = True
+                recovery = self.recovery_store.prepare(
+                    supervisor.lease,
+                    cycle_id=execution.claim.cycle_id,
+                    expected_runtime_version=supervisor.persisted_version,
+                )
+
         if recovery.status == "LEASE_LOST":
             supervisor._valid = False
             raise PersistedRuntimeLeaseError(
@@ -492,6 +527,11 @@ class PersistedRecoveryObligationSupervisor:
                 outcome = f"{outcome}_NO_RECOVERY_REQUIRED"
         elif recovery.status == "WAIT_ORIGINAL_COMMIT":
             outcome = f"{outcome}_RECOVERY_WAIT_ORIGINAL_COMMIT"
+        elif recovery.status == "FOREIGN_CYCLE_ACTIVE":
+            outcome = f"{outcome}_RECOVERY_WAIT_FOREIGN_CYCLE"
+
+        if quarantined_foreign_cycle:
+            outcome = f"{outcome}_FOREIGN_CYCLE_ABORTED"
 
         return RecoveryObligationExecutionStep(
             execution=execution,
