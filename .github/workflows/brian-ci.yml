@@ -169,4 +169,5 @@ jobs:
           tests/test_brian2026_control_center_postgres.py
           tests/test_brian2026_l2_capture_postgres.py
           tests/test_brian2026_phase70_durable_runtime_postgres.py
+          tests/test_brian2026_phase73_operational_risk_postgres.py
           -v
