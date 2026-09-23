@@ -997,3 +997,41 @@ This document records external open-source behaviors studied for Brian. It is no
   - HALTED remains a non-terminal wait and cannot cross STARTED.
 - Real Postgres 16 CI covers first STARTED, exact retry, concurrent duplicate race, wrong worker/fence, HALTED after claim, runtime/head movement, malformed reduce-only evidence, expired-claim takeover/resume and direct STARTED-history mutation denial.
 - Phase83 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the full Postgres suite rerun.
+
+
+## Phase 84 — Recovery Execution + Claim-Fenced Durable Checkpoint
+
+- Brian files:
+  - `brian2026/phase84_recovery_execution_checkpoint.py`
+  - `brian2026/sql/phase84_recovery_execution_checkpoint.sql`
+- Phase84 performs the first actual post-cancel recovery paper execution, but still remains strictly shadow/paper-only and never crosses into live execution.
+- Execution path:
+  - Phase83 STARTED remains mandatory;
+  - the current Phase82 recovery claim is renewed before recovery simulation and current risk is re-read;
+  - recovery is compiled only into Phase55 `RiskReductionIntent` objects;
+  - Phase56 independently revalidates every leg as reduce-only under current `ACTIVE`/`REDUCING` risk;
+  - Phase57 produces the execution cycle using explicit execution-market snapshots;
+  - any denied leg, pending reversal, non-reduce-only receipt, missing execution receipt, non-FILLED simulation or side/target drift aborts Phase84 before the paper venue is touched;
+  - the recovery cycle's full CYCLE_CREATED body is committed first through a recovery-claim-fenced Phase70 checkpoint;
+  - the recovery claim stores `recovery_cycle_id`, progress runtime version, progress Phase60 head and progress checkpoint id so a crash/restart can resume authorized recovery progress without mistaking it for unrelated head movement;
+  - the claim is renewed and current risk is rechecked again after durable write-ahead and immediately before Phase61 paper application;
+  - a HALTED risk at that boundary leaves the durable recovery cycle at write-ahead only and returns a wait state with no paper side effect.
+- Durable paper/reconciliation path:
+  - Phase61 applies the already-validated reduce-only recovery cycle;
+  - the existing local projection + Phase50 reconciliation + Phase60 authoritative ledger + Phase67 journal flow is reused unchanged;
+  - intermediate `PAPER_APPLIED`, `LOCAL_PROJECTED`, `RECONCILIATION_REQUIRED`, `RECONCILED` or `ABORTED` progress can be checkpointed under the same current recovery claim fence;
+  - the recovery claim becomes `COMPLETED` atomically only when the recovery cycle's journal stage is `COMMITTED` and the Phase60 head equals that recovery cycle's `RECONCILED_COMMIT.after_state_id`;
+  - exact lost-response retry of the final atomic transaction returns `DUPLICATE_CURRENT`.
+- Phase82 hardening introduced with Phase84:
+  - recovery claims now carry nullable durable-progress anchors;
+  - initial claims still anchor to the immutable Phase81 source runtime/head;
+  - once Phase84 advances the runtime, claim/renew validation anchors to the last Phase84 progress checkpoint instead;
+  - unrelated runtime/head movement still fails closed;
+  - claim existence is stored in an explicit boolean rather than relying on PL/pgSQL `FOUND` after later risk queries.
+- SQL validation:
+  - recovery cycle assets must map one-to-one to Phase83 immutable recovery legs;
+  - duplicate assets are rejected;
+  - every item must have an allowed reduce-only receipt, a non-null projected target matching the Phase83 leg, and a fully FILLED execution receipt on the correct side;
+  - malformed/missing JSON fields fail closed rather than passing through PostgreSQL three-valued NULL logic.
+- Real Postgres 16 CI covers durable recovery write-ahead, progress-anchor resume through Phase82 renewal, final atomic claim completion, final lost-response retry, invalid/non-reduce-only recovery rejection, concurrent exact write-ahead commit, stale-worker rejection and direct event-table mutation denial.
+- Phase84 SQL remains draft/undeployed outside `supabase/migrations`. At rollout freeze it must be converted with `supabase migration new` and the entire real-Postgres suite rerun before any deployment.
