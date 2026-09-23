@@ -1530,3 +1530,28 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team coverage includes no-op WAIT/HOLD behavior, persisted risk-head identity/state validation, Phase54-derived confidence/evidence lineage, exact Phase60 weights/equity/cash binding, stale-decision rejection, mark coverage, risk-head race propagation, Phase69 risk-id drift, zero-item no-op behavior, shadow/live boundaries and execution input bounds.
 - Phase101 remains hard shadow/paper-only and introduces no migration of its own.
 
+## Phase 102 — Grounded Decision Worker Cycle
+
+- Brian file:
+  - `brian2026/phase102_grounded_decision_worker_cycle.py`
+- Phase102 adds no new alpha model, SQL, scheduler, exchange transport or live execution. It closes the normal-shadow composition gap by running the existing Phase43→44→52→53→54 decision producer from prefetched evidence and then passing the resulting decision into Phase101 under the already-recovered Phase100 runtime.
+- Authoritative account inputs:
+  - callers do not provide current portfolio weights, equity or available cash;
+  - all three are read from the exact Phase60 head owned by the Phase100/92 runtime;
+  - the Phase60 `state_id` is captured before Phase54 and re-read after Phase54 completes;
+  - if the account head changes while the decision is being built, Phase101 is never called.
+- Decision snapshot integrity:
+  - the requested decision timestamp cannot precede the authoritative Phase60 head;
+  - the returned Phase54 timestamp must equal the requested snapshot time;
+  - the returned Phase54 current weights must equal the captured Phase60 weights;
+  - malformed pipeline ids, live/non-shadow decisions and automatic promotion fail closed.
+- Real decision path:
+  - `run_integrated_shadow_decision` remains the default producer, preserving the real Phase43 grounded analyst → Phase44 portfolio → Phase52 covariance → Phase53 turnover contracts;
+  - Phase102 forwards the completed Phase54 decision to Phase101, which derives grounded execution confidence/evidence, binds the current persisted Phase73 risk head and invokes Phase69;
+  - Phase101/100/99 then retain the Phase86 recovery gate and Phase75/76/77/79/80 durable execution authority.
+- Inputs that are still explicit:
+  - expected edge in basis points remains explicit because Phase54 does not contain a bps-return estimate and Phase102 does not synthesize one;
+  - execution market snapshots, instrument risk limits and authoritative marks remain explicit point-in-time inputs.
+- Red-team coverage includes exact Phase60 weight/equity/cash forwarding, caller inability to override account state, account-head mutation during Phase54, stale timestamps, Phase54 output timestamp/weight/pipeline drift, live/auto-promotion rejection, Phase101 WAIT/HOLD propagation, cross-worker composition, missing/invalid Phase60 head and worker closure.
+- Phase102 remains hard shadow/paper-only and introduces no migration of its own.
+
