@@ -430,6 +430,29 @@ class ShadowRuntimeCheckpoint:
         payload["checkpoint_id"] = self.checkpoint_id
         return payload
 
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "ShadowRuntimeCheckpoint":
+        raw = dict(payload)
+        expected_id = str(raw.pop("checkpoint_id"))
+        paper_raw = raw.get("paper")
+        ledger_raw = raw.get("shadow_ledger_manifest")
+        if not isinstance(paper_raw, Mapping) or not isinstance(ledger_raw, Mapping):
+            raise RuntimeRecoveryError("runtime checkpoint payload is missing paper/ledger state")
+        checkpoint = cls(
+            paper=PaperVenueCheckpoint.from_dict(paper_raw),
+            shadow_ledger_manifest=dict(ledger_raw),
+            pending_cycle_id=(
+                None
+                if raw.get("pending_cycle_id") is None
+                else str(raw["pending_cycle_id"])
+            ),
+            schema_version=str(raw.get("schema_version", PHASE63_SCHEMA_VERSION)),
+            live_execution=bool(raw.get("live_execution", False)),
+        )
+        if checkpoint.checkpoint_id != expected_id:
+            raise RuntimeRecoveryError("runtime checkpoint content hash mismatch")
+        return checkpoint
+
 
 def create_runtime_checkpoint(
     ledger: ShadowStateLedger,
