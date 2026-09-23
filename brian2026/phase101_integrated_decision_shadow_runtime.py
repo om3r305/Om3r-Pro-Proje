@@ -212,6 +212,7 @@ class IntegratedDecisionShadowRuntime:
         available_cash_usd: float,
         markets: Mapping[str, ExecutionMarketInput],
         risk_limits_by_asset: Mapping[str, InstrumentRiskLimits],
+        marks: Mapping[str, float],
         worker_token: str,
         claim_seconds: int,
         observed_at: float,
@@ -275,6 +276,10 @@ class IntegratedDecisionShadowRuntime:
             expected_edge_bps_by_asset,
             label="expected_edge_bps_by_asset",
         )
+        clean_marks = _finite_mapping(
+            marks,
+            label="marks",
+        )
         confidence, evidence = _grounded_execution_metadata(decision)
 
         stored = self.risk_store.load(runtime_id=self.runtime_id)
@@ -322,10 +327,7 @@ class IntegratedDecisionShadowRuntime:
             governed,
             worker_token=worker_token,
             claim_seconds=claim_seconds,
-            marks={
-                str(asset): float(market.reference_price)
-                for asset, market in markets.items()
-            },
+            marks=clean_marks,
             observed_at=float(observed_at),
             source_ref=source_ref,
         )
