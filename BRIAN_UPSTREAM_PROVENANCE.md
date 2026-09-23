@@ -224,3 +224,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - if mandatory risk reduction alone exceeds the turnover limit, the receipt records that the limit was exceeded only for risk reduction;
   - output remains a shadow rebalance plan with no order transport.
 - The hard-risk bypass is a Brian safety extension; it is not claimed to be Qlib's optimizer behavior.
+
+
+## Phase 54 — Integrated Grounded Shadow Decision Pipeline
+
+- Brian file: `brian2026/phase54_integrated_shadow_decision.py`
+- This phase introduces no new upstream algorithm. It composes the already provenance-tracked contracts from:
+  - Phase 43 / TradingAgents: point-in-time grounded evidence and regime-aware specialist routing.
+  - Phase 44 / ai-hedge-fund: conviction blending and independent hard risk clamps.
+  - Phase 52 / Qlib: shrunk covariance portfolio-risk overlay.
+  - Phase 53 / Qlib: L1 turnover-constrained rebalance planning.
+- Integration behavior:
+  - each asset is analyzed through the real Phase 43 implementation, not a duplicate simplified analyst path;
+  - grounded claims are converted through the real Phase 44 signal contract;
+  - the resulting portfolio book is passed unchanged into the real Phase 52 covariance overlay;
+  - covariance-approved target weights are passed into the real Phase 53 turnover planner;
+  - deterministic pipeline identity includes the actual intermediate receipts;
+  - missing grounded directional evidence fails to `WAIT_NO_GROUNDED_SIGNALS` and preserves the current book rather than liquidating because a source was unavailable;
+  - an asset intentionally absent from an otherwise valid new target is reduced through the rebalance stage;
+  - no execution/order transport is exposed in Phase 54.
+- Phase 54 exists specifically to prevent "feature islands": it verifies that the proven mechanisms operate through one typed end-to-end shadow decision path.
