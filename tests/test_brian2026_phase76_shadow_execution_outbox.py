@@ -124,6 +124,7 @@ def test_submitted_response_must_echo_immutable_authorization_anchors() -> None:
         "LEASE_LOST",
         "RUNTIME_VERSION_CONFLICT",
         "RISK_VERSION_CONFLICT",
+        "RECOVERY_BARRIER",
     ],
 )
 def test_fail_closed_dispatch_statuses_remain_non_submitted(status: str) -> None:
@@ -305,6 +306,32 @@ def test_risk_change_before_dispatch_aborts_without_paper_side_effect() -> None:
     assert governed.runtime_supervisor.runtime.projector.state_version == 0
     assert governed.runtime_supervisor.valid is True
 
+
+
+def test_recovery_barrier_before_dispatch_aborts_without_paper_side_effect() -> None:
+    auth = _authorization()
+    governed = _GovernedSupervisor(auth)
+    outbox = _Outbox(
+        _dispatch_receipt(status="RECOVERY_BARRIER", submitted=False),
+        governed,
+    )
+    wrapper = PersistedDispatchedRuntimeSupervisor(
+        governed_supervisor=governed,
+        outbox=outbox,
+    )
+
+    step = wrapper.process_governed_cycle(
+        object(),
+        marks={},
+        observed_at=1.0,
+        source_ref="phase86-recovery-barrier",
+    )
+    assert step.outcome == "ABORTED_RECOVERY_BARRIER"
+    assert governed.aborted is True
+    assert governed.runtime_supervisor.runtime.journal.stage == "ABORTED"
+    assert governed.runtime_supervisor.runtime.venue.state_version == 0
+    assert governed.runtime_supervisor.runtime.projector.state_version == 0
+    assert governed.runtime_supervisor.valid is True
 
 def test_runtime_conflict_before_dispatch_invalidates_supervisor() -> None:
     auth = _authorization()
