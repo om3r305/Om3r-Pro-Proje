@@ -303,3 +303,22 @@ This document records external open-source behaviors studied for Brian. It is no
   - HALTED/REDUCING behavior is inherited from Phase 56 rather than recreated in the integration layer;
   - account state is explicitly marked unmutated because simulated fills are evidence, not venue reconciliation.
 - Phase 57 remains fully shadow-only and cannot contact an exchange.
+
+
+## Phase 58 — CPCV / PBO / Deflated Sharpe Advanced Overfit Audit
+
+- Brian file: `brian2026/phase58_advanced_overfit_audit.py`
+- Behavioral references:
+  - Hudson & Thames mlfinlab CPCV/PurgedKFold public implementation lineage, inspected through historical fork `forensiclab/mlfinlab` revision `c87e19c59ad7169550d301cbddce7b89d3928d74`. License metadata is not sufficiently clear for reuse, therefore **behavior/formulas only; no source copied**.
+  - `tulinette/backtest-overfitting-lab` revision `1a4440f4e28569327daf57909914a6ded2843270` (MIT) for an independently implemented CSCV-PBO and Deflated Sharpe reference plus published-paper citations.
+- Upstream behavior inspected:
+  - CPCV divides chronological samples into contiguous blocks, evaluates combinations of test blocks, purges train observations whose information intervals overlap test-label intervals, and applies a forward embargo. CPCV(6,2) yields 15 combinations and 5 backtest paths.
+  - CSCV-PBO selects the best in-sample Sharpe strategy for each symmetric split, ranks that same strategy out-of-sample, converts the relative OOS rank to a logit, and defines PBO as the fraction at/below the OOS median.
+  - Deflated Sharpe uses the Bailey/López de Prado expected-maximum-Sharpe benchmark across tried variants, then evaluates the selected strategy with the non-normality-adjusted probabilistic Sharpe ratio.
+- Brian clean-room adaptation:
+  - CPCV accepts explicit sample information intervals and purges any overlap before training; embargo is explicit and auditable per split;
+  - PBO accepts a time x strategy-variant return matrix, supports deterministic split subsampling, and emits IS/OOS winner diagnostics;
+  - DSR records best variant, naive PSR, selection-bias benchmark, skew, raw kurtosis and deflated probability;
+  - an advanced robustness policy can require minimum CPCV paths, maximum PBO and minimum DSR probability;
+  - a passing result is only `ADVANCED_ROBUSTNESS_CANDIDATE`: research-only, no auto-promotion and no execution.
+- Phase 58 does not replace Phase 41; it adds multiple-testing/selection-bias diagnostics that Monte Carlo path shuffling alone cannot detect.
