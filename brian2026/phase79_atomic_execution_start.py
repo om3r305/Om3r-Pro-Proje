@@ -80,12 +80,26 @@ class AtomicExecutionStartReceipt:
             raise ValueError(f"{self.status} requires started=true")
         if self.status == "STARTED_ALREADY" and not self.duplicate:
             raise ValueError("STARTED_ALREADY requires duplicate=true")
+        if self.status == "STARTED_RESUME" and not self.resume_only:
+            raise ValueError("STARTED_RESUME requires resume_only=true")
+        if self.status == "STARTED" and self.resume_only:
+            raise ValueError("fresh STARTED cannot be resume_only")
         if self.status in {
             "CANCELLED_BEFORE_EXECUTION",
             "ABORTED",
             "COMPLETED",
         } and not self.terminal:
             raise ValueError(f"{self.status} must be terminal")
+        if self.started and (
+            self.risk_version is None
+            or self.risk_receipt_id is None
+            or self.risk_state is None
+            or self.journal_stage is None
+            or self.phase78_status is None
+        ):
+            raise ValueError("STARTED receipt requires complete persisted risk/journal evidence")
+        if self.cancel_requested and not self.reason:
+            raise ValueError("cancel_requested requires a reason")
         if not self.shadow_only or self.live_execution:
             raise ValueError("execution-start receipt must remain shadow-only")
 
@@ -224,7 +238,7 @@ class AtomicExecutionStartStore:
         )
         status = str(row.get("status", ""))
 
-        return AtomicExecutionStartReceipt(
+        receipt = AtomicExecutionStartReceipt(
             runtime_id=lease.runtime_id,
             cycle_id=claim.cycle_id,
             dispatch_id=str(row.get("dispatch_id", claim.dispatch_id)),
@@ -275,6 +289,19 @@ class AtomicExecutionStartStore:
             reason=None if row.get("reason") is None else str(row.get("reason")),
             resume_only=bool(row.get("resume_only", False)),
         )
+        if receipt.dispatch_id != claim.dispatch_id:
+            raise AtomicExecutionStartError(
+                "database STARTED dispatch_id does not match owned claim"
+            )
+        if receipt.fencing_token != lease.fencing_token:
+            raise AtomicExecutionStartError(
+                "database STARTED runtime fencing token does not match lease"
+            )
+        if receipt.claim_fencing_token != claim.claim_fencing_token:
+            raise AtomicExecutionStartError(
+                "database STARTED claim fencing token does not match owned claim"
+            )
+        return receipt
 
     def load(
         self,
