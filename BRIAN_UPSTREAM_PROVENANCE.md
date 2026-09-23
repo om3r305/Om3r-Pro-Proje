@@ -540,3 +540,28 @@ This document records external open-source behaviors studied for Brian. It is no
   - recovery advances journal metadata only from independently restored artifacts; it never infers a side effect from stage order alone.
 - Duplicate retries cannot duplicate paper fills or local position projection because the journal, Phase 60 ledger, Phase 61 paper venue and Phase 64 projector are all content-addressed/idempotent.
 - Phase 67 remains shadow/paper-only with no exchange transport, API-key surface, capital authorization or automatic live activation.
+
+
+## Phase 68 — Operational Risk Governor / Circuit Breaker
+
+- Brian file: `brian2026/phase68_operational_risk_governor.py`
+- Behavioral references:
+  - Freqtrade `freqtrade/freqtrade` revision `06ef422285a11ed293d1990e2bcdc964ed94aac4` (GPL-3.0; **behavior-only clean-room reference, no source copied**).
+  - NautilusTrader `nautechsystems/nautilus_trader` revision `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844` (LGPL-3.0; **behavior-only clean-room reference, no source copied**).
+- Upstream behavior inspected:
+  - Freqtrade `MaxDrawdown` applies a global trading lock when the configured lookback drawdown is **strictly greater than** its allowed threshold.
+  - Freqtrade `StoplossGuard` counts qualifying stop-loss/liquidation exits below a required-profit threshold inside a lookback window and applies a timed trading lock when the configured count is reached.
+  - Freqtrade `CooldownPeriod` blocks pair re-entry for a configured period after a recent closed trade.
+  - NautilusTrader exposes explicit risk-engine trading states and publishes trading-state changes; `HALTED` blocks new submit/modify flow while `REDUCING` is enforced as a risk-reduction-only boundary.
+- Brian clean-room adaptation:
+  - rolling peak-to-trough equity drawdown and window-loss limits can escalate the runtime to `HALTED`;
+  - qualifying stop-loss bursts produce a time-bounded `REDUCING` state instead of opening new risk;
+  - recently closed assets receive per-asset re-entry cooldowns without unnecessarily halting unrelated assets;
+  - consecutive execution failures and repeated reconciliation failures escalate to `REDUCING`;
+  - stale market data, unknown/ambiguous order outcomes and explicit manual halt escalate to `HALTED`;
+  - `HALTED` is latched: clearing the triggering condition is insufficient by itself, and a manual release is required before new risk can resume;
+  - manual release cannot override a severe trigger which is still active;
+  - future-dated health/trade/equity observations are excluded from current-window decisions and a future market-data timestamp is rejected;
+  - every decision emits a deterministic, content-addressed operational-risk receipt with the measured inputs/reasons and blocked-asset set;
+  - the receipt converts directly to the real Phase 56 `PreTradeRiskPolicy`, so `REDUCING` rejects new risk while valid reduce-only intent remains possible, and `HALTED` blocks submissions according to the existing Phase 56 contract.
+- Phase 68 changes no live adapter and cannot authorize capital or exchange execution.
