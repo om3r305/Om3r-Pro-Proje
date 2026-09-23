@@ -29,6 +29,10 @@ create table if not exists public.brian_shadow_recovery_claims (
     risk_state_at_claim is null
     or risk_state_at_claim in ('ACTIVE','REDUCING','HALTED')
   ),
+  recovery_cycle_id text,
+  progress_runtime_version bigint,
+  progress_head_state_id text,
+  progress_checkpoint_id text,
   completed_at timestamptz,
   completion_ref text,
   updated_at timestamptz not null default now(),
@@ -39,6 +43,10 @@ create table if not exists public.brian_shadow_recovery_claims (
   check (length(cancel_risk_receipt_id) = 64),
   check (head_state_id_at_claim is null or length(head_state_id_at_claim) = 64),
   check (risk_receipt_id_at_claim is null or length(risk_receipt_id_at_claim) = 64),
+  check (recovery_cycle_id is null or length(recovery_cycle_id) = 64),
+  check (progress_runtime_version is null or progress_runtime_version > 0),
+  check (progress_head_state_id is null or length(progress_head_state_id) = 64),
+  check (progress_checkpoint_id is null or length(progress_checkpoint_id) = 64),
   check (
     (status = 'CLAIMED'
       and worker_token is not null
@@ -142,6 +150,8 @@ declare
   v_risk_receipt jsonb;
   v_risk_receipt_id text;
   v_risk_state text;
+  v_anchor_runtime_version bigint;
+  v_anchor_head_state_id text;
   v_event text;
   v_claimed boolean := false;
   v_claim_fence bigint;
@@ -297,8 +307,42 @@ begin
     );
   end if;
 
-  if v_runtime_version <> v_directive.source_runtime_version
-     or v_head_state_id is distinct from v_directive.current_state_id then
+  select *
+    into v_claim
+  from public.brian_shadow_recovery_claims
+  where runtime_id = p_runtime_id
+    and dispatch_id = v_directive.dispatch_id
+    and cancel_risk_receipt_id = v_directive.cancel_risk_receipt_id
+  for update;
+
+  if found and v_claim.status = 'COMPLETED' then
+    return jsonb_build_object(
+      'claimed', false,
+      'terminal', true,
+      'status', 'COMPLETED',
+      'runtime_id', p_runtime_id,
+      'dispatch_id', v_directive.dispatch_id,
+      'cycle_id', p_cycle_id,
+      'cancel_risk_receipt_id', v_directive.cancel_risk_receipt_id,
+      'runtime_version', v_runtime_version,
+      'head_state_id', v_head_state_id,
+      'fencing_token', p_fencing_token,
+      'claim_fencing_token', v_claim.claim_fencing_token,
+      'completion_ref', v_claim.completion_ref
+    );
+  end if;
+
+  v_anchor_runtime_version := coalesce(
+    v_claim.progress_runtime_version,
+    v_directive.source_runtime_version
+  );
+  v_anchor_head_state_id := coalesce(
+    v_claim.progress_head_state_id,
+    v_directive.current_state_id
+  );
+
+  if v_runtime_version <> v_anchor_runtime_version
+     or v_head_state_id is distinct from v_anchor_head_state_id then
     insert into public.brian_shadow_recovery_claim_events(
       runtime_id, dispatch_id, cycle_id, cancel_risk_receipt_id,
       worker_token, runtime_version, head_state_id,
@@ -310,8 +354,10 @@ begin
       v_runtime_version, v_head_state_id,
       'HEAD_MOVED', v_now,
       jsonb_build_object(
-        'directive_runtime_version', v_directive.source_runtime_version,
-        'directive_state_id', v_directive.current_state_id
+        'anchor_runtime_version', v_anchor_runtime_version,
+        'anchor_state_id', v_anchor_head_state_id,
+        'recovery_cycle_id', v_claim.recovery_cycle_id,
+        'progress_checkpoint_id', v_claim.progress_checkpoint_id
       )
     );
     return jsonb_build_object(
@@ -401,31 +447,6 @@ begin
       'risk_version', v_risk_version,
       'risk_receipt_id', v_risk_receipt_id,
       'risk_state', v_risk_state
-    );
-  end if;
-
-  select *
-    into v_claim
-  from public.brian_shadow_recovery_claims
-  where runtime_id = p_runtime_id
-    and dispatch_id = v_directive.dispatch_id
-    and cancel_risk_receipt_id = v_directive.cancel_risk_receipt_id
-  for update;
-
-  if found and v_claim.status = 'COMPLETED' then
-    return jsonb_build_object(
-      'claimed', false,
-      'terminal', true,
-      'status', 'COMPLETED',
-      'runtime_id', p_runtime_id,
-      'dispatch_id', v_directive.dispatch_id,
-      'cycle_id', p_cycle_id,
-      'cancel_risk_receipt_id', v_directive.cancel_risk_receipt_id,
-      'runtime_version', v_runtime_version,
-      'head_state_id', v_head_state_id,
-      'fencing_token', p_fencing_token,
-      'claim_fencing_token', v_claim.claim_fencing_token,
-      'completion_ref', v_claim.completion_ref
     );
   end if;
 
@@ -563,6 +584,8 @@ declare
   v_risk_receipt jsonb;
   v_risk_receipt_id text;
   v_risk_state text;
+  v_anchor_runtime_version bigint;
+  v_anchor_head_state_id text;
   v_until timestamptz;
 begin
   if nullif(trim(p_runtime_id), '') is null
@@ -646,8 +669,17 @@ begin
     );
   end if;
 
-  if v_runtime_version <> v_directive.source_runtime_version
-     or v_head_state_id is distinct from v_directive.current_state_id then
+  v_anchor_runtime_version := coalesce(
+    v_claim.progress_runtime_version,
+    v_directive.source_runtime_version
+  );
+  v_anchor_head_state_id := coalesce(
+    v_claim.progress_head_state_id,
+    v_directive.current_state_id
+  );
+
+  if v_runtime_version <> v_anchor_runtime_version
+     or v_head_state_id is distinct from v_anchor_head_state_id then
     insert into public.brian_shadow_recovery_claim_events(
       runtime_id, dispatch_id, cycle_id, cancel_risk_receipt_id,
       worker_token, claim_fencing_token,
