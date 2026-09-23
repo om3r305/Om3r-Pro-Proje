@@ -395,3 +395,19 @@ This document records external open-source behaviors studied for Brian. It is no
   - only a successful Phase 50 reconciliation can be converted into a `RECONCILED_PAPER` Phase 60 state snapshot;
   - mark-to-market equity requires explicit marks for every open paper position and short-sale cash is conservatively capped when exposed as next-cycle available cash.
 - Phase 61 is a local paper venue only. It has no API-key transport, exchange connector, live order path or automatic capital authorization.
+
+
+## Phase 62 — Automatic Shadow/Paper Parity Evidence Bridge
+
+- Brian file: `brian2026/phase62_paper_parity_evidence.py`
+- This phase introduces no new external algorithm. It composes the already provenance-tracked contracts from Phase 49, Phase 50, Phase 57 and Phase 61.
+- Integration behavior:
+  - Phase 57 shadow execution items are paired one-to-one with Phase 61 paper outcomes from the same content-addressed cycle;
+  - a paper receipt whose cycle hash does not match the originating shadow cycle is rejected;
+  - Phase 56 risk-denied legs and Phase 46 local slippage-veto legs are excluded because they were never submitted to the paper venue;
+  - submitted legs preserve shadow direction/fill fraction, paper acknowledgement/fill fraction/fill price, and Phase 50 per-asset reconciliation completion in one `ShadowPaperObservation`;
+  - a definitive paper rejection records paper direction `0` and acknowledgement failure instead of pretending the shadow order reached the venue;
+  - missing/unresolved reconciliation marks the observation ambiguous and therefore fails the strict Phase 49 parity policy;
+  - cycle evidence is append-only and content-addressed; identical repeats are idempotent while conflicting reuse of a cycle id is rejected;
+  - the ledger evaluates by calling the real Phase 49 `evaluate_shadow_paper_parity` implementation rather than recreating parity thresholds.
+- Phase 62 remains shadow/paper evidence only and exposes no execution transport.
