@@ -64,6 +64,24 @@ class DurableRuntimeCheckpoint:
         payload["checkpoint_id"] = self.checkpoint_id
         return payload
 
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "DurableRuntimeCheckpoint":
+        raw = dict(payload)
+        expected_id = str(raw.pop("checkpoint_id"))
+        runtime_raw = raw.get("runtime_checkpoint")
+        journal_raw = raw.get("journal_manifest")
+        if not isinstance(runtime_raw, Mapping) or not isinstance(journal_raw, Mapping):
+            raise DurableRuntimeError("durable checkpoint payload is missing runtime/journal state")
+        checkpoint = cls(
+            runtime_checkpoint=ShadowRuntimeCheckpoint.from_dict(runtime_raw),
+            journal_manifest=dict(journal_raw),
+            schema_version=str(raw.get("schema_version", PHASE67_SCHEMA_VERSION)),
+            live_execution=bool(raw.get("live_execution", False)),
+        )
+        if checkpoint.checkpoint_id != expected_id:
+            raise DurableRuntimeError("durable runtime checkpoint content hash mismatch")
+        return checkpoint
+
 
 @dataclass(frozen=True, slots=True)
 class DurableRuntimeReceipt:
