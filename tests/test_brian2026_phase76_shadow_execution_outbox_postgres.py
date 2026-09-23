@@ -90,6 +90,7 @@ def _runtime_checkpoint(
     *,
     cycle_id: str | None = None,
     head_char: str = "a",
+    terminal_stage: str | None = None,
 ):
     cycles = {}
     entries = []
@@ -106,6 +107,18 @@ def _runtime_checkpoint(
             "artifact_ref": f"cycle:{cycle_id}",
             "entry_id": _h("e"),
         }]
+        if terminal_stage is not None:
+            entries.append({
+                "schema_version": "brian.phase66-durable-cycle-journal.v1",
+                "sequence": 1,
+                "stage": terminal_stage,
+                "cycle_id": cycle_id,
+                "cycle_hash": _h("c"),
+                "previous_entry_id": _h("e"),
+                "artifact_hash": _h("f"),
+                "artifact_ref": f"terminal:{terminal_stage}",
+                "entry_id": _h("0"),
+            })
     return {
         "schema_version": "brian.phase67-durable-runtime-orchestrator.v1",
         "runtime_checkpoint": {
@@ -151,7 +164,9 @@ def _runtime_checkpoint(
             "append_only": True,
             "cycles": cycles,
             "entries": entries,
-            "journal_hash": _h("j" if cycle_id is None else "k"),
+            "journal_hash": _h(
+                "j" if cycle_id is None else ("m" if terminal_stage is not None else "k")
+            ),
             "shadow_only": True,
             "live_execution": False,
         },
@@ -407,7 +422,11 @@ def test_runtime_change_after_authorization_blocks_dispatch():
             runtime_id,
             lease["fencing_token"],
             auth["runtime_version_after"],
-            _runtime_checkpoint("d", head_char="d"),
+            _runtime_checkpoint(
+                "d",
+                cycle_id=cycle_id,
+                terminal_stage="ABORTED",
+            ),
         )
         assert newer["version"] == auth["runtime_version_after"] + 1
 
