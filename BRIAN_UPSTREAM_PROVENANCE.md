@@ -370,3 +370,28 @@ This document records external open-source behaviors studied for Brian. It is no
   - integrity replay verifies sequence, previous-transition hashes, state continuity and pending-cycle continuity.
 - Phase 60 deliberately does not treat simulated fills or simulated sale proceeds as authoritative cash/position updates.
 - No live exchange state, broker transport or automatic promotion is introduced.
+
+
+## Phase 61 — Stateful Paper Venue + Reconciliation Loop
+
+- Brian file: `brian2026/phase61_stateful_paper_venue.py`
+- Reference project: NautilusTrader sandbox execution (`nautechsystems/nautilus_trader`, LGPL-3.0; behavioral reference only, no source copied).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - `crates/adapters/sandbox/src/execution.rs`: sandbox execution keeps starting balances, matching-engine state, inflight order state and account identity while consuming live/simulated market data without sending real venue orders.
+  - sandbox order flow emits ordinary order/fill/account events and supports report generation so the execution engine can reconcile paper state through the same conceptual execution boundary.
+  - `docs/concepts/backtesting/trade-execution.md`: simulated fills are quantity-bounded by available execution evidence/liquidity, partial fills are valid outcomes, and sandbox paper trading shares the matching-engine execution semantics.
+  - developer guidance requires account state and reconciliation to be established before trusting order flow.
+- Brian clean-room adaptation:
+  - Phase 57 execution receipts become persistent **paper** orders/fills only when explicitly applied to Phase 61;
+  - cycle application is content-addressed and idempotent; reusing a cycle id with different evidence is rejected;
+  - paper fills update quote-cash, signed net quantity, weighted average entry and realized PnL;
+  - partial fills update only the filled quantity;
+  - new BUY risk can be rejected when cash cannot fund fill + fees;
+  - reduce-only BUY exits are never blocked merely because paper cash is insufficient, preserving the safety rule that risk reduction must remain possible;
+  - risk-denied and local slippage-veto outcomes never become paper venue fills;
+  - explicit flat `VenuePositionReport` rows are generated for tracked assets instead of treating missing reports as flat;
+  - the paper venue can reconcile its reports against a caller-maintained local mirror through the real Phase 50 contract;
+  - only a successful Phase 50 reconciliation can be converted into a `RECONCILED_PAPER` Phase 60 state snapshot;
+  - mark-to-market equity requires explicit marks for every open paper position and short-sale cash is conservatively capped when exposed as next-cycle available cash.
+- Phase 61 is a local paper venue only. It has no API-key transport, exchange connector, live order path or automatic capital authorization.
