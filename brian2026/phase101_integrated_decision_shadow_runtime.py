@@ -293,6 +293,7 @@ class IntegratedDecisionShadowRuntime:
         claim_seconds: int,
         observed_at: float,
         source_ref: str,
+        blocked_new_risk_assets: Sequence[str] = (),
     ) -> IntegratedDecisionShadowReceipt:
         if self.worker.closed:
             raise IntegratedDecisionShadowRuntimeError(
@@ -383,6 +384,7 @@ class IntegratedDecisionShadowRuntime:
             available_cash_usd=float(available_cash_usd),
             markets=markets,
             risk_limits_by_asset=risk_limits_by_asset,
+            blocked_new_risk_assets=blocked_new_risk_assets,
         )
         if not governed.shadow_only or governed.live_execution:
             raise IntegratedDecisionShadowRuntimeError(
