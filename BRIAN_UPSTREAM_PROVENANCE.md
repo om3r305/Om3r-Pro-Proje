@@ -672,3 +672,30 @@ This document records external open-source behaviors studied for Brian. It is no
   - identical receipt retries are idempotent;
   - manifest restore rebuilds every receipt/entry, policy hash, current state, latch state and overall ledger hash before a governor can be recreated.
 - Phase 72 remains shadow/paper risk state only. It does not create orders or enable live execution.
+
+
+## Phase 73 — Transactional Operational-Risk Store
+
+- Brian files:
+  - `brian2026/phase73_operational_risk_store.py`
+  - `supabase/migrations/202609230745_brian_phase73_operational_risk_store.sql`
+- This phase introduces no new risk algorithm. It persists the Phase 72 operational-risk ledger under the **same Phase 70 runtime lease and fencing token** used by durable execution state.
+- Database behavior:
+  - one mutable operational-risk head per runtime tracks risk version, ledger hash, policy hash, head entry, current state and HALT latch;
+  - immutable risk snapshots, receipt/entry history and audit events are append-only;
+  - direct anon/authenticated/service-role mutation of risk tables is revoked; service-role writes go through explicit RPC only;
+  - risk commits acquire the same transaction advisory lock key as Phase 70 execution checkpoints;
+  - exact owner token + current fencing token + unexpired runtime lease are required;
+  - risk history has its own expected-version CAS so two concurrent same-version decisions cannot both advance the risk head;
+  - expired runtime takeover makes the old worker's risk commit return `LEASE_LOST`;
+  - exact ledger retries are idempotent; historical retries cannot roll the head backwards;
+  - a reused ledger hash with a changed manifest is an integrity violation;
+  - every incoming risk manifest must preserve the exact persisted entry prefix;
+  - database validation also enforces receipt state continuity, strictly increasing distinct receipt timestamps, shadow-only receipts, and HALT/latch consistency.
+- Python store behavior:
+  - the transport remains RPC-callable based and does not introduce a hard Supabase client dependency;
+  - before commit, the ledger is round-tripped through the real Phase 72 restore validator;
+  - on load, the DB manifest is rebuilt through Phase 72 and independently cross-checked against DB ledger hash, policy hash, head entry, current state and HALT latch.
+- Real Postgres 16 CI covers concurrent risk-CAS races, fencing takeover, prefix extension/rewrite rejection, state/time-chain rejection, historical retry and direct service-role mutation denial.
+- The Phase 73 migration is GitHub-only in this draft PR and has not been deployed to a live Supabase project.
+- Phase 73 remains shadow/paper operational state only.
