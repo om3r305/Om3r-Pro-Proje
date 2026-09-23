@@ -1439,3 +1439,28 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team unit coverage includes single-session READY, env/CLI precedence, provider bounds, blocked/manual/budget exit classes, bounded evidence-only output, invalid configuration rejection, secret redaction with session cleanup and generated process worker identity.
 - Phase98 remains hard shadow/paper-only and introduces no migration of its own.
 
+## Phase 99 — Recovery-Guarded Normal Shadow Handoff
+
+- Brian file:
+  - `brian2026/phase99_recovery_guarded_shadow_handoff.py`
+- Phase99 adds no alpha, SQL, scheduler or live execution. It is the same-session authority bridge from a successful Phase97 recovery drain into the existing Phase73/75–80 governed shadow execution path.
+- Normal shadow stack assembly:
+  - one caller-supplied RPC transport is shared by the Phase73 operational-risk store, Phase75 atomic write-ahead store, Phase76 outbox, Phase77 execution claims, Phase78 kill-switch, Phase79 STARTED store and Phase80 claim-fenced checkpoint store;
+  - the exact Phase71 runtime supervisor owned by the Phase92 recovery session is reused by the Phase75→80 stack;
+  - identity-level validation rejects cross-wired risk, outbox, claim, STARTED, checkpoint or kill-switch authorities.
+- Recovery handoff admission:
+  - a Phase99 handoff cannot be created unless the supplied Phase97 receipt belongs to the same runtime and is `READY_FOR_NORMAL_WORK` with final Phase86 admission `OPEN`;
+  - closed Phase92 sessions and stale Phase71 supervisors fail closed;
+  - the exact Phase86 admission reader already assembled in the Phase90 recovery stack is reused by the handoff.
+- Per-cycle safety:
+  - before every governed shadow cycle, Phase99 re-reads Phase86 under the still-owned Phase70 lease/session;
+  - a current recovery barrier blocks before the normal Phase75–80 execution path is called;
+  - if a barrier appears after the Phase99 pre-read, the existing Phase86 transactional wrappers around Phase75 authorization and Phase76 dispatch remain the final database interlock;
+  - downstream execution failures propagate without emitting a false successful handoff receipt.
+- Shadow boundary:
+  - non-shadow or live-enabled governed inputs are rejected before admission/execution;
+  - claim TTL is bounded to 10–300 seconds and worker/source/timestamp inputs are validated;
+  - successful receipts require both an OPEN admission and a hard shadow-only Phase80 execution result.
+- Red-team unit coverage includes exact Phase73/75–80 authority assembly, same-runtime READY handoff, pre-execution Phase86 blocking, non-ready recovery rejection, cross-runtime/cross-authority rejection, stale/closed sessions, missing admission authority, live/non-shadow rejection, input bounds and propagation of transactional barrier races.
+- Phase99 remains hard shadow/paper-only and introduces no migration of its own.
+
