@@ -621,3 +621,27 @@ This document records external open-source behaviors studied for Brian. It is no
 - Real Postgres 16 CI exercises fresh-acquire races, concurrent checkpoint CAS, expired-owner fencing, release/renew safety, journal prefix extension/conflict, exact and historical retries, checkpoint-id collision, and direct service-role mutation denial.
 - The migration is committed to GitHub only in this PR; it has not been rolled out to a live Supabase project.
 - Phase 70 remains shadow/paper-only and adds no exchange transport or capital authorization.
+
+
+## Phase 71 — Persisted Durable Runtime Supervisor
+
+- Brian file: `brian2026/phase71_persisted_runtime_supervisor.py`
+- This phase introduces no new external algorithm. It composes the Phase 67 write-ahead runtime with the Phase 70 transactional persistence/fencing boundary.
+- Persistence sequencing:
+  - acquiring a fresh runtime lease persists an initial validated checkpoint before work begins;
+  - every new Phase 57 cycle is first added to the Phase 66/67 full-body write-ahead journal;
+  - that write-ahead checkpoint is committed through Phase 70 CAS **before** `advance_pending` may execute paper/reconciliation work;
+  - after Phase 67 advances, a second checkpoint persists the resulting journal/venue/ledger state.
+- Crash semantics:
+  - if the process dies after the first DB commit but before/during paper execution, the authoritative DB checkpoint still contains the full original cycle body at `CYCLE_CREATED`;
+  - restart restores that checkpoint and deterministically replays the same cycle rather than regenerating a decision;
+  - because the current Phase 61 venue is paper-local, any in-memory work performed after the durable write-ahead but before the second checkpoint has no external exchange side effect and is safe to replay.
+- Stale-worker behavior:
+  - `CAS_CONFLICT`, historical-checkpoint mismatch or lease/fencing loss invalidates the supervisor instance immediately;
+  - an invalid supervisor cannot continue advancing its mutated local runtime and must reload from the Phase 70 authoritative head;
+  - lease renewal verifies that the fencing token is unchanged and that the database runtime version has not advanced outside the supervisor;
+  - a `DUPLICATE_CURRENT` checkpoint is accepted as the safe equivalent of a commit whose network response was lost, while `DUPLICATE_HISTORICAL` is treated as stale local state.
+- Durable-head precedence:
+  - if a checkpoint already exists, caller-provided initial memory is ignored and the database checkpoint is restored through Phase 63/67 validation;
+  - local lease-version snapshots are advanced with every accepted checkpoint commit so heartbeat/diagnostic state stays aligned with the durable head.
+- Phase 71 remains shadow/paper-only and adds no external execution side effect.
