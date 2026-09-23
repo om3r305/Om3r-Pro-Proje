@@ -1110,3 +1110,33 @@ This document records external open-source behaviors studied for Brian. It is no
   - Phase75 and Phase76 client contracts explicitly reject any impossible barrier response that claims authorization/submission succeeded.
 - Real Postgres 16 CI covers open/before-execution admission, unresolved AFTER_START barrier, NO_RECOVERY_REQUIRED/certificate resolution, MANUAL_REVIEW persistence, new authorization blocking without runtime advance, Phase75 duplicate retry, pre-authorized dispatch blocking, Phase76 duplicate retry, reopened authorization, concurrent blocked authorizations, Phase81 foreign CYCLE_CREATED refusal and direct admission-event mutation denial.
 - Phase86 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze its wrapper/rename operations must be converted into the official ordered migration set and the full real-Postgres suite rerun before deployment.
+
+
+## Phase 87 — Durable Recovery Backlog / Restart Resume View
+
+- Brian files:
+  - `brian2026/phase87_recovery_restart_resume.py`
+  - `brian2026/sql/phase87_recovery_restart_resume.sql`
+- Phase87 adds no alpha, signal or live execution. It makes unresolved recovery work discoverable after process restart without waiting for the original governed signal to reappear.
+- Database backlog semantics:
+  - only unresolved Phase78 `AFTER_START` cancels are considered;
+  - a Phase85 completion certificate removes the item from the backlog;
+  - a Phase81 `NO_RECOVERY_REQUIRED` directive also resolves the item;
+  - work is selected deterministically by oldest cancel request, then risk version/receipt;
+  - the returned row is anchored to the current Phase70 runtime version/checkpoint/head and exposes exact Phase81 directive, Phase82 claim, Phase83 STARTED, Phase84 recovery progress and terminal-event evidence.
+- Restart work-state classification:
+  - `NEEDS_DIRECTIVE`: cancel exists but no durable Phase81 directive;
+  - `MANUAL_REVIEW`: Phase81 refused automatic recovery;
+  - `NEEDS_CLAIM` / `CLAIM_EXPIRED`: recovery ownership must be acquired or taken over;
+  - `NEEDS_START`: claim exists but Phase83 STARTED evidence does not;
+  - `STARTED_NEEDS_EXECUTION`: Phase83 STARTED exists but no durable recovery cycle exists;
+  - `RECOVERY_PROGRESS`: Phase84 recovery cycle exists and must be resumed from its durable journal stage;
+  - `NEEDS_AUDIT`: recovery journal is COMMITTED and exact immutable Phase84 `RECOVERY_COMMITTED_PENDING_AUDIT` evidence exists, so Phase85 certification is the next boundary;
+  - `COMPLETED_WITHOUT_CERTIFICATE`: fail-closed visibility for an inconsistent/legacy claim state that must never be silently treated as resolved;
+  - `IDLE`: no unresolved recovery work remains.
+- Python contract:
+  - validates all runtime/cycle/dispatch/cancel/checkpoint/head hashes and positive versions/fences;
+  - rejects impossible work-state combinations (for example progress without STARTED evidence or audit without terminal Phase84 evidence);
+  - maps every DB state to one explicit operational action: prepare, acquire/take over claim, mark STARTED, execute/resume, audit, manual review, fail closed, or none.
+- Real Postgres 16 CI covers idle, directive preparation backlog, claim acquisition, expired takeover, STARTED transition, recovery progress, terminal audit handoff, manual review visibility, NO_RECOVERY_REQUIRED resolution, completion-certificate resolution, inconsistent completed-without-certificate visibility, deterministic oldest-work ordering and reader permissions.
+- Phase87 remains shadow/paper-only and read-oriented. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted with `supabase migration new` and rerun through the complete Postgres suite before deployment.
