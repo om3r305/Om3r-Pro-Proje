@@ -186,6 +186,10 @@ class PersistedDurableRuntimeSupervisor:
             f"runtime checkpoint commit rejected with {receipt.status}; reload required"
         )
 
+    def persist_current_checkpoint(self) -> RuntimeCommitReceipt:
+        """Persist the supervisor's exact current Phase67 checkpoint."""
+        return self._persist_current_checkpoint()
+
     def accept_external_checkpoint_commit(
         self,
         *,
