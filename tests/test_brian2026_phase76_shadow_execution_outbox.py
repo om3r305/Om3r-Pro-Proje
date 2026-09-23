@@ -194,9 +194,12 @@ class _RuntimeSupervisor:
     def __init__(self):
         self.lease = _lease()
         self.persisted_version = 2
-        self.valid = True
         self._valid = True
         self.runtime = _Runtime()
+
+    @property
+    def valid(self):
+        return self._valid
 
 
 class _Advanced:
