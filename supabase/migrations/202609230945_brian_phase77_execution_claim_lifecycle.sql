@@ -160,6 +160,7 @@ declare
   v_lease_until timestamptz;
   v_dispatch public.brian_shadow_execution_dispatches%rowtype;
   v_claim public.brian_shadow_execution_claims%rowtype;
+  v_had_claim boolean := false;
   v_cycle_payload jsonb;
   v_journal_stage text;
   v_risk_version bigint;
@@ -266,6 +267,10 @@ begin
   order by e.ord desc
   limit 1;
 
+  if v_journal_stage is null then
+    raise exception 'PHASE77_CLAIM: cycle % is missing from current runtime journal', p_cycle_id;
+  end if;
+
   if v_journal_stage = 'COMMITTED' then
     insert into public.brian_shadow_execution_claims(
       runtime_id, dispatch_id, cycle_id, status,
@@ -358,8 +363,9 @@ begin
   where runtime_id = p_runtime_id
     and dispatch_id = v_dispatch.dispatch_id
   for update;
+  v_had_claim := found;
 
-  if found and v_claim.status = 'CANCELLED_BEFORE_EXECUTION' then
+  if v_had_claim and v_claim.status = 'CANCELLED_BEFORE_EXECUTION' then
     return jsonb_build_object(
       'claimed', false,
       'cancelled', true,
@@ -376,7 +382,7 @@ begin
     );
   end if;
 
-  if found and v_claim.status = 'COMPLETED' then
+  if v_had_claim and v_claim.status = 'COMPLETED' then
     return jsonb_build_object(
       'claimed', false,
       'cancelled', false,
@@ -393,7 +399,7 @@ begin
     );
   end if;
 
-  if found
+  if v_had_claim
      and v_claim.status = 'CLAIMED'
      and v_claim.claim_until > v_now then
     if v_claim.worker_token = p_worker_token then
@@ -586,7 +592,7 @@ begin
   end if;
 
   v_next_claim_fence := coalesce(v_claim.claim_fencing_token, 0) + 1;
-  if found then
+  if v_had_claim then
     v_event := 'EXPIRED_RECOVERY';
   elsif v_resume_only then
     v_event := 'CLAIMED_RESUME';
