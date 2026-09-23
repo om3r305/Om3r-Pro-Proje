@@ -88,6 +88,8 @@ class RecoveryRestartWorkItem:
             raise ValueError("runtime_id is required")
         if self.work_state not in WORK_STATES:
             raise ValueError(f"unsupported recovery work_state {self.work_state}")
+        if not self.shadow_only or self.live_execution:
+            raise ValueError("Phase87 work item must remain shadow-only")
 
         if not self.has_work:
             if self.status != "IDLE" or self.work_state != "IDLE":
@@ -184,9 +186,6 @@ class RecoveryRestartWorkItem:
                 raise ValueError(
                     "NEEDS_AUDIT requires terminal Phase84 recovery evidence"
                 )
-
-        if not self.shadow_only or self.live_execution:
-            raise ValueError("Phase87 work item must remain shadow-only")
 
     @property
     def action(self) -> str:
