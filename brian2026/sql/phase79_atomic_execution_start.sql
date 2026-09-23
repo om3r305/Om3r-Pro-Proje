@@ -131,6 +131,7 @@ declare
   v_runtime_version bigint;
   v_lease_until timestamptz;
   v_dispatch_id text;
+  v_claim public.brian_shadow_execution_claims%rowtype;
   v_existing public.brian_shadow_execution_starts%rowtype;
   v_decision jsonb;
   v_status text;
@@ -200,6 +201,42 @@ begin
       'cycle_id', p_cycle_id,
       'runtime_version', v_runtime_version,
       'fencing_token', v_runtime_fence,
+      'claim_fencing_token', p_claim_fencing_token
+    );
+  end if;
+
+  select *
+    into v_claim
+  from public.brian_shadow_execution_claims
+  where runtime_id = p_runtime_id
+    and dispatch_id = v_dispatch_id
+  for update;
+
+  if not found
+     or v_claim.status <> 'CLAIMED'
+     or v_claim.worker_token <> p_worker_token
+     or v_claim.claim_fencing_token <> p_claim_fencing_token
+     or v_claim.claim_until <= v_now then
+    insert into public.brian_shadow_execution_start_events(
+      runtime_id, dispatch_id, cycle_id, worker_token,
+      claim_fencing_token, runtime_fencing_token,
+      runtime_version, event, observed_at
+    ) values (
+      p_runtime_id, v_dispatch_id, p_cycle_id, p_worker_token,
+      p_claim_fencing_token, p_fencing_token,
+      v_runtime_version, 'CLAIM_LOST', v_now
+    );
+    return jsonb_build_object(
+      'started', false,
+      'duplicate', false,
+      'terminal', false,
+      'cancel_requested', false,
+      'status', 'CLAIM_LOST',
+      'runtime_id', p_runtime_id,
+      'dispatch_id', v_dispatch_id,
+      'cycle_id', p_cycle_id,
+      'runtime_version', v_runtime_version,
+      'fencing_token', p_fencing_token,
       'claim_fencing_token', p_claim_fencing_token
     );
   end if;
