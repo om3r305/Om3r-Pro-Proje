@@ -1208,3 +1208,26 @@ This document records external open-source behaviors studied for Brian. It is no
   - `RecoveryRuntimeStack` validates identity-level wiring across Phase84, Phase88 and Phase89 and rejects cross-wired runtime/claim/store authorities.
 - Unit coverage proves shared RPC identity, shared runtime authority, exact store/supervisor identity, optional quarantine wiring, stale-runtime rejection, invalid transport/runtime rejection and cross-wired Phase84 rejection.
 - Phase90 remains hard shadow/paper-only and introduces no deployment migration of its own.
+
+
+## Phase 91 — Supabase Recovery RPC Transport
+
+- Brian file:
+  - `brian2026/phase91_supabase_rpc_transport.py`
+- Phase91 adds no alpha, trading logic, SQL or live execution. It provides the fail-closed backend transport used to call the exact Phase81–87 Postgres RPC surface through Supabase PostgREST.
+- Current Supabase API-key migration rules were re-verified before implementation:
+  - backend workers prefer `SUPABASE_SECRET_KEY` / `sb_secret_...`;
+  - hosted `SUPABASE_SECRET_KEYS` JSON with the `default` key is also supported;
+  - legacy `SUPABASE_SERVICE_ROLE_KEY` remains migration-compatible;
+  - publishable keys are rejected for the privileged recovery worker;
+  - modern secret keys are sent only in the `apikey` header, never as `Authorization: Bearer`.
+- Transport security:
+  - remote project URLs must use HTTPS; plain HTTP is accepted only for localhost;
+  - secret keys are never placed in URLs, exception messages or diagnostics;
+  - redirects are not followed, preventing privileged key forwarding to another origin;
+  - only the eight known Phase81–87 recovery RPC names are callable;
+  - responses must be 2xx JSON objects; malformed JSON, arrays/scalars, 204s and database/API errors fail closed;
+  - transport/timeouts are surfaced without blind HTTP retries because replay is delegated to the durable Phase81–89 idempotency/restart protocol.
+- Environment configuration supports explicit positive connect/read/write/pool timeouts and rejects malformed/zero values.
+- Red-team tests cover secret-key-only headers, legacy migration compatibility, modern-key precedence, Edge secret-key JSON, publishable-key rejection, HTTPS enforcement, RPC allowlisting, sanitized database errors, redirect blocking, no blind timeout retry, malformed response rejection and timeout configuration.
+- Phase91 remains hard shadow/paper-only and introduces no migration of its own.
