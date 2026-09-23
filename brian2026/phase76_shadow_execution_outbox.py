@@ -206,6 +206,7 @@ class ShadowExecutionOutboxStore:
             "LEASE_LOST",
             "RUNTIME_VERSION_CONFLICT",
             "RISK_VERSION_CONFLICT",
+            "RECOVERY_BARRIER",
         } and submitted:
             raise ShadowExecutionOutboxError(
                 f"{status} cannot return submitted=true"
@@ -345,6 +346,13 @@ class PersistedDispatchedRuntimeSupervisor:
                     reason="phase76:risk_changed_before_dispatch",
                 )
                 return authorization, dispatch, "ABORTED_RISK_STALE"
+
+            if dispatch.status == "RECOVERY_BARRIER":
+                phase75.abort_authorized_cycle(
+                    cycle_id=authorization.cycle_id,
+                    reason="phase86:recovery_admission_interlock",
+                )
+                return authorization, dispatch, "ABORTED_RECOVERY_BARRIER"
 
             supervisor._valid = False
             if dispatch.status == "LEASE_LOST":
