@@ -112,6 +112,20 @@ class RecoveryCheckpointReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class RecoveryExecutionCoreStep:
+    recovery_cycle_id: str | None
+    write_ahead: RecoveryCheckpointReceipt | None
+    progress: RecoveryCheckpointReceipt | None
+    durable_status: str | None
+    outcome: str
+    persisted_version: int
+    checkpoint_id: str
+    schema_version: str = PHASE84_SCHEMA_VERSION
+    shadow_only: bool = True
+    live_execution: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class RecoveryExecutionStep:
     start_step: AtomicRecoveryStartExecutionStep
     recovery_cycle_id: str | None
@@ -488,12 +502,11 @@ class PersistedRecoveryExecutionSupervisor:
             )
         return None if not matches else matches[0]
 
-    def process_governed_cycle(
+    def execute_started_recovery(
         self,
-        governed,
         *,
-        worker_token: str,
-        claim_seconds: int,
+        start: AtomicRecoveryStartReceipt,
+        claim: RecoveryClaimReceipt,
         recovery_worker_token: str,
         recovery_claim_seconds: int,
         recovery_markets: Mapping[str, ExecutionMarketInput],
@@ -502,32 +515,36 @@ class PersistedRecoveryExecutionSupervisor:
         marks: Mapping[str, float],
         observed_at: float,
         source_ref: str,
-    ) -> RecoveryExecutionStep:
-        start_step = self.start_supervisor.process_governed_cycle(
-            governed,
-            worker_token=worker_token,
-            claim_seconds=claim_seconds,
-            recovery_worker_token=recovery_worker_token,
-            recovery_claim_seconds=recovery_claim_seconds,
-            marks=marks,
-            observed_at=observed_at,
-            source_ref=source_ref,
-        )
-        supervisor = self._runtime_supervisor()
-        start = start_step.start
-        claim = start_step.claim_step.claim
+        base_outcome: str = "RECOVERY_RESUME",
+    ) -> RecoveryExecutionCoreStep:
+        """Resume Phase84 directly from durable Phase82/83 evidence.
 
-        if start is None or not start.started or claim is None or not claim.claimed:
-            return RecoveryExecutionStep(
-                start_step=start_step,
-                recovery_cycle_id=None,
-                write_ahead=None,
-                progress=None,
-                durable_status=None,
-                outcome=start_step.outcome,
-                persisted_version=start_step.persisted_version,
-                checkpoint_id=start_step.checkpoint_id,
-            )
+        This method is intentionally independent of a fresh governed signal so a
+        crash-restarted recovery worker can continue an already-durable recovery
+        obligation. It still requires the current runtime lease, current recovery
+        claim and immutable STARTED evidence.
+        """
+        supervisor = self._runtime_supervisor()
+        if not start.started:
+            raise RecoveryExecutionError("Phase84 direct resume requires STARTED evidence")
+        if not claim.claimed or claim.claim_fencing_token is None:
+            raise RecoveryExecutionError("Phase84 direct resume requires active recovery claim")
+        if start.runtime_id != supervisor.runtime_id or claim.runtime_id != supervisor.runtime_id:
+            raise RecoveryExecutionError("recovery evidence runtime does not match supervisor")
+        if start.cycle_id != claim.cycle_id:
+            raise RecoveryExecutionError("recovery STARTED/claim original cycle mismatch")
+        if start.dispatch_id != claim.dispatch_id:
+            raise RecoveryExecutionError("recovery STARTED/claim dispatch mismatch")
+        if start.cancel_risk_receipt_id != claim.cancel_risk_receipt_id:
+            raise RecoveryExecutionError("recovery STARTED/claim cancel receipt mismatch")
+        if start.recovery_claim_fencing_token != claim.claim_fencing_token:
+            raise RecoveryExecutionError("recovery STARTED/claim fence mismatch")
+        if claim.worker_token != recovery_worker_token:
+            raise RecoveryExecutionError("recovery claim worker does not match resume worker")
+        if tuple(leg.to_dict() for leg in start.recovery_legs) != tuple(
+            leg.to_dict() for leg in claim.recovery_legs
+        ):
+            raise RecoveryExecutionError("recovery STARTED legs differ from current claim")
 
         renewal = self._claims().renew(
             supervisor.lease,
@@ -538,13 +555,12 @@ class PersistedRecoveryExecutionSupervisor:
         self._handle_renewal(supervisor, renewal)
         if renewal.status == "RENEWAL_BLOCKED_RISK":
             checkpoint = supervisor.runtime.checkpoint()
-            return RecoveryExecutionStep(
-                start_step=start_step,
+            return RecoveryExecutionCoreStep(
                 recovery_cycle_id=None,
                 write_ahead=None,
                 progress=None,
                 durable_status=None,
-                outcome=f"{start_step.outcome}_EXECUTION_WAIT_RISK_RELEASE",
+                outcome=f"{base_outcome}_EXECUTION_WAIT_RISK_RELEASE",
                 persisted_version=supervisor.persisted_version,
                 checkpoint_id=checkpoint.checkpoint_id,
             )
@@ -597,6 +613,40 @@ class PersistedRecoveryExecutionSupervisor:
             )
             self._handle_commit(supervisor, write_ahead)
 
+        stage = supervisor.runtime.journal.latest_stage(cycle.cycle_id)
+        if stage == "COMMITTED":
+            checkpoint = supervisor.runtime.checkpoint()
+            progress = RecoveryCheckpointReceipt(
+                runtime_id=supervisor.runtime_id,
+                original_cycle_id=claim.cycle_id,
+                recovery_cycle_id=cycle.cycle_id,
+                dispatch_id=claim.dispatch_id,
+                checkpoint_id=checkpoint.checkpoint_id,
+                journal_stage="COMMITTED",
+                version=supervisor.persisted_version,
+                current_version=supervisor.persisted_version,
+                fencing_token=supervisor.lease.fencing_token,
+                recovery_claim_fencing_token=claim.claim_fencing_token,
+                status="DUPLICATE_CURRENT",
+                committed=True,
+                duplicate=True,
+                terminal=True,
+                head_state_id=supervisor.runtime.ledger.head_state.state_id,
+            )
+            return RecoveryExecutionCoreStep(
+                recovery_cycle_id=cycle.cycle_id,
+                write_ahead=write_ahead,
+                progress=progress,
+                durable_status="COMMITTED",
+                outcome=f"{base_outcome}_RECOVERY_COMMITTED_PENDING_AUDIT",
+                persisted_version=supervisor.persisted_version,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+        if stage == "ABORTED":
+            raise RecoveryExecutionError(
+                "durable recovery cycle is ABORTED and cannot be auto-resumed"
+            )
+
         # Re-check risk after durable write-ahead and immediately before the
         # replay-safe paper side effect.
         renewal = self._claims().renew(
@@ -608,13 +658,12 @@ class PersistedRecoveryExecutionSupervisor:
         self._handle_renewal(supervisor, renewal)
         if renewal.status == "RENEWAL_BLOCKED_RISK":
             checkpoint = supervisor.runtime.checkpoint()
-            return RecoveryExecutionStep(
-                start_step=start_step,
+            return RecoveryExecutionCoreStep(
                 recovery_cycle_id=cycle.cycle_id,
                 write_ahead=write_ahead,
                 progress=None,
-                durable_status=supervisor.runtime.journal.latest_stage(cycle.cycle_id),
-                outcome=f"{start_step.outcome}_WRITE_AHEAD_WAIT_RISK_RELEASE",
+                durable_status=stage,
+                outcome=f"{base_outcome}_WRITE_AHEAD_WAIT_RISK_RELEASE",
                 persisted_version=supervisor.persisted_version,
                 checkpoint_id=checkpoint.checkpoint_id,
             )
@@ -636,16 +685,15 @@ class PersistedRecoveryExecutionSupervisor:
         self._handle_commit(supervisor, progress)
 
         if progress.terminal:
-            outcome = f"{start_step.outcome}_RECOVERY_COMMITTED_PENDING_AUDIT"
+            outcome = f"{base_outcome}_RECOVERY_COMMITTED_PENDING_AUDIT"
         elif durable.status == "RECONCILIATION_BLOCKED":
-            outcome = f"{start_step.outcome}_RECOVERY_RECONCILIATION_BLOCKED"
+            outcome = f"{base_outcome}_RECOVERY_RECONCILIATION_BLOCKED"
         elif durable.status == "MARKS_REQUIRED":
-            outcome = f"{start_step.outcome}_RECOVERY_MARKS_REQUIRED"
+            outcome = f"{base_outcome}_RECOVERY_MARKS_REQUIRED"
         else:
-            outcome = f"{start_step.outcome}_RECOVERY_PROGRESS"
+            outcome = f"{base_outcome}_RECOVERY_PROGRESS"
 
-        return RecoveryExecutionStep(
-            start_step=start_step,
+        return RecoveryExecutionCoreStep(
             recovery_cycle_id=cycle.cycle_id,
             write_ahead=write_ahead,
             progress=progress,
@@ -654,3 +702,68 @@ class PersistedRecoveryExecutionSupervisor:
             persisted_version=supervisor.persisted_version,
             checkpoint_id=supervisor.runtime.checkpoint().checkpoint_id,
         )
+
+    def process_governed_cycle(
+        self,
+        governed,
+        *,
+        worker_token: str,
+        claim_seconds: int,
+        recovery_worker_token: str,
+        recovery_claim_seconds: int,
+        recovery_markets: Mapping[str, ExecutionMarketInput],
+        recovery_risk_limits_by_asset: Mapping[str, InstrumentRiskLimits],
+        recovery_ttl_seconds: int,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ) -> RecoveryExecutionStep:
+        start_step = self.start_supervisor.process_governed_cycle(
+            governed,
+            worker_token=worker_token,
+            claim_seconds=claim_seconds,
+            recovery_worker_token=recovery_worker_token,
+            recovery_claim_seconds=recovery_claim_seconds,
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+        )
+        start = start_step.start
+        claim = start_step.claim_step.claim
+
+        if start is None or not start.started or claim is None or not claim.claimed:
+            return RecoveryExecutionStep(
+                start_step=start_step,
+                recovery_cycle_id=None,
+                write_ahead=None,
+                progress=None,
+                durable_status=None,
+                outcome=start_step.outcome,
+                persisted_version=start_step.persisted_version,
+                checkpoint_id=start_step.checkpoint_id,
+            )
+
+        core = self.execute_started_recovery(
+            start=start,
+            claim=claim,
+            recovery_worker_token=recovery_worker_token,
+            recovery_claim_seconds=recovery_claim_seconds,
+            recovery_markets=recovery_markets,
+            recovery_risk_limits_by_asset=recovery_risk_limits_by_asset,
+            recovery_ttl_seconds=recovery_ttl_seconds,
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+            base_outcome=start_step.outcome,
+        )
+        return RecoveryExecutionStep(
+            start_step=start_step,
+            recovery_cycle_id=core.recovery_cycle_id,
+            write_ahead=core.write_ahead,
+            progress=core.progress,
+            durable_status=core.durable_status,
+            outcome=core.outcome,
+            persisted_version=core.persisted_version,
+            checkpoint_id=core.checkpoint_id,
+        )
+
