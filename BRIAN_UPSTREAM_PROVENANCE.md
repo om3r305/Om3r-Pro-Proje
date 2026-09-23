@@ -434,3 +434,25 @@ This document records external open-source behaviors studied for Brian. It is no
   - a runtime checkpoint verifies the paper venue and shadow ledger use the same account identity;
   - the critical crash window where a paper fill exists but Phase 50 reconciliation/Phase 60 commit has not yet completed is preserved as a pending cycle and can be reconciled after restart.
 - Phase 63 recovery is entirely local shadow/paper state recovery; no live adapter, API key or real-money execution surface is introduced.
+
+
+## Phase 64 — Independent Local Execution Event Projector
+
+- Brian file: `brian2026/phase64_local_execution_projector.py`
+- Reference project: NautilusTrader ExecutionEngine/cache event processing (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - `docs/concepts/events/index.md`: the ExecutionEngine processes each `OrderFilled`, updates or creates the cached position, then emits corresponding position lifecycle events.
+  - execution and reconciliation read the engine-maintained cache as local state; venue position reports remain an independent external/reconciliation input.
+  - event/replay ordering is explicit so a missing or reordered fill can produce a detectable local/venue divergence rather than silently copying venue state into cache.
+- Brian clean-room adaptation:
+  - Phase 64 never reads Phase 61 paper positions or cash;
+  - it consumes only immutable `PaperCycleReceipt` order outcomes and the referenced `PaperFill` events;
+  - every cycle receipt and fill id is content-hash verified independently;
+  - the complete cycle is validated before any local projection state changes, so a missing fill event cannot leave a half-applied local cache;
+  - filled/partial-filled outcomes must reconcile their referenced fill quantity, weighted-average price and fill fraction;
+  - risk-denied, local-veto, acknowledged-no-fill and venue-rejected outcomes create order history but no position mutation;
+  - fills update an independent net position projection with average entry, realized PnL and source-fill lineage;
+  - duplicate cycles are idempotent only when receipt evidence is identical;
+  - Phase 50 can now compare Phase 64 local positions against Phase 61 venue reports, making reconciliation an actual independent-state check rather than a venue-state copy.
+- Phase 64 is local shadow/paper event projection only and contains no exchange transport.
