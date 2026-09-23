@@ -748,3 +748,34 @@ This document records external open-source behaviors studied for Brian. It is no
   - only then may the ordinary Phase67/71 `advance_pending` path execute and persist paper/reconciliation results.
 - Real Postgres 16 CI covers successful atomic commit, lost-response retry, concurrent exact authorization, stale risk, stale runtime, inner Phase70 rollback, same-cycle evidence conflict and direct service-role mutation denial.
 - Phase75 remains shadow/paper-only and adds no exchange/broker transport.
+
+
+## Phase 76 — Durable Shadow Execution Outbox / Submit Boundary
+
+- Brian files:
+  - `brian2026/phase76_shadow_execution_outbox.py`
+  - `supabase/migrations/202609230915_brian_phase76_shadow_execution_outbox.sql`
+- This phase introduces no trading algorithm. It defines a durable **submission boundary** after Phase75 authorization but before Phase61 paper execution.
+- Database behavior:
+  - an immutable dispatch can exist only for an existing Phase75 governed authorization;
+  - dispatch submission uses the same Phase70 runtime advisory lock, lease owner and fencing token;
+  - the runtime head must still be exactly the Phase75 authorization's write-ahead checkpoint/version;
+  - the current Phase73 risk version/hash/head-receipt must still exactly match the Phase75 authorization;
+  - if risk changed after authorization but before submit, `RISK_VERSION_CONFLICT` is returned and no dispatch row is created;
+  - if runtime state advanced after authorization but before submit, `RUNTIME_VERSION_CONFLICT` is returned and no dispatch row is created;
+  - missing authorization, lost lease or changed dispatch identity fail closed;
+  - exact submit retries are idempotent; concurrent identical submits serialize to one `SUBMITTED` and one duplicate result;
+  - the durable dispatch copies the governed-result id, policy fingerprint, authorization checkpoint/version and risk anchors from the immutable Phase75 authorization rather than trusting caller-supplied duplicates;
+  - direct service-role mutation of dispatch history is denied.
+- Python behavior:
+  - the dispatch id is deterministically content-addressed from the Phase75 authorization anchors;
+  - `ShadowExecutionOutboxStore` submits only runtime id/owner/fence/cycle/dispatch id; successful DB responses must echo all immutable authorization anchors;
+  - `PersistedDispatchedRuntimeSupervisor` cannot call paper/local execution until a durable dispatch exists;
+  - a risk change before submit is treated as a normal pre-paper safety abort: the Phase66 journal moves `CYCLE_CREATED -> ABORTED` and that terminal checkpoint is persisted without any Phase61/64 side effect;
+  - lease/runtime conflicts invalidate the local supervisor and require reload;
+  - a historical duplicate dispatch is never treated as current local state.
+- Semantics:
+  - before `SUBMITTED`, a changed risk head can still veto the cycle with zero paper side effect;
+  - after `SUBMITTED`, a later HALT belongs to the post-submission cancel/kill-switch lifecycle, providing a clean boundary for the next phase.
+- Real Postgres 16 CI covers successful submit, exact and concurrent duplicate submit, missing authorization, risk-head advance, runtime-head advance, dispatch-id conflict and direct mutation denial.
+- Phase76 remains shadow/paper-only; it does not transmit an order to an exchange or broker.
