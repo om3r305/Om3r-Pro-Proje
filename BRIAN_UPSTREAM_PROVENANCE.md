@@ -166,3 +166,22 @@ This document records external open-source behaviors studied for Brian. It is no
   - duplicate fill ids and unresolved command outcomes block readiness;
   - batch readiness is fail-closed and remains shadow-only.
 - No Nautilus source code is copied in Phase 50.
+
+
+## Phase 51 — PnL / Decision Attribution Ledger
+
+- Brian file: `brian2026/phase51_pnl_attribution.py`
+- Reference projects:
+  - Hummingbot (`hummingbot/hummingbot`, Apache-2.0), revision `9af100d6822da7d2d0291a906c730ef172284ee2`.
+  - NautilusTrader execution/portfolio event model as a behavioral reference.
+- Upstream behavior inspected:
+  - Hummingbot `PositionHold` and `PerformanceReport` keep realized PnL, unrealized PnL, cumulative fees, traded quote volume and close-type counts as explicit accounting fields.
+  - Nautilus portfolio state is derived from execution/order/position events rather than from narrative analyst output.
+- Brian adaptation:
+  - every closed trade retains the originating `TradeIntent` and its evidence lineage;
+  - gross PnL is decomposed exactly into market move from the decision reference plus entry-execution effect;
+  - fees remain a separate explicit deduction and the arithmetic must reconcile exactly;
+  - portfolio-risk clamps are recorded as weight released to cash, not invented as realized PnL;
+  - regime, analyst and evidence views are association summaries only;
+  - evidence-linked PnL is deliberately non-additive and never presented as a causal dollar split among signals.
+- Phase 51 is shadow accounting only and introduces no execution transport.
