@@ -477,3 +477,24 @@ This document records external open-source behaviors studied for Brian. It is no
   - the pending-cycle crash window is preserved: a paper fill can already exist while the Phase 60 ledger still marks the cycle pending, and local cache replay catches up without silently committing the ledger;
   - a forensic partial-replay helper intentionally truncates local event replay so Phase 50 can prove that missing event history produces a reconciliation failure.
 - Phase 65 is restart/recovery logic for local shadow/paper execution state only; it exposes no live execution transport.
+
+
+## Phase 66 — Durable Shadow Cycle Write-Ahead Journal
+
+- Brian file: `brian2026/phase66_durable_cycle_journal.py`
+- Reference project: NautilusTrader event-store/cache replay behavior (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - durable execution state is sequenced before replay/reconciliation;
+  - replay works from persisted event/state payloads, not only opaque identifiers;
+  - sequence/hash divergence is treated as recovery failure instead of silently skipping missing execution history.
+- Brian clean-room adaptation:
+  - the complete Phase 57 `ShadowExecutionCycle` body is content-addressed and journaled **before** paper/local/reconciliation side effects;
+  - journal stages are append-only: `CYCLE_CREATED -> PAPER_APPLIED -> LOCAL_PROJECTED -> RECONCILED -> COMMITTED`, with explicit `RECONCILIATION_REQUIRED` and terminal `ABORTED` branches;
+  - every entry is globally sequenced and chained to the previous entry id;
+  - Phase 61 paper receipts are independently content-id verified before the journal advances;
+  - reconciliation artifacts remain shadow/paper only; live reconciliation is rejected;
+  - repeated identical stage artifacts are idempotent, while conflicting reuse of a cycle/stage is rejected;
+  - the journal manifest persists the **full cycle body**, not merely its hash, so a crash after cycle creation still leaves enough evidence to retry the same paper cycle;
+  - restore reconstructs Phase 57 nested risk/execution/pending-reversal receipts, recomputes entry ids, recomputes the journal manifest hash, verifies legal stage transitions and re-validates stored cycle hashes.
+- Phase 66 is a write-ahead recovery journal only. It does not submit live orders or authorize capital.
