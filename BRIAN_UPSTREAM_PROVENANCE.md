@@ -873,3 +873,29 @@ This document records external open-source behaviors studied for Brian. It is no
   - the SQL is intentionally stored outside `supabase/migrations` while this PR remains draft/undeployed;
   - before any rollout it must be converted into an official migration using `supabase migration new`, then rerun through the same full Python/Postgres gates.
 - Phase79 remains shadow/paper-only and does not transmit an order to any exchange or broker.
+
+
+## Phase 80 — Claim-Fenced Authoritative Runtime Checkpoint
+
+- Brian files:
+  - `brian2026/phase80_claim_fenced_checkpoint.py`
+  - `brian2026/sql/phase80_claim_fenced_checkpoint_commit.sql`
+- This phase introduces no new trading/alpha policy. It closes the authority gap after Phase79 `STARTED`: replay-safe paper/projector work may advance in memory, but that work cannot become the authoritative Phase70 runtime checkpoint unless the same Phase77 worker claim is still current.
+- Database behavior:
+  - commit requires the current Phase70 runtime lease owner/fence and the exact current Phase77 worker token + claim fencing token;
+  - an immutable Phase79 STARTED record must exist for the dispatch before any post-STARTED checkpoint can become authoritative;
+  - submitted checkpoints must prove a post-STARTED journal stage (`PAPER_APPLIED`, `LOCAL_PROJECTED`, `RECONCILIATION_REQUIRED`, `RECONCILED`, `COMMITTED`, or `ABORTED`);
+  - Phase80 serializes on the same runtime advisory lock and delegates the actual durable checkpoint append/CAS validation to the already-tested Phase70 commit RPC;
+  - claim takeover/expiry makes the old worker return `CLAIM_LOST` before it can advance the durable runtime head;
+  - runtime version drift returns `RUNTIME_VERSION_CONFLICT`;
+  - an exact lost-response retry is accepted as `DUPLICATE_CURRENT` only while the same worker/claim fence still owns execution and the current authoritative checkpoint id+payload exactly match the submitted checkpoint;
+  - if the original commit succeeded but the claim was subsequently taken over, the stale worker's retry is rejected as `CLAIM_LOST`, not misclassified as an idempotent success;
+  - claim-commit audit history is append-only and has no direct service-role table write grant.
+- Python supervisor behavior:
+  - Phase71 exposes an explicit non-authoritative in-memory advance path for replay-safe paper/projector state;
+  - Phase80 runs that in-memory advance only after Phase79 STARTED, then attempts the claim-fenced authoritative DB commit;
+  - any failed authoritative commit invalidates the mutated local supervisor so the worker cannot continue from a state the database did not accept;
+  - successful commit receipts must echo runtime/cycle/dispatch/checkpoint and both runtime + claim fencing tokens before the local supervisor accepts the external commit;
+  - only after the authoritative commit does the supervisor run the Phase78 post-start risk check and Phase77 completion path.
+- Real Postgres 16 CI covers successful authoritative commit, exact lost-response retry, concurrent identical commit, stale-worker claim takeover, stale retry after takeover, missing STARTED boundary, runtime CAS conflict and direct audit-table mutation denial.
+- Phase80 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
