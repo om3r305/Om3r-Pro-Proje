@@ -178,6 +178,33 @@ class GroundedDecisionWorkerCycle:
             raise GroundedDecisionWorkerCycleError(
                 "Phase54 automatic promotion is forbidden"
             )
+        if len(str(decision.pipeline_id)) != 64:
+            raise GroundedDecisionWorkerCycleError(
+                "Phase54 pipeline_id must be a content hash"
+            )
+        if not math.isclose(
+            float(decision.timestamp),
+            float(timestamp),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise GroundedDecisionWorkerCycleError(
+                "Phase54 decision timestamp differs from requested snapshot time"
+            )
+        decision_weights = {
+            str(asset): float(weight)
+            for asset, weight in decision.current_weights.items()
+            if abs(float(weight)) > 1e-15
+        }
+        expected_weights = {
+            str(asset): float(weight)
+            for asset, weight in current_weights.items()
+            if abs(float(weight)) > 1e-15
+        }
+        if decision_weights != expected_weights:
+            raise GroundedDecisionWorkerCycleError(
+                "Phase54 decision current_weights differ from captured Phase60 head"
+            )
 
         # Phase54 can be CPU-heavy. Preserve the exact account-state identity
         # across that work; never execute a decision built on a head that moved.
