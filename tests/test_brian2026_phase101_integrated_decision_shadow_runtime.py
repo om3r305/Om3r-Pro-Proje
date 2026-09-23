@@ -58,7 +58,24 @@ class _Worker:
         self.runtime_id = RUNTIME
         self.closed = False
         self.ready_for_normal_shadow = True
-        self.session = SimpleNamespace(rpc=lambda name, params: {})
+        head_state = SimpleNamespace(
+            observed_at=99.0,
+            equity_usd=1000.0,
+            available_cash_usd=500.0,
+            position_weights=(("BTCUSDT", 0.10),),
+        )
+        runtime = SimpleNamespace(
+            ledger=SimpleNamespace(head_state=head_state),
+            venue=SimpleNamespace(
+                positions={
+                    "BTCUSDT": SimpleNamespace(quantity=1.0),
+                }
+            ),
+        )
+        self.session = SimpleNamespace(
+            rpc=lambda name, params: {},
+            runtime_supervisor=SimpleNamespace(runtime=runtime),
+        )
         self.calls = []
         self.error = None
 
@@ -118,7 +135,11 @@ def _decision(
     )
 
 
-def _governed(*, risk_id=RISK_ID, items=(object(),)):
+def _governed(
+    *,
+    risk_id=RISK_ID,
+    items=(SimpleNamespace(asset_id="BTCUSDT"),),
+):
     return SimpleNamespace(
         operational_risk_receipt_id=risk_id,
         result_id=GOVERNED_ID,
@@ -437,3 +458,101 @@ def test_worker_closing_after_constructor_blocks_future_decisions() -> None:
         match="closed before integrated decision",
     ):
         _process(runtime)
+
+def test_phase54_account_state_must_match_authoritative_phase60_head() -> None:
+    worker = _Worker()
+    runtime = IntegratedDecisionShadowRuntime(
+        worker=worker,
+        risk_store=_RiskStore(_stored_risk()),
+        governed_runner=lambda *args, **kwargs: pytest.fail("must not run"),
+    )
+    decision = _decision()
+    decision.current_weights = {"BTCUSDT": 0.20}
+
+    with pytest.raises(
+        IntegratedDecisionShadowRuntimeError,
+        match="current_weights differ",
+    ):
+        _process(runtime, decision)
+
+    assert worker.calls == []
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"equity_usd": 999.0}, "equity differs"),
+        ({"available_cash_usd": 499.0}, "cash differs"),
+    ],
+)
+def test_execution_account_values_must_match_phase60_head(overrides, message) -> None:
+    runtime = IntegratedDecisionShadowRuntime(
+        worker=_Worker(),
+        risk_store=_RiskStore(_stored_risk()),
+        governed_runner=lambda *args, **kwargs: pytest.fail("must not run"),
+    )
+
+    with pytest.raises(
+        IntegratedDecisionShadowRuntimeError,
+        match=message,
+    ):
+        _process(runtime, **overrides)
+
+
+def test_phase54_decision_cannot_predate_authoritative_account_head() -> None:
+    runtime = IntegratedDecisionShadowRuntime(
+        worker=_Worker(),
+        risk_store=_RiskStore(_stored_risk()),
+        governed_runner=lambda *args, **kwargs: pytest.fail("must not run"),
+    )
+
+    with pytest.raises(
+        IntegratedDecisionShadowRuntimeError,
+        match="predates authoritative",
+    ):
+        _process(runtime, _decision(timestamp=98.0))
+
+
+def test_marks_must_cover_existing_and_candidate_cycle_assets_before_execution() -> None:
+    worker = _Worker()
+    runtime = IntegratedDecisionShadowRuntime(
+        worker=worker,
+        risk_store=_RiskStore(_stored_risk()),
+        governed_runner=lambda *args, **kwargs: _governed(
+            items=(
+                SimpleNamespace(asset_id="BTCUSDT"),
+                SimpleNamespace(asset_id="ETHUSDT"),
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        IntegratedDecisionShadowRuntimeError,
+        match="marks missing",
+    ):
+        _process(
+            runtime,
+            marks={"BTCUSDT": 100.5},
+        )
+
+    assert worker.calls == []
+
+
+def test_nonpositive_mark_is_rejected_before_durable_work() -> None:
+    risk_store = _RiskStore(_stored_risk())
+    worker = _Worker()
+    runtime = IntegratedDecisionShadowRuntime(
+        worker=worker,
+        risk_store=risk_store,
+        governed_runner=lambda *args, **kwargs: pytest.fail("must not run"),
+    )
+
+    with pytest.raises(ValueError, match="marks\\[BTCUSDT\\] must be positive"):
+        _process(
+            runtime,
+            marks={"BTCUSDT": 0.0},
+        )
+
+    assert risk_store.calls == []
+    assert worker.calls == []
+
