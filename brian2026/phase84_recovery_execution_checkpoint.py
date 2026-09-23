@@ -427,16 +427,36 @@ class PersistedRecoveryExecutionSupervisor:
     def __init__(
         self,
         *,
-        start_supervisor: PersistedAtomicRecoveryStartSupervisor,
         checkpoints: RecoveryCheckpointStore,
+        start_supervisor: PersistedAtomicRecoveryStartSupervisor | None = None,
+        runtime_supervisor=None,
+        claims=None,
     ) -> None:
+        if start_supervisor is None and (runtime_supervisor is None or claims is None):
+            raise ValueError(
+                "Phase84 requires either start_supervisor or direct runtime_supervisor+claims"
+            )
+        if start_supervisor is not None and (
+            runtime_supervisor is not None or claims is not None
+        ):
+            raise ValueError(
+                "Phase84 start_supervisor and direct dependencies are mutually exclusive"
+            )
         self.start_supervisor = start_supervisor
         self.checkpoints = checkpoints
+        self._direct_runtime_supervisor = runtime_supervisor
+        self._direct_claims = claims
 
     def _runtime_supervisor(self):
+        if self._direct_runtime_supervisor is not None:
+            return self._direct_runtime_supervisor
+        assert self.start_supervisor is not None
         return self.start_supervisor._runtime_supervisor()
 
     def _claims(self):
+        if self._direct_claims is not None:
+            return self._direct_claims
+        assert self.start_supervisor is not None
         return self.start_supervisor.claim_supervisor.claims
 
     @staticmethod
@@ -718,6 +738,10 @@ class PersistedRecoveryExecutionSupervisor:
         observed_at: float,
         source_ref: str,
     ) -> RecoveryExecutionStep:
+        if self.start_supervisor is None:
+            raise RecoveryExecutionError(
+                "process_governed_cycle requires Phase83 start_supervisor"
+            )
         start_step = self.start_supervisor.process_governed_cycle(
             governed,
             worker_token=worker_token,
