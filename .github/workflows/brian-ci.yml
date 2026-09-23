@@ -183,4 +183,5 @@ jobs:
           tests/test_brian2026_phase84_recovery_execution_checkpoint_postgres.py
           tests/test_brian2026_phase85_recovery_completion_audit_postgres.py
           tests/test_brian2026_phase86_recovery_admission_interlock_postgres.py
+          tests/test_brian2026_phase87_recovery_restart_resume_postgres.py
           -v
