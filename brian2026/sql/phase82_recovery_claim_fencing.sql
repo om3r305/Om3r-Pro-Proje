@@ -601,20 +601,14 @@ begin
     );
   end if;
 
-  select c.*, d.source_runtime_version, d.current_state_id
+  select c.*
     into v_claim
   from public.brian_shadow_recovery_claims c
-  join public.brian_shadow_cancel_recovery_directives d
-    on d.runtime_id=c.runtime_id
-   and d.dispatch_id=c.dispatch_id
-   and d.cancel_risk_receipt_id=c.cancel_risk_receipt_id
   where c.runtime_id = p_runtime_id
     and c.cycle_id = p_cycle_id
   limit 1
-  for update of c;
+  for update;
 
-  -- Re-fetch the directive separately because %rowtype above intentionally
-  -- ignores joined-only fields.
   select d.*
     into v_directive
   from public.brian_shadow_cancel_recovery_directives d
