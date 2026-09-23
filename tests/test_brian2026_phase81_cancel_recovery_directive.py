@@ -380,3 +380,142 @@ def test_wrapper_does_not_probe_recovery_before_authoritative_checkpoint() -> No
     assert step.recovery is None
     assert step.outcome == "CLAIM_LOST"
     assert recovery.calls == 0
+
+
+class _SequentialRecoveryStore:
+    def __init__(self, receipts):
+        self.receipts = list(receipts)
+        self.calls = []
+
+    def prepare(self, lease, *, cycle_id, expected_runtime_version):
+        assert lease.runtime_id == "runtime-81"
+        assert cycle_id == "c" * 64
+        self.calls.append(expected_runtime_version)
+        if not self.receipts:
+            raise AssertionError("unexpected recovery prepare retry")
+        return self.receipts.pop(0)
+
+
+class _Phase75AbortHarness:
+    def __init__(self, runtime):
+        self.runtime_supervisor = runtime
+        self.aborts = []
+
+    def abort_authorized_cycle(self, *, cycle_id, reason):
+        self.aborts.append((cycle_id, reason))
+        self.runtime_supervisor.persisted_version += 1
+        return SimpleNamespace(committed=True)
+
+
+class _ForeignExecutionSupervisor:
+    def __init__(self, step):
+        self.step = step
+        runtime = _RuntimeSupervisor()
+        phase75 = _Phase75AbortHarness(runtime)
+        self.phase75 = phase75
+        self.claimed_supervisor = SimpleNamespace(
+            dispatched_supervisor=SimpleNamespace(
+                governed_supervisor=phase75
+            )
+        )
+
+    def process_governed_cycle(self, *args, **kwargs):
+        del args, kwargs
+        return self.step
+
+
+def test_foreign_prepaper_cycle_is_aborted_before_phase81_recovery_is_frozen() -> None:
+    foreign_row = {
+        "prepared": False,
+        "duplicate": False,
+        "status": "FOREIGN_CYCLE_ACTIVE",
+        "runtime_id": "runtime-81",
+        "dispatch_id": "d" * 64,
+        "cycle_id": "c" * 64,
+        "runtime_version": 12,
+        "fencing_token": 31,
+        "cancel_risk_version": 8,
+        "cancel_risk_receipt_id": "r" * 64,
+        "cancel_reason": "HALTED",
+        "foreign_cycle_id": "f" * 64,
+        "foreign_cycle_stage": "CYCLE_CREATED",
+    }
+    prepared_row = _prepared_row()
+    prepared_row["runtime_version"] = 13
+
+    execution = _ForeignExecutionSupervisor(_execution_step())
+    recovery = _SequentialRecoveryStore([
+        _receipt_from_row(foreign_row),
+        CancelRecoveryDirectiveStore(FakeRpc(prepared_row)).prepare(
+            RuntimeLease(
+                runtime_id="runtime-81",
+                owner_token="owner-a",
+                fencing_token=31,
+                version=13,
+                status="ACQUIRED",
+                acquired=True,
+                lease_until=None,
+            ),
+            cycle_id="c" * 64,
+            expected_runtime_version=13,
+        ),
+    ])
+    wrapper = PersistedRecoveryObligationSupervisor(
+        execution_supervisor=execution,
+        recovery_store=recovery,
+    )
+
+    step = wrapper.process_governed_cycle(
+        object(),
+        worker_token="worker-a",
+        claim_seconds=30,
+        marks={},
+        observed_at=1.0,
+        source_ref="phase86-foreign-quarantine",
+    )
+
+    assert execution.phase75.aborts == [
+        ("f" * 64, "phase86:recovery_admission_interlock")
+    ]
+    assert recovery.calls == [12, 13]
+    assert step.recovery is not None and step.recovery.prepared is True
+    assert step.outcome.endswith("RECOVERY_READY_FOREIGN_CYCLE_ABORTED")
+
+
+def test_side_effected_foreign_cycle_is_never_auto_aborted() -> None:
+    foreign_row = {
+        "prepared": False,
+        "duplicate": False,
+        "status": "FOREIGN_CYCLE_ACTIVE",
+        "runtime_id": "runtime-81",
+        "dispatch_id": "d" * 64,
+        "cycle_id": "c" * 64,
+        "runtime_version": 12,
+        "fencing_token": 31,
+        "cancel_risk_version": 8,
+        "cancel_risk_receipt_id": "r" * 64,
+        "cancel_reason": "HALTED",
+        "foreign_cycle_id": "f" * 64,
+        "foreign_cycle_stage": "PAPER_APPLIED",
+    }
+    execution = _ForeignExecutionSupervisor(_execution_step())
+    recovery = _SequentialRecoveryStore([_receipt_from_row(foreign_row)])
+    wrapper = PersistedRecoveryObligationSupervisor(
+        execution_supervisor=execution,
+        recovery_store=recovery,
+    )
+
+    step = wrapper.process_governed_cycle(
+        object(),
+        worker_token="worker-a",
+        claim_seconds=30,
+        marks={},
+        observed_at=1.0,
+        source_ref="phase86-foreign-wait",
+    )
+
+    assert execution.phase75.aborts == []
+    assert recovery.calls == [12]
+    assert step.recovery is not None
+    assert step.recovery.status == "FOREIGN_CYCLE_ACTIVE"
+    assert step.outcome.endswith("RECOVERY_WAIT_FOREIGN_CYCLE")
