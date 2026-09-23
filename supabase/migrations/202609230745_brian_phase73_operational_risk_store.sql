@@ -206,6 +206,9 @@ declare
   v_previous_state text;
   v_trading_state text;
   v_entry_halt_latched boolean;
+  v_initial_state text;
+  v_expected_previous_state text;
+  v_previous_timestamp double precision := null;
   v_existing_entry_id text;
   v_existing_entry_payload jsonb;
   v_existing_version bigint;
@@ -235,6 +238,13 @@ begin
   v_current_state := nullif(trim(p_manifest->>'current_state'), '');
   v_halt_latched := (p_manifest->>'halt_latched')::boolean;
   v_entries := p_manifest->'entries';
+  v_initial_state := nullif(trim(p_manifest->>'initial_state'), '');
+  v_expected_previous_state := v_initial_state;
+
+  if jsonb_typeof(p_manifest->'policy') <> 'object'
+     or v_initial_state not in ('ACTIVE','REDUCING','HALTED') then
+    raise exception 'PHASE73_RISK_COMMIT: invalid policy/initial_state';
+  end if;
 
   if v_ledger_hash is null or length(v_ledger_hash) <> 64
      or v_policy_hash is null or length(v_policy_hash) <> 64
@@ -408,8 +418,18 @@ begin
     if v_receipt_id is null or length(v_receipt_id) <> 64
        or v_previous_state not in ('ACTIVE','REDUCING','HALTED')
        or v_trading_state not in ('ACTIVE','REDUCING','HALTED')
-       or v_entry_halt_latched is distinct from (v_trading_state = 'HALTED') then
+       or v_entry_halt_latched is distinct from (v_trading_state = 'HALTED')
+       or coalesce((v_receipt->>'shadow_only')::boolean, false) is not true
+       or coalesce((v_receipt->>'live_execution')::boolean, false) is not false then
       raise exception 'PHASE73_LEDGER: invalid receipt at sequence %', v_expected_sequence;
+    end if;
+    if v_previous_state is distinct from v_expected_previous_state then
+      raise exception 'PHASE73_LEDGER_STATE_CHAIN: expected previous %, got % at sequence %',
+        v_expected_previous_state, v_previous_state, v_expected_sequence;
+    end if;
+    if v_previous_timestamp is not null and v_receipt_timestamp <= v_previous_timestamp then
+      raise exception 'PHASE73_LEDGER_TIME: receipt timestamp must advance at sequence %',
+        v_expected_sequence;
     end if;
 
     select entry_id, entry_payload
@@ -426,9 +446,17 @@ begin
     end if;
 
     v_previous_entry_id := v_entry_id;
+    v_previous_timestamp := v_receipt_timestamp;
+    v_expected_previous_state := v_trading_state;
     v_expected_sequence := v_expected_sequence + 1;
   end loop;
 
+  if v_incoming_count = 0 and v_current_state is distinct from v_initial_state then
+    raise exception 'PHASE73_LEDGER_STATE_CHAIN: empty ledger current_state must equal initial_state';
+  end if;
+  if v_incoming_count > 0 and v_expected_previous_state is distinct from v_current_state then
+    raise exception 'PHASE73_LEDGER_STATE_CHAIN: final receipt state does not match current_state';
+  end if;
   if v_incoming_count > 0 and v_previous_entry_id is distinct from v_head_entry_id then
     raise exception 'PHASE73_LEDGER: head_entry_id does not match final entry';
   end if;
