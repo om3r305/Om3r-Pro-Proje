@@ -295,3 +295,55 @@ def test_manifest_hash_tamper_is_rejected() -> None:
 
     with pytest.raises(CycleJournalError, match="manifest hash mismatch"):
         restore_cycle_journal(manifest)
+
+
+def test_reconciliation_required_can_append_evolving_retry_evidence() -> None:
+    cycle = _cycle("reconcile-retries")
+    _, paper, _, projection, good = _artifacts(cycle)
+    bad_one = ReconciliationBatchReport(
+        results=good.results,
+        tracked_assets=good.tracked_assets,
+        reports_complete=True,
+        unresolved_command_ids=("unknown-command-1",),
+        duplicate_fill_ids=(),
+        checks=tuple(
+            (name, False if name == "no_unknown_command_outcomes" else value)
+            for name, value in good.checks
+        ),
+        ready=False,
+    )
+    bad_two = ReconciliationBatchReport(
+        results=good.results,
+        tracked_assets=good.tracked_assets,
+        reports_complete=True,
+        unresolved_command_ids=("unknown-command-2",),
+        duplicate_fill_ids=(),
+        checks=tuple(
+            (name, False if name == "no_unknown_command_outcomes" else value)
+            for name, value in good.checks
+        ),
+        ready=False,
+    )
+
+    journal = DurableCycleJournal()
+    journal.record_cycle(cycle)
+    journal.mark_paper_applied(cycle.cycle_id, paper)
+    journal.mark_local_projected(cycle.cycle_id, projection)
+
+    first = journal.mark_reconciliation(cycle.cycle_id, bad_one)
+    duplicate = journal.mark_reconciliation(cycle.cycle_id, bad_one)
+    second = journal.mark_reconciliation(cycle.cycle_id, bad_two)
+
+    assert first.stage == "RECONCILIATION_REQUIRED"
+    assert duplicate.duplicate is True
+    assert duplicate.entry_id == first.entry_id
+    assert second.duplicate is False
+    assert second.entry_id != first.entry_id
+    assert [row.stage for row in journal.entries[-2:]] == [
+        "RECONCILIATION_REQUIRED",
+        "RECONCILIATION_REQUIRED",
+    ]
+
+    reconciled = journal.mark_reconciliation(cycle.cycle_id, good)
+    assert reconciled.stage == "RECONCILED"
+    assert journal.verify_integrity() is True
