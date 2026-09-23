@@ -1412,3 +1412,30 @@ This document records external open-source behaviors studied for Brian. It is no
   - Phase97 remains hard shadow/paper-only and introduces no migration of its own.
 - Red-team unit coverage includes immediate IDLE release, multi-item drain on one session, fresh second attempt after the ready→barrier race, non-terminal stop behavior, bounded exhaustion, cross-runtime rejection, stale/closed sessions, invalid budgets and missing Phase86 handoff authority.
 
+## Phase 98 — Bounded Auto-Recovery Machine Entrypoint
+
+- Brian file:
+  - `brian2026/phase98_bounded_auto_recovery_entrypoint.py`
+- Phase98 adds no alpha, SQL, scheduler or live execution. It exposes Phase97 as a single machine-readable startup command that opens one Phase92 session, keeps one Phase70 lease for the complete bounded drain and closes both lease/transport on every exit.
+- Invocation / bounded controls:
+  - runnable as `python -m brian2026.phase98_bounded_auto_recovery_entrypoint`;
+  - recovery drain budget is configurable through `--max-items` / `BRIAN_RECOVERY_MAX_ITEMS` and bounded to 1–32;
+  - claim TTL, recovery intent TTL, Binance depth, spread ceiling, timeout and asset budget preserve the existing Phase94/96 bounds;
+  - CLI values override environment values and a process-unique `phase98-...` worker identity is generated when none is supplied.
+- Runtime handoff:
+  - Phase92 opens/restores the authoritative durable runtime once;
+  - Phase97 invokes Phase95 separately per backlog identity, so market evidence remains causal and item-specific while lease ownership stays continuous;
+  - Phase97's final Phase86 re-read must be OPEN before exit 0 is emitted;
+  - Phase86's database authorization/dispatch wrappers remain the final barrier against a recovery obligation that appears after the command returns.
+- Machine output:
+  - exactly one bounded JSON status line is emitted on normal completion;
+  - output includes attempt count, processed count, final Phase86 admission, per-attempt recovery status/outcomes and bounded evidence asset/timestamp metadata;
+  - raw depth books and order-book snapshots are not emitted;
+  - exit 0 = READY, 20 = blocked/non-terminal, 21 = manual review, 22 = bounded drain exhausted, 30 = input/config error, 40 = runtime/transport/evidence/recovery worker failure.
+- Error/resource safety:
+  - CLI parser failures are machine-readable JSON;
+  - modern, legacy and hosted Supabase secrets are redacted from worker diagnostics;
+  - the Phase92 context manager always closes the runtime lease/session when Phase97 returns or raises.
+- Red-team unit coverage includes single-session READY, env/CLI precedence, provider bounds, blocked/manual/budget exit classes, bounded evidence-only output, invalid configuration rejection, secret redaction with session cleanup and generated process worker identity.
+- Phase98 remains hard shadow/paper-only and introduces no migration of its own.
+
