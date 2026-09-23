@@ -198,6 +198,7 @@ class AtomicGovernedWriteAheadStore:
             "LEASE_LOST",
             "RUNTIME_VERSION_CONFLICT",
             "RISK_VERSION_CONFLICT",
+            "RECOVERY_BARRIER",
         } and authorized:
             raise AtomicGovernedWriteAheadError(
                 f"{status} cannot be authorized"
