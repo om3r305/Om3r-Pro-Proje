@@ -87,6 +87,7 @@ create table if not exists public.brian_shadow_cancel_recovery_events (
       'DUPLICATE',
       'NO_CANCEL_REQUEST',
       'WAIT_ORIGINAL_COMMIT',
+      'FOREIGN_CYCLE_ACTIVE',
       'HEAD_MOVED',
       'LEASE_LOST',
       'RUNTIME_VERSION_CONFLICT',
@@ -140,6 +141,8 @@ declare
   v_start public.brian_shadow_execution_starts%rowtype;
   v_cycle_payload jsonb;
   v_journal_stage text;
+  v_foreign_cycle_id text;
+  v_foreign_cycle_stage text;
   v_ledger jsonb;
   v_head_state_id text;
   v_pre_state_id text;
@@ -370,6 +373,59 @@ begin
       'cancel_risk_receipt_id', v_cancel.risk_receipt_id,
       'cancel_reason', v_cancel.reason,
       'journal_stage', v_journal_stage
+    );
+  end if;
+
+  -- Phase86 admission interlock: do not freeze an immutable recovery
+  -- directive while another journal cycle is still active. A pre-authorized
+  -- CYCLE_CREATED candidate must be quarantined/aborted first, then Phase81 is
+  -- retried against the new authoritative runtime version.
+  select latest.cycle_id, latest.stage
+    into v_foreign_cycle_id, v_foreign_cycle_stage
+  from (
+    select distinct on (e.value->>'cycle_id')
+      e.value->>'cycle_id' as cycle_id,
+      e.value->>'stage' as stage,
+      e.ord
+    from jsonb_array_elements(
+      coalesce(v_checkpoint->'journal_manifest'->'entries','[]'::jsonb)
+    ) with ordinality e(value,ord)
+    where nullif(trim(e.value->>'cycle_id'),'') is not null
+    order by e.value->>'cycle_id', e.ord desc
+  ) latest
+  where latest.cycle_id <> p_cycle_id
+    and latest.stage not in ('COMMITTED','ABORTED')
+  order by latest.ord asc
+  limit 1;
+
+  if v_foreign_cycle_id is not null then
+    insert into public.brian_shadow_cancel_recovery_events(
+      runtime_id, dispatch_id, cycle_id, runtime_version,
+      cancel_risk_version, cancel_risk_receipt_id,
+      event, observed_at, metadata
+    ) values (
+      p_runtime_id, v_dispatch.dispatch_id, p_cycle_id, v_runtime_version,
+      v_cancel.risk_version, v_cancel.risk_receipt_id,
+      'FOREIGN_CYCLE_ACTIVE', v_now,
+      jsonb_build_object(
+        'foreign_cycle_id',v_foreign_cycle_id,
+        'foreign_cycle_stage',v_foreign_cycle_stage
+      )
+    );
+    return jsonb_build_object(
+      'prepared',false,
+      'duplicate',false,
+      'status','FOREIGN_CYCLE_ACTIVE',
+      'runtime_id',p_runtime_id,
+      'dispatch_id',v_dispatch.dispatch_id,
+      'cycle_id',p_cycle_id,
+      'runtime_version',v_runtime_version,
+      'fencing_token',p_fencing_token,
+      'cancel_risk_version',v_cancel.risk_version,
+      'cancel_risk_receipt_id',v_cancel.risk_receipt_id,
+      'cancel_reason',v_cancel.reason,
+      'foreign_cycle_id',v_foreign_cycle_id,
+      'foreign_cycle_stage',v_foreign_cycle_stage
     );
   end if;
 
