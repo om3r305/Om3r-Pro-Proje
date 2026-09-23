@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from statistics import fmean
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 import json
 import math
 
@@ -458,12 +458,16 @@ class Phase43GroundedResult:
         }
 
 
+GroundedReasoner = Callable[..., ExpertDecision]
+
+
 def run_grounded_phase43(
     snapshot: Mapping[str, object],
     observations: Sequence[SensorObservation],
     *,
     timestamp: float,
     source_kind_by_eye: Mapping[str, str] | None = None,
+    reasoner: GroundedReasoner = reason_market,
 ) -> Phase43GroundedResult:
     packet = prefetch_structured_evidence(
         observations,
@@ -472,11 +476,17 @@ def run_grounded_phase43(
     )
     route = route_specialists(snapshot)
     claims = compile_prefetched_analyst_claims(packet)
-    decision = reason_market(
+    if not callable(reasoner):
+        raise TypeError("reasoner must be callable")
+    decision = reasoner(
         snapshot,
         timestamp=timestamp,
         selected_experts=route.selected_experts,
     )
+    if not decision.shadow_only:
+        raise ValueError("grounded expert decision must remain shadow-only")
+    if not math.isclose(float(decision.timestamp), float(timestamp), rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError("grounded expert decision timestamp drift")
 
     directional = tuple(row for row in claims if row.direction != 0 and row.grounded_confidence > 0)
     if directional:
