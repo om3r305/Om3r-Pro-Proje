@@ -75,6 +75,8 @@ declare
   v_owner text;
   v_runtime_fence bigint;
   v_runtime_version bigint;
+  v_current_checkpoint_id text;
+  v_current_checkpoint_payload jsonb;
   v_lease_until timestamptz;
   v_dispatch_id text;
   v_claim public.brian_shadow_execution_claims%rowtype;
@@ -133,8 +135,9 @@ begin
   );
   v_now := clock_timestamp();
 
-  select owner_token, fencing_token, version, lease_until
-    into v_owner, v_runtime_fence, v_runtime_version, v_lease_until
+  select owner_token, fencing_token, version, checkpoint_id, checkpoint_payload, lease_until
+    into v_owner, v_runtime_fence, v_runtime_version,
+         v_current_checkpoint_id, v_current_checkpoint_payload, v_lease_until
   from public.brian_shadow_runtime_heads
   where runtime_id = p_runtime_id
   for update;
@@ -176,35 +179,6 @@ begin
       'version', coalesce(v_runtime_version,0),
       'current_version', coalesce(v_runtime_version,0),
       'fencing_token', coalesce(v_runtime_fence,p_fencing_token),
-      'claim_fencing_token', p_claim_fencing_token
-    );
-  end if;
-
-  if v_runtime_version <> p_expected_version then
-    insert into public.brian_shadow_claim_commit_events(
-      runtime_id, dispatch_id, cycle_id, worker_token,
-      claim_fencing_token, runtime_fencing_token,
-      expected_runtime_version, committed_runtime_version,
-      checkpoint_id, journal_stage, event, observed_at
-    ) values (
-      p_runtime_id, v_dispatch_id, p_cycle_id, p_worker_token,
-      p_claim_fencing_token, p_fencing_token,
-      p_expected_version, v_runtime_version,
-      v_checkpoint_id, v_journal_stage,
-      'RUNTIME_VERSION_CONFLICT', v_now
-    );
-    return jsonb_build_object(
-      'committed', false,
-      'duplicate', false,
-      'status', 'RUNTIME_VERSION_CONFLICT',
-      'runtime_id', p_runtime_id,
-      'dispatch_id', v_dispatch_id,
-      'cycle_id', p_cycle_id,
-      'checkpoint_id', v_checkpoint_id,
-      'journal_stage', v_journal_stage,
-      'version', v_runtime_version,
-      'current_version', v_runtime_version,
-      'fencing_token', p_fencing_token,
       'claim_fencing_token', p_claim_fencing_token
     );
   end if;
@@ -279,6 +253,73 @@ begin
       'committed', false,
       'duplicate', false,
       'status', 'START_MISSING',
+      'runtime_id', p_runtime_id,
+      'dispatch_id', v_dispatch_id,
+      'cycle_id', p_cycle_id,
+      'checkpoint_id', v_checkpoint_id,
+      'journal_stage', v_journal_stage,
+      'version', v_runtime_version,
+      'current_version', v_runtime_version,
+      'fencing_token', p_fencing_token,
+      'claim_fencing_token', p_claim_fencing_token
+    );
+  end if;
+
+  -- Lost-response retry is accepted only when the current authoritative head is
+  -- exactly the submitted checkpoint AND the same claim still owns execution.
+  if v_runtime_version <> p_expected_version then
+    if v_current_checkpoint_id = v_checkpoint_id then
+      if v_current_checkpoint_payload is distinct from p_checkpoint then
+        raise exception 'PHASE80_CHECKPOINT_ID_CONFLICT: current checkpoint id reused with different payload';
+      end if;
+
+      insert into public.brian_shadow_claim_commit_events(
+        runtime_id, dispatch_id, cycle_id, worker_token,
+        claim_fencing_token, runtime_fencing_token,
+        expected_runtime_version, committed_runtime_version,
+        checkpoint_id, journal_stage, event, observed_at,
+        metadata
+      ) values (
+        p_runtime_id, v_dispatch_id, p_cycle_id, p_worker_token,
+        p_claim_fencing_token, p_fencing_token,
+        p_expected_version, v_runtime_version,
+        v_checkpoint_id, v_journal_stage,
+        'DUPLICATE_CURRENT', v_now,
+        jsonb_build_object('lost_response_retry', true)
+      );
+
+      return jsonb_build_object(
+        'committed', true,
+        'duplicate', true,
+        'status', 'DUPLICATE_CURRENT',
+        'runtime_id', p_runtime_id,
+        'dispatch_id', v_dispatch_id,
+        'cycle_id', p_cycle_id,
+        'checkpoint_id', v_checkpoint_id,
+        'journal_stage', v_journal_stage,
+        'version', v_runtime_version,
+        'current_version', v_runtime_version,
+        'fencing_token', p_fencing_token,
+        'claim_fencing_token', p_claim_fencing_token
+      );
+    end if;
+
+    insert into public.brian_shadow_claim_commit_events(
+      runtime_id, dispatch_id, cycle_id, worker_token,
+      claim_fencing_token, runtime_fencing_token,
+      expected_runtime_version, committed_runtime_version,
+      checkpoint_id, journal_stage, event, observed_at
+    ) values (
+      p_runtime_id, v_dispatch_id, p_cycle_id, p_worker_token,
+      p_claim_fencing_token, p_fencing_token,
+      p_expected_version, v_runtime_version,
+      v_checkpoint_id, v_journal_stage,
+      'RUNTIME_VERSION_CONFLICT', v_now
+    );
+    return jsonb_build_object(
+      'committed', false,
+      'duplicate', false,
+      'status', 'RUNTIME_VERSION_CONFLICT',
       'runtime_id', p_runtime_id,
       'dispatch_id', v_dispatch_id,
       'cycle_id', p_cycle_id,
