@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from collections.abc import Callable, Mapping
 
 from .phase69_governed_shadow_execution import GovernedShadowExecution
@@ -173,7 +174,7 @@ class RecoveryFirstShadowWorkerSession:
         recovery_ttl_seconds: int,
         source_ref: str,
         provider_factory: ProviderFactory = BinanceSpotRecoveryEvidenceProvider,
-        clock,
+        clock=time.time,
     ) -> RecoveryFirstShadowStartupReceipt:
         if self._closed:
             raise RecoveryFirstShadowWorkerError(
