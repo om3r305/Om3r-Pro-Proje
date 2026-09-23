@@ -12,6 +12,13 @@ import httpx
 PHASE91_SCHEMA_VERSION = "brian.phase91-supabase-rpc-transport.v1"
 
 RECOVERY_RPC_ALLOWLIST = frozenset({
+    # Phase70 durable runtime ownership/bootstrap.
+    "brian_acquire_shadow_runtime_lease",
+    "brian_renew_shadow_runtime_lease",
+    "brian_release_shadow_runtime_lease",
+    "brian_commit_shadow_runtime_checkpoint",
+    "brian_read_shadow_runtime_checkpoint",
+    # Phase81-87 recovery boundaries.
     "brian_prepare_shadow_cancel_recovery",
     "brian_claim_shadow_cancel_recovery",
     "brian_renew_shadow_cancel_recovery_claim",
@@ -143,7 +150,7 @@ class SupabaseRecoveryRpcConfig:
 
 
 class SupabaseRecoveryRpcTransport:
-    """Fail-closed PostgREST RPC transport for the Phase81-90 recovery stack.
+    """Fail-closed PostgREST RPC transport for Phase70 + Phase81-90 runtime recovery.
 
     The modern Supabase secret key is sent only through the `apikey` header.
     Legacy service-role keys remain accepted during migration, but secrets are
