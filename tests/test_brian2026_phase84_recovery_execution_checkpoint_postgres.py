@@ -645,17 +645,19 @@ def test_final_recovery_commit_atomically_completes_claim_and_advances_head():
         row = _commit(conn, runtime_id, ctx, final, expected_version=6)
         assert row["committed"] is True
         assert row["terminal"] is True
-        assert row["status"] == "RECOVERY_COMPLETED"
+        assert row["status"] == "RECOVERY_COMMITTED_PENDING_AUDIT"
         assert row["version"] == 7
         assert row["head_state_id"] == _h("z")
 
         claim = _read_claim(conn, runtime_id)
-        assert claim[0] == "COMPLETED"
+        # Phase84 leaves the claim open for Phase85's authoritative
+        # post-recovery invariant audit.
+        assert claim[0] == "CLAIMED"
         assert claim[3] == ctx["recovery_cycle_id"]
         assert claim[4] == 7
         assert claim[5] == _h("z")
         assert claim[6] == final["checkpoint_id"]
-        assert claim[7] == final["checkpoint_id"]
+        assert claim[7] is None
 
         head = _read_head(conn, runtime_id)
         assert head == (7, final["checkpoint_id"], _h("z"))
@@ -694,7 +696,7 @@ def test_exact_final_lost_response_retry_is_duplicate_current_after_claim_comple
         )
         first = _commit(conn, runtime_id, ctx, final, expected_version=6)
         retry = _commit(conn, runtime_id, ctx, final, expected_version=6)
-        assert first["status"] == "RECOVERY_COMPLETED"
+        assert first["status"] == "RECOVERY_COMMITTED_PENDING_AUDIT"
         assert retry["committed"] is True
         assert retry["duplicate"] is True
         assert retry["terminal"] is True
