@@ -322,3 +322,27 @@ This document records external open-source behaviors studied for Brian. It is no
   - an advanced robustness policy can require minimum CPCV paths, maximum PBO and minimum DSR probability;
   - a passing result is only `ADVANCED_ROBUSTNESS_CANDIDATE`: research-only, no auto-promotion and no execution.
 - Phase 58 does not replace Phase 41; it adds multiple-testing/selection-bias diagnostics that Monte Carlo path shuffling alone cannot detect.
+
+
+## Phase 59 — Hardened Promotion Gate + Pristine Final Validation Barrier
+
+- Brian file: `brian2026/phase59_hardened_promotion_gate.py`
+- This phase introduces no new trading algorithm. It composes:
+  - Phase 49 preliminary shadow/paper/causality eligibility;
+  - Phase 58 CPCV/PBO/Deflated-Sharpe advanced overfit controls;
+  - Phase 50 authoritative execution-state reconciliation;
+  - Brian's pre-existing scientific rule that contaminated/previously used data cannot be called a pristine final holdout.
+- Hardening behavior:
+  - Phase 49 `MICRO_LIVE_ELIGIBLE` is explicitly treated as **preliminary**, not final approval;
+  - a one-shot final-validation receipt must identify a SHA-256-sealed dataset, be sealed before evaluation, be evaluated exactly once, never be used for tuning, and never be marked contaminated;
+  - research/overfit failures block before execution-state review;
+  - unresolved execution reconciliation blocks even when research has passed;
+  - absence of pristine final validation produces `FINAL_VALIDATION_REQUIRED`;
+  - passing every automated gate yields only `HUMAN_REVIEW_READY`.
+- Even `HUMAN_REVIEW_READY` has:
+  - `human_authorization_required=True`;
+  - `exchange_adapter_enabled=False`;
+  - `capital_authorized=False`;
+  - `automatic_activation=False`;
+  - `live_execution=False`.
+- This makes the current absence of a pristine final holdout an explicit blocker instead of allowing a paper/backtest pass to be misrepresented as live readiness.
