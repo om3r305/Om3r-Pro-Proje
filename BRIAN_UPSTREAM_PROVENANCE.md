@@ -1187,3 +1187,24 @@ This document records external open-source behaviors studied for Brian. It is no
   - exhausting the item budget while Phase86 remains blocked returns `RECOVERY_BUDGET_EXHAUSTED`, never READY.
 - Red-team unit coverage includes IDLE/open release, multiple resolved backlog items, wait/manual stop behavior, the Phase87-IDLE→Phase86-barrier race, bounded backlog exhaustion, OPEN-admission/nonterminal disagreement and invalid budget rejection.
 - Phase89 remains hard shadow/paper-only and introduces no migration of its own.
+
+
+## Phase 90 — Recovery Runtime Assembly
+
+- Brian file:
+  - `brian2026/phase90_recovery_runtime_assembly.py`
+- Phase90 adds no alpha, SQL, scheduler or live execution. It centralizes construction of the Phase81–89 restart-recovery stack so deployment workers cannot accidentally cross-wire persistence/authority components.
+- Assembly semantics:
+  - one caller-supplied RPC transport is shared by the Phase81 directive store, Phase82 claim store, Phase83 STARTED store, Phase84 checkpoint store, Phase85 audit store, Phase86 admission reader and Phase87 backlog reader;
+  - one valid Phase71 persisted runtime supervisor is shared by Phase84 and Phase88;
+  - the exact Phase82 claim store is reused by Phase84 direct recovery execution and Phase88 restart orchestration;
+  - Phase88 is wired to the exact Phase81/82/83/84/85/87 components created by the assembly;
+  - Phase89 is wired to that exact Phase88 orchestrator and Phase86 admission store;
+  - an optional existing Phase75-compatible foreign-cycle aborter may be supplied only to the Phase88 restart orchestrator.
+- Fail-closed construction:
+  - non-callable RPC transports are rejected before stack construction;
+  - stale runtime supervisors are rejected;
+  - runtime supervisors must expose a non-empty runtime id;
+  - `RecoveryRuntimeStack` validates identity-level wiring across Phase84, Phase88 and Phase89 and rejects cross-wired runtime/claim/store authorities.
+- Unit coverage proves shared RPC identity, shared runtime authority, exact store/supervisor identity, optional quarantine wiring, stale-runtime rejection, invalid transport/runtime rejection and cross-wired Phase84 rejection.
+- Phase90 remains hard shadow/paper-only and introduces no deployment migration of its own.
