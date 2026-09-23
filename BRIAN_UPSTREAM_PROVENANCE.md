@@ -498,3 +498,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - the journal manifest persists the **full cycle body**, not merely its hash, so a crash after cycle creation still leaves enough evidence to retry the same paper cycle;
   - restore reconstructs Phase 57 nested risk/execution/pending-reversal receipts, recomputes entry ids, recomputes the journal manifest hash, verifies legal stage transitions and re-validates stored cycle hashes.
 - Phase 66 is a write-ahead recovery journal only. It does not submit live orders or authorize capital.
+
+
+## Phase 66 — Recovery-Aware Shadow/Paper Runtime Coordinator
+
+- Brian file: `brian2026/phase66_runtime_coordinator.py`
+- This phase introduces no new external trading algorithm. It composes the already provenance-tracked Phase 50, 57, 60, 61, 63, 64 and 65 contracts into one fail-closed runtime state machine.
+- Integration behavior:
+  - a cycle is first recorded in the append-only Phase 60 ledger;
+  - the exact same cycle is then applied idempotently to the Phase 61 paper venue;
+  - immutable Phase 61 order/fill events are projected independently through Phase 64;
+  - Phase 50 reconciles the independent local projection against explicit paper-venue reports;
+  - only a ready reconciliation plus complete mark-to-market inputs may produce a new Phase 60 authoritative state;
+  - missing mark prices return `MARKS_REQUIRED` and keep the cycle pending without changing the ledger head;
+  - local/venue divergence returns `RECONCILIATION_BLOCKED` and keeps the cycle pending;
+  - while a cycle is pending, any different new cycle is rejected, preventing overlapping decisions from spending or sizing from inconsistent account state;
+  - replaying the same pending cycle is safe because Phase 60, 61 and 64 are content-addressed/idempotent;
+  - Phase 63 checkpoints can be restored through Phase 65, rebuilding the local projector from durable events;
+  - after restart, a pending cycle can be reconciled and committed without needing the original `ShadowExecutionCycle` payload, because the durable paper events plus Phase 60 pending identity are sufficient for state completion;
+  - construction rejects split-brain account identities across ledger, paper venue and local projector.
+- Phase 66 remains shadow/paper-only. It has no exchange transport, API-key surface, capital authorization or automatic live activation.
