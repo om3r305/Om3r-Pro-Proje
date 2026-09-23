@@ -150,6 +150,10 @@ def test_store_accepts_takeover_resume_boundary() -> None:
 
 def test_store_rejects_started_leg_drift() -> None:
     row = _row()
+    # Return a different but internally valid recovery leg. This reaches the
+    # Phase83 immutable-anchor comparison instead of failing Phase81 leg shape
+    # validation first.
+    row["recovery_legs"][0]["before_weight"] = 0.05
     row["recovery_legs"][0]["target_weight"] = 0.05
     row["recovery_legs"][0]["reduce_weight"] = 0.20
     with pytest.raises(AtomicRecoveryStartError, match="legs differ"):
