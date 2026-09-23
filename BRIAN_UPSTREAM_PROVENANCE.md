@@ -263,3 +263,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - the pending reversal expires by TTL instead of opening stale new risk;
   - all Phase 55 instructions remain shadow-only with no exchange transport.
 - The implementation operates at portfolio-weight/delta level because the real quantity conversion remains the execution adapter's responsibility.
+
+
+## Phase 56 — Fail-Closed Pre-Trade Risk Engine
+
+- Brian file: `brian2026/phase56_pretrade_risk_engine.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `2c5364a5ca3ea2a68f51aa6e886aa6a7d6fc58e4`.
+- Upstream behavior inspected:
+  - Nautilus `RiskEngine` sits between strategy intent and execution and independently validates order/instrument/account constraints.
+  - `TradingState::Halted` denies new submissions.
+  - `TradingState::Reducing` accepts only a valid reduce-only submission tied to an identified open position; order side must oppose the position and quantity must not exceed open quantity.
+  - ACTIVE submissions still pass quantity/notional/account checks, including instrument min/max notional and configured `max_notional_per_order`.
+- Brian clean-room adaptation:
+  - Phase 56 has no bypass configuration;
+  - new/increasing-risk `TradeIntent` requires ACTIVE state, available cash and all notional gates;
+  - Phase 55 `RiskReductionIntent` may pass in ACTIVE or REDUCING, but must identify the current open direction, oppose it, remain within exposure, and never flip the position;
+  - HALTED denies both new-risk and reduce submissions in this simplified submission-only boundary;
+  - every review emits an auditable ALLOW/DENY receipt with individual checks and reasons;
+  - risk receipts remain shadow-only and do not route orders themselves.
+- Cancel/query behavior and venue-specific whole-position-exit exemptions are outside Phase 56 scope; they are not silently approximated.
