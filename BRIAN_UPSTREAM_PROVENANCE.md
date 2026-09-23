@@ -518,3 +518,25 @@ This document records external open-source behaviors studied for Brian. It is no
   - after restart, a pending cycle can be reconciled and committed without needing the original `ShadowExecutionCycle` payload, because the durable paper events plus Phase 60 pending identity are sufficient for state completion;
   - construction rejects split-brain account identities across ledger, paper venue and local projector.
 - Phase 66 remains shadow/paper-only. It has no exchange transport, API-key surface, capital authorization or automatic live activation.
+
+
+## Phase 67 — Write-Ahead Durable Runtime Orchestration
+
+- Brian file: `brian2026/phase67_durable_runtime_orchestrator.py`
+- This phase introduces no new trading algorithm. It integrates the Phase 66 durable cycle journal with the already proven Phase 60–66 shadow/paper runtime contracts.
+- Write-ahead behavior:
+  - the complete Phase 57 `ShadowExecutionCycle` body is content-addressed in `DurableCycleJournal` **before** any ledger, paper-venue or local-projection side effect;
+  - only one non-terminal journal cycle may exist at a time;
+  - Phase 60 pending identity and the active journal cycle must agree whenever a ledger pending cycle exists;
+  - stage order is enforced as `CYCLE_CREATED -> PAPER_APPLIED -> LOCAL_PROJECTED -> RECONCILED -> COMMITTED` (with explicit reconciliation-required/abort branches already defined by the journal).
+- Crash recovery behavior:
+  - crash after write-ahead but before Phase 60 append: the full original cycle body is restored from the journal and can be activated without regenerating the decision;
+  - crash after Phase 60 append but before paper execution: the same journaled cycle is applied idempotently;
+  - crash after Phase 61 paper side effects but before the journal stage write: the restored paper receipt proves the side effect and journal metadata is advanced forward;
+  - crash after paper fill but before local projection persistence: Phase 65 event replay rebuilds Phase 64 local state from the durable paper events, and the recovered projection receipt proves `LOCAL_PROJECTED`;
+  - recovered local/venue state must pass the real Phase 50 reconciliation before journal state can become `RECONCILED`;
+  - missing mark data leaves both Phase 60 and Phase 67 at a pending/reconciled boundary rather than inventing equity;
+  - crash after Phase 60 authoritative commit but before the journal `COMMITTED` write is repaired only when the Phase 60 `RECONCILED_COMMIT` transition proves the committed state id;
+  - recovery advances journal metadata only from independently restored artifacts; it never infers a side effect from stage order alone.
+- Duplicate retries cannot duplicate paper fills or local position projection because the journal, Phase 60 ledger, Phase 61 paper venue and Phase 64 projector are all content-addressed/idempotent.
+- Phase 67 remains shadow/paper-only with no exchange transport, API-key surface, capital authorization or automatic live activation.
