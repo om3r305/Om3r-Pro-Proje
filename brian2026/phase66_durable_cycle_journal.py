@@ -235,7 +235,7 @@ _ALLOWED_NEXT: dict[JournalStage, set[JournalStage]] = {
     "CYCLE_CREATED": {"PAPER_APPLIED", "ABORTED"},
     "PAPER_APPLIED": {"LOCAL_PROJECTED", "ABORTED"},
     "LOCAL_PROJECTED": {"RECONCILIATION_REQUIRED", "RECONCILED", "ABORTED"},
-    "RECONCILIATION_REQUIRED": {"RECONCILED", "ABORTED"},
+    "RECONCILIATION_REQUIRED": {"RECONCILIATION_REQUIRED", "RECONCILED", "ABORTED"},
     "RECONCILED": {"COMMITTED", "ABORTED"},
     "COMMITTED": set(),
     "ABORTED": set(),
@@ -255,7 +255,7 @@ class DurableCycleJournal:
         self._cycle_hashes: dict[str, str] = {}
         self._entries: list[CycleJournalEntry] = []
         self._latest_by_cycle: dict[str, CycleJournalEntry] = {}
-        self._artifact_hash_by_stage: dict[tuple[str, JournalStage], str] = {}
+        self._entry_by_artifact: dict[tuple[str, JournalStage, str], str] = {}
 
     @property
     def entries(self) -> tuple[CycleJournalEntry, ...]:
@@ -286,17 +286,13 @@ class DurableCycleJournal:
         if cycle_id not in self._cycles:
             raise CycleJournalError("cycle must be journaled before stage advancement")
         artifact_hash = content_hash(artifact_payload)
-        key = (cycle_id, stage)
-        previous_artifact = self._artifact_hash_by_stage.get(key)
-        if previous_artifact is not None:
-            if previous_artifact != artifact_hash:
-                raise CycleJournalError(
-                    f"{cycle_id} {stage} already exists with different artifact evidence"
-                )
+        artifact_key = (cycle_id, stage, artifact_hash)
+        previous_entry_id = self._entry_by_artifact.get(artifact_key)
+        if previous_entry_id is not None:
             entry = next(
                 row
                 for row in self._entries
-                if row.cycle_id == cycle_id and row.stage == stage
+                if row.entry_id == previous_entry_id
             )
             return JournalAppendReceipt(
                 cycle_id=cycle_id,
@@ -332,7 +328,7 @@ class DurableCycleJournal:
         )
         self._entries.append(entry)
         self._latest_by_cycle[cycle_id] = entry
-        self._artifact_hash_by_stage[key] = artifact_hash
+        self._entry_by_artifact[artifact_key] = entry.entry_id
         return JournalAppendReceipt(
             cycle_id=cycle_id,
             stage=stage,
@@ -575,10 +571,12 @@ def restore_cycle_journal(
 
     journal._entries = parsed_entries
     journal._latest_by_cycle = {}
-    journal._artifact_hash_by_stage = {}
+    journal._entry_by_artifact = {}
     for entry in parsed_entries:
         journal._latest_by_cycle[entry.cycle_id] = entry
-        journal._artifact_hash_by_stage[(entry.cycle_id, entry.stage)] = entry.artifact_hash
+        journal._entry_by_artifact[
+            (entry.cycle_id, entry.stage, entry.artifact_hash)
+        ] = entry.entry_id
 
     journal.verify_integrity()
     return journal
