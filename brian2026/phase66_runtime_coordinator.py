@@ -186,6 +186,14 @@ class ShadowPaperRuntimeCoordinator:
         )
         return tracked, report
 
+    def reconcile_current(
+        self,
+        *,
+        extra_assets: Sequence[str] = (),
+    ) -> tuple[tuple[str, ...], ReconciliationBatchReport]:
+        """Expose the independent Phase 50 check without committing ledger state."""
+        return self._reconcile(extra_assets=extra_assets)
+
     def _missing_marks(
         self,
         marks: Mapping[str, float],
