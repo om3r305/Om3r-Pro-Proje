@@ -198,7 +198,11 @@ class PaperVenue:
 
     @property
     def fills(self) -> tuple[PaperFill, ...]:
-        return tuple(self._fills[key] for key in sorted(self._fills))
+        return tuple(self._fills.values())
+
+    @property
+    def cycle_receipts(self) -> tuple[PaperCycleReceipt, ...]:
+        return tuple(self._cycle_receipts.values())
 
     def position(self, asset_id: str) -> PaperPosition:
         return self._positions.get(
