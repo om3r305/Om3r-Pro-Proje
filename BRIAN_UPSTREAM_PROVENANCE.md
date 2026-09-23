@@ -1292,3 +1292,37 @@ This document records external open-source behaviors studied for Brian. It is no
   - Phase92 remains responsible for lease + HTTP cleanup on every normal/exceptional exit.
 - Red-team tests cover exact market/risk/mark parsing, malformed/crossed books, invalid marks, one-line READY output, block/manual/budget exit-code separation, safe empty-TTY IDLE probes, invalid JSON/bounds, runtime-vs-input error classification, secret redaction, generated worker-token identity, file-vs-stdin precedence and machine-readable unknown-argument errors.
 - Phase93 remains hard shadow/paper-only and introduces no migration of its own.
+
+
+## Phase 94 — Public Binance Spot Recovery Evidence
+
+- Brian file:
+  - `brian2026/phase94_binance_spot_recovery_evidence.py`
+- Phase94 adds no alpha, SQL, private exchange API, account access or live execution. It is a read-only public Binance Spot market-evidence adapter for the Phase56/57/84 shadow recovery path.
+- Upstream contract:
+  - only public market-data GET routes are allowlisted: `/api/v3/depth` and `/api/v3/exchangeInfo`;
+  - the market-data-only `data-api.binance.vision` host is preferred, with the existing public Binance REST hosts used only as bounded failover for transport/5xx availability failures;
+  - no API key, Authorization header, signed request, account route or order route is accepted or constructed;
+  - HTTP redirects are not followed;
+  - HTTP 429/418 fails immediately instead of hopping across hosts, preserving Binance rate-limit/backoff semantics.
+- Asset / instrument evidence:
+  - support is intentionally restricted to uppercase Binance Spot USDT symbols used by the current crypto recovery model;
+  - exchangeInfo must contain exactly the requested symbol, status `TRADING`, and Spot trading must be allowed;
+  - `PRICE_FILTER.tickSize` is mandatory;
+  - current `NOTIONAL.minNotional` is preferred, with legacy `MIN_NOTIONAL.minNotional` accepted as compatibility fallback;
+  - the resulting values are converted into the existing Phase56 `InstrumentRiskLimits` and Phase57 `ExecutionMarketInput`, not a new risk/execution model.
+- Point-in-time depth evidence:
+  - bids/prices/quantities must be finite/positive, bids strictly descending and asks strictly ascending;
+  - crossed/locked books fail closed;
+  - the configurable top-of-book spread ceiling defaults to 30 bps;
+  - the response receive timestamp becomes the existing Phase46 `OrderBookSnapshot` timestamp;
+  - mid price becomes the shadow recovery mark/reference price;
+  - Binance `lastUpdateId` is retained as unsigned source evidence.
+- Operational bounds:
+  - requested assets are deduplicated and deterministically sorted;
+  - empty asset input is a valid no-op evidence bundle;
+  - asset count is bounded (default 8, maximum 32);
+  - depth limits are restricted to Binance-supported bounded values;
+  - the provider owns/closes its HTTP client only when it created that client.
+- Red-team unit coverage includes exact safe-route/header behavior, NOTIONAL precedence and MIN_NOTIONAL compatibility, deterministic asset handling, forbidden order routes, 429/418 no-host-hop behavior, bounded 5xx failover, redirect rejection, symbol/status/Spot/filter validation, malformed/crossed/out-of-order/wide books, depth/update-id validation, asset/depth budgets and all-host failure.
+- Phase94 remains hard shadow/paper-only. It deliberately does not wire itself into Phase93 automatically; that integration is a separate boundary so restart states that do not need market evidence do not make unnecessary external calls.
