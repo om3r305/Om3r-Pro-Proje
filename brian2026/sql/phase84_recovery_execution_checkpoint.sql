@@ -616,23 +616,34 @@ begin
 
   v_terminal := v_journal_stage = 'COMMITTED';
 
-  if v_terminal then
-    update public.brian_shadow_recovery_claims
-      set status='COMPLETED',
-          claim_until=null,
-          completed_at=v_now,
-          completion_ref=v_checkpoint_id,
-          updated_at=v_now
-      where runtime_id=p_runtime_id
-        and dispatch_id=v_directive.dispatch_id
-        and cancel_risk_receipt_id=v_directive.cancel_risk_receipt_id
-        and status='CLAIMED'
-        and worker_token=p_worker_token
-        and claim_fencing_token=p_recovery_claim_fencing_token;
+  update public.brian_shadow_recovery_claims
+    set recovery_cycle_id=p_recovery_cycle_id,
+        progress_runtime_version=v_commit_version,
+        progress_head_state_id=coalesce(
+          nullif(trim(
+            p_checkpoint->'runtime_checkpoint'
+              ->'shadow_ledger_manifest'->>'head_state_id'
+          ), ''),
+          v_current_head_state_id
+        ),
+        progress_checkpoint_id=v_checkpoint_id,
+        status=case when v_terminal then 'COMPLETED' else status end,
+        claim_until=case when v_terminal then null else claim_until end,
+        completed_at=case when v_terminal then v_now else completed_at end,
+        completion_ref=case when v_terminal then v_checkpoint_id else completion_ref end,
+        updated_at=v_now
+    where runtime_id=p_runtime_id
+      and dispatch_id=v_directive.dispatch_id
+      and cancel_risk_receipt_id=v_directive.cancel_risk_receipt_id
+      and status='CLAIMED'
+      and worker_token=p_worker_token
+      and claim_fencing_token=p_recovery_claim_fencing_token;
 
-    if not found then
-      raise exception 'PHASE84_COMMIT: recovery claim changed during atomic completion';
-    end if;
+  if not found then
+    raise exception 'PHASE84_COMMIT: recovery claim changed during atomic progress commit';
+  end if;
+
+  if v_terminal then
     v_event := 'RECOVERY_COMPLETED';
   elsif v_journal_stage = 'CYCLE_CREATED' then
     v_event := 'WRITE_AHEAD_COMMITTED';
