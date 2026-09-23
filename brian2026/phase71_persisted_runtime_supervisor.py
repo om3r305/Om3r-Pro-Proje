@@ -106,39 +106,49 @@ class PersistedDurableRuntimeSupervisor:
                 f"runtime {runtime_id} lease is owned by another worker"
             )
 
-        stored = store.load(runtime_id=runtime_id)
-        if stored is None:
-            if lease.version != 0:
+        try:
+            stored = store.load(runtime_id=runtime_id)
+            if stored is None:
+                if lease.version != 0:
+                    raise PersistedRuntimeStaleError(
+                        "database lease reports nonzero version but no checkpoint can be loaded"
+                    )
+                if initial_runtime is None:
+                    raise PersistedRuntimeError(
+                        "initial_runtime is required when durable runtime has no checkpoint"
+                    )
+                supervisor = cls(
+                    store=store,
+                    lease=lease,
+                    runtime=initial_runtime,
+                    persisted_version=0,
+                )
+                supervisor._persist_current_checkpoint()
+                return supervisor
+
+            if initial_runtime is not None:
+                # A durable head already exists. Never overwrite it with caller memory.
+                initial_runtime = None
+            if stored.version != lease.version:
                 raise PersistedRuntimeStaleError(
-                    "database lease reports nonzero version but no checkpoint can be loaded"
+                    "lease version and loaded durable checkpoint version disagree"
                 )
-            if initial_runtime is None:
-                raise PersistedRuntimeError(
-                    "initial_runtime is required when durable runtime has no checkpoint"
-                )
-            supervisor = cls(
+            runtime = DurableShadowPaperRuntime.restore(stored.checkpoint)
+            return cls(
                 store=store,
                 lease=lease,
-                runtime=initial_runtime,
-                persisted_version=0,
+                runtime=runtime,
+                persisted_version=stored.version,
             )
-            supervisor._persist_current_checkpoint()
-            return supervisor
-
-        if initial_runtime is not None:
-            # A durable head already exists. Never overwrite it with caller memory.
-            initial_runtime = None
-        if stored.version != lease.version:
-            raise PersistedRuntimeStaleError(
-                "lease version and loaded durable checkpoint version disagree"
-            )
-        runtime = DurableShadowPaperRuntime.restore(stored.checkpoint)
-        return cls(
-            store=store,
-            lease=lease,
-            runtime=runtime,
-            persisted_version=stored.version,
-        )
+        except Exception:
+            # Startup failures must not strand an otherwise valid lease until
+            # TTL expiry. Release is owner+fence guarded and best-effort: if
+            # ownership already moved, the database safely rejects it.
+            try:
+                store.release(lease)
+            except Exception:
+                pass
+            raise
 
     def _persist_current_checkpoint(self) -> RuntimeCommitReceipt:
         self._assert_valid()
