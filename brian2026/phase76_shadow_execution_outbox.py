@@ -331,14 +331,7 @@ class PersistedDispatchedRuntimeSupervisor:
         self.governed_supervisor = governed_supervisor
         self.outbox = outbox
 
-    def process_governed_cycle(
-        self,
-        governed,
-        *,
-        marks: Mapping[str, float],
-        observed_at: float,
-        source_ref: str,
-    ) -> PersistedDispatchedCycleStep:
+    def authorize_and_submit(self, governed):
         phase75 = self.governed_supervisor
         supervisor = phase75.runtime_supervisor
 
@@ -351,14 +344,7 @@ class PersistedDispatchedRuntimeSupervisor:
                     cycle_id=authorization.cycle_id,
                     reason="phase76:risk_changed_before_dispatch",
                 )
-                checkpoint = supervisor.runtime.checkpoint()
-                return PersistedDispatchedCycleStep(
-                    authorization=authorization,
-                    dispatch=dispatch,
-                    outcome="ABORTED_RISK_STALE",
-                    persisted_version=supervisor.persisted_version,
-                    checkpoint_id=checkpoint.checkpoint_id,
-                )
+                return authorization, dispatch, "ABORTED_RISK_STALE"
 
             supervisor._valid = False
             if dispatch.status == "LEASE_LOST":
@@ -384,8 +370,43 @@ class PersistedDispatchedRuntimeSupervisor:
             raise PersistedRuntimeLeaseError(
                 "dispatch fencing token disagrees with supervisor lease"
             )
+        return authorization, dispatch, None
 
-        advanced = phase75.advance_authorized(
+    def advance_submitted(
+        self,
+        *,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ):
+        return self.governed_supervisor.advance_authorized(
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+        )
+
+    def process_governed_cycle(
+        self,
+        governed,
+        *,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ) -> PersistedDispatchedCycleStep:
+        authorization, dispatch, terminal = self.authorize_and_submit(governed)
+        supervisor = self.governed_supervisor.runtime_supervisor
+
+        if terminal is not None:
+            checkpoint = supervisor.runtime.checkpoint()
+            return PersistedDispatchedCycleStep(
+                authorization=authorization,
+                dispatch=dispatch,
+                outcome=terminal,
+                persisted_version=supervisor.persisted_version,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+
+        advanced = self.advance_submitted(
             marks=marks,
             observed_at=observed_at,
             source_ref=source_ref,
