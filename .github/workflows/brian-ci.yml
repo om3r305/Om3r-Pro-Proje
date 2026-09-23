@@ -180,4 +180,5 @@ jobs:
           tests/test_brian2026_phase81_cancel_recovery_directive_postgres.py
           tests/test_brian2026_phase82_recovery_claim_fencing_postgres.py
           tests/test_brian2026_phase83_atomic_recovery_start_postgres.py
+          tests/test_brian2026_phase84_recovery_execution_checkpoint_postgres.py
           -v
