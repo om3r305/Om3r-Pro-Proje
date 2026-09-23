@@ -386,7 +386,10 @@ class PaperVenue:
                 if execution.side == "BUY"
                 else 0.0
             )
-            if required_buy_cash > self.cash_usd + 1e-12:
+            if (
+                required_buy_cash > self.cash_usd + 1e-12
+                and not risk.reduce_only
+            ):
                 outcomes.append(PaperOrderOutcome(
                     paper_order_id=paper_order_id,
                     cycle_id=cycle.cycle_id,
