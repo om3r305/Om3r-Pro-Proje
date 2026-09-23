@@ -381,3 +381,22 @@ def test_input_file_is_read_instead_of_stdin(tmp_path) -> None:
     )
     assert code == EXIT_READY
     assert "BTCUSDT" in seen["recovery_markets"]
+
+
+
+def test_invalid_cli_argument_is_machine_readable_input_error() -> None:
+    stderr = io.StringIO()
+    code = main(
+        ["--definitely-unknown"],
+        env={"BRIAN_RUNTIME_ID": "runtime-93"},
+        stdin=io.StringIO("{}"),
+        stdout=io.StringIO(),
+        stderr=stderr,
+        worker_runner=lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("runner must not execute")
+        ),
+    )
+    assert code == EXIT_INPUT_ERROR
+    row = json.loads(stderr.getvalue())
+    assert row["status"] == "INPUT_ERROR"
+    assert "invalid worker arguments" in row["error"]
