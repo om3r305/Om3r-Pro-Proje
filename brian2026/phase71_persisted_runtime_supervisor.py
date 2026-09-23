@@ -186,6 +186,34 @@ class PersistedDurableRuntimeSupervisor:
             f"runtime checkpoint commit rejected with {receipt.status}; reload required"
         )
 
+    def accept_external_checkpoint_commit(
+        self,
+        *,
+        checkpoint_id: str,
+        version: int,
+    ) -> None:
+        """Accept a checkpoint committed atomically by a higher-level DB RPC.
+
+        Phase75 uses this after the database has atomically validated risk
+        authorization and persisted the exact current write-ahead checkpoint.
+        The local supervisor may advance only when the returned checkpoint id
+        matches its current in-memory checkpoint.
+        """
+        self._assert_valid()
+        current = self.runtime.checkpoint()
+        if current.checkpoint_id != checkpoint_id:
+            self._valid = False
+            raise PersistedRuntimeStaleError(
+                "externally committed checkpoint does not match local runtime"
+            )
+        if version <= self.persisted_version:
+            self._valid = False
+            raise PersistedRuntimeStaleError(
+                "externally committed runtime version did not advance"
+            )
+        self.persisted_version = int(version)
+        self.lease = replace(self.lease, version=self.persisted_version)
+
     def renew(self, *, lease_seconds: int) -> RuntimeLease:
         self._assert_valid()
         renewed = self.store.renew(self.lease, lease_seconds=lease_seconds)
