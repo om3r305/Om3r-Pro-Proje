@@ -456,3 +456,24 @@ This document records external open-source behaviors studied for Brian. It is no
   - duplicate cycles are idempotent only when receipt evidence is identical;
   - Phase 50 can now compare Phase 64 local positions against Phase 61 venue reports, making reconciliation an actual independent-state check rather than a venue-state copy.
 - Phase 64 is local shadow/paper event projection only and contains no exchange transport.
+
+
+## Phase 65 — Event-Sourced Local Cache Recovery
+
+- Brian file: `brian2026/phase65_event_sourced_local_recovery.py`
+- Reference project: NautilusTrader ExecutionEngine/event-store/cache recovery behavior (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - durable execution events can be replayed to rebuild local execution/cache state after restart;
+  - order fills are the source events from which cached positions are updated rather than trusting a separate copied venue position snapshot;
+  - restored local state is still reconciled against venue reports after recovery.
+- Brian clean-room adaptation:
+  - the Phase 63 paper checkpoint is validated first by deterministic paper-venue replay;
+  - Phase 64 local execution state is then rebuilt from zero by replaying every durable Phase 61 cycle receipt and referenced fill event;
+  - no serialized local position snapshot is required or trusted;
+  - recovery records how many cycles/fills were available and replayed plus the resulting local projection hash;
+  - a full recovered runtime contains the independently restored Phase 60 ledger, Phase 61 venue and Phase 64 local projector;
+  - before the recovered runtime is returned, Phase 50 must reconcile the rebuilt local positions against the independently restored paper venue reports;
+  - the pending-cycle crash window is preserved: a paper fill can already exist while the Phase 60 ledger still marks the cycle pending, and local cache replay catches up without silently committing the ledger;
+  - a forensic partial-replay helper intentionally truncates local event replay so Phase 50 can prove that missing event history produces a reconciliation failure.
+- Phase 65 is restart/recovery logic for local shadow/paper execution state only; it exposes no live execution transport.
