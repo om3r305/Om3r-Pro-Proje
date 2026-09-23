@@ -1326,3 +1326,33 @@ This document records external open-source behaviors studied for Brian. It is no
   - the provider owns/closes its HTTP client only when it created that client.
 - Red-team unit coverage includes exact safe-route/header behavior, NOTIONAL precedence and MIN_NOTIONAL compatibility, deterministic asset handling, forbidden order routes, 429/418 no-host-hop behavior, bounded 5xx failover, redirect rejection, symbol/status/Spot/filter validation, malformed/crossed/out-of-order/wide books, depth/update-id validation, asset/depth budgets and all-host failure.
 - Phase94 remains hard shadow/paper-only. It deliberately does not wire itself into Phase93 automatically; that integration is a separate boundary so restart states that do not need market evidence do not make unnecessary external calls.
+
+
+## Phase 95 — Causal Auto-Evidence Recovery Worker
+
+- Brian file:
+  - `brian2026/phase95_auto_binance_recovery_worker.py`
+- Phase95 adds no alpha, SQL, scheduler or live execution. It binds the Phase94 public Binance Spot evidence provider to the existing Phase87→89 restart-recovery path without allowing market evidence from one backlog item to leak into another.
+- One-item authority boundary:
+  - each Phase95 invocation processes at most one Phase87 recovery identity through Phase89 with `max_items=1`;
+  - if another unresolved recovery remains, a later invocation must acquire a fresh evidence set for that item's own immutable Phase81 legs;
+  - this intentionally trades a small amount of extra public market-data I/O for strict evidence/authority isolation.
+- Lazy evidence acquisition:
+  - Phase87 `IDLE`, `NEEDS_AUDIT`, `MANUAL_REVIEW` and other non-execution states do not construct or call the Binance provider;
+  - execution-capable states preflight the existing Phase81 directive under the same Phase92 lease;
+  - Phase81 `NO_RECOVERY_REQUIRED` / `MANUAL_REVIEW` or non-prepared wait states do not fetch market data;
+  - only prepared `READY_REDUCE_ONLY` / `WAIT_RISK_RELEASE` directives with immutable recovery legs trigger Phase94 evidence collection;
+  - the requested Binance symbols are exactly the sorted Phase81 recovery-leg asset ids and the returned evidence set must match exactly.
+- Causality:
+  - Phase95 freezes one recovery decision timestamp before any external Binance request;
+  - every Phase94 snapshot used by the existing Phase46/57 simulator must be observed at or after that decision time;
+  - the decision timestamp is passed unchanged into Phase89/88/84 as the recovery execution observation time, preventing post-fetch timestamps from being backdated into the decision.
+- External-I/O race protection:
+  - after Binance evidence collection, Phase95 re-reads the Phase87 backlog before any recovery gate execution;
+  - a legitimate Phase81 preflight state transition such as `NEEDS_DIRECTIVE → NEEDS_CLAIM` is allowed only when original cycle, dispatch and cancel-risk receipt identity remain unchanged;
+  - backlog identity change, runtime-version drift, checkpoint drift or Phase60 head drift invalidates the local Phase71 supervisor and fails closed;
+  - provider exceptions close the provider context and never enter Phase89.
+- Lifecycle:
+  - the env one-shot helper owns no new lease logic; it uses the Phase92 session context so Supabase transport/runtime lease cleanup still occurs on evidence-provider or recovery failures.
+- Red-team unit coverage includes zero-I/O IDLE/audit paths, exact leg-asset collection, causal decision-before-snapshot enforcement, NEEDS_DIRECTIVE durable transition tolerance, NO_RECOVERY_REQUIRED no-I/O behavior, evidence asset mismatch, backlog identity/runtime/head races, provider cleanup/failure, non-finite clocks and Phase92 session cleanup on provider failure.
+- Phase95 remains hard shadow/paper-only and introduces no migration of its own.
