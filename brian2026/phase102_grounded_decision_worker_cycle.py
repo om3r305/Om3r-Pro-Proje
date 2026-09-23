@@ -8,7 +8,9 @@ from .phase54_integrated_shadow_decision import (
     AssetDecisionInput,
     IntegratedShadowConfig,
     IntegratedShadowDecision,
-    run_integrated_shadow_decision,
+)
+from .phase103_prospective_grounded_runtime import (
+    run_prospective_integrated_shadow_decision,
 )
 from .phase56_pretrade_risk_engine import InstrumentRiskLimits
 from .phase57_shadow_execution_cycle import ExecutionMarketInput
@@ -92,7 +94,7 @@ class GroundedDecisionWorkerCycle:
         *,
         worker: RecoveryFirstShadowWorkerSession,
         integrated_runtime: IntegratedDecisionShadowRuntime | None = None,
-        decision_runner: DecisionRunner = run_integrated_shadow_decision,
+        decision_runner: DecisionRunner = run_prospective_integrated_shadow_decision,
     ) -> None:
         if getattr(worker, "closed", False):
             raise GroundedDecisionWorkerCycleError(
