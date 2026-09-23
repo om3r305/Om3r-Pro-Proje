@@ -533,3 +533,33 @@ def test_fail_closed_start_statuses_never_advance(status, error) -> None:
             source_ref="phase79-fail",
         )
     assert phase77.advanced is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("dispatch_id", "0" * 64, "dispatch_id"),
+        ("fencing_token", 99, "runtime fencing"),
+        ("claim_fencing_token", 99, "claim fencing"),
+    ],
+)
+def test_store_rejects_database_start_anchor_drift(field, value, message) -> None:
+    row = _start_row()
+    row[field] = value
+    with pytest.raises(AtomicExecutionStartError, match=message):
+        AtomicExecutionStartStore(FakeRpc(row)).mark_started(
+            _lease(),
+            _claim(),
+            worker_token="worker-a",
+        )
+
+
+def test_started_receipt_requires_complete_risk_and_journal_evidence() -> None:
+    row = _start_row()
+    row["risk_receipt_id"] = None
+    with pytest.raises(ValueError, match="complete persisted"):
+        AtomicExecutionStartStore(FakeRpc(row)).mark_started(
+            _lease(),
+            _claim(),
+            worker_token="worker-a",
+        )
