@@ -840,3 +840,36 @@ This document records external open-source behaviors studied for Brian. It is no
   - claim completion is attempted only after the durable runtime is COMMITTED; completion metadata loss cannot cause re-execution because Phase77 can recover terminal completion from the journal.
 - Real Postgres 16 CI covers healthy proceed, claim-to-HALT/REDUCING/cooldown races, reduce-only exceptions, post-start cancel requests, healthy resume-only, wrong worker/fence, committed terminal recovery and direct mutation denial.
 - Phase78 remains shadow/paper-only. A future real-venue adapter would map AFTER_START cancel requests to venue-specific cancel/flatten behavior rather than bypassing reconciliation.
+
+
+## Phase 79 — Atomic Execution-Start Point-of-No-Return
+
+- Brian files:
+  - `brian2026/phase79_atomic_execution_start.py`
+  - `brian2026/sql/phase79_atomic_execution_start.sql` (**draft SQL contract, not an official Supabase migration yet**)
+- This phase introduces no new alpha, execution-price or risk algorithm. It closes the remaining transaction window between the existing Phase78 pre-execution risk decision and the first paper/recovery side-effect boundary.
+- Composition rather than policy duplication:
+  - Phase78 remains the single owner of current-risk semantics (`PROCEED`, `RESUME_ONLY`, `CANCELLED_BEFORE_EXECUTION`, `CANCEL_REQUESTED`, terminal states);
+  - Phase79 acquires the same Phase70 runtime transaction advisory lock and invokes the real Phase78 kill-switch RPC inside that same transaction;
+  - only a Phase78 decision which permits progress can create an immutable Phase79 `STARTED` row;
+  - therefore a Phase73 risk commit cannot slip between the final Phase78 veto decision and the durable point-of-no-return.
+- Claim/fencing behavior:
+  - an exact current Phase77 `CLAIMED` owner, worker token, claim fencing token, runtime lease owner/fence and unexpired TTL are required **before** checking for an existing STARTED row;
+  - this ordering prevents a non-owner from exploiting idempotent `STARTED_ALREADY` recovery;
+  - exact concurrent retries serialize to one `STARTED` and one `STARTED_ALREADY`;
+  - stale worker token or claim fence returns `CLAIM_LOST` even when STARTED already exists.
+- Point-of-no-return semantics:
+  - at fresh `CYCLE_CREATED`, an incompatible current risk head still yields Phase78 `CANCELLED_BEFORE_EXECUTION`; no STARTED record is created and Phase61/64 work must not begin;
+  - healthy fresh work records `STARTED` with runtime version/fence, claim fence, current risk version/receipt/state and journal stage;
+  - already-started recovery (`RESUME_ONLY`) records `STARTED_RESUME`;
+  - if Phase78 already has an `AFTER_START` `CANCEL_REQUESTED` for durable in-progress work, Phase79 records `STARTED_RESUME` plus the cancel evidence instead of fabricating a rollback;
+  - once STARTED exists, later risk deterioration remains a Phase78 post-start cancel/recovery signal and cannot erase/relabel the immutable start evidence.
+- Python orchestration:
+  - `PersistedAtomicStartedRuntimeSupervisor` runs Phase77 authorize/submit/claim, then requires Phase79 STARTED before calling `advance_claimed`;
+  - after advance it reuses the existing Phase78 kill-switch for post-start safety and the existing Phase77 completion contract for durable COMMITTED completion;
+  - a post-STARTED response attempting `CANCELLED_BEFORE_EXECUTION` is treated as an evidence contradiction and fails closed rather than rewriting history.
+- Real Postgres 16 CI covers exact/concurrent start, wrong-worker and wrong-claim-fence duplicate attacks, claim-to-start risk changes (HALTED/REDUCING/cooldown), reduce-only exceptions, resume-with-cancel evidence, post-start HALT, read-back anchors and direct service-role mutation denial.
+- Supabase rollout note:
+  - the SQL is intentionally stored outside `supabase/migrations` while this PR remains draft/undeployed;
+  - before any rollout it must be converted into an official migration using `supabase migration new`, then rerun through the same full Python/Postgres gates.
+- Phase79 remains shadow/paper-only and does not transmit an order to any exchange or broker.
