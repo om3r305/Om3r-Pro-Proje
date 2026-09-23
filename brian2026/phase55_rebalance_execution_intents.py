@@ -164,6 +164,7 @@ class RebalanceExecutionPlan:
     instructions: tuple[RebalanceExecutionInstruction, ...]
     skipped_assets: tuple[str, ...]
     plan_id: str
+    blocked_new_risk_assets: tuple[str, ...] = ()
     schema_version: str = PHASE55_SCHEMA_VERSION
     shadow_only: bool = True
     live_execution: bool = False
@@ -175,6 +176,7 @@ class RebalanceExecutionPlan:
             "instructions": [asdict(row) for row in self.instructions],
             "skipped_assets": self.skipped_assets,
             "plan_id": self.plan_id,
+            "blocked_new_risk_assets": self.blocked_new_risk_assets,
             "shadow_only": self.shadow_only,
             "live_execution": self.live_execution,
             "automatic_release": self.automatic_release,
@@ -266,6 +268,7 @@ def compile_rebalance_execution_plan(
     created_at: float,
     max_slippage_bps: float,
     ttl_seconds: int,
+    blocked_new_risk_assets: Sequence[str] = (),
 ) -> RebalanceExecutionPlan:
     """Compile planned *deltas*, never final target weights, into execution intents.
 
@@ -283,6 +286,11 @@ def compile_rebalance_execution_plan(
 
     instructions: list[RebalanceExecutionInstruction] = []
     skipped: list[str] = []
+    blocked_new_risk = {
+        str(asset).strip()
+        for asset in blocked_new_risk_assets
+        if str(asset).strip()
+    }
 
     for leg in turnover.legs:
         if abs(leg.planned_delta) <= 1e-12:
@@ -296,6 +304,9 @@ def compile_rebalance_execution_plan(
         if current_sign == 0 or (
             planned_sign == current_sign and abs(leg.planned_weight) > abs(leg.current_weight) + 1e-12
         ):
+            if leg.asset_id in blocked_new_risk:
+                skipped.append(leg.asset_id)
+                continue
             edge = expected_edge_bps_by_asset.get(leg.asset_id)
             confidence = confidence_by_asset.get(leg.asset_id)
             if edge is None or confidence is None:
@@ -351,8 +362,27 @@ def compile_rebalance_execution_plan(
                 created_at=created_at,
                 ttl_seconds=ttl_seconds,
                 resulting_weight=0.0,
-                label="REVERSAL_CLOSE",
+                label=(
+                    "REVERSAL_CLOSE_EDGE_BLOCKED"
+                    if leg.asset_id in blocked_new_risk
+                    else "REVERSAL_CLOSE"
+                ),
             )
+            if leg.asset_id in blocked_new_risk:
+                skipped.append(leg.asset_id)
+                instructions.append(RebalanceExecutionInstruction(
+                    kind="CLOSE",
+                    asset_id=leg.asset_id,
+                    current_weight=leg.current_weight,
+                    planned_weight=0.0,
+                    planned_delta=-leg.current_weight,
+                    reduction_intent=reduction,
+                    reason=(
+                        "opposite-side new risk is blocked by expected-edge gate; "
+                        "existing exposure may still close to flat"
+                    ),
+                ))
+                continue
             edge = expected_edge_bps_by_asset.get(leg.asset_id)
             confidence = confidence_by_asset.get(leg.asset_id)
             ids = tuple(sorted({
@@ -400,11 +430,13 @@ def compile_rebalance_execution_plan(
         "schema": PHASE55_SCHEMA_VERSION,
         "instructions": [asdict(row) for row in instructions],
         "skipped_assets": sorted(skipped),
+        "blocked_new_risk_assets": sorted(blocked_new_risk),
     }
     return RebalanceExecutionPlan(
         instructions=tuple(instructions),
-        skipped_assets=tuple(sorted(skipped)),
+        skipped_assets=tuple(sorted(set(skipped))),
         plan_id=_hash(payload),
+        blocked_new_risk_assets=tuple(sorted(blocked_new_risk)),
     )
 
 
@@ -447,6 +479,7 @@ def compile_from_integrated_decision(
     evidence_ids_by_asset: Mapping[str, Sequence[str]],
     max_slippage_bps: float,
     ttl_seconds: int,
+    blocked_new_risk_assets: Sequence[str] = (),
 ) -> RebalanceExecutionPlan:
     if decision.turnover_plan is None:
         return RebalanceExecutionPlan((), tuple(sorted(decision.current_weights)), _hash({
@@ -463,4 +496,5 @@ def compile_from_integrated_decision(
         created_at=decision.timestamp,
         max_slippage_bps=max_slippage_bps,
         ttl_seconds=ttl_seconds,
+        blocked_new_risk_assets=blocked_new_risk_assets,
     )
