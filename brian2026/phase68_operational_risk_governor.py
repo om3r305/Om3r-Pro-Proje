@@ -170,6 +170,19 @@ class OperationalRiskReceipt:
             limits=limits,
         )
 
+    def pretrade_policy_for_asset(
+        self,
+        asset_id: str,
+        limits: InstrumentRiskLimits = InstrumentRiskLimits(),
+    ) -> PreTradeRiskPolicy:
+        if not asset_id.strip():
+            raise ValueError("asset_id is required")
+        return PreTradeRiskPolicy(
+            trading_state=self.trading_state,
+            limits=limits,
+            block_new_risk=asset_id in self.blocked_assets,
+        )
+
 
 def _severity(state: TradingState) -> int:
     return {"ACTIVE": 0, "REDUCING": 1, "HALTED": 2}[state]
