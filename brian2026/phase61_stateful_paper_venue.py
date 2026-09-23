@@ -204,6 +204,12 @@ class PaperVenue:
     def cycle_receipts(self) -> tuple[PaperCycleReceipt, ...]:
         return tuple(self._cycle_receipts.values())
 
+    def cycle_receipt(self, cycle_id: str) -> PaperCycleReceipt:
+        try:
+            return self._cycle_receipts[cycle_id]
+        except KeyError as exc:
+            raise KeyError(f"unknown paper cycle {cycle_id}") from exc
+
     def position(self, asset_id: str) -> PaperPosition:
         return self._positions.get(
             asset_id,
