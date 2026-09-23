@@ -565,3 +565,24 @@ This document records external open-source behaviors studied for Brian. It is no
   - every decision emits a deterministic, content-addressed operational-risk receipt with the measured inputs/reasons and blocked-asset set;
   - the receipt converts directly to the real Phase 56 `PreTradeRiskPolicy`, so `REDUCING` rejects new risk while valid reduce-only intent remains possible, and `HALTED` blocks submissions according to the existing Phase 56 contract.
 - Phase 68 changes no live adapter and cannot authorize capital or exchange execution.
+
+
+## Phase 69 — Operationally Governed Shadow Execution
+
+- Brian file: `brian2026/phase69_governed_shadow_execution.py`
+- This phase introduces no new external algorithm. It composes the Phase 68 operational-risk receipt with the real Phase 56 pre-trade RiskEngine and Phase 57 execution simulator.
+- Supporting contract hardening:
+  - Phase 56 `PreTradeRiskPolicy` now carries an optional per-asset `block_new_risk` flag;
+  - that flag is evaluated only for new/increasing-risk `TradeIntent`; it does not block a valid `RiskReductionIntent`;
+  - Phase 57 accepts optional per-asset Phase 56 policies while preserving its prior global trading-state/default-limits behavior when none are supplied;
+  - Phase 68 exposes `pretrade_policy_for_asset`, translating its cooldown set into the Phase 56 new-risk lock while retaining the global ACTIVE/REDUCING/HALTED state.
+- Integration behavior:
+  - every asset present in a Phase 55 rebalance plan receives a Phase 56 policy derived from the same content-addressed Phase 68 receipt;
+  - a per-asset cooldown blocks only that asset's OPEN/INCREASE leg, so unrelated assets are not globally frozen;
+  - cooldown does not consume/reserve cash for the denied leg, preserving cash for independently allowed assets in the same cycle;
+  - a cooled-down asset may still REDUCE/CLOSE while the global state is ACTIVE or REDUCING;
+  - global `REDUCING` denies all new/increased risk while still permitting valid exposure reduction;
+  - global `HALTED` follows the existing Phase 56 submission boundary and denies both new-risk and reduce submissions;
+  - execution still runs through the real Phase 57 cash reservation, Phase 45 executor action and Phase 46 order-book/latency fill simulation rather than a parallel shortcut;
+  - the result records the Phase 68 receipt id, per-asset policy fingerprint, blocked-new-risk asset set and resulting Phase 57 cycle id.
+- Phase 69 remains fully shadow-only with no broker/exchange transport or live capital authorization.
