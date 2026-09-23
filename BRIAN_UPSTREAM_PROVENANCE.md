@@ -1356,3 +1356,35 @@ This document records external open-source behaviors studied for Brian. It is no
   - the env one-shot helper owns no new lease logic; it uses the Phase92 session context so Supabase transport/runtime lease cleanup still occurs on evidence-provider or recovery failures.
 - Red-team unit coverage includes zero-I/O IDLE/audit paths, exact leg-asset collection, causal decision-before-snapshot enforcement, NEEDS_DIRECTIVE durable transition tolerance, NO_RECOVERY_REQUIRED no-I/O behavior, evidence asset mismatch, backlog identity/runtime/head races, provider cleanup/failure, non-finite clocks and Phase92 session cleanup on provider failure.
 - Phase95 remains hard shadow/paper-only and introduces no migration of its own.
+
+
+## Phase 96 — Machine Auto-Recovery Entrypoint
+
+- Brian file:
+  - `brian2026/phase96_auto_recovery_entrypoint.py`
+- Phase96 adds no alpha, SQL, scheduler or live execution. It exposes the Phase95 one-item causal auto-evidence worker as a machine-readable backend command with no market JSON input requirement.
+- Invocation / controls:
+  - runnable as `python -m brian2026.phase96_auto_recovery_entrypoint`;
+  - Phase92 still owns the Supabase runtime lease/session lifecycle and Phase95 still limits each invocation to one Phase87 backlog identity;
+  - recovery claim TTL is bounded to 10–300 seconds and recovery intent TTL to 10–900 seconds;
+  - Binance depth size is restricted to the Phase94 allowlist;
+  - public-market timeout is bounded to 0.5–20 seconds, spread ceiling to 0.1–500 bps, and requested recovery assets to 1–32;
+  - CLI values override the corresponding `BRIAN_RECOVERY_*` environment settings;
+  - an explicit worker token may be supplied, otherwise a process-unique `phase96-...` token is generated.
+- Public evidence construction:
+  - Phase96 constructs a lazy Phase94 provider factory with the bounded market settings and the same injected clock used by Phase95;
+  - Phase95 decides whether evidence is needed at all, so IDLE/audit/manual/wait paths do not make unnecessary public Binance calls;
+  - raw order-book snapshots are never emitted in the machine status payload; output contains only bounded evidence asset ids/timestamps and recovery/admission metadata.
+- Exit/status contract:
+  - exit 0: Phase89 says `READY_FOR_NORMAL_WORK`;
+  - exit 20: recovery remains blocked/non-terminal;
+  - exit 21: manual review is required;
+  - exit 22: one-item recovery budget was consumed while another recovery barrier remains;
+  - exit 30: CLI/environment configuration failed validation;
+  - exit 40: lease/Supabase/public-market/runtime/recovery processing failed.
+- Error safety:
+  - unknown CLI arguments and invalid bounds are returned as one JSON `INPUT_ERROR`, not unstructured argparse termination;
+  - runtime failures remain `WORKER_ERROR`;
+  - configured modern, legacy and hosted Supabase secrets plus generic modern `sb_secret_*` forms are redacted from stderr diagnostics.
+- Red-team unit coverage includes exact CLI/env forwarding, Phase94 provider configuration, all exit-code classes, bounded evidence metadata output, invalid argument/bound enforcement, secret redaction, generated worker identity and CLI-over-env precedence.
+- Phase96 remains hard shadow/paper-only and introduces no migration of its own.
