@@ -1494,3 +1494,39 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team unit coverage includes blocked startup, blocked→ready retry on one session, duplicate ready-gate rejection, cross-runtime recovery, stale/closed authority, owned-session cleanup, external-session ownership, constructor-failure cleanup, handoff failure and post-close execution rejection.
 - Phase100 remains hard shadow/paper-only and introduces no migration of its own.
 
+## Phase 101 — Integrated Decision → Governed Shadow Runtime
+
+- Brian file:
+  - `brian2026/phase101_integrated_decision_shadow_runtime.py`
+- Phase101 adds no new alpha model, SQL, scheduler, exchange transport or live execution. It connects the existing Phase54 evidence/portfolio decision producer to the persisted Phase68/73 risk authority, Phase69 governed execution compiler and the Phase100 recovery-first worker.
+- Decision authority:
+  - only hard shadow Phase54 decisions are accepted; `live_execution` and `automatic_promotion` remain forbidden;
+  - `WAIT_NO_GROUNDED_SIGNALS` and `HOLD_CURRENT_BOOK` are true no-op outcomes: no persisted risk read, no governed cycle and no durable execution side effect;
+  - `REBALANCE_PLANNED` is the only decision status that may enter execution.
+- Grounded execution metadata:
+  - execution confidence is derived from the absolute Phase44 blended conviction already embedded in the Phase54 portfolio book;
+  - execution evidence ids are derived only from Phase43 validated `support_evidence_ids`;
+  - callers cannot inject a separate confidence/evidence lineage at the Phase101 boundary;
+  - expected edge in basis points remains an explicit input because Phase54 does not contain a bps return estimate; Phase101 does not fabricate one.
+- Authoritative account binding:
+  - the Phase54 `current_weights` must match the exact Phase60 authoritative head owned by the same Phase100/92 runtime;
+  - supplied equity and available cash must match that Phase60 head;
+  - a decision older than the authoritative account head is rejected;
+  - this prevents a current signal from being compiled against stale caller-side position/cash state.
+- Persisted risk binding:
+  - Phase101 loads and validates the current Phase73 operational-risk ledger head;
+  - the exact persisted Phase68 receipt is supplied to Phase69;
+  - the Phase69 result must echo that receipt id;
+  - Phase75 later reloads the persisted risk head atomically at write-ahead authorization, so a risk-head change after Phase101 compilation still fails closed.
+- Market / commit preflight:
+  - marks must be finite and positive;
+  - before durable work begins, marks must cover current non-zero paper positions plus every candidate cycle asset;
+  - the execution observation time cannot precede the Phase54 decision;
+  - a rebalance that compiles to zero executable items returns `NO_EXECUTABLE_INSTRUCTIONS` without creating durable execution state.
+- Runtime path:
+  - executable governed cycles are delegated only through Phase100 → Phase99 → Phase75/76/77/79/80;
+  - Phase99 still performs a fresh Phase86 admission read and Phase86's transactional authorization/dispatch wrappers remain the final recovery interlock;
+  - Phase77 claim fencing, Phase79 STARTED and Phase80 claim-fenced checkpoint authority are not bypassed.
+- Red-team coverage includes no-op WAIT/HOLD behavior, persisted risk-head identity/state validation, Phase54-derived confidence/evidence lineage, exact Phase60 weights/equity/cash binding, stale-decision rejection, mark coverage, risk-head race propagation, Phase69 risk-id drift, zero-item no-op behavior, shadow/live boundaries and execution input bounds.
+- Phase101 remains hard shadow/paper-only and introduces no migration of its own.
+
