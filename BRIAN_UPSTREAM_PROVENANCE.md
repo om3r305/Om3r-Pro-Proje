@@ -814,3 +814,29 @@ This document records external open-source behaviors studied for Brian. It is no
   - `PersistedClaimedRuntimeSupervisor` claims first, advances only when claim ownership is proven, persists a risk cancellation through Phase75's ABORTED path, and calls claim completion only after durable runtime commit.
 - Real Postgres 16 CI covers competing workers, exact re-claim, expired takeover/fencing, HALTED/REDUCING/cooldown cancellation, reduce-only exceptions, resume-only recovery, claim renewal, completion gating/retry, committed recovery and direct mutation denial.
 - Phase77 remains shadow/paper-only and does not transmit orders to an external venue.
+
+
+## Phase 78 — Double-Checked Execution Kill-Switch / Cancel Requests
+
+- Brian files:
+  - `brian2026/phase78_execution_kill_switch.py`
+  - `supabase/migrations/202609231015_brian_phase78_execution_kill_switch.sql`
+- This phase introduces no new alpha or execution model. It closes the risk-race window after Phase77 claim ownership is established.
+- Database behavior:
+  - every kill-switch check requires the current Phase70 runtime lease/fence and the exact Phase77 worker/claim fencing token;
+  - the current persisted Phase73 risk head is read under the same runtime advisory lock and evaluated against the immutable Phase57 cycle body;
+  - at `CYCLE_CREATED`, current HALTED / REDUCING-with-new-risk / affected ACTIVE-cooldown conditions convert the claim to terminal `CANCELLED_BEFORE_EXECUTION` with zero paper side effect;
+  - after the durable journal proves execution already started, the same incompatible risk state creates an append-only `AFTER_START` cancel request and returns `CANCEL_REQUESTED` while allowing Phase67 idempotent recovery/reconciliation to continue;
+  - reduce-only cycles remain permitted under REDUCING or asset cooldown;
+  - healthy already-started work returns `RESUME_ONLY`;
+  - COMMITTED and ABORTED journal states are terminal and returned before any new risk decision;
+  - wrong/expired worker claim, lost runtime lease or unavailable risk state fail closed;
+  - cancel-request history is append-only and direct service-role mutation is denied.
+- Python behavior:
+  - Phase77 is split into explicit claim acquisition and claimed execution advance, with optional deferred claim completion;
+  - `PersistedKillSwitchRuntimeSupervisor` performs one DB risk check immediately before Phase67/71 advance and a second check immediately after it;
+  - pre-execution cancellation is persisted through the existing Phase75 ABORTED write-ahead path;
+  - a post-start cancellation is surfaced as a durable cancel-request outcome without discarding/restarting paper side effects;
+  - claim completion is attempted only after the durable runtime is COMMITTED; completion metadata loss cannot cause re-execution because Phase77 can recover terminal completion from the journal.
+- Real Postgres 16 CI covers healthy proceed, claim-to-HALT/REDUCING/cooldown races, reduce-only exceptions, post-start cancel requests, healthy resume-only, wrong worker/fence, committed terminal recovery and direct mutation denial.
+- Phase78 remains shadow/paper-only. A future real-venue adapter would map AFTER_START cancel requests to venue-specific cancel/flatten behavior rather than bypassing reconciliation.
