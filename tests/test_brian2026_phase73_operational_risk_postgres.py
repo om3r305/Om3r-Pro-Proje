@@ -1,4 +1,10 @@
-"""Real Postgres integration tests for Phase73 operational-risk persistence."""
+"""Real Postgres integration tests for Phase73 operational-risk persistence.
+
+This file deliberately imports only stdlib + psycopg2. The dedicated Postgres
+CI job validates the SQL concurrency boundary without installing Brian's full
+runtime dependency graph. Phase72/73 Python content-hash reconstruction is
+tested separately in the normal full Python suite.
+"""
 
 from __future__ import annotations
 
@@ -17,14 +23,6 @@ psycopg2 = pytest.importorskip(
     reason="psycopg2 is only installed in the dedicated Postgres CI job",
 )
 from psycopg2.extras import Json
-
-from brian2026.phase68_operational_risk_governor import (
-    EquityPoint,
-    OperationalRiskPolicy,
-    RuntimeHealthEvent,
-)
-from brian2026.phase72_operational_risk_ledger import OperationalRiskLedger
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = (
@@ -61,14 +59,147 @@ def _apply_migrations():
     try:
         with conn.cursor() as cur:
             cur.execute(_BOOTSTRAP)
-            for path in MIGRATIONS:
-                cur.execute(path.read_text(encoding="utf-8"))
+            for migration in MIGRATIONS:
+                cur.execute(migration.read_text(encoding="utf-8"))
     finally:
         conn.close()
 
 
 def _runtime_id(label: str) -> str:
     return f"pytest-phase73-{label}-{uuid.uuid4().hex[:10]}"
+
+
+def _h(char: str) -> str:
+    return char * 64
+
+
+def _entry(
+    sequence: int,
+    *,
+    entry_char: str,
+    receipt_char: str,
+    previous_entry_char: str | None,
+    previous_state: str,
+    trading_state: str,
+    timestamp: float,
+):
+    return {
+        "schema_version": "brian.phase72-operational-risk-ledger.v1",
+        "sequence": sequence,
+        "previous_entry_id": (
+            None if previous_entry_char is None else _h(previous_entry_char)
+        ),
+        "policy_hash": _h("e"),
+        "receipt": {
+            "schema_version": "brian.phase68-operational-risk-governor.v1",
+            "timestamp": timestamp,
+            "previous_state": previous_state,
+            "trading_state": trading_state,
+            "recommended_state": trading_state,
+            "reasons": [],
+            "max_drawdown_fraction": 0.0,
+            "window_loss_fraction": 0.0,
+            "qualifying_stoplosses": 0,
+            "stoploss_lock_until": None,
+            "blocked_assets": [],
+            "consecutive_execution_failures": 0,
+            "reconciliation_failures": 0,
+            "unknown_order_outcomes": 0,
+            "market_data_age_seconds": 0.0,
+            "manual_halt": False,
+            "manual_release_requested": False,
+            "halt_latched": trading_state == "HALTED",
+            "receipt_id": _h(receipt_char),
+            "execution_failure_lock_until": None,
+            "reconciliation_failure_lock_until": None,
+            "asset_cooldown_until": [],
+            "shadow_only": True,
+            "live_execution": False,
+        },
+        "entry_id": _h(entry_char),
+    }
+
+
+def _manifest(
+    *,
+    ledger_char: str,
+    entries: list[dict],
+    current_state: str,
+):
+    return {
+        "schema_version": "brian.phase72-operational-risk-ledger.v1",
+        "append_only": True,
+        "policy": {
+            "max_drawdown_fraction": 0.5,
+            "max_daily_loss_fraction": 0.5,
+        },
+        "policy_hash": _h("e"),
+        "initial_state": "ACTIVE",
+        "entries": entries,
+        "entry_count": len(entries),
+        "head_entry_id": None if not entries else entries[-1]["entry_id"],
+        "current_state": current_state,
+        "halt_latched": current_state == "HALTED",
+        "ledger_hash": _h(ledger_char),
+        "shadow_only": True,
+        "live_execution": False,
+    }
+
+
+def _active_manifest(ledger_char: str = "1"):
+    return _manifest(
+        ledger_char=ledger_char,
+        entries=[
+            _entry(
+                0,
+                entry_char="a",
+                receipt_char="b",
+                previous_entry_char=None,
+                previous_state="ACTIVE",
+                trading_state="ACTIVE",
+                timestamp=TS,
+            )
+        ],
+        current_state="ACTIVE",
+    )
+
+
+def _halted_manifest(ledger_char: str = "2"):
+    return _manifest(
+        ledger_char=ledger_char,
+        entries=[
+            _entry(
+                0,
+                entry_char="c",
+                receipt_char="d",
+                previous_entry_char=None,
+                previous_state="ACTIVE",
+                trading_state="HALTED",
+                timestamp=TS,
+            )
+        ],
+        current_state="HALTED",
+    )
+
+
+def _extended_active_manifest(ledger_char: str = "3"):
+    first = _active_manifest()["entries"][0]
+    return _manifest(
+        ledger_char=ledger_char,
+        entries=[
+            first,
+            _entry(
+                1,
+                entry_char="f",
+                receipt_char="0",
+                previous_entry_char="a",
+                previous_state="ACTIVE",
+                trading_state="ACTIVE",
+                timestamp=TS + 1,
+            ),
+        ],
+        current_state="ACTIVE",
+    )
 
 
 def _acquire(conn, runtime_id: str, owner: str, seconds: int = 30):
@@ -98,48 +229,6 @@ def _read(conn, runtime_id: str):
         return cur.fetchone()[0]
 
 
-def _policy() -> OperationalRiskPolicy:
-    return OperationalRiskPolicy(
-        max_drawdown_fraction=0.50,
-        max_daily_loss_fraction=0.50,
-        max_unknown_order_outcomes=1,
-        max_market_data_age_seconds=10.0,
-    )
-
-
-def _ledger(*, now: float = TS, halted: bool = False) -> OperationalRiskLedger:
-    ledger = OperationalRiskLedger(_policy())
-    governor = ledger.governor()
-    receipt = governor.evaluate(
-        now=now,
-        equity_points=(
-            EquityPoint(now - 60, 1000.0),
-            EquityPoint(now, 1000.0),
-        ),
-        closed_trades=(),
-        health_events=(),
-        market_data_timestamp=now - 20 if halted else now,
-    )
-    ledger.append(receipt)
-    return ledger
-
-
-def _append_success(ledger: OperationalRiskLedger, *, now: float):
-    governor = ledger.governor()
-    receipt = governor.evaluate(
-        now=now,
-        equity_points=(
-            EquityPoint(now - 60, 1000.0),
-            EquityPoint(now, 1000.0),
-        ),
-        closed_trades=(),
-        health_events=(RuntimeHealthEvent(now, "EXECUTION_SUCCESS"),),
-        market_data_timestamp=now,
-    )
-    ledger.append(receipt)
-    return ledger
-
-
 def _count(conn, table: str, runtime_id: str) -> int:
     with conn.cursor() as cur:
         cur.execute(
@@ -154,9 +243,7 @@ def test_first_risk_commit_persists_manifest_and_exact_retry_is_idempotent():
     conn = _connect()
     try:
         lease = _acquire(conn, runtime_id, "owner-a")
-        ledger = _ledger()
-        manifest = ledger.manifest()
-
+        manifest = _active_manifest()
         first = _commit(conn, runtime_id, "owner-a", lease["fencing_token"], 0, manifest)
         duplicate = _commit(conn, runtime_id, "owner-a", lease["fencing_token"], 0, manifest)
         head = _read(conn, runtime_id)
@@ -178,13 +265,10 @@ def test_two_concurrent_same_version_risk_commits_have_one_winner():
     runtime_id = _runtime_id("race")
     setup = _connect()
     try:
-        lease = _acquire(setup, runtime_id, "owner-a")
-        fence = lease["fencing_token"]
+        fence = _acquire(setup, runtime_id, "owner-a")["fencing_token"]
     finally:
         setup.close()
 
-    healthy = _ledger().manifest()
-    halted = _ledger(halted=True).manifest()
     barrier = threading.Barrier(2)
 
     def contender(manifest):
@@ -196,7 +280,7 @@ def test_two_concurrent_same_version_risk_commits_have_one_winner():
             conn.close()
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(contender, (healthy, halted)))
+        results = list(pool.map(contender, (_active_manifest(), _halted_manifest())))
 
     assert sum(row["status"] == "COMMITTED" for row in results) == 1
     assert sum(row["status"] == "CAS_CONFLICT" for row in results) == 1
@@ -214,18 +298,17 @@ def test_expired_runtime_fence_prevents_stale_risk_commit():
     runtime_id = _runtime_id("fence")
     conn = _connect()
     try:
-        first = _acquire(conn, runtime_id, "owner-a", 1)
-        assert first["fencing_token"] == 1
+        assert _acquire(conn, runtime_id, "owner-a", 1)["fencing_token"] == 1
         time.sleep(1.15)
-        second = _acquire(conn, runtime_id, "owner-b", 30)
-        assert second["status"] == "EXPIRED_RECOVERY"
-        assert second["fencing_token"] == 2
+        takeover = _acquire(conn, runtime_id, "owner-b", 30)
+        assert takeover["status"] == "EXPIRED_RECOVERY"
+        assert takeover["fencing_token"] == 2
 
-        stale = _commit(conn, runtime_id, "owner-a", 1, 0, _ledger().manifest())
+        stale = _commit(conn, runtime_id, "owner-a", 1, 0, _active_manifest())
         assert stale["status"] == "LEASE_LOST"
         assert stale["committed"] is False
 
-        good = _commit(conn, runtime_id, "owner-b", 2, 0, _ledger().manifest())
+        good = _commit(conn, runtime_id, "owner-b", 2, 0, _active_manifest())
         assert good["status"] == "COMMITTED"
         assert good["version"] == 1
     finally:
@@ -236,20 +319,15 @@ def test_risk_ledger_prefix_extends_append_only():
     runtime_id = _runtime_id("prefix")
     conn = _connect()
     try:
-        lease = _acquire(conn, runtime_id, "owner-a")
-        fence = lease["fencing_token"]
-        ledger = _ledger()
-        first_manifest = ledger.manifest()
-        first = _commit(conn, runtime_id, "owner-a", fence, 0, first_manifest)
-        assert first["version"] == 1
+        fence = _acquire(conn, runtime_id, "owner-a")["fencing_token"]
+        first = _active_manifest()
+        assert _commit(conn, runtime_id, "owner-a", fence, 0, first)["version"] == 1
 
-        _append_success(ledger, now=TS + 1)
-        second_manifest = ledger.manifest()
-        second = _commit(conn, runtime_id, "owner-a", fence, 1, second_manifest)
-        assert second["version"] == 2
+        second = _extended_active_manifest()
+        assert _commit(conn, runtime_id, "owner-a", fence, 1, second)["version"] == 2
         assert _count(conn, "brian_operational_risk_entries", runtime_id) == 2
         assert _count(conn, "brian_operational_risk_snapshots", runtime_id) == 2
-        assert _read(conn, runtime_id)["ledger_hash"] == second_manifest["ledger_hash"]
+        assert _read(conn, runtime_id)["ledger_hash"] == second["ledger_hash"]
     finally:
         conn.close()
 
@@ -258,16 +336,13 @@ def test_changed_persisted_prefix_is_rejected_without_advancing_head():
     runtime_id = _runtime_id("rewrite")
     conn = _connect()
     try:
-        lease = _acquire(conn, runtime_id, "owner-a")
-        fence = lease["fencing_token"]
-        ledger = _ledger()
-        first_manifest = ledger.manifest()
-        assert _commit(conn, runtime_id, "owner-a", fence, 0, first_manifest)["version"] == 1
+        fence = _acquire(conn, runtime_id, "owner-a")["fencing_token"]
+        first = _active_manifest()
+        assert _commit(conn, runtime_id, "owner-a", fence, 0, first)["version"] == 1
 
-        forged = copy.deepcopy(first_manifest)
+        forged = copy.deepcopy(first)
         forged["entries"][0]["receipt"]["reasons"] = ["forged-history-rewrite"]
-        forged["ledger_hash"] = "9" * 64
-
+        forged["ledger_hash"] = _h("4")
         with pytest.raises(psycopg2.Error, match="PHASE73_LEDGER_PREFIX_CONFLICT"):
             _commit(conn, runtime_id, "owner-a", fence, 1, forged)
 
@@ -277,25 +352,75 @@ def test_changed_persisted_prefix_is_rejected_without_advancing_head():
         conn.close()
 
 
+def test_state_chain_and_timestamp_regression_are_rejected_in_database():
+    runtime_id = _runtime_id("continuity")
+    conn = _connect()
+    try:
+        fence = _acquire(conn, runtime_id, "owner-a")["fencing_token"]
+
+        bad_state = _manifest(
+            ledger_char="5",
+            entries=[
+                _entry(
+                    0,
+                    entry_char="1",
+                    receipt_char="2",
+                    previous_entry_char=None,
+                    previous_state="REDUCING",
+                    trading_state="ACTIVE",
+                    timestamp=TS,
+                )
+            ],
+            current_state="ACTIVE",
+        )
+        with pytest.raises(psycopg2.Error, match="PHASE73_LEDGER_STATE_CHAIN"):
+            _commit(conn, runtime_id, "owner-a", fence, 0, bad_state)
+
+        bad_time = _manifest(
+            ledger_char="6",
+            entries=[
+                _entry(
+                    0,
+                    entry_char="3",
+                    receipt_char="4",
+                    previous_entry_char=None,
+                    previous_state="ACTIVE",
+                    trading_state="ACTIVE",
+                    timestamp=TS,
+                ),
+                _entry(
+                    1,
+                    entry_char="5",
+                    receipt_char="6",
+                    previous_entry_char="3",
+                    previous_state="ACTIVE",
+                    trading_state="ACTIVE",
+                    timestamp=TS,
+                ),
+            ],
+            current_state="ACTIVE",
+        )
+        with pytest.raises(psycopg2.Error, match="PHASE73_LEDGER_TIME"):
+            _commit(conn, runtime_id, "owner-a", fence, 0, bad_time)
+    finally:
+        conn.close()
+
+
 def test_historical_retry_does_not_roll_back_newer_risk_head():
     runtime_id = _runtime_id("historical")
     conn = _connect()
     try:
-        lease = _acquire(conn, runtime_id, "owner-a")
-        fence = lease["fencing_token"]
-        ledger = _ledger()
-        first_manifest = ledger.manifest()
-        assert _commit(conn, runtime_id, "owner-a", fence, 0, first_manifest)["version"] == 1
+        fence = _acquire(conn, runtime_id, "owner-a")["fencing_token"]
+        first = _active_manifest()
+        second = _extended_active_manifest()
+        assert _commit(conn, runtime_id, "owner-a", fence, 0, first)["version"] == 1
+        assert _commit(conn, runtime_id, "owner-a", fence, 1, second)["version"] == 2
 
-        _append_success(ledger, now=TS + 1)
-        second_manifest = ledger.manifest()
-        assert _commit(conn, runtime_id, "owner-a", fence, 1, second_manifest)["version"] == 2
-
-        retry = _commit(conn, runtime_id, "owner-a", fence, 0, first_manifest)
+        retry = _commit(conn, runtime_id, "owner-a", fence, 0, first)
         assert retry["status"] == "DUPLICATE_HISTORICAL"
         assert retry["version"] == 1
         assert retry["current_version"] == 2
-        assert _read(conn, runtime_id)["ledger_hash"] == second_manifest["ledger_hash"]
+        assert _read(conn, runtime_id)["ledger_hash"] == second["ledger_hash"]
         assert _read(conn, runtime_id)["version"] == 2
     finally:
         conn.close()
@@ -305,13 +430,12 @@ def test_same_ledger_hash_with_changed_manifest_is_integrity_error():
     runtime_id = _runtime_id("hash-conflict")
     conn = _connect()
     try:
-        lease = _acquire(conn, runtime_id, "owner-a")
-        fence = lease["fencing_token"]
-        manifest = _ledger().manifest()
+        fence = _acquire(conn, runtime_id, "owner-a")["fencing_token"]
+        manifest = _active_manifest()
         assert _commit(conn, runtime_id, "owner-a", fence, 0, manifest)["version"] == 1
 
         forged = copy.deepcopy(manifest)
-        forged["current_state"] = "REDUCING"
+        forged["entries"][0]["receipt"]["reasons"] = ["changed-under-same-hash"]
         with pytest.raises(psycopg2.Error, match="PHASE73_LEDGER_HASH_CONFLICT"):
             _commit(conn, runtime_id, "owner-a", fence, 1, forged)
     finally:
@@ -329,7 +453,7 @@ def test_service_role_cannot_mutate_risk_history_directly():
             "owner-a",
             lease["fencing_token"],
             0,
-            _ledger().manifest(),
+            _active_manifest(),
         )["status"] == "COMMITTED"
 
         with conn.cursor() as cur:
