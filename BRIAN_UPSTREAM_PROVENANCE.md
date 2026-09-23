@@ -1167,3 +1167,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - after a successful Phase85 certificate, Phase88 re-reads Phase87 and requires the exact certified backlog item to disappear; another distinct unresolved item may remain for a later invocation.
 - Red-team unit coverage includes stale Phase87 anchors, no-recovery resolution, manual review, active-owner blocking, expired takeover/resume, terminal Phase84→Phase85 completion, direct NEEDS_AUDIT certification, certificate/backlog inconsistency, completed-without-certificate fail-closed behavior, audit failure evidence and optional foreign pre-paper quarantine.
 - Phase88 remains hard shadow/paper-only and introduces no deployment migration of its own.
+
+
+## Phase 89 — Bounded Recovery Startup Gate
+
+- Brian file:
+  - `brian2026/phase89_recovery_startup_gate.py`
+- Phase89 adds no alpha, SQL or live execution. It is the bounded startup/worker gate that runs Phase88 recovery work before normal shadow work may resume.
+- Bounded drain semantics:
+  - one invocation processes at most a caller-specified positive number of Phase87 backlog items;
+  - only terminal resolution outcomes (`RECOVERY_COMPLETED`, `NO_RECOVERY_REQUIRED`) may continue to another item in the same invocation;
+  - `WAIT_*`, `MANUAL_REVIEW_REQUIRED`, reconciliation/mark dependencies, foreign-cycle waits and any future non-terminal outcome stop immediately instead of spinning on an external dependency;
+  - `IDLE` stops the drain without consuming the item budget.
+- Final admission semantics:
+  - after the bounded Phase88 work, Phase89 always re-reads the existing Phase86 DB admission barrier;
+  - normal work is released only when Phase86 is `OPEN` AND the worker's final outcome is terminal/IDLE;
+  - a new AFTER_START cancel appearing between Phase87's IDLE read and the final Phase86 read is classified as `RECOVERY_BARRIER_APPEARED` and keeps normal work closed;
+  - an OPEN Phase86 read never overrides a non-terminal Phase88 result from the same invocation;
+  - exhausting the item budget while Phase86 remains blocked returns `RECOVERY_BUDGET_EXHAUSTED`, never READY.
+- Red-team unit coverage includes IDLE/open release, multiple resolved backlog items, wait/manual stop behavior, the Phase87-IDLE→Phase86-barrier race, bounded backlog exhaustion, OPEN-admission/nonterminal disagreement and invalid budget rejection.
+- Phase89 remains hard shadow/paper-only and introduces no migration of its own.
