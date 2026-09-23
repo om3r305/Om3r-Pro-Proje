@@ -645,3 +645,30 @@ This document records external open-source behaviors studied for Brian. It is no
   - if a checkpoint already exists, caller-provided initial memory is ignored and the database checkpoint is restored through Phase 63/67 validation;
   - local lease-version snapshots are advanced with every accepted checkpoint commit so heartbeat/diagnostic state stays aligned with the durable head.
 - Phase 71 remains shadow/paper-only and adds no external execution side effect.
+
+
+## Phase 72 — Durable Operational Risk Ledger + Restart Locks
+
+- Brian file: `brian2026/phase72_operational_risk_ledger.py`
+- This phase introduces no new external protection algorithm. It hardens Phase 68 so operational safety state survives process restart.
+- Phase 68 receipt hardening:
+  - each operational-risk receipt can re-verify its own content hash;
+  - `HALTED` and `halt_latched` are structurally required to agree;
+  - temporary stop-loss, execution-failure and reconciliation-failure lock expiries are carried in the receipt;
+  - per-asset cooldown expiry timestamps are persisted, not only the blocked-asset names;
+  - blocked assets must exactly match the persisted cooldown map;
+  - governor restoration from a verified receipt restores halt latch plus all unexpired temporary lock state.
+- Recovery semantics:
+  - a stop-loss REDUCING lock survives restart until its original expiry even when the caller does not replay old closed-trade rows;
+  - per-asset cooldowns survive restart until their exact expiry and then clear automatically;
+  - an execution-failure REDUCING lock survives restart conservatively, but a fresh EXECUTION_SUCCESS may clear it early;
+  - a reconciliation-failure REDUCING lock behaves the same with a fresh RECONCILIATION_SUCCESS;
+  - severe HALTED state remains latched across restart and still requires explicit manual release after the severe trigger itself has cleared.
+- Phase 72 ledger behavior:
+  - the exact `OperationalRiskPolicy` is content-addressed and sealed into the ledger;
+  - receipts form a sequential append-only hash chain;
+  - each new receipt must name the ledger's current trading state as its `previous_state`;
+  - distinct receipts must advance time, preventing ambiguous same-timestamp state forks;
+  - identical receipt retries are idempotent;
+  - manifest restore rebuilds every receipt/entry, policy hash, current state, latch state and overall ledger hash before a governor can be recreated.
+- Phase 72 remains shadow/paper risk state only. It does not create orders or enable live execution.
