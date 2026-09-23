@@ -185,6 +185,8 @@ class RecoveryFirstGroundedWorker:
         recovery_claim_seconds: int,
         recovery_ttl_seconds: int,
         recovery_source_ref: str,
+        normal_worker_token: str,
+        normal_claim_seconds: int,
         recovery_provider_factory: ProviderFactory = BinanceSpotRecoveryEvidenceProvider,
         clock=time.time,
     ) -> RecoveryFirstGroundedWorkerReceipt:
@@ -192,6 +194,10 @@ class RecoveryFirstGroundedWorker:
             raise RecoveryFirstGroundedWorkerError("Phase104 worker is closed")
         if not callable(prefetch_provider):
             raise TypeError("prefetch_provider must be callable")
+        if not normal_worker_token.strip():
+            raise ValueError("normal_worker_token is required")
+        if normal_claim_seconds < 10 or normal_claim_seconds > 300:
+            raise ValueError("normal_claim_seconds must be in [10,300]")
 
         if self.worker.ready_for_normal_shadow:
             startup = self.worker.startup
@@ -245,8 +251,8 @@ class RecoveryFirstGroundedWorker:
             markets=bundle.markets,
             risk_limits_by_asset=bundle.risk_limits_by_asset,
             marks=bundle.marks,
-            worker_token=recovery_worker_token,
-            claim_seconds=recovery_claim_seconds,
+            worker_token=normal_worker_token,
+            claim_seconds=normal_claim_seconds,
             observed_at=bundle.observed_at,
             source_ref=bundle.source_ref,
         )
