@@ -75,6 +75,7 @@ def run_governed_shadow_execution_cycle(
     barrier: TripleBarrierPolicy = TripleBarrierPolicy(),
     latency: StaticLatencyModel = StaticLatencyModel(),
     fill_models_by_asset: Mapping[str, ProbabilisticFillModel] | None = None,
+    blocked_new_risk_assets: Sequence[str] = (),
 ) -> GovernedShadowExecution:
     """Run the real Phase 57 execution path under the Phase 68 governor.
 
@@ -161,6 +162,7 @@ def run_governed_integrated_shadow_execution_cycle(
         evidence_ids_by_asset=evidence_ids_by_asset,
         max_slippage_bps=max_slippage_bps,
         ttl_seconds=ttl_seconds,
+        blocked_new_risk_assets=blocked_new_risk_assets,
     )
     return run_governed_shadow_execution_cycle(
         plan,
