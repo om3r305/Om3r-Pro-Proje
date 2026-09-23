@@ -586,3 +586,38 @@ This document records external open-source behaviors studied for Brian. It is no
   - execution still runs through the real Phase 57 cash reservation, Phase 45 executor action and Phase 46 order-book/latency fill simulation rather than a parallel shortcut;
   - the result records the Phase 68 receipt id, per-asset policy fingerprint, blocked-new-risk asset set and resulting Phase 57 cycle id.
 - Phase 69 remains fully shadow-only with no broker/exchange transport or live capital authorization.
+
+
+## Phase 70 — Transactional Durable Runtime Store
+
+- Brian files:
+  - `brian2026/phase70_durable_runtime_store.py`
+  - `supabase/migrations/202609230720_brian_phase70_durable_runtime_store.sql`
+- This phase introduces no trading algorithm. It turns the Phase 63–67 crash/recovery contracts into a real Postgres/Supabase persistence boundary.
+- Proven internal concurrency patterns reused:
+  - `202609030009_brian_collector_lease.sql`: owner-token lease acquisition/renewal/release and expired-owner recovery;
+  - `202609111675_brian_treasury_atomic_cas_guard.sql`: transaction-scoped advisory serialization and stale-parent compare-and-swap;
+  - `202609111695_brian_ocean_atomic_control_guard.sql`: database-time refresh after lock acquisition and serialized control transitions.
+- Current Supabase database-function guidance was rechecked before implementation:
+  - data-intensive atomic logic belongs inside Postgres functions/RPC;
+  - `security invoker` is preferred generally, while genuine privileged `security definer` functions must pin `search_path` and have explicit EXECUTE grants;
+  - functions are executable by PUBLIC by default unless privileges are revoked.
+- Phase 70 adaptation:
+  - one mutable operational head row per runtime holds current checkpoint version, lease owner, fencing token and current checkpoint anchors;
+  - immutable checkpoint history, full cycle bodies, journal entries and runtime events are stored in separate append-only tables;
+  - all append-only tables reject UPDATE/DELETE and have no direct anon/authenticated/service-role table mutation grant;
+  - the service role may mutate runtime persistence only through explicitly granted RPC functions;
+  - lease acquisition is serialized per runtime and expired takeover increments a fencing token;
+  - renew/commit require exact owner token + fencing token + unexpired lease;
+  - release rotates the owner token so an already-in-flight stale renewal cannot resurrect ownership;
+  - checkpoint commit is serialized and uses expected-version CAS; concurrent commits from the same version cannot both advance the head;
+  - exact checkpoint retries are idempotent, including historical retries, without rolling the authoritative head backwards;
+  - a reused checkpoint id with different payload is treated as an integrity violation;
+  - incoming durable journals must contain the entire previously persisted prefix; truncation or mutation of an existing sequence fails closed;
+  - full Phase 57 cycle bodies are persisted once and conflicting cycle body/hash reuse is rejected;
+  - DB heads expose checkpoint id, journal hash, Phase 60 head-state id and pending-cycle id as independent restore anchors;
+  - Python `DurableRuntimeStore` is transport-agnostic (RPC callable injection) so Brian does not gain a hard dependency on supabase-py;
+  - loaded JSON is reconstructed through Phase 63/67 content-hash validation and then cross-checked against all database head anchors before it can be returned to the runtime.
+- Real Postgres 16 CI exercises fresh-acquire races, concurrent checkpoint CAS, expired-owner fencing, release/renew safety, journal prefix extension/conflict, exact and historical retries, checkpoint-id collision, and direct service-role mutation denial.
+- The migration is committed to GitHub only in this PR; it has not been rolled out to a live Supabase project.
+- Phase 70 remains shadow/paper-only and adds no exchange transport or capital authorization.
