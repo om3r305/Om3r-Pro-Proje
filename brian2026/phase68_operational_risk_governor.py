@@ -155,6 +155,65 @@ class OperationalRiskReceipt:
     shadow_only: bool = True
     live_execution: bool = False
 
+    def __post_init__(self) -> None:
+        if self.previous_state not in ("ACTIVE", "REDUCING", "HALTED"):
+            raise ValueError("invalid previous_state")
+        if self.trading_state not in ("ACTIVE", "REDUCING", "HALTED"):
+            raise ValueError("invalid trading_state")
+        if self.recommended_state not in ("ACTIVE", "REDUCING", "HALTED"):
+            raise ValueError("invalid recommended_state")
+        if not all(math.isfinite(value) for value in (
+            self.timestamp,
+            self.max_drawdown_fraction,
+            self.window_loss_fraction,
+            self.market_data_age_seconds,
+        )):
+            raise ValueError("operational-risk receipt metrics must be finite")
+        if self.max_drawdown_fraction < 0 or self.window_loss_fraction < 0:
+            raise ValueError("operational-risk loss metrics cannot be negative")
+        if self.market_data_age_seconds < 0:
+            raise ValueError("market_data_age_seconds cannot be negative")
+        if min(
+            self.qualifying_stoplosses,
+            self.consecutive_execution_failures,
+            self.reconciliation_failures,
+            self.unknown_order_outcomes,
+        ) < 0:
+            raise ValueError("operational-risk counters cannot be negative")
+        if self.stoploss_lock_until is not None and not math.isfinite(self.stoploss_lock_until):
+            raise ValueError("stoploss_lock_until must be finite when set")
+        if self.halt_latched != (self.trading_state == "HALTED"):
+            raise ValueError("HALTED state and halt_latched must agree")
+        if not self.shadow_only or self.live_execution:
+            raise ValueError("operational-risk receipt must remain shadow-only")
+        if len(self.receipt_id) != 64:
+            raise ValueError("operational-risk receipt_id must be a content hash")
+
+    def identity_payload(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "timestamp": float(self.timestamp),
+            "previous_state": self.previous_state,
+            "trading_state": self.trading_state,
+            "recommended_state": self.recommended_state,
+            "reasons": self.reasons,
+            "max_drawdown_fraction": float(self.max_drawdown_fraction),
+            "window_loss_fraction": float(self.window_loss_fraction),
+            "qualifying_stoplosses": self.qualifying_stoplosses,
+            "stoploss_lock_until": self.stoploss_lock_until,
+            "blocked_assets": self.blocked_assets,
+            "consecutive_execution_failures": self.consecutive_execution_failures,
+            "reconciliation_failures": self.reconciliation_failures,
+            "unknown_order_outcomes": self.unknown_order_outcomes,
+            "market_data_age_seconds": float(self.market_data_age_seconds),
+            "manual_halt": self.manual_halt,
+            "manual_release_requested": self.manual_release_requested,
+            "halt_latched": self.halt_latched,
+        }
+
+    def verify_identity(self) -> bool:
+        return content_hash(self.identity_payload()) == self.receipt_id
+
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
@@ -258,6 +317,18 @@ class OperationalRiskGovernor:
     @property
     def state(self) -> TradingState:
         return self._state
+
+    @classmethod
+    def from_receipt(
+        cls,
+        policy: OperationalRiskPolicy,
+        receipt: OperationalRiskReceipt,
+    ) -> "OperationalRiskGovernor":
+        if not receipt.verify_identity():
+            raise ValueError("operational-risk receipt content hash mismatch")
+        governor = cls(policy, initial_state=receipt.trading_state)
+        governor._halt_latched = receipt.halt_latched
+        return governor
 
     def evaluate(
         self,
