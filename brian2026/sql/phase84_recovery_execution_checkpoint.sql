@@ -29,7 +29,7 @@ create table if not exists public.brian_shadow_recovery_commit_events (
     event in (
       'WRITE_AHEAD_COMMITTED',
       'PROGRESS_COMMITTED',
-      'RECOVERY_COMPLETED',
+      'RECOVERY_COMMITTED_PENDING_AUDIT',
       'DUPLICATE_CURRENT',
       'CLAIM_LOST',
       'LEASE_LOST',
@@ -642,10 +642,9 @@ begin
           v_current_head_state_id
         ),
         progress_checkpoint_id=v_checkpoint_id,
-        status=case when v_terminal then 'COMPLETED' else status end,
-        claim_until=case when v_terminal then null else claim_until end,
-        completed_at=case when v_terminal then v_now else completed_at end,
-        completion_ref=case when v_terminal then v_checkpoint_id else completion_ref end,
+        -- Phase85 owns terminal completion. A COMMITTED recovery is durable
+        -- progress, not yet proof that final authoritative exposure satisfied
+        -- the post-recovery safety invariants.
         updated_at=v_now
     where runtime_id=p_runtime_id
       and dispatch_id=v_directive.dispatch_id
@@ -659,7 +658,7 @@ begin
   end if;
 
   if v_terminal then
-    v_event := 'RECOVERY_COMPLETED';
+    v_event := 'RECOVERY_COMMITTED_PENDING_AUDIT';
   elsif v_journal_stage = 'CYCLE_CREATED' then
     v_event := 'WRITE_AHEAD_COMMITTED';
   else
@@ -695,7 +694,7 @@ begin
     'duplicate', v_commit_status = 'DUPLICATE_CURRENT',
     'terminal', v_terminal,
     'status', case
-      when v_terminal then 'RECOVERY_COMPLETED'
+      when v_terminal then 'RECOVERY_COMMITTED_PENDING_AUDIT'
       else v_commit_status
     end,
     'runtime_id', p_runtime_id,
