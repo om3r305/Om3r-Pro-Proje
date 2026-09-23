@@ -84,6 +84,7 @@ def _finite_mapping(
     values: Mapping[str, float],
     *,
     label: str,
+    positive: bool = False,
 ) -> dict[str, float]:
     result: dict[str, float] = {}
     for raw_asset, raw_value in values.items():
@@ -93,6 +94,8 @@ def _finite_mapping(
         value = float(raw_value)
         if not math.isfinite(value):
             raise ValueError(f"{label}[{asset}] must be finite")
+        if positive and value <= 0:
+            raise ValueError(f"{label}[{asset}] must be positive")
         result[asset] = value
     return result
 
@@ -127,6 +130,79 @@ def _grounded_execution_metadata(
         evidence[str(asset)] = tuple(sorted(ids))
 
     return confidence, evidence
+
+
+def _authoritative_account_head(
+    worker: RecoveryFirstShadowWorkerSession,
+):
+    session = getattr(worker, "session", None)
+    supervisor = getattr(session, "runtime_supervisor", None)
+    runtime = getattr(supervisor, "runtime", None)
+    ledger = getattr(runtime, "ledger", None)
+    head = getattr(ledger, "head_state", None)
+    if head is None:
+        raise IntegratedDecisionShadowRuntimeError(
+            "Phase100 session does not expose authoritative Phase60 head state"
+        )
+    return head
+
+
+def _assert_decision_account_binding(
+    decision: IntegratedShadowDecision,
+    head,
+    *,
+    equity_usd: float,
+    available_cash_usd: float,
+) -> None:
+    if float(decision.timestamp) < float(head.observed_at):
+        raise IntegratedDecisionShadowRuntimeError(
+            "Phase54 decision predates authoritative Phase60 account head"
+        )
+
+    planned_current = {
+        str(asset): float(weight)
+        for asset, weight in decision.current_weights.items()
+        if abs(float(weight)) > 1e-15
+    }
+    authoritative = {
+        str(asset): float(weight)
+        for asset, weight in head.position_weights
+        if abs(float(weight)) > 1e-15
+    }
+    assets = set(planned_current) | set(authoritative)
+    drifted = tuple(sorted(
+        asset
+        for asset in assets
+        if not math.isclose(
+            planned_current.get(asset, 0.0),
+            authoritative.get(asset, 0.0),
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        )
+    ))
+    if drifted:
+        raise IntegratedDecisionShadowRuntimeError(
+            f"Phase54 current_weights differ from Phase60 head for {drifted}"
+        )
+
+    if not math.isclose(
+        float(equity_usd),
+        float(head.equity_usd),
+        rel_tol=1e-12,
+        abs_tol=1e-9,
+    ):
+        raise IntegratedDecisionShadowRuntimeError(
+            "execution equity differs from authoritative Phase60 head"
+        )
+    if not math.isclose(
+        float(available_cash_usd),
+        float(head.available_cash_usd),
+        rel_tol=1e-12,
+        abs_tol=1e-9,
+    ):
+        raise IntegratedDecisionShadowRuntimeError(
+            "execution cash differs from authoritative Phase60 head"
+        )
 
 
 def _persisted_risk_head(
@@ -279,8 +355,17 @@ class IntegratedDecisionShadowRuntime:
         clean_marks = _finite_mapping(
             marks,
             label="marks",
+            positive=True,
         )
         confidence, evidence = _grounded_execution_metadata(decision)
+
+        account_head = _authoritative_account_head(self.worker)
+        _assert_decision_account_binding(
+            decision,
+            account_head,
+            equity_usd=float(equity_usd),
+            available_cash_usd=float(available_cash_usd),
+        )
 
         stored = self.risk_store.load(runtime_id=self.runtime_id)
         risk = _persisted_risk_head(stored)
@@ -306,6 +391,26 @@ class IntegratedDecisionShadowRuntime:
         if governed.operational_risk_receipt_id != risk.receipt_id:
             raise IntegratedDecisionShadowRuntimeError(
                 "Phase69 governed result is not bound to persisted risk head"
+            )
+
+        runtime = self.worker.session.runtime_supervisor.runtime
+        current_mark_assets = {
+            str(asset)
+            for asset, position in runtime.venue.positions.items()
+            if abs(float(position.quantity)) > 1e-12
+        }
+        cycle_mark_assets = {
+            str(item.asset_id)
+            for item in governed.cycle.items
+        }
+        missing_marks = tuple(sorted(
+            asset
+            for asset in current_mark_assets | cycle_mark_assets
+            if asset not in clean_marks
+        ))
+        if missing_marks:
+            raise IntegratedDecisionShadowRuntimeError(
+                f"authoritative marks missing before durable execution: {missing_marks}"
             )
 
         # A Phase54 rebalance can collapse to zero executable legs after exact
