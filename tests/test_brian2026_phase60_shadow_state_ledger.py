@@ -196,7 +196,20 @@ def test_reconciled_state_must_cover_every_tracked_asset_in_report() -> None:
     cycle = _cycle("cycle-coverage")
     ledger.append_cycle(cycle)
     report = _reconciliation()
-    state = _reconciled_state(report, covered_assets=("BTCUSDT",))
+    # Keep the state itself internally valid: only BTC has a non-zero weight and
+    # BTC is covered. The intended failure belongs to the Phase 50 -> Phase 60
+    # boundary because the reconciliation report also tracks ETH.
+    state = ShadowAccountState(
+        account_id="paper-acct",
+        observed_at=200.0,
+        equity_usd=1010.0,
+        available_cash_usd=610.0,
+        position_weights=(("BTCUSDT", 0.20),),
+        covered_assets=("BTCUSDT",),
+        source_kind="RECONCILED_PAPER",
+        source_ref="paper-account-report-coverage",
+        reconciliation_hash=content_hash(report.to_dict()),
+    )
     with pytest.raises(ShadowStateConflictError, match="does not cover"):
         ledger.commit_reconciled_state(cycle.cycle_id, report, state)
 
