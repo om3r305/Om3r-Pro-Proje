@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping
 
 from .phase57_shadow_execution_cycle import ShadowExecutionCycle
@@ -156,6 +156,7 @@ class PersistedDurableRuntimeSupervisor:
                     "database returned inconsistent COMMITTED receipt"
                 )
             self.persisted_version = receipt.version
+            self.lease = replace(self.lease, version=self.persisted_version)
             return receipt
 
         if receipt.status == "DUPLICATE_CURRENT":
@@ -170,6 +171,7 @@ class PersistedDurableRuntimeSupervisor:
                     "duplicate-current receipt version mismatch"
                 )
             self.persisted_version = receipt.current_version
+            self.lease = replace(self.lease, version=self.persisted_version)
             return receipt
 
         # DUPLICATE_HISTORICAL means this local checkpoint is older than the DB
