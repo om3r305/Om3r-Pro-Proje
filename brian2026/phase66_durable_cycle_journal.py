@@ -88,6 +88,20 @@ def _cycle_hash(cycle: ShadowExecutionCycle) -> str:
     return content_hash(cycle.to_dict())
 
 
+def _paper_receipt_hash(receipt: PaperCycleReceipt) -> str:
+    return content_hash({
+        "schema_version": receipt.schema_version,
+        "cycle_id": receipt.cycle_id,
+        "cycle_hash": receipt.cycle_hash,
+        "outcomes": [row.to_dict() for row in receipt.outcomes],
+        "fill_ids": list(receipt.fill_ids),
+        "cash_before_usd": receipt.cash_before_usd,
+        "cash_after_usd": receipt.cash_after_usd,
+        "state_version_before": receipt.state_version_before,
+        "state_version_after": receipt.state_version_after,
+    })
+
+
 def _parse_risk_receipt(payload: Mapping[str, object]) -> PreTradeRiskReceipt:
     return PreTradeRiskReceipt(
         action=str(payload["action"]),  # type: ignore[arg-type]
@@ -364,6 +378,10 @@ class DurableCycleJournal:
             raise CycleJournalError("paper receipt belongs to a different cycle")
         if receipt.cycle_hash != self._cycle_hashes.get(cycle_id):
             raise CycleJournalError("paper receipt does not reference the journaled cycle hash")
+        if _paper_receipt_hash(receipt) != receipt.receipt_id:
+            raise CycleJournalError("paper receipt content hash mismatch")
+        if receipt.live_execution or not receipt.paper_only:
+            raise CycleJournalError("journal accepts only paper execution receipts")
         return self._append(
             cycle_id=cycle_id,
             stage="PAPER_APPLIED",
@@ -390,6 +408,8 @@ class DurableCycleJournal:
         cycle_id: str,
         report: ReconciliationBatchReport,
     ) -> JournalAppendReceipt:
+        if report.live_execution:
+            raise CycleJournalError("journal accepts only shadow/paper reconciliation")
         stage: JournalStage = (
             "RECONCILED"
             if report.ready and all(value for _, value in report.checks)
