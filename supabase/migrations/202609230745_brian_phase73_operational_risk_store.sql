@@ -114,7 +114,13 @@ create table if not exists public.brian_operational_risk_entries (
   check (previous_entry_id is null or length(previous_entry_id) = 64),
   check (length(policy_hash) = 64),
   check (length(receipt_id) = 64),
-  check (receipt_timestamp = receipt_timestamp),
+  check (
+    receipt_timestamp not in (
+      'NaN'::double precision,
+      'Infinity'::double precision,
+      '-Infinity'::double precision
+    )
+  ),
   check (halt_latched = (trading_state = 'HALTED')),
   check (jsonb_typeof(entry_payload) = 'object')
 );
