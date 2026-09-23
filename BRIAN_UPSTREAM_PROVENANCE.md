@@ -1388,3 +1388,27 @@ This document records external open-source behaviors studied for Brian. It is no
   - configured modern, legacy and hosted Supabase secrets plus generic modern `sb_secret_*` forms are redacted from stderr diagnostics.
 - Red-team unit coverage includes exact CLI/env forwarding, Phase94 provider configuration, all exit-code classes, bounded evidence metadata output, invalid argument/bound enforcement, secret redaction, generated worker identity and CLI-over-env precedence.
 - Phase96 remains hard shadow/paper-only and introduces no migration of its own.
+
+## Phase 97 — Bounded Auto-Recovery Drain
+
+- Brian file:
+  - `brian2026/phase97_bounded_auto_recovery_drain.py`
+- Phase97 adds no alpha, SQL, scheduler or live execution. It turns the Phase95 one-item causal worker into a bounded multi-item startup drain while preserving one fresh market-evidence decision per recovery identity.
+- Authority and evidence isolation:
+  - one Phase92 session and one Phase70 lease remain owned across the bounded drain;
+  - each backlog identity is still processed by a separate Phase95 invocation with its own decision timestamp and Phase94 provider call when market evidence is actually required;
+  - market evidence from one recovery item is never reused for the next item;
+  - the same recovery worker identity is reused only as process ownership, while durable original-cycle/claim/start/checkpoint identities remain item-specific.
+- Retry/stop semantics:
+  - Phase89 `RECOVERY_BUDGET_EXHAUSTED`, `RECOVERY_BACKLOG_REMAINS` and the IDLE→barrier race `RECOVERY_BARRIER_APPEARED` may consume another bounded Phase95 attempt;
+  - WAIT/manual/reconciliation/other non-terminal outcomes stop immediately instead of spinning on an external dependency;
+  - total Phase95 attempts and total processed recovery items are bounded to 1–32.
+- Final handoff hardening:
+  - a Phase89 `READY_FOR_NORMAL_WORK` result is re-read through the exact Phase86 admission store before Phase97 returns READY;
+  - if a new AFTER_START barrier appears after the Phase89 ready read, normal work remains closed and Phase97 spends another bounded fresh-evidence attempt when budget remains;
+  - Phase86's database authorization/dispatch wrappers remain the final normal-cycle interlock for any barrier that appears after Phase97 returns.
+- Fail-closed wiring:
+  - closed sessions, stale Phase71 supervisors, missing Phase86 admission readers and cross-runtime Phase95 receipts are rejected;
+  - Phase97 remains hard shadow/paper-only and introduces no migration of its own.
+- Red-team unit coverage includes immediate IDLE release, multi-item drain on one session, fresh second attempt after the ready→barrier race, non-terminal stop behavior, bounded exhaustion, cross-runtime rejection, stale/closed sessions, invalid budgets and missing Phase86 handoff authority.
+
