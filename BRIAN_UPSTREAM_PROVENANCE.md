@@ -205,3 +205,22 @@ This document records external open-source behaviors studied for Brian. It is no
   - marginal and normalized risk contributions plus pairwise correlation are emitted for audit;
   - released gross exposure remains cash.
 - Phase 52 is shadow-only and does not alter the production Treasury path.
+
+
+## Phase 53 — Turnover-Constrained Rebalance Planner
+
+- Brian file: `brian2026/phase53_turnover_rebalance.py`
+- Reference project: Microsoft Qlib (`microsoft/qlib`, MIT).
+- Reference revision inspected: `be725493eb1a6bbb42bf11b37aa7669f59610ff1`.
+- Upstream behavior inspected:
+  - `qlib/contrib/strategy/optimizer/optimizer.py` constrains portfolio turnover with an L1 budget of the form `|w - w0| <= delta`.
+  - Qlib's optimizer treats turnover as a first-class portfolio constraint rather than letting every new target immediately churn the full book.
+- Brian clean-room adaptation:
+  - current-to-target absolute weight change is measured as L1 turnover;
+  - if ordinary additions/rotations exceed the budget, the remaining trade vector is scaled proportionally toward the approved target;
+  - no planned weight may overshoot its target path;
+  - hard exposure reductions are applied first and, by default, cannot be blocked by a transaction-cost/turnover budget;
+  - an opposite-side reversal must close existing exposure before any new opposite exposure is opened;
+  - if mandatory risk reduction alone exceeds the turnover limit, the receipt records that the limit was exceeded only for risk reduction;
+  - output remains a shadow rebalance plan with no order transport.
+- The hard-risk bypass is a Brian safety extension; it is not claimed to be Qlib's optimizer behavior.
