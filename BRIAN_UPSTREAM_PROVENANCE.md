@@ -123,3 +123,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - inflight receipt state is idempotent under duplicate submits;
   - all receipts remain shadow-only with no exchange transport.
 - License boundary: NautilusTrader is used strictly as a behavioral reference for this phase; implementation is independent.
+
+
+## Phase 49 — Shadow/Paper Parity + Micro-Live Eligibility Gate
+
+- Brian file: `brian2026/phase49_promotion_gate.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, used as a behavioral reference only).
+- Reference revision inspected: `2c5364a5ca3ea2a68f51aa6e886aa6a7d6fc58e4`.
+- Upstream behavior inspected:
+  - `docs/concepts/architecture.md`: Backtest, Sandbox and Live share a common kernel/core; Sandbox uses real-time data with simulated execution, while Live uses live venue connections.
+  - `docs/concepts/execution/index.md`: execution outcomes distinguish local failures, definitive venue results and unknown live outcomes; unknown outcomes remain in flight until stream/poll/query/reconciliation resolves them.
+  - live execution state is reconciled from order, fill, position and account reports instead of assuming local state is authoritative.
+- Brian adaptation:
+  - promotion evaluates real-time shadow versus paper/sandbox observations by intent id;
+  - direction parity, acknowledgement rate, reconciliation completeness, fill-fraction parity and execution-price drift are separate gates;
+  - unresolved ambiguous outcomes fail the gate instead of being treated as fills or losses;
+  - Phase 42 research, Phase 41 robustness and Phase 48 causality must all pass before paper parity can matter;
+  - passing every gate yields only `MICRO_LIVE_ELIGIBLE`;
+  - `MICRO_LIVE_ELIGIBLE` does not enable an exchange adapter, allocate capital, activate automatically or submit an order;
+  - explicit later authorization remains mandatory.
+- No Nautilus source code is copied in Phase 49.
