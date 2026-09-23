@@ -185,3 +185,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - regime, analyst and evidence views are association summaries only;
   - evidence-linked PnL is deliberately non-additive and never presented as a causal dollar split among signals.
 - Phase 51 is shadow accounting only and introduces no execution transport.
+
+
+## Phase 52 — Shrunk Covariance Portfolio Risk Overlay
+
+- Brian file: `brian2026/phase52_covariance_risk.py`
+- Reference project: Microsoft Qlib (`microsoft/qlib`, MIT).
+- Reference revision inspected: `be725493eb1a6bbb42bf11b37aa7669f59610ff1`.
+- Upstream behavior inspected:
+  - `qlib/model/riskmodel/base.py`: risk models estimate covariance from aligned observations after centering, with explicit missing-data behavior.
+  - `qlib/model/riskmodel/shrink.py`: sample covariance may be shrunk toward a constant-variance target; Qlib supports Ledoit-Wolf shrinkage using the documented `phi/gamma/T` estimator.
+  - `qlib/contrib/strategy/optimizer/optimizer.py`: portfolio risk is measured through the covariance matrix using `w' S w`; inverse-volatility, minimum-variance, mean-variance and risk-parity allocations are built on that matrix.
+- Brian clean-room adaptation:
+  - aligned per-asset return histories are centered and converted to sample covariance;
+  - the constant-variance shrink target and Ledoit-Wolf shrink parameter are independently implemented from the public estimator equations;
+  - Brian keeps Phase 44 conviction signs/relative requests intact;
+  - covariance risk is an overlay only: if predicted period volatility exceeds the preregistered limit, all weights are scaled down proportionally;
+  - the overlay can never increase a position, flip direction or redistribute released risk into another asset;
+  - marginal and normalized risk contributions plus pairwise correlation are emitted for audit;
+  - released gross exposure remains cash.
+- Phase 52 is shadow-only and does not alter the production Treasury path.
