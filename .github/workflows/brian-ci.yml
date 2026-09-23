@@ -171,4 +171,5 @@ jobs:
           tests/test_brian2026_phase70_durable_runtime_postgres.py
           tests/test_brian2026_phase73_operational_risk_postgres.py
           tests/test_brian2026_phase74_governed_cycle_binding_postgres.py
+          tests/test_brian2026_phase75_atomic_governed_writeahead_postgres.py
           -v
