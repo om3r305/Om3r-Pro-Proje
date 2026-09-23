@@ -244,3 +244,22 @@ This document records external open-source behaviors studied for Brian. It is no
   - an asset intentionally absent from an otherwise valid new target is reduced through the rebalance stage;
   - no execution/order transport is exposed in Phase 54.
 - Phase 54 exists specifically to prevent "feature islands": it verifies that the proven mechanisms operate through one typed end-to-end shadow decision path.
+
+
+## Phase 55 — Delta-Safe Rebalance Execution Intents
+
+- Brian file: `brian2026/phase55_rebalance_execution_intents.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `2c5364a5ca3ea2a68f51aa6e886aa6a7d6fc58e4`.
+- Upstream behavior inspected:
+  - `crates/risk/src/engine/mod.rs::is_reducing_submission`: a reducing submission must be reduce-only, positive-sized, tied to the same instrument and identified open position, have the opposite order side, and must not exceed the open position quantity.
+  - Nautilus `TradingState::Reducing` permits only valid exposure-reducing submissions; ordinary new-risk modifications/submissions are blocked by the risk engine.
+- Brian clean-room adaptation:
+  - execution is compiled from Phase 53 `planned_delta`, never from final target weight; this prevents over-ordering an already-open position;
+  - same-side exposure reductions compile to explicit reduce-only intents and do not require alpha evidence merely to lower risk;
+  - new/increased risk compiles to Phase 45 `TradeIntent` and requires grounded evidence, expected edge and confidence;
+  - a direction reversal is always split into a reduce-only close-to-flat leg plus a pending opposite-side open;
+  - the opposite-side leg cannot auto-release and requires an authoritative, reconciliation-complete flat-position receipt;
+  - the pending reversal expires by TTL instead of opening stale new risk;
+  - all Phase 55 instructions remain shadow-only with no exchange transport.
+- The implementation operates at portfolio-weight/delta level because the real quantity conversion remains the execution adapter's responsibility.
