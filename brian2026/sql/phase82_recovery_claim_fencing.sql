@@ -162,6 +162,7 @@ declare
   v_claimed boolean := false;
   v_claim_fence bigint;
   v_claim_until timestamptz;
+  v_claim_exists boolean := false;
 begin
   if nullif(trim(p_runtime_id), '') is null
      or nullif(trim(p_owner_token), '') is null
@@ -320,8 +321,9 @@ begin
     and dispatch_id = v_directive.dispatch_id
     and cancel_risk_receipt_id = v_directive.cancel_risk_receipt_id
   for update;
+  v_claim_exists := found;
 
-  if found and v_claim.status = 'COMPLETED' then
+  if v_claim_exists and v_claim.status = 'COMPLETED' then
     return jsonb_build_object(
       'claimed', false,
       'terminal', true,
@@ -456,7 +458,7 @@ begin
     );
   end if;
 
-  if found
+  if v_claim_exists
      and v_claim.status = 'CLAIMED'
      and v_claim.claim_until > v_now
      and v_claim.worker_token = p_worker_token then
@@ -464,14 +466,14 @@ begin
     v_claimed := true;
     v_claim_fence := v_claim.claim_fencing_token;
     v_claim_until := v_claim.claim_until;
-  elsif found
+  elsif v_claim_exists
      and v_claim.status = 'CLAIMED'
      and v_claim.claim_until > v_now then
     v_event := 'BLOCKED_ACTIVE';
     v_claimed := false;
     v_claim_fence := v_claim.claim_fencing_token;
     v_claim_until := v_claim.claim_until;
-  elsif found then
+  elsif v_claim_exists then
     v_event := 'EXPIRED_RECOVERY';
     v_claimed := true;
     v_claim_fence := v_claim.claim_fencing_token + 1;
