@@ -1214,7 +1214,7 @@ This document records external open-source behaviors studied for Brian. It is no
 
 - Brian file:
   - `brian2026/phase91_supabase_rpc_transport.py`
-- Phase91 adds no alpha, trading logic, SQL or live execution. It provides the fail-closed backend transport used to call the exact Phase81–87 Postgres RPC surface through Supabase PostgREST.
+- Phase91 adds no alpha, trading logic, SQL or live execution. It provides the fail-closed backend transport used to call the exact Phase70 bootstrap/lease plus Phase81–87 recovery Postgres RPC surface through Supabase PostgREST.
 - Current Supabase API-key migration rules were re-verified before implementation:
   - backend workers prefer `SUPABASE_SECRET_KEY` / `sb_secret_...`;
   - hosted `SUPABASE_SECRET_KEYS` JSON with the `default` key is also supported;
@@ -1225,9 +1225,35 @@ This document records external open-source behaviors studied for Brian. It is no
   - remote project URLs must use HTTPS; plain HTTP is accepted only for localhost;
   - secret keys are never placed in URLs, exception messages or diagnostics;
   - redirects are not followed, preventing privileged key forwarding to another origin;
-  - only the eight known Phase81–87 recovery RPC names are callable;
+  - only the five known Phase70 runtime bootstrap/lease RPCs plus the eight known Phase81–87 recovery RPCs are callable;
   - responses must be 2xx JSON objects; malformed JSON, arrays/scalars, 204s and database/API errors fail closed;
   - transport/timeouts are surfaced without blind HTTP retries because replay is delegated to the durable Phase81–89 idempotency/restart protocol.
 - Environment configuration supports explicit positive connect/read/write/pool timeouts and rejects malformed/zero values.
 - Red-team tests cover secret-key-only headers, legacy migration compatibility, modern-key precedence, Edge secret-key JSON, publishable-key rejection, HTTPS enforcement, RPC allowlisting, sanitized database errors, redirect blocking, no blind timeout retry, malformed response rejection and timeout configuration.
 - Phase91 remains hard shadow/paper-only and introduces no migration of its own.
+
+
+## Phase 92 — Lease-Owned Recovery Worker Session
+
+- Brian files:
+  - `brian2026/phase92_recovery_worker_session.py`
+  - Phase71 startup lease cleanup hardening in `brian2026/phase71_persisted_runtime_supervisor.py`
+- Phase92 adds no alpha, SQL, market strategy or live execution. It is the backend session/bootstrap boundary that connects the real Phase91 Supabase transport to Phase70 durable ownership, Phase71 runtime restoration, Phase90 stack assembly and the Phase89 startup recovery gate.
+- Runtime ownership:
+  - one Phase70 lease is acquired for the configured runtime id with a per-process owner token by default;
+  - lease TTL is bounded to 10–300 seconds;
+  - the Phase71 durable checkpoint is restored before recovery assembly;
+  - a fresh runtime is never invented implicitly: callers must explicitly supply `initial_runtime` when the durable database head does not yet exist;
+  - the same RPC transport is reused for Phase70 and all recovery stores.
+- Resource lifecycle:
+  - Phase71 now best-effort releases a newly acquired owner+fence lease if checkpoint load, bootstrap validation or first checkpoint persistence fails;
+  - Phase92 releases the supervisor lease if stack assembly fails after supervisor construction;
+  - owned Phase91 HTTP transport is closed on every bootstrap failure;
+  - session `close()` is idempotent and releases the owner+fence-gated lease before closing the HTTP transport;
+  - the one-shot helper wraps the complete startup gate in the same cleanup boundary, so gate exceptions do not strand a lease.
+- Environment bootstrap:
+  - `BRIAN_RUNTIME_ID` is mandatory;
+  - `BRIAN_RECOVERY_OWNER_TOKEN` is optional; when absent a unique per-process token is generated so independent workers never silently share one fencing identity;
+  - `BRIAN_RUNTIME_LEASE_SECONDS` defaults to 60 and is restricted to 10–300.
+- Red-team coverage includes normal gate delegation/cleanup, idempotent close, gate exceptions, release errors with transport cleanup, stack-assembly failure cleanup, unsafe lease bounds, missing runtime id, generated process owner identity, one-shot failure cleanup, plus Phase71-specific lease release on missing initial runtime, checkpoint-load failure and bootstrap commit conflict.
+- Phase92 remains hard shadow/paper-only and introduces no migration of its own.
