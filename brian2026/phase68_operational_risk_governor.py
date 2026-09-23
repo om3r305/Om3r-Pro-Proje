@@ -151,6 +151,9 @@ class OperationalRiskReceipt:
     manual_release_requested: bool
     halt_latched: bool
     receipt_id: str
+    execution_failure_lock_until: float | None = None
+    reconciliation_failure_lock_until: float | None = None
+    asset_cooldown_until: tuple[tuple[str, float], ...] = ()
     schema_version: str = PHASE68_SCHEMA_VERSION
     shadow_only: bool = True
     live_execution: bool = False
@@ -180,8 +183,22 @@ class OperationalRiskReceipt:
             self.unknown_order_outcomes,
         ) < 0:
             raise ValueError("operational-risk counters cannot be negative")
-        if self.stoploss_lock_until is not None and not math.isfinite(self.stoploss_lock_until):
-            raise ValueError("stoploss_lock_until must be finite when set")
+        for label, value in (
+            ("stoploss_lock_until", self.stoploss_lock_until),
+            ("execution_failure_lock_until", self.execution_failure_lock_until),
+            ("reconciliation_failure_lock_until", self.reconciliation_failure_lock_until),
+        ):
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"{label} must be finite when set")
+        cooldown_assets: set[str] = set()
+        for asset, until in self.asset_cooldown_until:
+            if not asset.strip() or not math.isfinite(until):
+                raise ValueError("asset cooldown entries require asset and finite expiry")
+            if asset in cooldown_assets:
+                raise ValueError("asset cooldown entries must be unique")
+            cooldown_assets.add(asset)
+        if tuple(sorted(cooldown_assets)) != self.blocked_assets:
+            raise ValueError("blocked_assets must match asset_cooldown_until")
         if self.halt_latched != (self.trading_state == "HALTED"):
             raise ValueError("HALTED state and halt_latched must agree")
         if not self.shadow_only or self.live_execution:
@@ -209,6 +226,9 @@ class OperationalRiskReceipt:
             "manual_halt": self.manual_halt,
             "manual_release_requested": self.manual_release_requested,
             "halt_latched": self.halt_latched,
+            "execution_failure_lock_until": self.execution_failure_lock_until,
+            "reconciliation_failure_lock_until": self.reconciliation_failure_lock_until,
+            "asset_cooldown_until": self.asset_cooldown_until,
         }
 
     def verify_identity(self) -> bool:
@@ -313,6 +333,10 @@ class OperationalRiskGovernor:
         self.policy = policy
         self._state: TradingState = initial_state
         self._halt_latched = initial_state == "HALTED"
+        self._stoploss_lock_until: float | None = None
+        self._execution_failure_lock_until: float | None = None
+        self._reconciliation_failure_lock_until: float | None = None
+        self._asset_cooldown_until: dict[str, float] = {}
 
     @property
     def state(self) -> TradingState:
@@ -328,6 +352,10 @@ class OperationalRiskGovernor:
             raise ValueError("operational-risk receipt content hash mismatch")
         governor = cls(policy, initial_state=receipt.trading_state)
         governor._halt_latched = receipt.halt_latched
+        governor._stoploss_lock_until = receipt.stoploss_lock_until
+        governor._execution_failure_lock_until = receipt.execution_failure_lock_until
+        governor._reconciliation_failure_lock_until = receipt.reconciliation_failure_lock_until
+        governor._asset_cooldown_until = dict(receipt.asset_cooldown_until)
         return governor
 
     def evaluate(
@@ -376,19 +404,36 @@ class OperationalRiskGovernor:
             if trade.exit_reason in _STOPLOSS_REASONS
             and trade.return_fraction < policy.stoploss_required_profit
         )
-        stoploss_lock_until = (
+        fresh_stoploss_lock_until = (
             max(trade.closed_at for trade in stoploss_trades) + policy.stoploss_lock_seconds
             if len(stoploss_trades) >= policy.stoploss_limit
             else None
         )
+        stoploss_candidates = [
+            value
+            for value in (fresh_stoploss_lock_until, self._stoploss_lock_until)
+            if value is not None and value > now
+        ]
+        stoploss_lock_until = max(stoploss_candidates) if stoploss_candidates else None
+        self._stoploss_lock_until = stoploss_lock_until
 
-        blocked_assets: set[str] = set()
+        cooldown_until = {
+            asset: until
+            for asset, until in self._asset_cooldown_until.items()
+            if until > now
+        }
         if policy.asset_cooldown_seconds > 0:
             for trade in closed_trades:
                 if trade.closed_at > now:
                     continue
-                if now < trade.closed_at + policy.asset_cooldown_seconds:
-                    blocked_assets.add(trade.asset_id)
+                until = trade.closed_at + policy.asset_cooldown_seconds
+                if until > now:
+                    cooldown_until[trade.asset_id] = max(
+                        cooldown_until.get(trade.asset_id, until),
+                        until,
+                    )
+        self._asset_cooldown_until = cooldown_until
+        blocked_assets = set(cooldown_until)
 
         execution_events = _recent(
             health_events,
@@ -397,6 +442,34 @@ class OperationalRiskGovernor:
             timestamp=lambda row: row.timestamp,
         )
         consecutive_execution_failures = _consecutive_execution_failures(execution_events)
+        latest_execution_event = max(
+            (
+                event
+                for event in execution_events
+                if event.kind in ("EXECUTION_SUCCESS", "EXECUTION_FAILURE")
+            ),
+            key=lambda row: row.timestamp,
+            default=None,
+        )
+        if latest_execution_event is not None and latest_execution_event.kind == "EXECUTION_SUCCESS":
+            execution_failure_lock_until = None
+        elif consecutive_execution_failures >= policy.max_consecutive_execution_failures:
+            latest_failure_at = max(
+                event.timestamp
+                for event in execution_events
+                if event.kind == "EXECUTION_FAILURE"
+            )
+            execution_failure_lock_until = (
+                latest_failure_at + policy.execution_failure_lookback_seconds
+            )
+        else:
+            execution_failure_lock_until = (
+                self._execution_failure_lock_until
+                if self._execution_failure_lock_until is not None
+                and self._execution_failure_lock_until > now
+                else None
+            )
+        self._execution_failure_lock_until = execution_failure_lock_until
 
         reconciliation_events = _recent(
             health_events,
@@ -404,10 +477,51 @@ class OperationalRiskGovernor:
             lookback_seconds=policy.reconciliation_failure_lookback_seconds,
             timestamp=lambda row: row.timestamp,
         )
+        latest_reconciliation_event = max(
+            (
+                event
+                for event in reconciliation_events
+                if event.kind in ("RECONCILIATION_SUCCESS", "RECONCILIATION_FAILURE")
+            ),
+            key=lambda row: row.timestamp,
+            default=None,
+        )
+        latest_reconciliation_success_at = max(
+            (
+                event.timestamp
+                for event in reconciliation_events
+                if event.kind == "RECONCILIATION_SUCCESS"
+            ),
+            default=float("-inf"),
+        )
         reconciliation_failures = sum(
             event.kind == "RECONCILIATION_FAILURE"
+            and event.timestamp > latest_reconciliation_success_at
             for event in reconciliation_events
         )
+        if (
+            latest_reconciliation_event is not None
+            and latest_reconciliation_event.kind == "RECONCILIATION_SUCCESS"
+        ):
+            reconciliation_failure_lock_until = None
+        elif reconciliation_failures >= policy.max_reconciliation_failures:
+            latest_failure_at = max(
+                event.timestamp
+                for event in reconciliation_events
+                if event.kind == "RECONCILIATION_FAILURE"
+                and event.timestamp > latest_reconciliation_success_at
+            )
+            reconciliation_failure_lock_until = (
+                latest_failure_at + policy.reconciliation_failure_lookback_seconds
+            )
+        else:
+            reconciliation_failure_lock_until = (
+                self._reconciliation_failure_lock_until
+                if self._reconciliation_failure_lock_until is not None
+                and self._reconciliation_failure_lock_until > now
+                else None
+            )
+        self._reconciliation_failure_lock_until = reconciliation_failure_lock_until
 
         unknown_events = _recent(
             health_events,
@@ -460,15 +574,15 @@ class OperationalRiskGovernor:
                 "REDUCING",
                 f"stoploss_guard:{len(stoploss_trades)}_until_{stoploss_lock_until:.6f}",
             )
-        if consecutive_execution_failures >= policy.max_consecutive_execution_failures:
+        if execution_failure_lock_until is not None and now < execution_failure_lock_until:
             escalate(
                 "REDUCING",
-                f"execution_failures:{consecutive_execution_failures}",
+                f"execution_failures:{consecutive_execution_failures}_until_{execution_failure_lock_until:.6f}",
             )
-        if reconciliation_failures >= policy.max_reconciliation_failures:
+        if reconciliation_failure_lock_until is not None and now < reconciliation_failure_lock_until:
             escalate(
                 "REDUCING",
-                f"reconciliation_failures:{reconciliation_failures}",
+                f"reconciliation_failures:{reconciliation_failures}_until_{reconciliation_failure_lock_until:.6f}",
             )
 
         if recommended == "HALTED":
@@ -505,6 +619,9 @@ class OperationalRiskGovernor:
             "manual_halt": manual_halt,
             "manual_release_requested": manual_release,
             "halt_latched": self._halt_latched,
+            "execution_failure_lock_until": execution_failure_lock_until,
+            "reconciliation_failure_lock_until": reconciliation_failure_lock_until,
+            "asset_cooldown_until": tuple(sorted(cooldown_until.items())),
         }
         return OperationalRiskReceipt(
             timestamp=float(now),
@@ -525,4 +642,7 @@ class OperationalRiskGovernor:
             manual_release_requested=manual_release,
             halt_latched=self._halt_latched,
             receipt_id=content_hash(payload),
+            execution_failure_lock_until=execution_failure_lock_until,
+            reconciliation_failure_lock_until=reconciliation_failure_lock_until,
+            asset_cooldown_until=tuple(sorted(cooldown_until.items())),
         )
