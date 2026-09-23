@@ -143,3 +143,26 @@ This document records external open-source behaviors studied for Brian. It is no
   - `MICRO_LIVE_ELIGIBLE` does not enable an exchange adapter, allocate capital, activate automatically or submit an order;
   - explicit later authorization remains mandatory.
 - No Nautilus source code is copied in Phase 49.
+
+
+## Phase 50 — Execution Reconciliation
+
+- Brian file: `brian2026/phase50_execution_reconciliation.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `2c5364a5ca3ea2a68f51aa6e886aa6a7d6fc58e4`.
+- Upstream behavior inspected:
+  - `docs/concepts/execution/reconciliation.md`: explicit position reports are authoritative; missing reports are not evidence of flat; unresolved explicit reports fail closed.
+  - startup reconciliation applies orders/fills before position validation and requires in-scope venue positions to match local state within quantity tolerance.
+  - open positions without a usable reported entry average cannot be safely reconstructed from an empty cache.
+  - matching quantity does not excuse a reported entry-average mismatch.
+  - direction reversals are recovered by closing cached exposure then opening the authoritative side.
+  - unknown command outcomes remain unresolved until stream/poll/query/reconciliation provides evidence.
+  - bounded/incomplete historical report sets may still be usable when an explicit authoritative position report resolves the tracked exposure.
+- Brian adaptation:
+  - local and venue position identities are compared explicitly by account + asset;
+  - a missing venue report yields `NO_AUTHORITATIVE_POSITION_REPORT`, never synthetic flat;
+  - safe quantity mismatches produce auditable synthetic recovery proposals but remain `RECOVERY_REQUIRED` until a subsequent reconciliation confirms the new state;
+  - synthetic recovery never invents historical realized PnL;
+  - duplicate fill ids and unresolved command outcomes block readiness;
+  - batch readiness is fail-closed and remains shadow-only.
+- No Nautilus source code is copied in Phase 50.
