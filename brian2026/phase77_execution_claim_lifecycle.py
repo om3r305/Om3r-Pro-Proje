@@ -396,16 +396,13 @@ class PersistedClaimedRuntimeSupervisor:
         self.dispatched_supervisor = dispatched_supervisor
         self.claims = claims
 
-    def process_governed_cycle(
+    def authorize_submit_and_claim(
         self,
         governed,
         *,
         worker_token: str,
         claim_seconds: int,
-        marks: Mapping[str, float],
-        observed_at: float,
-        source_ref: str,
-    ) -> ClaimedExecutionStep:
+    ):
         phase76 = self.dispatched_supervisor
         phase75 = phase76.governed_supervisor
         supervisor = phase75.runtime_supervisor
@@ -439,54 +436,89 @@ class PersistedClaimedRuntimeSupervisor:
                     cycle_id=authorization.cycle_id,
                     reason=f"phase77:{claim.cancel_reason or 'risk_cancel'}",
                 )
-            checkpoint = supervisor.runtime.checkpoint()
-            return ClaimedExecutionStep(
-                dispatch=dispatch,
-                claim=claim,
-                outcome="CANCELLED_BEFORE_EXECUTION",
-                completion=None,
-                persisted_version=supervisor.persisted_version,
-                checkpoint_id=checkpoint.checkpoint_id,
-            )
+            return authorization, dispatch, claim, "CANCELLED_BEFORE_EXECUTION"
 
         if claim.status == "COMPLETED":
-            checkpoint = supervisor.runtime.checkpoint()
-            return ClaimedExecutionStep(
-                dispatch=dispatch,
-                claim=claim,
-                outcome="ALREADY_COMPLETED",
-                completion=None,
-                persisted_version=supervisor.persisted_version,
-                checkpoint_id=checkpoint.checkpoint_id,
-            )
+            return authorization, dispatch, claim, "ALREADY_COMPLETED"
 
         if not claim.claimed:
             raise ExecutionClaimError(f"unexpected non-claimed status {claim.status}")
+
+        return authorization, dispatch, claim, None
+
+    def advance_claimed(
+        self,
+        claim: ExecutionClaimReceipt,
+        *,
+        worker_token: str,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+        complete_on_commit: bool = True,
+    ):
+        phase76 = self.dispatched_supervisor
+        supervisor = phase76.governed_supervisor.runtime_supervisor
+        if not claim.claimed:
+            raise ExecutionClaimError("cannot advance without an owned claim")
 
         advanced = phase76.advance_submitted(
             marks=marks,
             observed_at=observed_at,
             source_ref=source_ref,
         )
-        checkpoint = supervisor.runtime.checkpoint()
         outcome = (
             "NONE"
             if advanced.durable_receipt is None
             else advanced.durable_receipt.status
         )
-
         completion = None
-        if outcome == "COMMITTED":
+        if outcome == "COMMITTED" and complete_on_commit:
             completion = self.claims.complete(
                 supervisor.lease,
                 claim,
                 worker_token=worker_token,
             )
             if not completion.completed:
-                # Runtime state is already durable/committed. A later claim call
-                # will recover COMPLETED from the journal; never re-run execution.
                 outcome = f"COMMITTED_{completion.status}"
+        return advanced, outcome, completion
 
+    def process_governed_cycle(
+        self,
+        governed,
+        *,
+        worker_token: str,
+        claim_seconds: int,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ) -> ClaimedExecutionStep:
+        authorization, dispatch, claim, terminal = self.authorize_submit_and_claim(
+            governed,
+            worker_token=worker_token,
+            claim_seconds=claim_seconds,
+        )
+        del authorization
+        supervisor = self.dispatched_supervisor.governed_supervisor.runtime_supervisor
+
+        if terminal is not None:
+            checkpoint = supervisor.runtime.checkpoint()
+            return ClaimedExecutionStep(
+                dispatch=dispatch,
+                claim=claim,
+                outcome=terminal,
+                completion=None,
+                persisted_version=supervisor.persisted_version,
+                checkpoint_id=checkpoint.checkpoint_id,
+            )
+
+        _, outcome, completion = self.advance_claimed(
+            claim,
+            worker_token=worker_token,
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+        )
+        checkpoint = supervisor.runtime.checkpoint()
         return ClaimedExecutionStep(
             dispatch=dispatch,
             claim=claim,
