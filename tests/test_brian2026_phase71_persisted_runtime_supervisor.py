@@ -22,6 +22,7 @@ from brian2026.phase70_durable_runtime_store import (
 )
 from brian2026.phase71_persisted_runtime_supervisor import (
     PersistedDurableRuntimeSupervisor,
+    PersistedRuntimeError,
     PersistedRuntimeLeaseError,
     PersistedRuntimeStaleError,
 )
@@ -515,3 +516,53 @@ def test_existing_durable_head_wins_over_caller_initial_runtime() -> None:
     assert second.persisted_version == 2
     assert second.runtime.journal.latest_stage(cycle.cycle_id) == "CYCLE_CREATED"
     assert caller_memory.journal.latest_stage(cycle.cycle_id) is None
+
+
+
+def test_startup_failure_releases_acquired_lease() -> None:
+    store = MemoryStore()
+
+    with pytest.raises(PersistedRuntimeError, match="initial_runtime"):
+        PersistedDurableRuntimeSupervisor.acquire(
+            store=store,
+            runtime_id="runtime-71",
+            owner_token="owner-a",
+            lease_seconds=30,
+        )
+
+    assert store.owner is None
+
+
+def test_load_failure_releases_acquired_lease() -> None:
+    class BrokenLoadStore(MemoryStore):
+        def load(self, *, runtime_id):
+            del runtime_id
+            raise RuntimeError("load exploded")
+
+    store = BrokenLoadStore()
+    with pytest.raises(RuntimeError, match="load exploded"):
+        PersistedDurableRuntimeSupervisor.acquire(
+            store=store,
+            runtime_id="runtime-71",
+            owner_token="owner-a",
+            lease_seconds=30,
+            initial_runtime=_runtime(),
+        )
+
+    assert store.owner is None
+
+
+def test_bootstrap_commit_failure_releases_acquired_lease() -> None:
+    store = MemoryStore()
+    store.fail_next_status = "CAS_CONFLICT"
+
+    with pytest.raises(PersistedRuntimeStaleError, match="CAS_CONFLICT"):
+        PersistedDurableRuntimeSupervisor.acquire(
+            store=store,
+            runtime_id="runtime-71",
+            owner_token="owner-a",
+            lease_seconds=30,
+            initial_runtime=_runtime(),
+        )
+
+    assert store.owner is None
