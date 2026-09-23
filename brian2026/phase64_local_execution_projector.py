@@ -206,6 +206,12 @@ class LocalExecutionProjector:
     def positions(self) -> Mapping[str, ProjectedPosition]:
         return dict(self._positions)
 
+    def projection_receipt(self, cycle_id: str) -> ProjectionReceipt:
+        try:
+            return self._cycle_projection_receipts[cycle_id]
+        except KeyError as exc:
+            raise KeyError(f"unknown projected cycle {cycle_id}") from exc
+
     def position(self, asset_id: str) -> ProjectedPosition:
         return self._positions.get(
             asset_id,
