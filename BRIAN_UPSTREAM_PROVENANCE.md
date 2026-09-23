@@ -1464,3 +1464,33 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team unit coverage includes exact Phase73/75–80 authority assembly, same-runtime READY handoff, pre-execution Phase86 blocking, non-ready recovery rejection, cross-runtime/cross-authority rejection, stale/closed sessions, missing admission authority, live/non-shadow rejection, input bounds and propagation of transactional barrier races.
 - Phase99 remains hard shadow/paper-only and introduces no migration of its own.
 
+## Phase 100 — Recovery-First Shadow Worker Session
+
+- Brian file:
+  - `brian2026/phase100_recovery_first_shadow_worker.py`
+- Phase100 adds no alpha, SQL, scheduler or live execution. It is the lifecycle object that keeps Phase97 recovery and Phase99 normal shadow execution under one Phase92 session instead of closing/reacquiring runtime authority between startup and work.
+- Lifecycle / authority:
+  - one Phase92 session owns/restores the Phase70/71 runtime authority;
+  - Phase97 is run first on that exact session;
+  - Phase99 is constructed only after Phase97 returns `READY_FOR_NORMAL_WORK`;
+  - normal governed shadow cycles are rejected until that handoff exists;
+  - once recovery has released normal work, the same startup gate is not rerun inside the worker session.
+- Blocked recovery behavior:
+  - a non-ready Phase97 result publishes a non-ready Phase100 startup receipt and creates no Phase99 handoff;
+  - the caller may retry the recovery gate later on the same still-owned session, allowing fresh evidence and barrier state to be evaluated without changing runtime authority;
+  - cross-runtime Phase97 receipts fail closed.
+- Normal work:
+  - `process_governed_cycle` delegates only through the Phase99 handoff, so every cycle retains Phase86 pre-admission plus the transactional Phase75/76 recovery interlock;
+  - the worker never bypasses Phase77 claim fencing, Phase79 STARTED or Phase80 claim-fenced checkpoint commit.
+- Resource ownership:
+  - `from_env` opens a Phase92 session and owns its cleanup;
+  - context-manager/close paths release the owned Phase70 lease and transport through Phase92;
+  - wrapper construction failures close an already-opened owned session;
+  - externally supplied sessions are not silently closed by the wrapper.
+- Fail-closed state:
+  - closed sessions and stale Phase71 supervisors are rejected;
+  - handoff-construction failure never publishes a false ready startup state;
+  - processing after close or before successful recovery release is rejected.
+- Red-team unit coverage includes blocked startup, blocked→ready retry on one session, duplicate ready-gate rejection, cross-runtime recovery, stale/closed authority, owned-session cleanup, external-session ownership, constructor-failure cleanup, handoff failure and post-close execution rejection.
+- Phase100 remains hard shadow/paper-only and introduces no migration of its own.
+
