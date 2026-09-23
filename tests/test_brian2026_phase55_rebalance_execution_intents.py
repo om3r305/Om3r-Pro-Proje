@@ -179,3 +179,60 @@ def test_zero_delta_assets_are_skipped_and_plan_id_is_deterministic() -> None:
     assert first.shadow_only is True
     assert first.live_execution is False
     assert first.automatic_release is False
+
+def test_expected_edge_gate_can_skip_new_risk_without_blocking_other_reduction() -> None:
+    turnover = plan_turnover_constrained_rebalance(
+        {"BTC": 0.40},
+        {"BTC": 0.15, "ETH": 0.20},
+        config=TurnoverConfig(max_l1_turnover=2.0, risk_reduction_bypass=True),
+    )
+    plan = compile_rebalance_execution_plan(
+        turnover,
+        expected_edge_bps_by_asset={},
+        confidence_by_asset={"ETH": 0.8},
+        evidence_ids_by_asset={"ETH": ("ev-ETH",)},
+        created_at=TS,
+        max_slippage_bps=8.0,
+        ttl_seconds=60,
+        blocked_new_risk_assets=("ETH",),
+    )
+
+    assert plan.blocked_new_risk_assets == ("ETH",)
+    assert "ETH" in plan.skipped_assets
+    assert len(plan.instructions) == 1
+    instruction = plan.instructions[0]
+    assert instruction.asset_id == "BTC"
+    assert instruction.kind == "REDUCE"
+    assert instruction.reduction_intent is not None
+    assert instruction.reduction_intent.resulting_weight == pytest.approx(0.15)
+
+
+def test_expected_edge_gate_turns_blocked_reversal_into_close_to_flat_only() -> None:
+    turnover = plan_turnover_constrained_rebalance(
+        {"BTC": 0.30},
+        {"BTC": -0.20},
+        config=TurnoverConfig(max_l1_turnover=2.0, risk_reduction_bypass=True),
+    )
+    plan = compile_rebalance_execution_plan(
+        turnover,
+        expected_edge_bps_by_asset={},
+        confidence_by_asset={},
+        evidence_ids_by_asset={},
+        created_at=TS,
+        max_slippage_bps=8.0,
+        ttl_seconds=60,
+        blocked_new_risk_assets=("BTC",),
+    )
+
+    assert plan.blocked_new_risk_assets == ("BTC",)
+    assert plan.skipped_assets == ("BTC",)
+    assert len(plan.instructions) == 1
+    instruction = plan.instructions[0]
+    assert instruction.kind == "CLOSE"
+    assert instruction.pending_reversal is None
+    assert instruction.trade_intent is None
+    assert instruction.reduction_intent is not None
+    assert instruction.planned_weight == pytest.approx(0.0)
+    assert instruction.planned_delta == pytest.approx(-0.30)
+    assert instruction.reduction_intent.resulting_weight == pytest.approx(0.0)
+
