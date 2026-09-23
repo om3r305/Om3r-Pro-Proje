@@ -520,7 +520,8 @@ class PersistedAtomicStartedRuntimeSupervisor:
             # history, so fail closed rather than rewriting it.
             supervisor._valid = False
             raise PersistedRuntimeStaleError(
-                "post-start check attempted pre-execution cancellation"
+                "post-start evidence contradiction: kill switch attempted "
+                "pre-execution cancellation"
             )
 
         completion = None
