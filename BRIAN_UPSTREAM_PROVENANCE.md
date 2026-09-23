@@ -935,3 +935,36 @@ This document records external open-source behaviors studied for Brian. It is no
   - prepared outcomes are surfaced explicitly as `RECOVERY_READY`, `RECOVERY_WAIT_RISK_RELEASE`, `RECOVERY_MANUAL_REVIEW`, or `NO_RECOVERY_REQUIRED`.
 - Real Postgres 16 CI covers pre-existing exposure preservation, HALTED wait behavior, asset-specific cooldown rollback, already-reduced/no-op recovery, sign-flip manual review, original-commit gating, head-moved rejection, no-cancel behavior, runtime-version conflict, idempotent retry, concurrent prepare and direct table-mutation denial.
 - Phase81 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+
+
+## Phase 82 — Recovery Claim Fencing
+
+- Brian files:
+  - `brian2026/phase82_recovery_claim_fencing.py`
+  - `brian2026/sql/phase82_recovery_claim_fencing.sql`
+- Phase82 adds no alpha, signal, or live-execution behavior. It makes a Phase81 recovery obligation single-owner work before any later recovery side effect is allowed.
+- Claim semantics:
+  - recovery ownership has its own worker token and monotonically increasing `claim_fencing_token`, independent of the original Phase77 execution claim;
+  - the current Phase70 runtime lease/fence, runtime version and Phase60 head state must still match the immutable Phase81 directive;
+  - `NO_RECOVERY_REQUIRED` and `MANUAL_REVIEW` are terminal/non-claimable outcomes;
+  - current `HALTED` risk returns `WAIT_RISK_RELEASE` and creates no execution-ready recovery claim, preserving Phase56's rule that HALTED forbids submissions;
+  - current `ACTIVE` or `REDUCING` risk may claim structurally safe Phase81 reduce-only recovery legs;
+  - first owner receives claim fence 1; an exact same-worker retry returns `ALREADY_OWNED` with the same fence;
+  - a second worker is `BLOCKED_ACTIVE` while the first claim is live;
+  - after expiry, takeover returns `EXPIRED_RECOVERY` and increments the recovery claim fence so the stale worker cannot remain authoritative.
+- Renewal semantics:
+  - only the current worker/fence may renew;
+  - runtime/head movement causes renewal loss;
+  - if current risk becomes `HALTED`, renewal is refused as `RENEWAL_BLOCKED_RISK` instead of extending recovery execution authority;
+  - ACTIVE/REDUCING may renew the same claim fence.
+- Security:
+  - recovery claim/event tables have RLS enabled and no direct anon/authenticated/service-role table grants;
+  - privileged RPC functions explicitly revoke EXECUTE from PUBLIC/anon/authenticated and grant only service_role;
+  - event history is append-only.
+- Python behavior:
+  - RPC responses are checked for exact runtime/cycle/runtime-fence/worker/claim-fence anchors;
+  - a claimed recovery under HALTED risk is rejected as an invalid contract;
+  - lease loss invalidates the local runtime and raises the lease error; head/directive/risk/evidence drift fails closed as stale runtime;
+  - `MANUAL_REVIEW` and `NO_RECOVERY_REQUIRED` are never automatically claimed.
+- Real Postgres 16 CI covers single-owner claim, concurrent two-worker exclusivity, same-worker idempotency, expired takeover with fence increment, stale-worker renewal rejection, HALTED initial wait, HALTED-after-claim renewal block, runtime/head movement, terminal non-claimable directives and direct table-mutation denial.
+- Phase82 remains shadow/paper-only and performs no recovery execution side effect. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
