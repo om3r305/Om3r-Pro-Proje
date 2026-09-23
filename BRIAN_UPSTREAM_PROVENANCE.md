@@ -1140,3 +1140,30 @@ This document records external open-source behaviors studied for Brian. It is no
   - maps every DB state to one explicit operational action: prepare, acquire/take over claim, mark STARTED, execute/resume, audit, manual review, fail closed, or none.
 - Real Postgres 16 CI covers idle, directive preparation backlog, claim acquisition, expired takeover, STARTED transition, recovery progress, terminal audit handoff, manual review visibility, NO_RECOVERY_REQUIRED resolution, completion-certificate resolution, inconsistent completed-without-certificate visibility, deterministic oldest-work ordering and reader permissions.
 - Phase87 remains shadow/paper-only and read-oriented. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted with `supabase migration new` and rerun through the complete Postgres suite before deployment.
+
+
+## Phase 88 — Restart Recovery Orchestrator
+
+- Brian file:
+  - `brian2026/phase88_recovery_restart_orchestrator.py`
+- Phase88 adds no alpha, order strategy, SQL persistence path or live execution. It is the process-restart orchestrator that consumes one Phase87 DB-authoritative backlog item and reuses the existing Phase81→85 recovery boundaries instead of creating a parallel recovery engine.
+- Authority anchoring:
+  - before any action, Phase87 runtime version, checkpoint id and Phase60 head state must exactly match the local Phase71 persisted runtime supervisor;
+  - any mismatch invalidates the local runtime and requires authoritative reload;
+  - one call processes at most the oldest Phase87 backlog item, preventing an unbounded restart loop from monopolizing the worker.
+- Routing:
+  - `IDLE` performs no recovery action;
+  - `MANUAL_REVIEW` stays manual and is never automatically claimed;
+  - `COMPLETED_WITHOUT_CERTIFICATE` fails closed as inconsistent legacy/state evidence;
+  - `NEEDS_AUDIT` goes directly to the existing Phase85 certification boundary without reacquiring or replaying recovery execution;
+  - `NEEDS_DIRECTIVE` uses Phase81 with the current runtime lease/version; pre-paper foreign `CYCLE_CREATED` work may be quarantined only when an explicit existing Phase75-compatible aborter is supplied, otherwise it remains a wait state;
+  - all executable states acquire/take over the existing Phase82 claim, cross the existing idempotent Phase83 STARTED boundary, and call Phase84's direct `execute_started_recovery` resume core;
+  - a terminal Phase84 result is immediately passed to Phase85 certification.
+- Safety / idempotency:
+  - another worker's unexpired Phase82 claim returns a wait outcome and is never stolen;
+  - expired claims use Phase82's existing fencing-token takeover semantics;
+  - Phase83 `STARTED_ALREADY` / `STARTED_RESUME` and Phase84 durable journal replay semantics are reused;
+  - lease loss, runtime/head/evidence drift and audit invariant failures retain the existing fail-closed behavior;
+  - after a successful Phase85 certificate, Phase88 re-reads Phase87 and requires the exact certified backlog item to disappear; another distinct unresolved item may remain for a later invocation.
+- Red-team unit coverage includes stale Phase87 anchors, no-recovery resolution, manual review, active-owner blocking, expired takeover/resume, terminal Phase84→Phase85 completion, direct NEEDS_AUDIT certification, certificate/backlog inconsistency, completed-without-certificate fail-closed behavior, audit failure evidence and optional foreign pre-paper quarantine.
+- Phase88 remains hard shadow/paper-only and introduces no deployment migration of its own.
