@@ -175,4 +175,5 @@ jobs:
           tests/test_brian2026_phase76_shadow_execution_outbox_postgres.py
           tests/test_brian2026_phase77_execution_claim_lifecycle_postgres.py
           tests/test_brian2026_phase78_execution_kill_switch_postgres.py
+          tests/test_brian2026_phase79_atomic_execution_start_postgres.py
           -v
