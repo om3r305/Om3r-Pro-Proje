@@ -1070,3 +1070,43 @@ This document records external open-source behaviors studied for Brian. It is no
   - failed audits leave the claim open and emit immutable failure evidence instead of declaring success.
 - Real Postgres 16 CI covers valid long reduction, valid short reduction, flattening, over-reduction/direction flip, missing recovery fills, Phase60 sign mismatch, checkpoint/head drift, claim-progress drift, exact duplicate certification, concurrent certification and direct certificate-history mutation denial.
 - Phase85 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the entire real-Postgres suite rerun before deployment.
+
+
+## Phase 86 — Unresolved-Recovery Admission Interlock
+
+- Brian files:
+  - `brian2026/phase86_recovery_admission_interlock.py`
+  - `brian2026/sql/phase86_recovery_admission_interlock.sql`
+- Phase86 adds no alpha or execution strategy. It closes the race in which a new normal governed cycle could be authorized or dispatched while a Phase78 `AFTER_START` recovery obligation is still unresolved.
+- Barrier source / resolution:
+  - the database-authoritative barrier begins as soon as an `AFTER_START` cancel request exists;
+  - `BEFORE_EXECUTION` cancels do not create a recovery admission barrier;
+  - the barrier remains closed through `READY_REDUCE_ONLY`, `WAIT_RISK_RELEASE`, `MANUAL_REVIEW`, missing/not-yet-prepared Phase81 recovery, Phase84 pending-audit recovery, and Phase85 audit failure;
+  - the barrier opens only when an immutable Phase85 recovery-completion certificate exists for the original cycle, or Phase81 proves `NO_RECOVERY_REQUIRED`.
+- Phase75 authorization interlock:
+  - the existing Phase75 SQL implementation is renamed once to a private base RPC;
+  - the public/service-role Phase75 RPC name becomes a Phase86 wrapper under the same runtime advisory transaction lock;
+  - a new candidate authorization is rejected as `RECOVERY_BARRIER` before any Phase75/Phase70 write-ahead mutation;
+  - exact already-persisted authorization retries are delegated to the original implementation so lost-response idempotency remains readable;
+  - lease/version validation precedence remains owned by the original Phase75 implementation.
+- Phase76 dispatch interlock:
+  - the existing Phase76 submit implementation is likewise retained as a private base RPC behind a Phase86 wrapper;
+  - an authorization created before the barrier but not yet dispatched is rejected as `RECOVERY_BARRIER` on first dispatch;
+  - Python immediately marks that still-pre-paper CYCLE_CREATED candidate `ABORTED` through Phase75 and persists the abort checkpoint, so it cannot remain an active journal cycle;
+  - an already-persisted dispatch remains readable as an exact duplicate retry after a later barrier;
+  - no paper/local side effect occurs for a dispatch blocked by the recovery barrier.
+- Phase81 foreign-active-cycle hardening:
+  - before freezing an immutable recovery directive, Phase81 now checks the durable journal for any other non-terminal cycle;
+  - a foreign `CYCLE_CREATED` candidate is quarantined by marking it `ABORTED`, advancing the authoritative runtime version, then retrying Phase81 against that new version/head;
+  - a foreign cycle that has already crossed into `PAPER_APPLIED` or a later side-effected stage is never auto-aborted; recovery remains in `FOREIGN_CYCLE_ACTIVE` wait until that cycle is reconciled/settled safely;
+  - this prevents a pre-authorized candidate from invalidating the Phase81 source runtime/head immediately after the recovery directive is created.
+- Security / idempotency:
+  - the original Phase75/76 base functions are not executable by public/anon/authenticated/service_role after wrapping;
+  - only the wrapper functions retain service-role execute permission;
+  - recovery-admission events are append-only, RLS-enabled and have no direct service-role table write grant;
+  - exact authorization/dispatch duplicates remain idempotent and do not get hidden by a later barrier.
+- Python observability:
+  - `RecoveryAdmissionInterlockStore` exposes the DB-authoritative `OPEN` vs `RECOVERY_BARRIER` state with exact original-cycle/cancel-receipt lineage validation;
+  - Phase75 and Phase76 client contracts explicitly reject any impossible barrier response that claims authorization/submission succeeded.
+- Real Postgres 16 CI covers open/before-execution admission, unresolved AFTER_START barrier, NO_RECOVERY_REQUIRED/certificate resolution, MANUAL_REVIEW persistence, new authorization blocking without runtime advance, Phase75 duplicate retry, pre-authorized dispatch blocking, Phase76 duplicate retry, reopened authorization, concurrent blocked authorizations, Phase81 foreign CYCLE_CREATED refusal and direct admission-event mutation denial.
+- Phase86 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze its wrapper/rename operations must be converted into the official ordered migration set and the full real-Postgres suite rerun before deployment.
