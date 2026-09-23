@@ -198,6 +198,34 @@ begin
     and dispatch_id = v_dispatch.dispatch_id
   for update;
 
+  if found and v_claim.status = 'COMPLETED' then
+    return jsonb_build_object(
+      'status', 'COMPLETED',
+      'proceed', false,
+      'cancel_requested', false,
+      'terminal', true,
+      'runtime_id', p_runtime_id,
+      'dispatch_id', v_dispatch.dispatch_id,
+      'cycle_id', p_cycle_id,
+      'runtime_version', v_runtime_version,
+      'completion_checkpoint_id', v_claim.completion_checkpoint_id
+    );
+  end if;
+
+  if found and v_claim.status = 'CANCELLED_BEFORE_EXECUTION' then
+    return jsonb_build_object(
+      'status', 'CANCELLED_BEFORE_EXECUTION',
+      'proceed', false,
+      'cancel_requested', true,
+      'terminal', true,
+      'runtime_id', p_runtime_id,
+      'dispatch_id', v_dispatch.dispatch_id,
+      'cycle_id', p_cycle_id,
+      'runtime_version', v_runtime_version,
+      'reason', v_claim.cancel_reason
+    );
+  end if;
+
   if not found
      or v_claim.status <> 'CLAIMED'
      or v_claim.worker_token <> p_worker_token
