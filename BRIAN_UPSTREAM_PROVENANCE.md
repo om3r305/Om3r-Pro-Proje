@@ -1555,3 +1555,50 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team coverage includes exact Phase60 weight/equity/cash forwarding, caller inability to override account state, account-head mutation during Phase54, stale timestamps, Phase54 output timestamp/weight/pipeline drift, live/auto-promotion rejection, Phase101 WAIT/HOLD propagation, cross-worker composition, missing/invalid Phase60 head and worker closure.
 - Phase102 remains hard shadow/paper-only and introduces no migration of its own.
 
+## Phase 103 — Prospective Post-Cutoff Grounded Runtime
+
+- Brian files:
+  - `brian2026/phase103_prospective_grounded_runtime.py`
+  - additive injection points in `brian2026/expert_reasoner.py`, `phase43_grounded_analysts.py`, and `phase54_integrated_shadow_decision.py`
+- Phase103 closes a critical runtime gap without weakening the frozen research lane:
+  - the original `reason_market()` still rejects data at/after the 2026 development cutoff;
+  - a separate `reason_market_prospective()` entrypoint permits only the explicit prospective-shadow lane;
+  - Phase43 and Phase54 gained dependency-injection hooks, while their defaults preserve the original frozen pre-cutoff behavior.
+- Prospective evidence contract:
+  - decision timestamp must be post-cutoff;
+  - every SensorObservation must remain `PROSPECTIVE_DEVELOPMENT_SHADOW`, `shadow_only=true`, `live_execution=false`;
+  - pre-cutoff observations cannot be recycled into the prospective runtime;
+  - future-dated observations fail closed;
+  - automatic promotion remains forbidden.
+- Phase102 now uses the prospective Phase54 runner by default, so the recovery-first current-data worker can actually consume post-cutoff observations without opening the historical contamination boundary.
+- Red-team coverage proves both lanes simultaneously:
+  - frozen/default reasoner still rejects post-cutoff input;
+  - prospective Phase43/54 accept valid current shadow observations;
+  - pre-cutoff reuse, future evidence and pre-cutoff prospective decisions are rejected;
+  - the default Phase54 lane remains frozen.
+- Phase103 adds no exchange transport, SQL, scheduler or live execution.
+
+## Phase 104 — Recovery-First Grounded Backend Worker
+
+- Brian file:
+  - `brian2026/phase104_recovery_first_grounded_worker.py`
+- Phase104 is the backend lifecycle bridge promised after Phase102:
+  - Phase100 recovery is always evaluated before intelligence/market prefetch;
+  - if recovery remains blocked, no prefetch provider is called and no Phase102 decision cycle is built;
+  - once recovery is ready on the same session, exactly one immutable prefetched bundle is consumed and passed through Phase102.
+- Prefetch contract:
+  - `PrefetchedGroundedCycle` freezes asset inputs, returns, model weights, Phase54 config, expected-edge estimates, execution markets, risk limits, authoritative marks and timestamps before Phase43 reasoning begins;
+  - the bundle itself is hard shadow-only;
+  - the provider can later be backed by Supabase or another collector without giving Phase43 open-ended I/O access.
+- Worker identity separation:
+  - recovery claim identity and normal Phase77 execution claim identity are separate inputs;
+  - both claim TTLs remain bounded by their downstream contracts;
+  - an already-ready Phase100 worker does not rerun recovery unnecessarily.
+- Resource / failure behavior:
+  - `from_env` owns and closes its Phase100 worker/session;
+  - externally supplied workers are not silently closed;
+  - prefetch errors, invalid bundle types and cycle failures propagate without a false success receipt;
+  - constructor failures close any worker opened by `from_env`.
+- Red-team coverage includes blocked-before-prefetch ordering, ready recovery → prefetch → Phase102 ordering, already-ready reuse, separate claim identities, invalid prefetch, prefetch failure, owned/external cleanup and post-close rejection.
+- Phase104 remains scheduler-neutral and hard shadow/paper-only. A concrete Supabase prefetch adapter is intentionally a later layer because expected edge must be evidence-backed rather than synthesized from confidence.
+
