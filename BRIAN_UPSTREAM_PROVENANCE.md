@@ -699,3 +699,52 @@ This document records external open-source behaviors studied for Brian. It is no
 - Real Postgres 16 CI covers concurrent risk-CAS races, fencing takeover, prefix extension/rewrite rejection, state/time-chain rejection, historical retry and direct service-role mutation denial.
 - The Phase 73 migration is GitHub-only in this draft PR and has not been deployed to a live Supabase project.
 - Phase 73 remains shadow/paper operational state only.
+
+
+## Phase 74 — Persisted Risk-to-Cycle Authorization Binding
+
+- Brian files:
+  - `brian2026/phase74_governed_cycle_binding.py`
+  - `supabase/migrations/202609230815_brian_phase74_governed_cycle_binding.sql`
+- This phase introduces no new trading logic. It closes the identity gap between the Phase69 governed execution result and the independently persisted Phase72/73 operational-risk head.
+- Database behavior:
+  - binding uses the same Phase70 runtime advisory lock, lease owner and fencing token;
+  - current runtime version must equal the version used to generate/submit the governed cycle;
+  - current Phase73 risk version, ledger hash and **head receipt id** must exactly match the risk evidence named by the Phase69 governed result;
+  - the immutable binding stores cycle id, governed result id, policy fingerprint, risk version/hash/receipt, runtime version and fencing token;
+  - exact retries are idempotent and return the full immutable evidence anchors;
+  - same cycle id with changed governed/risk/policy evidence is an integrity error;
+  - stale runtime, stale risk or lost lease fail closed before any paper execution path;
+  - direct service-role mutation of binding history is denied.
+- Python behavior:
+  - `GovernedCycleBindingStore` verifies the supplied risk ledger belongs to the runtime and has a persisted head receipt;
+  - the Phase69 governed result must name that exact persisted head receipt before an RPC is attempted;
+  - successful/duplicate database receipts must echo every immutable evidence anchor, otherwise the client rejects the response;
+  - loaded bindings revalidate content-hash shapes and shadow/live boundary flags.
+- Real Postgres 16 CI covers current-head binding, exact duplicate, concurrent duplicate race, risk-version advance, runtime-version advance, stale fencing takeover, same-cycle evidence conflict and direct mutation denial.
+- Phase74 remains shadow/paper-only.
+
+## Phase 75 — Atomic Governed Authorization + Durable Write-Ahead
+
+- Brian files:
+  - `brian2026/phase75_atomic_governed_writeahead.py`
+  - `supabase/migrations/202609230845_brian_phase75_atomic_governed_writeahead.sql`
+- This phase removes the transaction gap between Phase74 authorization and Phase71 durable `CYCLE_CREATED` persistence.
+- Atomic database behavior:
+  - the full Phase57 governed cycle must already be present in the submitted Phase67 journal checkpoint;
+  - the latest journal stage for that cycle must be exactly `CYCLE_CREATED`, proving no paper/local side effect has occurred yet;
+  - the write-ahead checkpoint must still have no Phase60 pending cycle, matching the Phase71 pre-execution boundary;
+  - one transaction/advisory lock validates runtime lease/fence/version, locks the current Phase73 risk head, verifies risk version/hash/head receipt, and then calls the already-tested Phase70 checkpoint commit;
+  - because Phase70 and Phase73 use the same runtime advisory lock, the risk head cannot advance between authorization validation and write-ahead commit;
+  - the immutable authorization row is inserted only after the Phase70 checkpoint commit succeeds;
+  - any Phase70 failure raises inside the outer transaction, rolling back the authorization as well;
+  - exact lost-response retry is idempotent and can return `DUPLICATE_CURRENT`; a historical duplicate is surfaced separately and cannot be treated as current local state;
+  - authorization stores both runtime version before and after plus the exact write-ahead checkpoint id.
+- Python supervisor behavior:
+  - `PersistedGovernedRuntimeSupervisor` loads the current persisted Phase73 risk head before attempting authorization;
+  - it may mutate only the local write-ahead journal before the atomic RPC; paper venue and local projector side effects remain untouched until authorization succeeds;
+  - any failed atomic authorization invalidates the local supervisor because its in-memory journal may now differ from the authoritative DB head;
+  - after a successful atomic commit, Phase71 accepts the externally committed checkpoint only when the returned checkpoint id exactly matches its current in-memory checkpoint and the version advanced;
+  - only then may the ordinary Phase67/71 `advance_pending` path execute and persist paper/reconciliation results.
+- Real Postgres 16 CI covers successful atomic commit, lost-response retry, concurrent exact authorization, stale risk, stale runtime, inner Phase70 rollback, same-cycle evidence conflict and direct service-role mutation denial.
+- Phase75 remains shadow/paper-only and adds no exchange/broker transport.
