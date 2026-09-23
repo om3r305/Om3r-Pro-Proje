@@ -278,14 +278,10 @@ class PersistedGovernedRuntimeSupervisor:
         self.risk_store = risk_store
         self.atomic_store = atomic_store
 
-    def process_governed_cycle(
+    def authorize_write_ahead(
         self,
         governed: GovernedShadowExecution,
-        *,
-        marks: Mapping[str, float],
-        observed_at: float,
-        source_ref: str,
-    ) -> PersistedGovernedCycleStep:
+    ) -> AtomicGovernedWriteAheadReceipt:
         supervisor = self.runtime_supervisor
         if not supervisor.valid:
             raise PersistedRuntimeStaleError(
@@ -298,8 +294,6 @@ class PersistedGovernedRuntimeSupervisor:
                 "no persisted operational-risk ledger exists for runtime"
             )
 
-        # Mutate only local write-ahead journal first. No paper side effect happens
-        # until the atomic DB authorization/checkpoint commit succeeds.
         supervisor.runtime.journal_cycle(governed.cycle)
         checkpoint = supervisor.runtime.checkpoint()
 
@@ -312,8 +306,6 @@ class PersistedGovernedRuntimeSupervisor:
                 checkpoint=checkpoint,
             )
         except Exception:
-            # Local journal now differs from authoritative DB state. Never reuse
-            # this supervisor instance after any failed atomic authorization.
             supervisor._valid = False
             raise
 
@@ -337,8 +329,53 @@ class PersistedGovernedRuntimeSupervisor:
             checkpoint_id=authorization.checkpoint_id,
             version=authorization.runtime_version_after,
         )
+        return authorization
 
-        advanced = supervisor.advance_pending(
+    def advance_authorized(
+        self,
+        *,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ):
+        return self.runtime_supervisor.advance_pending(
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+        )
+
+    def abort_authorized_cycle(
+        self,
+        *,
+        cycle_id: str,
+        reason: str,
+    ):
+        supervisor = self.runtime_supervisor
+        if not supervisor.valid:
+            raise PersistedRuntimeStaleError(
+                "runtime supervisor is stale before governed abort"
+            )
+        if supervisor.runtime.journal.latest_stage(cycle_id) != "CYCLE_CREATED":
+            raise AtomicGovernedWriteAheadError(
+                "only a pre-paper CYCLE_CREATED authorization may be aborted"
+            )
+        supervisor.runtime.journal.mark_aborted(
+            cycle_id,
+            reason=reason,
+        )
+        commit = supervisor.persist_current_checkpoint()
+        return commit
+
+    def process_governed_cycle(
+        self,
+        governed: GovernedShadowExecution,
+        *,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ) -> PersistedGovernedCycleStep:
+        authorization = self.authorize_write_ahead(governed)
+        advanced = self.advance_authorized(
             marks=marks,
             observed_at=observed_at,
             source_ref=source_ref,
