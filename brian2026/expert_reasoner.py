@@ -405,8 +405,9 @@ def reason_market(
     use_volume: bool = True,
     use_divergence: bool = True,
     selected_experts: Sequence[str] | None = None,
+    _prospective_shadow: bool = False,
 ) -> ExpertDecision:
-    if float(timestamp) >= DEVELOPMENT_CUTOFF:
+    if float(timestamp) >= DEVELOPMENT_CUTOFF and not _prospective_shadow:
         raise ValueError("2026 data is INVALID_CONTAMINATED and forbidden for Phase 2.8")
 
     available_experts = (
@@ -513,4 +514,38 @@ def reason_market(
         float(timestamp), action, edge, confidence, agreement, setup, regime, thesis,
         invalidation, bull_case, bear_case, no_trade_case, tuple(returned_experts),
         tuple(contradictions), evidence,
+    )
+
+
+def reason_market_prospective(
+    snapshot: Mapping[str, object],
+    *,
+    timestamp: float,
+    config: ExpertReasonerConfig = ExpertReasonerConfig(),
+    use_risk_critic: bool = True,
+    single_timeframe: bool = False,
+    use_volume: bool = True,
+    use_divergence: bool = True,
+    selected_experts: Sequence[str] | None = None,
+) -> ExpertDecision:
+    """Run the same deterministic reasoner on prospective shadow evidence.
+
+    This entrypoint exists only for post-cutoff prospective runtime data. The
+    original reason_market() keeps the frozen pre-2026 development boundary, so
+    post-cutoff observations cannot leak back into historical tuning/backtests.
+    """
+    if float(timestamp) < DEVELOPMENT_CUTOFF:
+        raise ValueError(
+            "prospective reasoner is reserved for post-cutoff shadow observations"
+        )
+    return reason_market(
+        snapshot,
+        timestamp=timestamp,
+        config=config,
+        use_risk_critic=use_risk_critic,
+        single_timeframe=single_timeframe,
+        use_volume=use_volume,
+        use_divergence=use_divergence,
+        selected_experts=selected_experts,
+        _prospective_shadow=True,
     )
