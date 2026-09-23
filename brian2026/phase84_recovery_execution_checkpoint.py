@@ -95,16 +95,16 @@ class RecoveryCheckpointReceipt:
         if self.committed and self.status not in {
             "COMMITTED",
             "DUPLICATE_CURRENT",
-            "RECOVERY_COMPLETED",
+            "RECOVERY_COMMITTED_PENDING_AUDIT",
         }:
             raise ValueError("unsupported committed recovery status")
         if self.terminal:
             if not self.committed or self.journal_stage != "COMMITTED":
                 raise ValueError("terminal recovery checkpoint must be COMMITTED")
-            if self.status not in {"RECOVERY_COMPLETED", "DUPLICATE_CURRENT"}:
+            if self.status not in {"RECOVERY_COMMITTED_PENDING_AUDIT", "DUPLICATE_CURRENT"}:
                 raise ValueError("terminal recovery has invalid status")
-        if self.status == "RECOVERY_COMPLETED" and not self.terminal:
-            raise ValueError("RECOVERY_COMPLETED must be terminal")
+        if self.status == "RECOVERY_COMMITTED_PENDING_AUDIT" and not self.terminal:
+            raise ValueError("RECOVERY_COMMITTED_PENDING_AUDIT must be terminal")
         if self.head_state_id is not None and len(self.head_state_id) != 64:
             raise ValueError("head_state_id must be a content hash")
         if not self.shadow_only or self.live_execution:
@@ -636,7 +636,7 @@ class PersistedRecoveryExecutionSupervisor:
         self._handle_commit(supervisor, progress)
 
         if progress.terminal:
-            outcome = f"{start_step.outcome}_RECOVERY_COMPLETED"
+            outcome = f"{start_step.outcome}_RECOVERY_COMMITTED_PENDING_AUDIT"
         elif durable.status == "RECONCILIATION_BLOCKED":
             outcome = f"{start_step.outcome}_RECOVERY_RECONCILIATION_BLOCKED"
         elif durable.status == "MARKS_REQUIRED":
