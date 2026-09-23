@@ -307,7 +307,11 @@ begin
       'cycle_id', p_cycle_id,
       'runtime_version', v_runtime_version,
       'risk_version', v_risk_version,
-      'fencing_token', p_fencing_token
+      'fencing_token', p_fencing_token,
+      'risk_ledger_hash', v_existing.risk_ledger_hash,
+      'risk_receipt_id', v_existing.risk_receipt_id,
+      'governed_result_id', v_existing.governed_result_id,
+      'policy_fingerprint', v_existing.policy_fingerprint
     );
   end if;
 
