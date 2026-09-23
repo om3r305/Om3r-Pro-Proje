@@ -347,15 +347,15 @@ class OperationalRiskGovernor:
 
         if manual_halt:
             escalate("HALTED", "manual_halt")
-        if max_drawdown >= policy.max_drawdown_fraction:
+        if max_drawdown > policy.max_drawdown_fraction:
             escalate(
                 "HALTED",
-                f"max_drawdown:{max_drawdown:.8f}>={policy.max_drawdown_fraction:.8f}",
+                f"max_drawdown:{max_drawdown:.8f}>{policy.max_drawdown_fraction:.8f}",
             )
-        if window_loss >= policy.max_daily_loss_fraction:
+        if window_loss > policy.max_daily_loss_fraction:
             escalate(
                 "HALTED",
-                f"window_loss:{window_loss:.8f}>={policy.max_daily_loss_fraction:.8f}",
+                f"window_loss:{window_loss:.8f}>{policy.max_daily_loss_fraction:.8f}",
             )
         if market_data_age > policy.max_market_data_age_seconds:
             escalate(
