@@ -119,7 +119,8 @@ as $$
     when w.original_cycle_id is null then jsonb_build_object(
       'has_work',false,
       'status','IDLE',
-      'runtime_id',p_runtime_id
+      'runtime_id',p_runtime_id,
+      'work_state','IDLE'
     )
     else jsonb_build_object(
       'has_work',true,
