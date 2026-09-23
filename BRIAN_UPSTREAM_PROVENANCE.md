@@ -899,3 +899,39 @@ This document records external open-source behaviors studied for Brian. It is no
   - only after the authoritative commit does the supervisor run the Phase78 post-start risk check and Phase77 completion path.
 - Real Postgres 16 CI covers successful authoritative commit, exact lost-response retry, concurrent identical commit, stale-worker claim takeover, stale retry after takeover, missing STARTED boundary, runtime CAS conflict and direct audit-table mutation denial.
 - Phase80 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+
+
+## Phase 81 — Durable Post-Cancel Recovery Directive
+
+- Brian files:
+  - `brian2026/phase81_cancel_recovery_directive.py`
+  - `brian2026/sql/phase81_cancel_recovery_directive.sql`
+- This phase introduces no new alpha/trading signal. It turns a Phase78 `AFTER_START` cancel request into an immutable recovery obligation only after the already-started original cycle has an authoritative Phase60/67 `COMMITTED` state.
+- Recovery semantics:
+  - recovery never blindly flattens the account;
+  - for each original cycle asset that actually carried ALLOWed non-reduce-only risk, Phase81 compares the authoritative Phase60 pre-cycle state with the current authoritative post-cycle head;
+  - a safe automatic leg targets the exact pre-cycle position weight, preserving pre-existing exposure while removing only the additional exposure attributable to the cancelled cycle;
+  - every automatic leg is structurally reduce-only: order direction opposes current exposure, target magnitude cannot exceed current magnitude, and the target cannot flip direction;
+  - `ASSET_COOLDOWN` recovery is restricted to assets named in the exact cancel-risk receipt's blocked-asset evidence;
+  - if the position path would require a direction flip or exposure increase to recreate the pre-cycle state, automatic recovery is refused as `MANUAL_REVIEW`;
+  - if exposure is already at or below the pre-cycle level, the durable result is `NO_RECOVERY_REQUIRED`.
+- Risk-state behavior:
+  - Phase56's existing invariant is preserved: `HALTED` forbids submissions, including reductions;
+  - therefore a valid rollback obligation under current `HALTED` risk becomes `WAIT_RISK_RELEASE`, never an auto-submit;
+  - under current `ACTIVE` or `REDUCING`, structurally safe legs become `READY_REDUCE_ONLY`.
+- Authority / concurrency behavior:
+  - preparation uses the same Phase70 runtime advisory lock and validates current runtime lease/fence and exact expected runtime version;
+  - the original Phase79 STARTED evidence must exist;
+  - the current journal must prove the original cycle is `COMMITTED`;
+  - the Phase60 `CYCLE_PROPOSED.before_state_id` and `RECONCILED_COMMIT.after_state_id` are used as rollback lineage;
+  - if the current Phase60 head no longer equals the original cycle's commit state, preparation returns `HEAD_MOVED` instead of applying rollback assumptions to later account history;
+  - exact concurrent/retry preparation is idempotent and returns the same immutable directive;
+  - directive and event tables have RLS enabled, no direct anon/authenticated/service-role table grants, and append-only mutation guards.
+- Python supervisor behavior:
+  - Phase81 wraps the Phase80 claim-fenced authoritative execution result;
+  - recovery is probed only after a STARTED cycle has an authoritative Phase80 checkpoint commit;
+  - `WAIT_ORIGINAL_COMMIT` remains a non-terminal recovery obligation state while reconciliation finishes;
+  - lease/version/head/evidence failures invalidate the local runtime copy and fail closed;
+  - prepared outcomes are surfaced explicitly as `RECOVERY_READY`, `RECOVERY_WAIT_RISK_RELEASE`, `RECOVERY_MANUAL_REVIEW`, or `NO_RECOVERY_REQUIRED`.
+- Real Postgres 16 CI covers pre-existing exposure preservation, HALTED wait behavior, asset-specific cooldown rollback, already-reduced/no-op recovery, sign-flip manual review, original-commit gating, head-moved rejection, no-cancel behavior, runtime-version conflict, idempotent retry, concurrent prepare and direct table-mutation denial.
+- Phase81 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
