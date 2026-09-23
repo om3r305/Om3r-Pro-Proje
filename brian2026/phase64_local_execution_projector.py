@@ -254,7 +254,16 @@ class LocalExecutionProjector:
                 raise LocalExecutionProjectionError(
                     "cycle_id already projected with different receipt evidence"
                 )
-            return self._cycle_projection_receipts[receipt.cycle_id]
+            stored = self._cycle_projection_receipts[receipt.cycle_id]
+            return ProjectionReceipt(
+                cycle_id=stored.cycle_id,
+                paper_receipt_id=stored.paper_receipt_id,
+                orders_projected=stored.orders_projected,
+                fills_applied=stored.fills_applied,
+                duplicate=True,
+                projection_version=stored.projection_version,
+                projection_hash=stored.projection_hash,
+            )
 
         # Validate the entire cycle before changing local state.
         outcome_order_ids = [row.paper_order_id for row in receipt.outcomes]
