@@ -101,6 +101,7 @@ def review_new_risk_intent(
     trading_state: TradingState,
     account: PreTradeAccountState,
     limits: InstrumentRiskLimits,
+    block_new_risk: bool = False,
 ) -> PreTradeRiskReceipt:
     """Independent hard gate for a new/increasing-risk TradeIntent.
 
@@ -115,6 +116,7 @@ def review_new_risk_intent(
     checks = list(_notional_checks(requested_notional, limits))
     checks.extend((
         ("trading_state_active", trading_state == "ACTIVE"),
+        ("asset_new_risk_allowed", not block_new_risk),
         ("cash_available", requested_notional <= account.available_cash_usd + 1e-12),
         ("intent_is_shadow_only", intent.shadow_only and not intent.live_execution),
     ))
@@ -195,6 +197,11 @@ def review_reduce_only_intent(
 class PreTradeRiskPolicy:
     trading_state: TradingState = "ACTIVE"
     limits: InstrumentRiskLimits = InstrumentRiskLimits()
+    block_new_risk: bool = False
+
+    def __post_init__(self) -> None:
+        if self.trading_state not in ("ACTIVE", "REDUCING", "HALTED"):
+            raise ValueError("invalid trading_state")
 
 
 class PreTradeRiskEngine:
@@ -218,6 +225,7 @@ class PreTradeRiskEngine:
                 trading_state=self.policy.trading_state,
                 account=account,
                 limits=self.policy.limits,
+                block_new_risk=self.policy.block_new_risk,
             )
         if isinstance(intent, RiskReductionIntent):
             return review_reduce_only_intent(
