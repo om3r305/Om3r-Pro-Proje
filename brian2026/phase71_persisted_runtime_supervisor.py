@@ -261,6 +261,26 @@ class PersistedDurableRuntimeSupervisor:
             commit_status=commit.status,
         )
 
+    def advance_pending_in_memory(
+        self,
+        *,
+        marks: Mapping[str, float],
+        observed_at: float,
+        source_ref: str,
+    ) -> DurableRuntimeReceipt:
+        """Advance Phase67 locally without making the result authoritative.
+
+        Higher-level fencing phases use this to stage replay-safe shadow/paper
+        work, then commit the resulting checkpoint through a stronger database
+        boundary (for example a current worker claim fence).
+        """
+        self._assert_valid()
+        return self.runtime.advance_pending(
+            marks=marks,
+            observed_at=observed_at,
+            source_ref=source_ref,
+        )
+
     def advance_pending(
         self,
         *,
