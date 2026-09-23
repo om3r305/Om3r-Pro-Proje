@@ -131,6 +131,7 @@ def run_shadow_execution_cycle(
     markets: Mapping[str, ExecutionMarketInput],
     risk_limits_by_asset: Mapping[str, InstrumentRiskLimits],
     trading_state: TradingState = "ACTIVE",
+    risk_policy_by_asset: Mapping[str, PreTradeRiskPolicy] | None = None,
     barrier: TripleBarrierPolicy = TripleBarrierPolicy(),
     latency: StaticLatencyModel = StaticLatencyModel(),
     fill_models_by_asset: Mapping[str, ProbabilisticFillModel] | None = None,
@@ -156,6 +157,7 @@ def run_shadow_execution_cycle(
     denied: set[str] = set()
     pending_assets: set[str] = set()
     fill_models = fill_models_by_asset or {}
+    asset_policies = risk_policy_by_asset or {}
 
     for instruction in plan.instructions:
         asset = instruction.asset_id
@@ -166,9 +168,11 @@ def run_shadow_execution_cycle(
             available_cash_usd=max(0.0, float(available_cash_usd) - reserved_cash),
             open_position_weight=float(weights.get(asset, instruction.current_weight)),
         )
-        engine = PreTradeRiskEngine(
-            PreTradeRiskPolicy(trading_state=trading_state, limits=limits)
+        policy = asset_policies.get(
+            asset,
+            PreTradeRiskPolicy(trading_state=trading_state, limits=limits),
         )
+        engine = PreTradeRiskEngine(policy)
 
         execution: SimulatedExecutionReceipt | None = None
         cash_reservation = 0.0
@@ -273,6 +277,7 @@ def run_integrated_shadow_execution_cycle(
     markets: Mapping[str, ExecutionMarketInput],
     risk_limits_by_asset: Mapping[str, InstrumentRiskLimits],
     trading_state: TradingState = "ACTIVE",
+    risk_policy_by_asset: Mapping[str, PreTradeRiskPolicy] | None = None,
     barrier: TripleBarrierPolicy = TripleBarrierPolicy(),
     latency: StaticLatencyModel = StaticLatencyModel(),
     fill_models_by_asset: Mapping[str, ProbabilisticFillModel] | None = None,
@@ -293,6 +298,7 @@ def run_integrated_shadow_execution_cycle(
         markets=markets,
         risk_limits_by_asset=risk_limits_by_asset,
         trading_state=trading_state,
+        risk_policy_by_asset=risk_policy_by_asset,
         barrier=barrier,
         latency=latency,
         fill_models_by_asset=fill_models_by_asset,
