@@ -94,6 +94,7 @@ declare
   v_item jsonb;
   v_leg jsonb;
   v_item_count integer := 0;
+  v_distinct_item_count integer := 0;
   v_commit jsonb;
   v_commit_status text;
   v_commit_version bigint;
@@ -365,7 +366,12 @@ begin
     if v_leg is null
        or coalesce((v_item->'risk_receipt'->>'allowed')::boolean, false) is not true
        or coalesce((v_item->'risk_receipt'->>'reduce_only')::boolean, false) is not true
-       or nullif(trim(v_item->'execution_receipt'->>'status'), '') <> 'FILLED'
+       or nullif(trim(v_item->'execution_receipt'->>'status'), '')
+            is distinct from 'FILLED'
+       or nullif(
+            v_item->'risk_receipt'->>'projected_position_weight',
+            ''
+          ) is null
        or abs(
             (v_item->'risk_receipt'->>'projected_position_weight')::double precision
             - (v_leg->>'target_weight')::double precision
@@ -375,7 +381,10 @@ begin
            when (v_leg->>'order_direction')::integer > 0 then 'BUY'
            else 'SELL'
          end
-       ) <> nullif(trim(v_item->'execution_receipt'->>'side'), '') then
+       ) is distinct from nullif(
+         trim(v_item->'execution_receipt'->>'side'),
+         ''
+       ) then
       insert into public.brian_shadow_recovery_commit_events(
         runtime_id, dispatch_id, original_cycle_id, recovery_cycle_id,
         cancel_risk_receipt_id, worker_token,
@@ -412,7 +421,12 @@ begin
     end if;
   end loop;
 
-  if v_item_count <> jsonb_array_length(v_start.recovery_legs) then
+  select count(distinct value->>'asset_id')
+    into v_distinct_item_count
+  from jsonb_array_elements(v_cycle_payload->'items');
+
+  if v_item_count <> jsonb_array_length(v_start.recovery_legs)
+     or v_distinct_item_count <> v_item_count then
     insert into public.brian_shadow_recovery_commit_events(
       runtime_id, dispatch_id, original_cycle_id, recovery_cycle_id,
       cancel_risk_receipt_id, worker_token,
@@ -430,6 +444,7 @@ begin
       'RECOVERY_CYCLE_INVALID', v_now,
       jsonb_build_object(
         'item_count', v_item_count,
+        'distinct_item_count', v_distinct_item_count,
         'leg_count', jsonb_array_length(v_start.recovery_legs)
       )
     );
