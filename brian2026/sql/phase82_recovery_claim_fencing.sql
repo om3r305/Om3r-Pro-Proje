@@ -61,6 +61,12 @@ create table if not exists public.brian_shadow_recovery_claims (
   )
 );
 
+alter table public.brian_shadow_recovery_claims
+  add column if not exists recovery_cycle_id text,
+  add column if not exists progress_runtime_version bigint,
+  add column if not exists progress_head_state_id text,
+  add column if not exists progress_checkpoint_id text;
+
 create index if not exists brian_shadow_recovery_claims_cycle_idx
   on public.brian_shadow_recovery_claims(
     runtime_id, cycle_id, updated_at desc
