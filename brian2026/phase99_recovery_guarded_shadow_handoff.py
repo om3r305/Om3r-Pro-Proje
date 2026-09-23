@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from typing import Mapping
 
-from .phase56_pretrade_risk_engine import GovernedShadowExecution
+from .phase69_governed_shadow_execution import GovernedShadowExecution
 from .phase71_persisted_runtime_supervisor import PersistedRuntimeStaleError
 from .phase73_operational_risk_store import OperationalRiskStore
 from .phase75_atomic_governed_writeahead import (
