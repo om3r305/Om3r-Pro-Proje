@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from hashlib import sha256
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 import json
 import math
 
@@ -106,6 +106,9 @@ def _phase43_signals(
     return tuple(rows)
 
 
+GroundedRunner = Callable[..., Phase43GroundedResult]
+
+
 def run_integrated_shadow_decision(
     asset_inputs: Mapping[str, AssetDecisionInput],
     *,
@@ -114,6 +117,7 @@ def run_integrated_shadow_decision(
     current_weights: Mapping[str, float],
     returns_by_asset: Mapping[str, Sequence[float]],
     config: IntegratedShadowConfig,
+    grounded_runner: GroundedRunner = run_grounded_phase43,
 ) -> IntegratedShadowDecision:
     """Run the evidence -> portfolio -> covariance -> turnover chain.
 
@@ -134,6 +138,9 @@ def run_integrated_shadow_decision(
     if any(not math.isfinite(value) for value in clean_current.values()):
         raise ValueError("current weights must be finite")
 
+    if not callable(grounded_runner):
+        raise TypeError("grounded_runner must be callable")
+
     results: dict[str, Phase43GroundedResult] = {}
     for asset, item in sorted(asset_inputs.items()):
         observations = tuple(item.observations)
@@ -142,7 +149,7 @@ def run_integrated_shadow_decision(
             raise ValueError(
                 f"asset input key {asset} does not match observation assets {sorted(observed_assets)}"
             )
-        results[asset] = run_grounded_phase43(
+        results[asset] = grounded_runner(
             item.snapshot,
             observations,
             timestamp=timestamp,
