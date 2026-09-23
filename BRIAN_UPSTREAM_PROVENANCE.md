@@ -346,3 +346,27 @@ This document records external open-source behaviors studied for Brian. It is no
   - `automatic_activation=False`;
   - `live_execution=False`.
 - This makes the current absence of a pristine final holdout an explicit blocker instead of allowing a paper/backtest pass to be misrepresented as live readiness.
+
+
+## Phase 60 — Append-Only Shadow State Ledger + Cycle Continuity
+
+- Brian file: `brian2026/phase60_shadow_state_ledger.py`
+- Reference project: NautilusTrader (`nautechsystems/nautilus_trader`, behavioral reference only).
+- Reference revision inspected: `e1a67a5ba1c3bad68a3b6d2c8122b38c308c2844`.
+- Upstream behavior inspected:
+  - `docs/concepts/cache.md`: trading state (accounts, orders and positions) is retained in the central cache; when a backing database is configured, supported state can be restored after restart before execution reconciliation.
+  - the live node restores persisted cache state and rebuilds derived indexes before connecting clients/reconciling execution state.
+  - `docs/concepts/execution/reconciliation.md`: retaining execution events/state reduces reliance on short venue-history windows and gives reconciliation enough order/position context to interpret current state.
+  - Nautilus event-store replay consumes durable sequence order and supports snapshot anchors plus replay of the subsequent event tail; replay divergence is surfaced instead of silently skipped.
+- Brian clean-room adaptation:
+  - a content-addressed `ShadowAccountState` is the only account/position/cash head used across shadow cycles;
+  - all ledger transitions are append-only, sequential and hash-chained;
+  - a Phase 57 simulation cycle is persisted as execution evidence but **cannot mutate account state**;
+  - a second cycle cannot start while the previous cycle is unresolved, preventing overlapping decisions from reading different implicit account states;
+  - pure simulation cycles can be closed while explicitly preserving the same authoritative state;
+  - state changes require a Phase 50 reconciliation report with `ready=True`, every required check passing, and an explicit `RECONCILED_PAPER` account snapshot whose reconciliation hash exactly matches the report;
+  - committed state must cover every tracked reconciliation asset, keep the same account identity and never move time backwards;
+  - duplicate cycle/commit submissions are idempotent only when the content hash is identical; conflicting history is rejected;
+  - integrity replay verifies sequence, previous-transition hashes, state continuity and pending-cycle continuity.
+- Phase 60 deliberately does not treat simulated fills or simulated sale proceeds as authoritative cash/position updates.
+- No live exchange state, broker transport or automatic promotion is introduced.
