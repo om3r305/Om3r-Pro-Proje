@@ -283,3 +283,23 @@ This document records external open-source behaviors studied for Brian. It is no
   - every review emits an auditable ALLOW/DENY receipt with individual checks and reasons;
   - risk receipts remain shadow-only and do not route orders themselves.
 - Cancel/query behavior and venue-specific whole-position-exit exemptions are outside Phase 56 scope; they are not silently approximated.
+
+
+## Phase 57 — Integrated Shadow Execution Cycle
+
+- Brian file: `brian2026/phase57_shadow_execution_cycle.py`
+- This phase introduces no new upstream algorithm; it composes the already provenance-tracked execution contracts:
+  - Phase 55 delta-safe/reduce-only execution intent compilation;
+  - Phase 56 independent pre-trade risk review;
+  - Phase 45 executor-action contract;
+  - Phase 46 latency/order-book/fill simulation.
+- Integration behavior:
+  - each Phase 55 instruction is independently reviewed by the real Phase 56 RiskEngine contract before simulation;
+  - ALLOWed new-risk legs reserve their full requested cash inside the cycle before fill simulation, preventing later same-cycle orders from spending the same dollars;
+  - simulated reduce-only fills never create spendable cash for another order because simulation is not authoritative account reconciliation;
+  - new-risk orders use the real Phase 45 `CreateExecutorAction` and Phase 46 `simulate_create_action`;
+  - reduce-only instructions use Phase 46 market-book simulation directly with the opposite position side;
+  - reversal cycles execute only the reduce-only close leg; the opposite-side open remains pending behind the Phase 55 authoritative-flat barrier;
+  - HALTED/REDUCING behavior is inherited from Phase 56 rather than recreated in the integration layer;
+  - account state is explicitly marked unmutated because simulated fills are evidence, not venue reconciliation.
+- Phase 57 remains fully shadow-only and cannot contact an exchange.
