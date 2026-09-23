@@ -968,3 +968,32 @@ This document records external open-source behaviors studied for Brian. It is no
   - `MANUAL_REVIEW` and `NO_RECOVERY_REQUIRED` are never automatically claimed.
 - Real Postgres 16 CI covers single-owner claim, concurrent two-worker exclusivity, same-worker idempotency, expired takeover with fence increment, stale-worker renewal rejection, HALTED initial wait, HALTED-after-claim renewal block, runtime/head movement, terminal non-claimable directives and direct table-mutation denial.
 - Phase82 remains shadow/paper-only and performs no recovery execution side effect. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+
+
+## Phase 83 — Atomic Recovery STARTED Boundary
+
+- Brian files:
+  - `brian2026/phase83_atomic_recovery_start.py`
+  - `brian2026/sql/phase83_atomic_recovery_start.sql`
+- Phase83 introduces no new alpha and performs no paper/exchange side effect. It is the durable point-of-no-return marker immediately before later recovery work may begin.
+- Atomic start semantics:
+  - the current Phase70 runtime lease/fence is revalidated under the same runtime advisory lock used by the durable runtime;
+  - the immutable Phase81 recovery directive must exist and contain non-empty recovery legs;
+  - every recovery leg is revalidated as strictly reduce-only (positive reduction, opposing order direction, non-increasing target magnitude and internally consistent reduction amount);
+  - the current Phase82 recovery worker/claim fencing token must still own an unexpired claim;
+  - before the first STARTED row, runtime version and Phase60 head must still equal the Phase81 directive anchors;
+  - current operational risk is re-read under the same lock; `HALTED` returns `WAIT_RISK_RELEASE` and no STARTED row, while `ACTIVE`/`REDUCING` may cross the boundary;
+  - the immutable STARTED record copies exact recovery legs plus runtime/head/risk evidence.
+- Idempotency / recovery:
+  - exact lost-response retry by the same current claim returns `STARTED_ALREADY`;
+  - an expired Phase82 claim may be taken over with a higher claim fence; if immutable STARTED evidence already exists, the valid takeover returns `STARTED_RESUME` and does not create a second STARTED row;
+  - wrong worker, stale claim fence or expired claim returns `CLAIM_LOST`;
+  - a first start after runtime/head drift returns `HEAD_MOVED`;
+  - malformed recovery evidence fails closed as `EVIDENCE_INVALID`.
+- Python behavior:
+  - database STARTED responses must echo runtime/cycle/dispatch/cancel-risk/runtime-fence/recovery-claim-fence anchors;
+  - started recovery legs must exactly match the Phase82 claimed directive legs;
+  - lease/head/directive/risk/evidence failures fail closed; claim loss requires acquiring a fresh recovery claim without falsely marking the runtime stale;
+  - HALTED remains a non-terminal wait and cannot cross STARTED.
+- Real Postgres 16 CI covers first STARTED, exact retry, concurrent duplicate race, wrong worker/fence, HALTED after claim, runtime/head movement, malformed reduce-only evidence, expired-claim takeover/resume and direct STARTED-history mutation denial.
+- Phase83 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the full Postgres suite rerun.
