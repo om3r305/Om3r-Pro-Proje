@@ -105,6 +105,70 @@ def _read_secret_key_from_env(env: Mapping[str, str]) -> tuple[str, str]:
     )
 
 
+def _read_scoped_project_url(
+    env: Mapping[str, str],
+    scope: str,
+) -> tuple[str, str]:
+    prefix = str(scope).strip().upper()
+    if not prefix or not re.fullmatch(r"[A-Z0-9_]+", prefix):
+        raise SupabaseRecoveryRpcConfigurationError(
+            "Supabase environment scope must be uppercase identifier text"
+        )
+    scoped_name = f"{prefix}_SUPABASE_URL"
+    scoped = env.get(scoped_name, "").strip().rstrip("/")
+    if scoped:
+        return scoped, scoped_name
+    generic = env.get("SUPABASE_URL", "").strip().rstrip("/")
+    if generic:
+        return generic, "SUPABASE_URL"
+    raise SupabaseRecoveryRpcConfigurationError(
+        f"{scoped_name} or SUPABASE_URL is required"
+    )
+
+
+def _read_scoped_secret_key_from_env(
+    env: Mapping[str, str],
+    scope: str,
+) -> tuple[str, str]:
+    prefix = str(scope).strip().upper()
+    if not prefix or not re.fullmatch(r"[A-Z0-9_]+", prefix):
+        raise SupabaseRecoveryRpcConfigurationError(
+            "Supabase environment scope must be uppercase identifier text"
+        )
+
+    modern_name = f"{prefix}_SUPABASE_SECRET_KEY"
+    modern = env.get(modern_name, "").strip()
+    if modern:
+        return modern, modern_name
+
+    keys_name = f"{prefix}_SUPABASE_SECRET_KEYS"
+    raw = env.get(keys_name, "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise SupabaseRecoveryRpcConfigurationError(
+                f"{keys_name} must be valid JSON"
+            ) from exc
+        if not isinstance(parsed, Mapping):
+            raise SupabaseRecoveryRpcConfigurationError(
+                f"{keys_name} must be a JSON object"
+            )
+        default = parsed.get("default")
+        if isinstance(default, str) and default.strip():
+            return default.strip(), f"{keys_name}.default"
+        raise SupabaseRecoveryRpcConfigurationError(
+            f"{keys_name}.default is required"
+        )
+
+    legacy_name = f"{prefix}_SUPABASE_SERVICE_ROLE_KEY"
+    legacy = env.get(legacy_name, "").strip()
+    if legacy:
+        return legacy, legacy_name
+
+    return _read_secret_key_from_env(env)
+
+
 def _validate_server_key(key: str, source: str) -> None:
     if not key.strip():
         raise SupabaseRecoveryRpcConfigurationError("Supabase key is empty")
@@ -112,7 +176,7 @@ def _validate_server_key(key: str, source: str) -> None:
         raise SupabaseRecoveryRpcConfigurationError(
             f"{source} contains a publishable key; backend recovery requires a secret key"
         )
-    if source == "SUPABASE_SECRET_KEY" and not key.startswith("sb_secret_"):
+    if source.endswith("SUPABASE_SECRET_KEY") and not key.startswith("sb_secret_"):
         raise SupabaseRecoveryRpcConfigurationError(
             "SUPABASE_SECRET_KEY must use the sb_secret_ format"
         )
@@ -193,10 +257,14 @@ class SupabaseRecoveryRpcTransport:
         client: httpx.Client | None = None,
     ) -> "SupabaseRecoveryRpcTransport":
         source = os.environ if env is None else env
-        project_url = source.get("SUPABASE_URL", "").strip().rstrip("/")
-        if not project_url:
-            raise SupabaseRecoveryRpcConfigurationError("SUPABASE_URL is required")
-        key, key_source = _read_secret_key_from_env(source)
+        project_url, _project_url_source = _read_scoped_project_url(
+            source,
+            "BRIAN_RUNTIME",
+        )
+        key, key_source = _read_scoped_secret_key_from_env(
+            source,
+            "BRIAN_RUNTIME",
+        )
         _validate_server_key(key, key_source)
 
         def _float(name: str, default: float) -> float:
