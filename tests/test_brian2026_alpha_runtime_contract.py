@@ -18,6 +18,7 @@ RUNTIME_POLICY = ROOT / "supabase/functions/_shared/alpha_runtime_policy.ts"
 CRON_AUTH = ROOT / "supabase/functions/_shared/cron_auth.ts"
 REALTIME_AUTH = ROOT / "supabase/functions/_shared/realtime_internal_auth.ts"
 AUDITOR = ROOT / "supabase/functions/brian-missed-opportunity-auditor/index.ts"
+AUDITOR_V3 = ROOT / "supabase/functions/brian-missed-opportunity-auditor-v3/index.ts"
 MACRO = ROOT / "supabase/functions/brian-official-macro-eye/index.ts"
 MIGRATIONS = [
     ROOT / "supabase/migrations/202609040015_brian_alpha_decision_compiler.sql",
@@ -91,10 +92,10 @@ def test_auditor_never_silently_turns_unknown_cost_into_zero_and_keeps_horizon_p
     assert "const fallbackCost = points" in audit
     assert 'decision.action === "OPEN_SHORT" ? -downExcursion : upExcursion' in audit
     assert "Unknown cost never becomes 0 bps" in audit
-    auditor = _text(AUDITOR)
-    assert "skipped_unresolved" in auditor
-    assert "gross_outcome_resolves_without_cost_but_cost_dependent_receipts_fail_closed" in auditor
-    assert "OUTCOME_RESOLVED_COST_UNAVAILABLE" in auditor
+    auditor_v3 = _text(AUDITOR_V3)
+    assert "skipped_unresolved" in auditor_v3
+    assert "gross_outcome_resolves_without_cost_but_cost_dependent_receipts_fail_closed" in auditor_v3
+    assert "OUTCOME_RESOLVED_COST_UNAVAILABLE" in auditor_v3
 
 
 def test_per_asset_poison_and_context_outage_fail_closed_without_killing_cycle():
