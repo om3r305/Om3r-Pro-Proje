@@ -17,6 +17,7 @@ from .phase114_crypto_shadow_machine_entrypoint import (
     parse_machine_policy,
 )
 from .phase115_crypto_shadow_readiness_gate import CryptoShadowReadinessGate
+from .phase120_strict_supabase_topology import load_strict_supabase_topology
 
 PHASE117_SCHEMA_VERSION = "brian.phase117-readiness-guarded-crypto-shadow.v1"
 
@@ -169,6 +170,7 @@ def main(
     stderr: TextIO | None = None,
     readiness_factory=CryptoShadowReadinessGate.from_env,
     service_factory=EdgeBoundCryptoShadowService.from_env,
+    topology_loader=load_strict_supabase_topology,
     clock=time.time,
 ) -> int:
     source = dict(os.environ if env is None else env)
@@ -216,6 +218,7 @@ def main(
                 "runtime_id is required via --runtime-id or BRIAN_RUNTIME_ID"
             )
         source["BRIAN_RUNTIME_ID"] = runtime_id
+        topology = topology_loader(source)
 
         recovery_max_items = _positive_int(
             args.recovery_max_items
@@ -315,6 +318,7 @@ def main(
             "schema_version": PHASE117_SCHEMA_VERSION,
             "status": "READINESS_BLOCKED",
             "worker_invoked": False,
+            "topology_id": topology.topology_id,
             "readiness": readiness.to_dict(),
             "shadow_only": True,
             "live_execution": False,
@@ -389,6 +393,7 @@ def main(
         "schema_version": PHASE117_SCHEMA_VERSION,
         "status": receipt.status,
         "worker_invoked": True,
+        "topology_id": topology.topology_id,
         "readiness_report_id": readiness.report_id,
         "readiness_observed_at": readiness.observed_at,
         "worker": _receipt_summary(receipt),
