@@ -42,20 +42,20 @@ def test_manifest_covers_phase70_and_every_sql_phase73_to_87() -> None:
     )
 
 
-def test_current_branch_lineage_blocks_scheduler_even_if_capabilities_exist() -> None:
+def test_official_migration_lineage_allows_scheduling_only_when_capabilities_exist() -> None:
     report = evaluate_runtime_rollout(
         relations=_all("RELATION"),
         functions=_all("FUNCTION"),
     )
 
     assert report.capabilities_complete is True
-    assert report.official_migration_lineage_complete is False
-    assert report.safe_to_schedule_phase117 is False
+    assert report.official_migration_lineage_complete is True
+    assert report.safe_to_schedule_phase117 is True
     assert report.missing_capabilities == ()
-    assert len(report.draft_sources) == 9
+    assert report.draft_sources == ()
     assert all(
-        path.startswith("brian2026/sql/phase")
-        for path in report.draft_sources
+        row.source_path.startswith("supabase/migrations/")
+        for row in RUNTIME_ROLLOUT_REQUIREMENTS
     )
     assert len(report.report_id) == 64
     assert report.read_only is True
