@@ -368,3 +368,147 @@ def test_from_env_rejects_publishable_key() -> None:
                 "SUPABASE_SECRET_KEY": "sb_publishable_not_server",
             }
         )
+
+def test_reliability_and_cost_can_use_distinct_supabase_projects_and_keys() -> None:
+    reliability_url = "https://edge-project.supabase.co"
+    cost_url = "https://cost-project.supabase.co"
+    edge_key = "sb_secret_edge_phase108_abcdefghijklmnopqrstuvwxyz"
+    cost_key = "sb_secret_cost_phase108_abcdefghijklmnopqrstuvwxyz"
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((
+            request.url.host,
+            request.url.path,
+            request.headers.get("apikey"),
+        ))
+        if request.url.path.endswith(
+            "/rest/v1/brian_sensor_reliability_shadow_snapshots"
+        ):
+            if request.url.params.get("select") == "window_end,generated_at":
+                return httpx.Response(
+                    200,
+                    json=[{
+                        "window_end": _iso(TS - 3600),
+                        "generated_at": _iso(TS - 1800),
+                    }],
+                )
+            return httpx.Response(
+                200,
+                json=[_reliability_row("price_structure")],
+            )
+        if request.url.path.endswith("/rest/v1/brian_dynamic_cost_quotes"):
+            return httpx.Response(
+                200,
+                json=[_cost_row("crypto:BTCUSDT", cost=3.5)],
+            )
+        raise AssertionError(str(request.url))
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    reader = SupabaseLaggedEdgeReader(
+        config=SupabaseLaggedEdgeReaderConfig(
+            project_url=reliability_url,
+            key_source="SUPABASE_SECRET_KEY",
+            cost_project_url=cost_url,
+            cost_key_source="SUPABASE_SECRET_KEY",
+            outcome_horizon_seconds=900,
+        ),
+        api_key=edge_key,
+        cost_api_key=cost_key,
+        client=client,
+    )
+    try:
+        contexts = reader.load_contexts(
+            groups_by_asset={
+                "crypto:BTCUSDT": ("price_structure",),
+            },
+            cost_asset_id_by_asset={
+                "crypto:BTCUSDT": "crypto:BTCUSDT",
+            },
+            decision_timestamp=TS,
+        )
+    finally:
+        client.close()
+
+    assert contexts["crypto:BTCUSDT"].round_trip_cost_bps == pytest.approx(3.5)
+    reliability_hosts = {
+        host for host, path, _ in seen
+        if path.endswith("/brian_sensor_reliability_shadow_snapshots")
+    }
+    cost_hosts = {
+        host for host, path, _ in seen
+        if path.endswith("/brian_dynamic_cost_quotes")
+    }
+    assert reliability_hosts == {"edge-project.supabase.co"}
+    assert cost_hosts == {"cost-project.supabase.co"}
+    assert all(
+        key == edge_key
+        for _, path, key in seen
+        if path.endswith("/brian_sensor_reliability_shadow_snapshots")
+    )
+    assert all(
+        key == cost_key
+        for _, path, key in seen
+        if path.endswith("/brian_dynamic_cost_quotes")
+    )
+
+
+def test_from_env_supports_scoped_edge_and_cost_supabase_sources() -> None:
+    edge_url = "https://edge-project.supabase.co"
+    cost_url = "https://cost-project.supabase.co"
+    edge_key = "sb_secret_edge_env_phase108_abcdefghijklmnopqrstuvwxyz"
+    cost_key = "sb_secret_cost_env_phase108_abcdefghijklmnopqrstuvwxyz"
+    reader = SupabaseLaggedEdgeReader.from_env(
+        env={
+            "SUPABASE_URL": "https://generic.supabase.co",
+            "SUPABASE_SECRET_KEY": "sb_secret_generic_abcdefghijklmnopqrstuvwxyz",
+            "BRIAN_EDGE_SUPABASE_URL": edge_url,
+            "BRIAN_EDGE_SUPABASE_SECRET_KEY": edge_key,
+            "BRIAN_COST_SUPABASE_URL": cost_url,
+            "BRIAN_COST_SUPABASE_SECRET_KEY": cost_key,
+        },
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=[])
+            )
+        ),
+    )
+    try:
+        assert reader.config.project_url == edge_url
+        assert reader.config.key_source == "BRIAN_EDGE_SUPABASE_SECRET_KEY"
+        assert reader.config.cost_project_url == cost_url
+        assert reader.config.cost_key_source == "BRIAN_COST_SUPABASE_SECRET_KEY"
+        assert reader._api_key == edge_key
+        assert reader._cost_api_key == cost_key
+    finally:
+        reader._client.close()
+
+
+def test_partial_cost_scope_configuration_fails_closed() -> None:
+    with pytest.raises(
+        SupabaseRecoveryRpcConfigurationError,
+        match="server key",
+    ):
+        SupabaseLaggedEdgeReader.from_env(
+            env={
+                "BRIAN_EDGE_SUPABASE_URL": "https://edge.supabase.co",
+                "BRIAN_EDGE_SUPABASE_SECRET_KEY":
+                    "sb_secret_edge_only_abcdefghijklmnopqrstuvwxyz",
+                "BRIAN_COST_SUPABASE_URL": "https://cost.supabase.co",
+            }
+        )
+
+    with pytest.raises(
+        SupabaseRecoveryRpcConfigurationError,
+        match="BRIAN_COST_SUPABASE_URL",
+    ):
+        SupabaseLaggedEdgeReader.from_env(
+            env={
+                "BRIAN_EDGE_SUPABASE_URL": "https://edge.supabase.co",
+                "BRIAN_EDGE_SUPABASE_SECRET_KEY":
+                    "sb_secret_edge_only_abcdefghijklmnopqrstuvwxyz",
+                "BRIAN_COST_SUPABASE_SECRET_KEY":
+                    "sb_secret_cost_only_abcdefghijklmnopqrstuvwxyz",
+            }
+        )
+
