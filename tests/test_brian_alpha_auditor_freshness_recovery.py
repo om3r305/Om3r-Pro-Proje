@@ -67,3 +67,14 @@ def test_migration_keeps_shadow_only_scope_and_adds_no_trade_surface() -> None:
         "exchange_api_key",
     ):
         assert forbidden not in sql
+
+def test_reliability_measurement_cadences_return_to_declared_repository_rates() -> None:
+    sql = _sql()
+
+    assert "'brian-sensor-reliability-shadow-hourly'" in sql
+    assert "'12 * * * *'" in sql
+    assert "brian_refresh_sensor_reliability_shadow" in sql
+    assert "'brian-sensor-reliability-calibration-5m'" in sql
+    assert "'4-59/5 * * * *'" in sql
+    assert "brian_resolve_sensor_reliability_prospective_calibration" in sql
+
