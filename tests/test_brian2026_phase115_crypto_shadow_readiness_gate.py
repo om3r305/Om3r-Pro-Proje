@@ -243,11 +243,15 @@ class _PersistedProbe:
         runtime=True,
         risk=True,
         blocked=False,
+        risk_state="ACTIVE",
+        pending_cycle_id=None,
         error=None,
     ):
         self.runtime = runtime
         self.risk = risk
         self.blocked = blocked
+        self.risk_state = risk_state
+        self.pending_cycle_id = pending_cycle_id
         self.error = error
         self.calls = []
 
@@ -273,14 +277,17 @@ class _PersistedProbe:
         )
         return PersistedReadinessState(
             runtime=(
-                SimpleNamespace(version=4)
+                SimpleNamespace(
+                    version=4,
+                    pending_cycle_id=self.pending_cycle_id,
+                )
                 if self.runtime
                 else None
             ),
             risk=(
                 SimpleNamespace(
                     version=3,
-                    current_state="ACTIVE",
+                    current_state=self.risk_state,
                 )
                 if self.risk
                 else None
@@ -333,6 +340,8 @@ def test_all_green_inputs_produce_ready_edge_bound_shadow_report() -> None:
         "PERSISTED_RUNTIME",
         "PERSISTED_RISK",
         "RECOVERY_ADMISSION",
+        "RUNTIME_CONTINUITY",
+        "RISK_STATE",
         "MARKET_PREFETCH",
         "SENSOR_FRESHNESS",
         "COVARIANCE_HISTORY",
@@ -603,3 +612,38 @@ def test_owned_gate_closes_owned_external_resources_once() -> None:
     assert market.close_calls == 1
     assert edge.close_calls == 1
     assert execution.close_calls == 1
+
+@pytest.mark.parametrize("risk_state", ["REDUCING", "HALTED"])
+def test_nonactive_persisted_risk_blocks_new_risk_but_not_safe_invocation(
+    risk_state,
+) -> None:
+    report = _gate(
+        persisted=_PersistedProbe(risk_state=risk_state),
+    ).run(
+        runtime_id="runtime-115",
+        asset_ids=(ASSET,),
+        config=_config(),
+        decision_timestamp=TS,
+    )
+
+    assert report.status == "SAFE_FAIL_CLOSED_ONLY"
+    assert report.safe_to_invoke_shadow_worker is True
+    assert report.new_risk_ready is False
+    assert _check_map(report)["RISK_STATE"].status == "FAIL"
+
+
+def test_pending_durable_cycle_blocks_new_risk_until_recovery_resolves_it() -> None:
+    report = _gate(
+        persisted=_PersistedProbe(pending_cycle_id="c" * 64),
+    ).run(
+        runtime_id="runtime-115",
+        asset_ids=(ASSET,),
+        config=_config(),
+        decision_timestamp=TS,
+    )
+
+    assert report.status == "SAFE_FAIL_CLOSED_ONLY"
+    assert report.safe_to_invoke_shadow_worker is True
+    assert report.new_risk_ready is False
+    assert _check_map(report)["RUNTIME_CONTINUITY"].status == "FAIL"
+
