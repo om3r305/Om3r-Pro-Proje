@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 import time
 from collections.abc import Mapping, Sequence
@@ -258,6 +259,7 @@ class RuntimeBootstrapper:
         self.runtime_store = DurableRuntimeStore(rpc)
         self.risk_store = OperationalRiskStore(rpc)
         self.lease_seconds = int(lease_seconds)
+        self._owns_rpc = False
 
     @classmethod
     def from_env(
@@ -270,7 +272,7 @@ class RuntimeBootstrapper:
             env=env,
             client=client,
         )
-        source = {} if env is None else env
+        source = os.environ if env is None else env
         raw = source.get("BRIAN_RUNTIME_LEASE_SECONDS", "60")
         try:
             lease_seconds = int(raw)
