@@ -26,10 +26,18 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
       signal:AbortSignal.timeout(timeoutMs)
     });
     const text=await r.text();
-    let body:any={};
-    try{body=JSON.parse(text)}catch{body={raw:text.slice(0,1000)}}
-    const target=String(body?.status??"");
-    const nested=String(body?.result?.status??"");
+    let body:Record<string,unknown>={};
+    try{
+      const parsed:unknown=JSON.parse(text);
+      body=parsed&&typeof parsed==="object"&&!Array.isArray(parsed)
+        ? parsed as Record<string,unknown>
+        : {raw:text.slice(0,1000)};
+    }catch{body={raw:text.slice(0,1000)}}
+    const nestedBody=body.result&&typeof body.result==="object"&&!Array.isArray(body.result)
+      ? body.result as Record<string,unknown>
+      : {};
+    const target=String(body.status??"");
+    const nested=String(nestedBody.status??"");
     const ok=r.ok&&![target,nested].some(s=>["FAILED","FAILED_CLOSED","UNAUTHORIZED","INVALID_ACTION","DEGRADED"].includes(s));
     return {action,ok,http_status:r.status,target_status:target,elapsed_ms:Date.now()-started,body};
   }catch(e){
