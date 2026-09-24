@@ -304,3 +304,54 @@ def test_timeout_environment_values_must_be_positive_numbers() -> None:
             },
             client=_client(lambda request: httpx.Response(200, json={"ok": True})),
         )
+
+def test_scoped_runtime_supabase_credentials_take_precedence_over_generic() -> None:
+    scoped_url = "https://runtime-project.supabase.co"
+    scoped_secret = "sb_secret_runtime_scope_abcdefghijklmnopqrstuvwxyz"
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["apikey"] = request.headers.get("apikey")
+        return httpx.Response(200, json={"ok": True})
+
+    transport = SupabaseRecoveryRpcTransport.from_env(
+        env={
+            "SUPABASE_URL": URL,
+            "SUPABASE_SECRET_KEY": SECRET,
+            "BRIAN_RUNTIME_SUPABASE_URL": scoped_url,
+            "BRIAN_RUNTIME_SUPABASE_SECRET_KEY": scoped_secret,
+        },
+        client=_client(handler),
+    )
+    assert transport(RPC, {"p_runtime_id": "runtime-91"}) == {"ok": True}
+    assert seen["url"] == f"{scoped_url}/rest/v1/rpc/{RPC}"
+    assert seen["apikey"] == scoped_secret
+    assert transport.config.key_source == "BRIAN_RUNTIME_SUPABASE_SECRET_KEY"
+
+
+def test_scoped_secret_key_still_rejects_publishable_or_legacy_value() -> None:
+    with pytest.raises(
+        SupabaseRecoveryRpcConfigurationError,
+        match="publishable",
+    ):
+        SupabaseRecoveryRpcTransport.from_env(
+            env={
+                "BRIAN_RUNTIME_SUPABASE_URL": URL,
+                "BRIAN_RUNTIME_SUPABASE_SECRET_KEY": "sb_publishable_public",
+            },
+            client=_client(lambda request: httpx.Response(200, json={"ok": True})),
+        )
+
+    with pytest.raises(
+        SupabaseRecoveryRpcConfigurationError,
+        match="sb_secret_",
+    ):
+        SupabaseRecoveryRpcTransport.from_env(
+            env={
+                "BRIAN_RUNTIME_SUPABASE_URL": URL,
+                "BRIAN_RUNTIME_SUPABASE_SECRET_KEY": LEGACY,
+            },
+            client=_client(lambda request: httpx.Response(200, json={"ok": True})),
+        )
+
