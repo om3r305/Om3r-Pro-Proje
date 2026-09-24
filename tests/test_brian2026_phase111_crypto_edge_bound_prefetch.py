@@ -409,3 +409,22 @@ def test_from_env_closes_partially_opened_resources_on_factory_failure() -> None
 
     assert edge.close_calls == 1
     assert market.close_calls == 1
+
+def test_phase111_identity_changes_when_decision_policy_changes() -> None:
+    first = _provider()()
+
+    second = CryptoEdgeBoundPrefetchProvider(
+        asset_ids=(ASSET,),
+        model_weights={"market_snapshot_analyst": 1.0},
+        config=_config(),
+        market_reader=_MarketReader(),
+        edge_reader=_EdgeReader(),
+        execution_provider=_ExecutionProvider(),
+        max_slippage_bps=25.0,
+        ttl_seconds=60,
+        minimum_net_margin_bps=2.0,
+        clock=lambda: TS,
+    )()
+
+    assert first.bundle_ref != second.bundle_ref
+
