@@ -841,6 +841,15 @@ class SupabaseGroundedMarketPrefetchReader:
         common = set.intersection(
             *(set(rows) for rows in buckets_by_asset.values())
         )
+        # Covariance uses completed buckets only. A point captured inside the
+        # still-open decision-time bucket may serve as the current mark, but it
+        # cannot enter the historical return matrix.
+        common = {
+            bucket
+            for bucket in common
+            if (bucket + 1) * self.config.bucket_seconds
+            <= timestamp + 1e-9
+        }
         required_buckets = self.config.return_observations + 1
         if len(common) < required_buckets:
             raise SupabaseGroundedMarketPrefetchError(
