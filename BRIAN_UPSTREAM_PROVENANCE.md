@@ -1754,3 +1754,56 @@ This document records external open-source behaviors studied for Brian. It is no
 - Output is bounded JSON containing recovery state, bundle identity, decision pipeline/status and shadow execution receipt identity. A blocked recovery path emits no fabricated decision/execution object.
 - Phase114 is still one-shot and scheduler-neutral. It does not merge, deploy SQL, place a live order, or enable automatic promotion.
 
+
+
+## Phase 115 — Crypto Shadow Readiness Gate
+
+- Brian file:
+  - `brian2026/phase115_crypto_shadow_readiness_gate.py`
+- Phase115 is a read-only, pre-scheduler gate for the Phase114 machine. It does **not** bootstrap state or mutate recovery/risk/runtime records.
+- CORE readiness requires:
+  - an existing validated Phase70 durable runtime checkpoint;
+  - an existing validated Phase73 operational-risk ledger;
+  - Phase86 recovery admission `OPEN`;
+  - successful grounded Phase113/110 market prefetch;
+  - fresh public Phase94 Binance depth/exchange-info execution evidence.
+- NEW_RISK readiness additionally requires:
+  - at least one horizon-fresh available sensor group per asset;
+  - covariance return count satisfying the configured Phase52 minimum;
+  - reliability snapshots fresh enough for the hourly reliability producer;
+  - at least Phase105's preregistered maturity threshold: two independent groups with >=100 samples each;
+  - a fresh fillable decision-time dynamic cost.
+- The report has three machine states:
+  - `READY_FOR_EDGE_BOUND_SHADOW`: core + new-risk evidence are ready;
+  - `SAFE_FAIL_CLOSED_ONLY`: core runtime is safe to invoke but new/increasing risk will remain fail-closed;
+  - `NOT_READY`: runtime/recovery/market execution authority itself is not ready.
+- Persisted-state reads reuse the Phase70/73/86 typed validators. The dedicated readiness RPC transport allowlists only the three existing read functions and exposes no lease, commit, claim, cancel, dispatch or order RPC.
+- Reports are deterministic/content-addressed and remain `read_only=true`, `shadow_only=true`, `live_execution=false`.
+
+## Phase 116 — Crypto Shadow Readiness Machine Entrypoint
+
+- Brian file:
+  - `brian2026/phase116_crypto_shadow_readiness_entrypoint.py`
+- Phase116 turns Phase115 into a bounded one-shot machine probe before any scheduler is enabled.
+- It reuses the explicit Phase114 policy parser instead of inventing strategy defaults, requires a runtime id, and emits bounded JSON with machine-visible exit codes:
+  - 0 = fully edge-bound shadow ready;
+  - 10 = safe fail-closed only;
+  - 20 = not ready;
+  - 30 = input error;
+  - 40 = readiness-check error.
+- Generic and scoped Supabase secrets are scrubbed from diagnostics.
+- Phase116 performs no runtime bootstrap, database mutation, schedule creation, exchange order or promotion.
+
+## Split Supabase Source Topology — Runtime Readiness Hardening
+
+A read-only audit of the two active Brian Supabase projects showed that the current data plane is intentionally split, so Phases91/108/110 were hardened to model that split explicitly instead of assuming one `SUPABASE_URL`.
+
+- `BRIAN_SENSOR_SUPABASE_*`: current sensor observations; intended for the realtime project.
+- `BRIAN_EDGE_SUPABASE_*`: lagged reliability snapshots; intended for the market-intelligence project.
+- `BRIAN_COST_SUPABASE_*`: current dynamic execution-cost quotes; intended for the realtime project.
+- `BRIAN_RUNTIME_SUPABASE_*`: Phase70/73/86 durable runtime authority once that migration set is deliberately deployed.
+- Every scoped source may fall back to the legacy generic `SUPABASE_*` configuration for backward compatibility, but partial scoped configurations fail closed.
+- Phase108 can use independent reliability and cost project URLs/keys without creating a generic cross-project mutation surface.
+- Phase110 now filters PostgREST sensor reads to supported horizons/families at query time and maps the concrete live derivative families `taker_flow`, `open_interest` and `funding_crowding` into the existing grounded `derivatives` source-kind boundary.
+- Unsupported live families/horizons (for example current EVENT_DRIVEN/DAILY rows not accepted by Phase43's current horizon contract) no longer poison an otherwise valid crypto sensor prefetch.
+- No live database migration was applied as part of this audit.
