@@ -86,6 +86,27 @@ def _safe_error(exc: Exception, env: Mapping[str, str]) -> str:
         for name in secret_names
         if str(env.get(name, "")).strip()
     }
+    for scope in (
+        "BRIAN_SENSOR",
+        "BRIAN_EDGE",
+        "BRIAN_COST",
+        "BRIAN_RUNTIME",
+    ):
+        raw = str(
+            env.get(f"{scope}_SUPABASE_SECRET_KEYS", "")
+        ).strip()
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, Mapping):
+            secrets.update(
+                str(value).strip()
+                for value in parsed.values()
+                if isinstance(value, str) and value.strip()
+            )
     for secret in sorted(secrets, key=len, reverse=True):
         message = message.replace(secret, "<redacted>")
     message = re.sub(
