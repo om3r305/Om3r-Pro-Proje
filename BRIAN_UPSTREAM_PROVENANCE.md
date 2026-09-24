@@ -1835,3 +1835,20 @@ A read-only audit of the two active Brian Supabase projects showed that the curr
 - Even if every SQL object were manually present, `safe_to_schedule_phase117` remains false while required Phase79–87 sources are still draft SQL rather than official migrations. This prevents an ad-hoc/manual partial rollout from being treated as production-ready lineage.
 - Phase118 also generates a bounded **SELECT-only** Postgres capability probe using `to_regclass` and `pg_catalog.pg_proc`; a guard rejects DDL/mutation tokens.
 - The 2026-09-24 read-only live probe found **none** of the Phase70/73→87 runtime capabilities in either active Brian Supabase project. No migration was applied.
+
+
+## Phase 119 — Runtime Deployment Preflight
+
+- Brian file:
+  - `brian2026/phase119_runtime_deployment_preflight.py`
+- Phase119 turns the Phase118 repository manifest into a live-target deployment-state model without mutating the database.
+- It binds two independent facts before any runtime migration is applied:
+  - required Phase70/73→87 relations/functions exist or do not exist;
+  - the matching official Supabase migration versions exist or do not exist in `supabase_migrations.schema_migrations`.
+- The only accepted states are:
+  - `SAFE_CLEAN_INSTALL`: none of the required runtime capabilities and none of the required migration versions are present; migrations may be applied as one reviewed ordered chain, but Phase117 is not schedule-ready yet;
+  - `ALREADY_DEPLOYED`: every required capability and every required official migration version are present; no re-apply is allowed and Phase117 may proceed to Phase115 readiness;
+  - `BLOCKED_PARTIAL`: any mixed capability/ledger state; both migration application and scheduling are blocked until the drift is understood.
+- Migration timestamps are validated to preserve phase dependency order. Duplicate versions or any remaining draft lineage fail construction.
+- The generated capability/ledger probe is SELECT-only and explicitly guarded against DDL/DML/MERGE tokens.
+- 2026-09-24 read-only live checks on both active Brian Supabase projects found **zero** Phase70/73→87 runtime capabilities and **zero** matching official migration-ledger versions. Both targets therefore currently resemble a clean-install state; no migration was applied by Phase119.
