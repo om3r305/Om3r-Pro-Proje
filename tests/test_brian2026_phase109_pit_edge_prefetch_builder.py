@@ -5,7 +5,13 @@ from types import SimpleNamespace
 import pytest
 
 from brian2026.global_sensor_mesh import SensorObservation
-from brian2026.phase54_integrated_shadow_decision import AssetDecisionInput
+from brian2026.phase44_portfolio_brain import PortfolioRiskLimits
+from brian2026.phase52_covariance_risk import CovarianceRiskConfig
+from brian2026.phase53_turnover_rebalance import TurnoverConfig
+from brian2026.phase54_integrated_shadow_decision import (
+    AssetDecisionInput,
+    IntegratedShadowConfig,
+)
 from brian2026.phase106_decision_bound_lagged_edge import AssetLaggedEdgeContext
 from brian2026.phase109_pit_edge_prefetch_builder import (
     PointInTimePrefetchError,
@@ -58,10 +64,28 @@ def _asset_input(asset: str) -> AssetDecisionInput:
 def _returns(asset: str, *, until: float = TS - 1) -> PointInTimeReturnSeries:
     return PointInTimeReturnSeries(
         asset_id=asset,
-        values=(0.01, -0.005, 0.002, 0.004),
+        values=(0.01, -0.005, 0.002, 0.004, -0.001),
         observed_from=TS - 3600,
         observed_until=until,
         source_ids=(f"returns-{asset}",),
+    )
+
+
+def _config() -> IntegratedShadowConfig:
+    return IntegratedShadowConfig(
+        gross_target=0.5,
+        position_limits=PortfolioRiskLimits(
+            max_position_pct=0.3,
+            max_gross_exposure=0.5,
+        ),
+        covariance=CovarianceRiskConfig(
+            min_observations=5,
+            max_period_volatility=1.0,
+        ),
+        turnover=TurnoverConfig(
+            max_l1_turnover=1.0,
+            risk_reduction_bypass=True,
+        ),
     )
 
 
@@ -98,7 +122,7 @@ def _build(reader, **overrides):
             "BTCUSDT": _returns("BTCUSDT"),
             "ETHUSDT": _returns("ETHUSDT"),
         },
-        config="phase54-config",
+        config=_config(),
         max_slippage_bps=20.0,
         ttl_seconds=60,
         markets={"BTCUSDT": "market-btc", "ETHUSDT": "market-eth"},
@@ -124,8 +148,8 @@ def test_builder_freezes_causal_returns_and_derives_edge_groups_from_observation
     assert bundle.bundle_ref == "bundle-109"
     assert bundle.timestamp == TS
     assert bundle.returns_by_asset == {
-        "BTCUSDT": (0.01, -0.005, 0.002, 0.004),
-        "ETHUSDT": (0.01, -0.005, 0.002, 0.004),
+        "BTCUSDT": (0.01, -0.005, 0.002, 0.004, -0.001),
+        "ETHUSDT": (0.01, -0.005, 0.002, 0.004, -0.001),
     }
     assert set(bundle.edge_contexts_by_asset) == {"BTCUSDT", "ETHUSDT"}
     assert len(reader.calls) == 1
@@ -304,3 +328,26 @@ def test_return_series_requires_lineage() -> None:
             observed_until=TS - 1,
             source_ids=(),
         )
+
+def test_return_history_shorter_than_covariance_minimum_fails_before_edge_reader() -> None:
+    reader = _Reader()
+    short = PointInTimeReturnSeries(
+        asset_id="BTCUSDT",
+        values=(0.01, -0.01, 0.005, 0.002),
+        observed_from=TS - 3600,
+        observed_until=TS - 1,
+        source_ids=("short-returns",),
+    )
+
+    with pytest.raises(
+        PointInTimePrefetchError,
+        match="shorter than covariance minimum",
+    ):
+        _build(
+            reader,
+            asset_inputs={"BTCUSDT": _asset_input("BTCUSDT")},
+            return_series_by_asset={"BTCUSDT": short},
+        )
+
+    assert reader.calls == []
+
