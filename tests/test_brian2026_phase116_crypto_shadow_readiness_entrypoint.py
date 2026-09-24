@@ -22,6 +22,23 @@ from brian2026.phase116_crypto_shadow_readiness_entrypoint import (
 TS = 1_790_000_000.0
 
 
+def _strict_env():
+    return {
+        "BRIAN_SENSOR_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_SENSOR_SUPABASE_SECRET_KEY":
+            "sb_secret_sensor_phase116_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_EDGE_SUPABASE_URL": "https://market.supabase.co",
+        "BRIAN_EDGE_SUPABASE_SECRET_KEY":
+            "sb_secret_edge_phase116_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_COST_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_COST_SUPABASE_SECRET_KEY":
+            "sb_secret_cost_phase116_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_RUNTIME_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_RUNTIME_SUPABASE_SECRET_KEY":
+            "sb_secret_runtime_phase116_abcdefghijklmnopqrstuvwxyz",
+    }
+
+
 def _policy_payload():
     return {
         "asset_ids": ["crypto:BTCUSDT"],
@@ -152,7 +169,7 @@ def test_entrypoint_exit_code_matches_readiness_status(status, expected) -> None
     stderr = io.StringIO()
     code = main(
         ["--runtime-id", "runtime-116"],
-        env={},
+        env=_strict_env(),
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=stdout,
         stderr=stderr,
@@ -166,6 +183,7 @@ def test_entrypoint_exit_code_matches_readiness_status(status, expected) -> None
     assert payload["status"] == status
     assert payload["runtime_id"] == "runtime-116"
     assert payload["entrypoint_schema_version"].startswith("brian.phase116")
+    assert len(payload["topology_id"]) == 64
     assert payload["read_only"] is True
     assert payload["shadow_only"] is True
     assert payload["live_execution"] is False
@@ -181,7 +199,7 @@ def test_runtime_id_can_come_from_environment() -> None:
     gate = _Gate(_report("READY_FOR_EDGE_BOUND_SHADOW"))
     code = main(
         [],
-        env={"BRIAN_RUNTIME_ID": "runtime-env-116"},
+        env={**_strict_env(), "BRIAN_RUNTIME_ID": "runtime-env-116"},
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=io.StringIO(),
         stderr=io.StringIO(),
@@ -238,6 +256,7 @@ def test_check_error_redacts_all_scoped_supabase_secret_forms() -> None:
     code = main(
         ["--runtime-id", "runtime-116"],
         env={
+            **_strict_env(),
             "BRIAN_RUNTIME_SUPABASE_SECRET_KEY": secret,
         },
         stdin=io.StringIO(json.dumps(_policy_payload())),
@@ -253,3 +272,30 @@ def test_check_error_redacts_all_scoped_supabase_secret_forms() -> None:
     assert payload["status"] == "CHECK_ERROR"
     assert payload["read_only"] is True
     assert "<redacted>" in payload["error"]
+
+def test_strict_topology_failure_blocks_gate_before_any_readiness_io() -> None:
+    calls = 0
+
+    def gate_factory(**kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError("gate must not be built")
+
+    env = _strict_env()
+    env.pop("BRIAN_EDGE_SUPABASE_URL")
+    stderr = io.StringIO()
+    code = main(
+        ["--runtime-id", "runtime-116"],
+        env=env,
+        stdin=io.StringIO(json.dumps(_policy_payload())),
+        stdout=io.StringIO(),
+        stderr=stderr,
+        gate_factory=gate_factory,
+    )
+
+    assert code == EXIT_INPUT_ERROR
+    assert calls == 0
+    payload = json.loads(stderr.getvalue())
+    assert payload["status"] == "INPUT_ERROR"
+    assert "BRIAN_EDGE_SUPABASE_URL" in payload["error"]
+
