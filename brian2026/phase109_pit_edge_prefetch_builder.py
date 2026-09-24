@@ -183,6 +183,16 @@ def build_pit_edge_prefetch_bundle(
         return_series_by_asset,
         decision_timestamp=timestamp,
     )
+    too_short = tuple(sorted(
+        asset
+        for asset, values in returns.items()
+        if len(values) < config.covariance.min_observations
+    ))
+    if too_short:
+        raise PointInTimePrefetchError(
+            "return history is shorter than covariance minimum for "
+            f"{too_short}: need {config.covariance.min_observations}"
+        )
     contexts = edge_reader.load_contexts(
         groups_by_asset=groups_by_asset,
         decision_timestamp=timestamp,
