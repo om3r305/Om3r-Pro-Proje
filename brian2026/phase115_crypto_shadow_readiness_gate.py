@@ -539,6 +539,18 @@ class CryptoShadowReadinessGate:
                     "risk readiness unavailable because persisted read failed",
                 ),
                 _check(
+                    "RUNTIME_CONTINUITY",
+                    "NEW_RISK",
+                    False,
+                    "runtime continuity unavailable because persisted read failed",
+                ),
+                _check(
+                    "RISK_STATE",
+                    "NEW_RISK",
+                    False,
+                    "risk state unavailable because persisted read failed",
+                ),
+                _check(
                     "RECOVERY_ADMISSION",
                     "CORE",
                     False,
@@ -565,6 +577,44 @@ class CryptoShadowReadinessGate:
                     f"state={persisted.risk.current_state}"
                     if persisted.risk is not None
                     else "no persisted Phase73 operational-risk ledger"
+                ),
+            ))
+            runtime_continuity_ok = (
+                persisted.runtime is not None
+                and getattr(persisted.runtime, "pending_cycle_id", None) is None
+            )
+            checks.append(_check(
+                "RUNTIME_CONTINUITY",
+                "NEW_RISK",
+                runtime_continuity_ok,
+                (
+                    "no pending durable runtime cycle"
+                    if runtime_continuity_ok
+                    else (
+                        "new risk withheld until pending durable runtime cycle "
+                        "is recovered/resolved"
+                    )
+                ),
+            ))
+            risk_active = (
+                persisted.risk is not None
+                and persisted.risk.current_state == "ACTIVE"
+            )
+            checks.append(_check(
+                "RISK_STATE",
+                "NEW_RISK",
+                risk_active,
+                (
+                    "persisted operational-risk state is ACTIVE"
+                    if risk_active
+                    else (
+                        "new risk requires persisted ACTIVE state; current="
+                        + (
+                            persisted.risk.current_state
+                            if persisted.risk is not None
+                            else "MISSING"
+                        )
+                    )
                 ),
             ))
             admission_ok = (
