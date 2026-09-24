@@ -224,3 +224,57 @@ select cron.schedule(
     select brian_private.enqueue_aux_service('missed_auditor');
   $cron$
 );
+
+-- DB-recovery throttling also drifted the two read/measurement-only reliability
+-- jobs away from their original repository cadence. Restore those declared
+-- cadences now that the outcome writer is again bounded and backpressured.
+do $$
+declare
+  v_jobid bigint;
+begin
+  select jobid into v_jobid
+  from cron.job
+  where jobname = 'brian-sensor-reliability-shadow-hourly'
+  limit 1;
+
+  if v_jobid is not null then
+    perform cron.alter_job(
+      v_jobid,
+      '12 * * * *',
+      $cron$select public.brian_refresh_sensor_reliability_shadow(now(), interval '24 hours');$cron$,
+      null,
+      null,
+      true
+    );
+  else
+    perform cron.schedule(
+      'brian-sensor-reliability-shadow-hourly',
+      '12 * * * *',
+      $cron$select public.brian_refresh_sensor_reliability_shadow(now(), interval '24 hours');$cron$
+    );
+  end if;
+
+  select jobid into v_jobid
+  from cron.job
+  where jobname = 'brian-sensor-reliability-calibration-5m'
+  limit 1;
+
+  if v_jobid is not null then
+    perform cron.alter_job(
+      v_jobid,
+      '4-59/5 * * * *',
+      $cron$select public.brian_resolve_sensor_reliability_prospective_calibration(now(), interval '12 hours', 2000);$cron$,
+      null,
+      null,
+      true
+    );
+  else
+    perform cron.schedule(
+      'brian-sensor-reliability-calibration-5m',
+      '4-59/5 * * * *',
+      $cron$select public.brian_resolve_sensor_reliability_prospective_calibration(now(), interval '12 hours', 2000);$cron$
+    );
+  end if;
+end
+$$;
+
