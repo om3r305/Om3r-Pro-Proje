@@ -846,7 +846,8 @@ This document records external open-source behaviors studied for Brian. It is no
 
 - Brian files:
   - `brian2026/phase79_atomic_execution_start.py`
-  - `brian2026/sql/phase79_atomic_execution_start.sql` (**draft SQL contract, not an official Supabase migration yet**)
+  - `brian2026/sql/phase79_atomic_execution_start.sql` (original reviewed draft retained for provenance)
+  - `supabase/migrations/20260924110000_brian_phase79_atomic_execution_start.sql` (official migration lineage)
 - This phase introduces no new alpha, execution-price or risk algorithm. It closes the remaining transaction window between the existing Phase78 pre-execution risk decision and the first paper/recovery side-effect boundary.
 - Composition rather than policy duplication:
   - Phase78 remains the single owner of current-risk semantics (`PROCEED`, `RESUME_ONLY`, `CANCELLED_BEFORE_EXECUTION`, `CANCEL_REQUESTED`, terminal states);
@@ -870,8 +871,8 @@ This document records external open-source behaviors studied for Brian. It is no
   - a post-STARTED response attempting `CANCELLED_BEFORE_EXECUTION` is treated as an evidence contradiction and fails closed rather than rewriting history.
 - Real Postgres 16 CI covers exact/concurrent start, wrong-worker and wrong-claim-fence duplicate attacks, claim-to-start risk changes (HALTED/REDUCING/cooldown), reduce-only exceptions, resume-with-cancel evidence, post-start HALT, read-back anchors and direct service-role mutation denial.
 - Supabase rollout note:
-  - the SQL is intentionally stored outside `supabase/migrations` while this PR remains draft/undeployed;
-  - before any rollout it must be converted into an official migration using `supabase migration new`, then rerun through the same full Python/Postgres gates.
+  - the original reviewed SQL remains under `brian2026/sql` for provenance;
+  - it was promoted into the official ordered migration `20260924110000_brian_phase79_atomic_execution_start.sql` and rerun through the full Python/Postgres gates; the migration remains undeployed live.
 - Phase79 remains shadow/paper-only and does not transmit an order to any exchange or broker.
 
 
@@ -898,7 +899,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - successful commit receipts must echo runtime/cycle/dispatch/checkpoint and both runtime + claim fencing tokens before the local supervisor accepts the external commit;
   - only after the authoritative commit does the supervisor run the Phase78 post-start risk check and Phase77 completion path.
 - Real Postgres 16 CI covers successful authoritative commit, exact lost-response retry, concurrent identical commit, stale-worker claim takeover, stale retry after takeover, missing STARTED boundary, runtime CAS conflict and direct audit-table mutation denial.
-- Phase80 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+- Phase80 remains shadow/paper-only. Its reviewed draft is retained for provenance and the official migration is `20260924110500_brian_phase80_claim_fenced_checkpoint_commit.sql`; it passes the full Postgres suite and remains undeployed live.
 
 
 ## Phase 81 — Durable Post-Cancel Recovery Directive
@@ -934,7 +935,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - lease/version/head/evidence failures invalidate the local runtime copy and fail closed;
   - prepared outcomes are surfaced explicitly as `RECOVERY_READY`, `RECOVERY_WAIT_RISK_RELEASE`, `RECOVERY_MANUAL_REVIEW`, or `NO_RECOVERY_REQUIRED`.
 - Real Postgres 16 CI covers pre-existing exposure preservation, HALTED wait behavior, asset-specific cooldown rollback, already-reduced/no-op recovery, sign-flip manual review, original-commit gating, head-moved rejection, no-cancel behavior, runtime-version conflict, idempotent retry, concurrent prepare and direct table-mutation denial.
-- Phase81 remains shadow/paper-only. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+- Phase81 remains shadow/paper-only. Its reviewed draft is retained for provenance and the official migration is `20260924111000_brian_phase81_cancel_recovery_directive.sql`; it passes the full Postgres suite and remains undeployed live.
 
 
 ## Phase 82 — Recovery Claim Fencing
@@ -967,7 +968,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - lease loss invalidates the local runtime and raises the lease error; head/directive/risk/evidence drift fails closed as stale runtime;
   - `MANUAL_REVIEW` and `NO_RECOVERY_REQUIRED` are never automatically claimed.
 - Real Postgres 16 CI covers single-owner claim, concurrent two-worker exclusivity, same-worker idempotency, expired takeover with fence increment, stale-worker renewal rejection, HALTED initial wait, HALTED-after-claim renewal block, runtime/head movement, terminal non-claimable directives and direct table-mutation denial.
-- Phase82 remains shadow/paper-only and performs no recovery execution side effect. Its SQL is still a draft contract outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and rerun through the full Postgres suite before deployment.
+- Phase82 remains shadow/paper-only and performs no recovery execution side effect. Its official migration is `20260924111500_brian_phase82_recovery_claim_fencing.sql`; the reviewed draft remains for provenance and the migration is still undeployed live.
 
 
 ## Phase 83 — Atomic Recovery STARTED Boundary
@@ -996,7 +997,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - lease/head/directive/risk/evidence failures fail closed; claim loss requires acquiring a fresh recovery claim without falsely marking the runtime stale;
   - HALTED remains a non-terminal wait and cannot cross STARTED.
 - Real Postgres 16 CI covers first STARTED, exact retry, concurrent duplicate race, wrong worker/fence, HALTED after claim, runtime/head movement, malformed reduce-only evidence, expired-claim takeover/resume and direct STARTED-history mutation denial.
-- Phase83 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the full Postgres suite rerun.
+- Phase83 remains shadow/paper-only. Its official migration is `20260924112000_brian_phase83_atomic_recovery_start.sql`; the reviewed draft remains for provenance and the migration is still undeployed live.
 
 
 ## Phase 84 — Recovery Execution + Claim-Fenced Durable Checkpoint
@@ -1034,7 +1035,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - every item must have an allowed reduce-only receipt, a non-null projected target matching the Phase83 leg, and a fully FILLED execution receipt on the correct side;
   - malformed/missing JSON fields fail closed rather than passing through PostgreSQL three-valued NULL logic.
 - Real Postgres 16 CI covers durable recovery write-ahead, progress-anchor resume through Phase82 renewal, final atomic claim completion, final lost-response retry, invalid/non-reduce-only recovery rejection, concurrent exact write-ahead commit, stale-worker rejection and direct event-table mutation denial.
-- Phase84 SQL remains draft/undeployed outside `supabase/migrations`. At rollout freeze it must be converted with `supabase migration new` and the entire real-Postgres suite rerun before any deployment.
+- Phase84 now has official migration lineage at `20260924112500_brian_phase84_recovery_execution_checkpoint.sql`; the reviewed draft is retained for provenance, CI is green, and the migration remains undeployed live.
 
 
 ## Phase 85 — Authoritative Recovery Completion Audit
@@ -1069,7 +1070,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - `completion_ref` remains the exact terminal Phase84 checkpoint id, so an exact Phase84 lost-response retry after certification is still recognized;
   - failed audits leave the claim open and emit immutable failure evidence instead of declaring success.
 - Real Postgres 16 CI covers valid long reduction, valid short reduction, flattening, over-reduction/direction flip, missing recovery fills, Phase60 sign mismatch, checkpoint/head drift, claim-progress drift, exact duplicate certification, concurrent certification and direct certificate-history mutation denial.
-- Phase85 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted using `supabase migration new` and the entire real-Postgres suite rerun before deployment.
+- Phase85 remains shadow/paper-only. Its official migration is `20260924113000_brian_phase85_recovery_completion_audit.sql`; the reviewed draft is retained for provenance and the migration remains undeployed live.
 
 
 ## Phase 86 — Unresolved-Recovery Admission Interlock
@@ -1109,7 +1110,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - `RecoveryAdmissionInterlockStore` exposes the DB-authoritative `OPEN` vs `RECOVERY_BARRIER` state with exact original-cycle/cancel-receipt lineage validation;
   - Phase75 and Phase76 client contracts explicitly reject any impossible barrier response that claims authorization/submission succeeded.
 - Real Postgres 16 CI covers open/before-execution admission, unresolved AFTER_START barrier, NO_RECOVERY_REQUIRED/certificate resolution, MANUAL_REVIEW persistence, new authorization blocking without runtime advance, Phase75 duplicate retry, pre-authorized dispatch blocking, Phase76 duplicate retry, reopened authorization, concurrent blocked authorizations, Phase81 foreign CYCLE_CREATED refusal and direct admission-event mutation denial.
-- Phase86 remains shadow/paper-only. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze its wrapper/rename operations must be converted into the official ordered migration set and the full real-Postgres suite rerun before deployment.
+- Phase86 remains shadow/paper-only. Its wrapper/rename operations now have official ordered migration lineage at `20260924113500_brian_phase86_recovery_admission_interlock.sql`; the full real-Postgres suite is green and the migration remains undeployed live.
 
 
 ## Phase 87 — Durable Recovery Backlog / Restart Resume View
@@ -1139,7 +1140,7 @@ This document records external open-source behaviors studied for Brian. It is no
   - rejects impossible work-state combinations (for example progress without STARTED evidence or audit without terminal Phase84 evidence);
   - maps every DB state to one explicit operational action: prepare, acquire/take over claim, mark STARTED, execute/resume, audit, manual review, fail closed, or none.
 - Real Postgres 16 CI covers idle, directive preparation backlog, claim acquisition, expired takeover, STARTED transition, recovery progress, terminal audit handoff, manual review visibility, NO_RECOVERY_REQUIRED resolution, completion-certificate resolution, inconsistent completed-without-certificate visibility, deterministic oldest-work ordering and reader permissions.
-- Phase87 remains shadow/paper-only and read-oriented. Its SQL is draft/undeployed outside `supabase/migrations`; at rollout freeze it must be converted with `supabase migration new` and rerun through the complete Postgres suite before deployment.
+- Phase87 remains shadow/paper-only and read-oriented. Its official migration is `20260924114000_brian_phase87_recovery_restart_resume.sql`; the reviewed draft is retained for provenance, CI is green, and the migration remains undeployed live.
 
 
 ## Phase 88 — Restart Recovery Orchestrator
@@ -1829,10 +1830,10 @@ A read-only audit of the two active Brian Supabase projects showed that the curr
   - `brian2026/phase118_runtime_rollout_manifest.py`
 - Phase118 makes the durable-runtime deployment boundary explicit before any Phase117 scheduling:
   - enumerates the required Phase70 and Phase73→87 relations/functions from their repository SQL sources;
-  - distinguishes official `supabase/migrations/` lineage (Phase70,73–78) from still-draft `brian2026/sql/` lineage (Phase79–87);
+  - verifies that every required Phase70/73→87 capability now has official `supabase/migrations/` lineage while the earlier `brian2026/sql/` files remain only as reviewed provenance;
   - evaluates a database capability snapshot without mutating it;
-  - emits a deterministic report containing missing capabilities, remaining draft sources and `safe_to_schedule_phase117`.
-- Even if every SQL object were manually present, `safe_to_schedule_phase117` remains false while required Phase79–87 sources are still draft SQL rather than official migrations. This prevents an ad-hoc/manual partial rollout from being treated as production-ready lineage.
+  - emits a deterministic report containing missing capabilities, lineage state and `safe_to_schedule_phase117`.
+- Phase118 now reports official migration lineage complete for Phase70/73→87. Live scheduling still remains false until the target database actually contains the complete capability set; ad-hoc/manual partial rollout is not treated as production-ready.
 - Phase118 also generates a bounded **SELECT-only** Postgres capability probe using `to_regclass` and `pg_catalog.pg_proc`; a guard rejects DDL/mutation tokens.
 - The 2026-09-24 read-only live probe found **none** of the Phase70/73→87 runtime capabilities in either active Brian Supabase project. No migration was applied.
 
