@@ -171,8 +171,8 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         79,
-        "DRAFT_SQL",
-        "brian2026/sql/phase79_atomic_execution_start.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924110000_brian_phase79_atomic_execution_start.sql",
         relations=(
             "brian_shadow_execution_starts",
             "brian_shadow_execution_start_events",
@@ -184,15 +184,15 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         80,
-        "DRAFT_SQL",
-        "brian2026/sql/phase80_claim_fenced_checkpoint_commit.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924110500_brian_phase80_claim_fenced_checkpoint_commit.sql",
         relations=("brian_shadow_claim_commit_events",),
         functions=("brian_commit_claimed_shadow_runtime_checkpoint",),
     ),
     *_requirements(
         81,
-        "DRAFT_SQL",
-        "brian2026/sql/phase81_cancel_recovery_directive.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924111000_brian_phase81_cancel_recovery_directive.sql",
         relations=(
             "brian_shadow_cancel_recovery_directives",
             "brian_shadow_cancel_recovery_events",
@@ -204,8 +204,8 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         82,
-        "DRAFT_SQL",
-        "brian2026/sql/phase82_recovery_claim_fencing.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924111500_brian_phase82_recovery_claim_fencing.sql",
         relations=(
             "brian_shadow_recovery_claims",
             "brian_shadow_recovery_claim_events",
@@ -217,8 +217,8 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         83,
-        "DRAFT_SQL",
-        "brian2026/sql/phase83_atomic_recovery_start.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924112000_brian_phase83_atomic_recovery_start.sql",
         relations=(
             "brian_shadow_recovery_starts",
             "brian_shadow_recovery_start_events",
@@ -230,15 +230,15 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         84,
-        "DRAFT_SQL",
-        "brian2026/sql/phase84_recovery_execution_checkpoint.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924112500_brian_phase84_recovery_execution_checkpoint.sql",
         relations=("brian_shadow_recovery_commit_events",),
         functions=("brian_commit_shadow_recovery_checkpoint",),
     ),
     *_requirements(
         85,
-        "DRAFT_SQL",
-        "brian2026/sql/phase85_recovery_completion_audit.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924113000_brian_phase85_recovery_completion_audit.sql",
         relations=(
             "brian_shadow_recovery_completion_certificates",
             "brian_shadow_recovery_completion_events",
@@ -250,15 +250,15 @@ RUNTIME_ROLLOUT_REQUIREMENTS: tuple[RuntimeCapabilityRequirement, ...] = (
     ),
     *_requirements(
         86,
-        "DRAFT_SQL",
-        "brian2026/sql/phase86_recovery_admission_interlock.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924113500_brian_phase86_recovery_admission_interlock.sql",
         relations=("brian_shadow_recovery_admission_events",),
         functions=("brian_read_shadow_recovery_admission",),
     ),
     *_requirements(
         87,
-        "DRAFT_SQL",
-        "brian2026/sql/phase87_recovery_restart_resume.sql",
+        "MIGRATION",
+        "supabase/migrations/20260924114000_brian_phase87_recovery_restart_resume.sql",
         functions=("brian_read_next_shadow_recovery_work",),
     ),
 )
