@@ -9,6 +9,7 @@ from brian2026.phase91_supabase_rpc_transport import (
     SupabaseRecoveryRpcConfigurationError,
 )
 from brian2026.phase108_supabase_lagged_edge_reader import (
+    READINESS_COST_COMPILER_VERSION,
     SupabaseLaggedEdgeReader,
     SupabaseLaggedEdgeReaderConfig,
     SupabaseLaggedEdgeReaderError,
@@ -112,6 +113,9 @@ def test_load_contexts_uses_one_pit_window_and_latest_fresh_costs_read_only() ->
         ):
             assert request.url.params["fillable"] == "eq.true"
             assert request.url.params["quality"] == "neq.UNAVAILABLE"
+            assert request.url.params["compiler_version"] == (
+                f"eq.{READINESS_COST_COMPILER_VERSION}"
+            )
             return httpx.Response(
                 200,
                 json=[
