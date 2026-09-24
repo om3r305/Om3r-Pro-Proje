@@ -156,6 +156,7 @@ def test_migration_requirement_rejects_invalid_version_or_source() -> None:
     with pytest.raises(ValueError, match="12-14 digit"):
         RuntimeMigrationRequirement(
             version="abc",
+            name="brian_phase79_x",
             source_path="supabase/migrations/x.sql",
             phase=79,
         )
@@ -163,6 +164,7 @@ def test_migration_requirement_rejects_invalid_version_or_source() -> None:
     with pytest.raises(ValueError, match="supabase/migrations"):
         RuntimeMigrationRequirement(
             version="20260924110000",
+            name="brian_phase79_atomic_execution_start",
             source_path="brian2026/sql/phase79_atomic_execution_start.sql",
             phase=79,
         )
@@ -190,3 +192,44 @@ def test_report_identity_changes_with_target_or_state() -> None:
 
     assert clean_a.report_id != clean_b.report_id
     assert clean_a.report_id != deployed.report_id
+
+def test_migration_name_can_prove_lineage_when_deployer_generates_new_version() -> None:
+    names = tuple(row.name for row in RUNTIME_MIGRATION_REQUIREMENTS)
+    report = evaluate_runtime_deployment(
+        relations=_relations(),
+        functions=_functions(),
+        applied_migration_versions=(),
+        applied_migration_names=names,
+        target_label="runtime-name-based-deploy",
+    )
+
+    assert report.state == "ALREADY_DEPLOYED"
+    assert report.safe_to_schedule_phase117 is True
+    assert report.missing_migration_names == ()
+    assert report.missing_migration_versions == ()
+    assert report.applied_migration_names == tuple(sorted(names))
+
+
+def test_partial_migration_name_set_is_blocked() -> None:
+    names = tuple(row.name for row in RUNTIME_MIGRATION_REQUIREMENTS)
+    report = evaluate_runtime_deployment(
+        relations=_relations(),
+        functions=_functions(),
+        applied_migration_versions=(),
+        applied_migration_names=names[:-1],
+        target_label="runtime-name-partial",
+    )
+
+    assert report.state == "BLOCKED_PARTIAL"
+    assert report.safe_to_apply_migrations is False
+    assert report.safe_to_schedule_phase117 is False
+    assert report.missing_migration_names == (names[-1],)
+
+
+def test_probe_accepts_matching_migration_name_or_repo_version() -> None:
+    sql = build_read_only_deployment_probe_sql()
+
+    assert "required_migrations(version,name)" in sql
+    assert "m.version=v.version or m.name=v.name" in sql
+    assert RUNTIME_MIGRATION_REQUIREMENTS[0].name in sql
+
