@@ -12,23 +12,48 @@ import httpx
 
 PHASE91_SCHEMA_VERSION = "brian.phase91-supabase-rpc-transport.v1"
 
-RECOVERY_RPC_ALLOWLIST = frozenset({
+RUNTIME_RPC_ALLOWLIST = frozenset({
     # Phase70 durable runtime ownership/bootstrap.
     "brian_acquire_shadow_runtime_lease",
     "brian_renew_shadow_runtime_lease",
     "brian_release_shadow_runtime_lease",
     "brian_commit_shadow_runtime_checkpoint",
     "brian_read_shadow_runtime_checkpoint",
+    # Phase73 persisted operational-risk authority.
+    "brian_commit_operational_risk_ledger",
+    "brian_read_operational_risk_ledger",
+    # Phase74-80 governed normal-shadow authority.
+    "brian_bind_governed_shadow_cycle",
+    "brian_read_governed_cycle_binding",
+    "brian_authorize_and_persist_governed_cycle",
+    "brian_submit_shadow_execution_dispatch",
+    "brian_read_shadow_execution_dispatch",
+    "brian_claim_shadow_execution_dispatch",
+    "brian_renew_shadow_execution_claim",
+    "brian_complete_shadow_execution_claim",
+    "brian_read_shadow_execution_claim",
+    "brian_check_shadow_execution_kill_switch",
+    "brian_mark_shadow_execution_started",
+    "brian_read_shadow_execution_start",
+    "brian_commit_claimed_shadow_runtime_checkpoint",
     # Phase81-87 recovery boundaries.
     "brian_prepare_shadow_cancel_recovery",
+    "brian_read_shadow_cancel_recovery",
     "brian_claim_shadow_cancel_recovery",
     "brian_renew_shadow_cancel_recovery_claim",
     "brian_mark_shadow_recovery_started",
+    "brian_read_shadow_recovery_start",
     "brian_commit_shadow_recovery_checkpoint",
     "brian_certify_shadow_recovery_completion",
+    "brian_read_shadow_recovery_completion",
     "brian_read_shadow_recovery_admission",
     "brian_read_next_shadow_recovery_work",
 })
+
+# Backward-compatible name for existing imports/tests. The transport now
+# intentionally serves the complete Phase70/73-87 shadow runtime boundary,
+# not recovery-only calls.
+RECOVERY_RPC_ALLOWLIST = RUNTIME_RPC_ALLOWLIST
 
 
 class SupabaseRecoveryRpcError(RuntimeError):
@@ -215,7 +240,7 @@ class SupabaseRecoveryRpcConfig:
 
 
 class SupabaseRecoveryRpcTransport:
-    """Fail-closed PostgREST RPC transport for Phase70 + Phase81-90 runtime recovery.
+    """Fail-closed PostgREST RPC transport for the Phase70/73-87 shadow runtime.
 
     The modern Supabase secret key is sent only through the `apikey` header.
     Legacy service-role keys remain accepted during migration, but secrets are
@@ -295,7 +320,7 @@ class SupabaseRecoveryRpcTransport:
         return cls(config=config, api_key=key, client=client)
 
     def __call__(self, function_name: str, params: Mapping[str, object]) -> object:
-        if function_name not in RECOVERY_RPC_ALLOWLIST:
+        if function_name not in RUNTIME_RPC_ALLOWLIST:
             raise SupabaseRecoveryRpcConfigurationError(
                 f"RPC function is not allowed by Phase91: {function_name}"
             )
