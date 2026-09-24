@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import TextIO
 
 from .phase112_edge_bound_crypto_shadow_service import EdgeBoundCryptoShadowService
+from .phase91_supabase_rpc_transport import (
+    SupabaseRecoveryRpcConfigurationError,
+)
 from .phase114_crypto_shadow_machine_entrypoint import (
     CryptoShadowMachineEntrypointError,
     parse_machine_policy,
@@ -295,6 +298,7 @@ def main(
     except (
         ReadinessGuardedCryptoShadowError,
         CryptoShadowMachineEntrypointError,
+        SupabaseRecoveryRpcConfigurationError,
         ValueError,
         TypeError,
         OSError,
