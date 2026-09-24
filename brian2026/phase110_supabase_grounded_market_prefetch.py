@@ -653,7 +653,7 @@ class SupabaseGroundedMarketPrefetchReader:
         )
         crypto = tuple(asset for asset in assets if asset.startswith("crypto:"))
         other = tuple(asset for asset in assets if not asset.startswith("crypto:"))
-        points: dict[str, list[_PricePoint]] = {
+        points: dict[str, list[GroundedPricePoint]] = {
             asset: [] for asset in assets
         }
 
@@ -707,7 +707,7 @@ class SupabaseGroundedMarketPrefetchReader:
                     raise SupabaseGroundedMarketPrefetchResponseError(
                         "observed_mid_price must be positive"
                     )
-                points[asset].append(_PricePoint(
+                points[asset].append(GroundedPricePoint(
                     asset_id=asset,
                     observed_at=observed,
                     price=price,
@@ -768,7 +768,7 @@ class SupabaseGroundedMarketPrefetchReader:
                     raise SupabaseGroundedMarketPrefetchResponseError(
                         "market mark price must be positive"
                     )
-                points[asset].append(_PricePoint(
+                points[asset].append(GroundedPricePoint(
                     asset_id=asset,
                     observed_at=observed,
                     price=price,
@@ -778,7 +778,7 @@ class SupabaseGroundedMarketPrefetchReader:
                     ),
                 ))
 
-        result: dict[str, tuple[_PricePoint, ...]] = {}
+        result: dict[str, tuple[GroundedPricePoint, ...]] = {}
         for asset, rows in points.items():
             if not rows:
                 raise SupabaseGroundedMarketPrefetchError(
@@ -790,9 +790,9 @@ class SupabaseGroundedMarketPrefetchReader:
 
     def _bucket_prices(
         self,
-        rows: Sequence[_PricePoint],
-    ) -> dict[int, _PricePoint]:
-        buckets: dict[int, _PricePoint] = {}
+        rows: Sequence[GroundedPricePoint],
+    ) -> dict[int, GroundedPricePoint]:
+        buckets: dict[int, GroundedPricePoint] = {}
         for row in rows:
             bucket = int(row.observed_at // self.config.bucket_seconds)
             prior = buckets.get(bucket)
