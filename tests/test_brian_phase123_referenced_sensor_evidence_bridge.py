@@ -70,7 +70,7 @@ def test_bridge_runs_bounded_every_two_minutes_and_logs_outcomes() -> None:
 def test_realtime_export_accepts_only_bounded_hash_ids() -> None:
     source = _export()
 
-    assert "const MAX_IDS = 500;" in source
+    assert "const MAX_IDS = 200;" in source
     assert "/^[a-f0-9]{64}$/i.test(item)" in source
     assert "[...new Set(ids)].slice(0, MAX_IDS)" in source
     assert '.in("observation_id", ids)' in source
@@ -100,3 +100,11 @@ def test_phase123_adds_no_mutation_of_existing_sensor_rows() -> None:
     assert "on conflict (observation_id) do nothing" in sql
     assert "update public.brian_sensor_observations" not in sql
     assert "delete from public.brian_sensor_observations" not in sql
+
+def test_export_batch_cap_stays_below_large_postgrest_in_filter() -> None:
+    source = _export()
+
+    assert "const MAX_IDS = 200;" in source
+    assert "gateway/query-string limits" in source
+    assert "const MAX_IDS = 500;" not in source
+
