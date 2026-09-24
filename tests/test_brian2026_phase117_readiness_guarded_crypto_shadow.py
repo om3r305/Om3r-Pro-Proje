@@ -23,6 +23,23 @@ from brian2026.phase117_readiness_guarded_crypto_shadow import (
 TS = 1_790_000_000.0
 
 
+def _strict_env():
+    return {
+        "BRIAN_SENSOR_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_SENSOR_SUPABASE_SECRET_KEY":
+            "sb_secret_sensor_phase117_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_EDGE_SUPABASE_URL": "https://market.supabase.co",
+        "BRIAN_EDGE_SUPABASE_SECRET_KEY":
+            "sb_secret_edge_phase117_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_COST_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_COST_SUPABASE_SECRET_KEY":
+            "sb_secret_cost_phase117_abcdefghijklmnopqrstuvwxyz",
+        "BRIAN_RUNTIME_SUPABASE_URL": "https://realtime.supabase.co",
+        "BRIAN_RUNTIME_SUPABASE_SECRET_KEY":
+            "sb_secret_runtime_phase117_abcdefghijklmnopqrstuvwxyz",
+    }
+
+
 def _policy_payload():
     return {
         "asset_ids": ["crypto:BTCUSDT"],
@@ -175,7 +192,7 @@ def test_worker_is_never_constructed_when_readiness_is_not_full(
     stdout = io.StringIO()
     code = main(
         ["--runtime-id", "runtime-117"],
-        env={},
+        env=_strict_env(),
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=stdout,
         stderr=io.StringIO(),
@@ -190,6 +207,7 @@ def test_worker_is_never_constructed_when_readiness_is_not_full(
     assert payload["status"] == "READINESS_BLOCKED"
     assert payload["worker_invoked"] is False
     assert payload["readiness"]["status"] == readiness_status
+    assert len(payload["topology_id"]) == 64
     assert gate.closed is True
 
 
@@ -219,7 +237,7 @@ def test_fully_ready_report_constructs_worker_only_after_gate() -> None:
     stderr = io.StringIO()
     code = main(
         ["--runtime-id", "runtime-117"],
-        env={},
+        env=_strict_env(),
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=stdout,
         stderr=stderr,
@@ -242,6 +260,7 @@ def test_fully_ready_report_constructs_worker_only_after_gate() -> None:
     assert payload["worker"]["runtime_id"] == "runtime-117"
     assert payload["worker"]["executed"] is True
     assert payload["readiness_report_id"] == gate.report.report_id
+    assert len(payload["topology_id"]) == 64
     assert service.closed is True
 
 
@@ -283,7 +302,7 @@ def test_worker_runtime_identity_drift_is_machine_failure() -> None:
 
     code = main(
         ["--runtime-id", "runtime-117"],
-        env={},
+        env=_strict_env(),
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=io.StringIO(),
         stderr=stderr,
@@ -305,7 +324,7 @@ def test_worker_recovery_can_reblock_after_ready_preflight() -> None:
 
     code = main(
         ["--runtime-id", "runtime-117"],
-        env={},
+        env=_strict_env(),
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=stdout,
         stderr=io.StringIO(),
@@ -343,7 +362,10 @@ def test_readiness_error_redacts_scoped_secret_and_never_constructs_worker() -> 
     stderr = io.StringIO()
     code = main(
         ["--runtime-id", "runtime-117"],
-        env={"BRIAN_RUNTIME_SUPABASE_SECRET_KEY": secret},
+        env={
+            **_strict_env(),
+            "BRIAN_RUNTIME_SUPABASE_SECRET_KEY": secret,
+        },
         stdin=io.StringIO(json.dumps(_policy_payload())),
         stdout=io.StringIO(),
         stderr=stderr,
@@ -359,3 +381,38 @@ def test_readiness_error_redacts_scoped_secret_and_never_constructs_worker() -> 
     payload = json.loads(text)
     assert payload["status"] == "READINESS_ERROR"
     assert "<redacted>" in payload["error"]
+
+def test_strict_topology_failure_blocks_readiness_and_worker_construction() -> None:
+    readiness_calls = 0
+    service_calls = 0
+
+    def readiness_factory(**kwargs):
+        nonlocal readiness_calls
+        readiness_calls += 1
+        raise AssertionError("readiness must not be constructed")
+
+    def service_factory(**kwargs):
+        nonlocal service_calls
+        service_calls += 1
+        raise AssertionError("service must not be constructed")
+
+    env = _strict_env()
+    env.pop("BRIAN_RUNTIME_SUPABASE_URL")
+    stderr = io.StringIO()
+    code = main(
+        ["--runtime-id", "runtime-117"],
+        env=env,
+        stdin=io.StringIO(json.dumps(_policy_payload())),
+        stdout=io.StringIO(),
+        stderr=stderr,
+        readiness_factory=readiness_factory,
+        service_factory=service_factory,
+    )
+
+    assert code == EXIT_INPUT_ERROR
+    assert readiness_calls == 0
+    assert service_calls == 0
+    payload = json.loads(stderr.getvalue())
+    assert payload["status"] == "INPUT_ERROR"
+    assert "BRIAN_RUNTIME_SUPABASE_URL" in payload["error"]
+
