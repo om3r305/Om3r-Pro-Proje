@@ -7,7 +7,7 @@ const db = createClient(URL, SERVICE, {
 });
 
 const VERSION = "brian.realtime-referenced-sensor-export.v1";
-const MAX_IDS = 500;
+// Keep the PostgREST in-filter comfortably below gateway/query-string limits.\nconst MAX_IDS = 200;
 const ALLOWED_SHA256 = new Set([
   "b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a",
   "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab",
