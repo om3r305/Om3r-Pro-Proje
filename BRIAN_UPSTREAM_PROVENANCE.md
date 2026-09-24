@@ -1853,3 +1853,19 @@ A read-only audit of the two active Brian Supabase projects showed that the curr
 - Migration timestamps are validated to preserve phase dependency order. Duplicate versions or any remaining draft lineage fail construction.
 - The generated capability/ledger probe is SELECT-only and explicitly guarded against DDL/DML/MERGE tokens.
 - 2026-09-24 read-only live checks on both active Brian Supabase projects found **zero** Phase70/73→87 runtime capabilities and **zero** matching official migration-ledger versions. Both targets therefore currently resemble a clean-install state; no migration was applied by Phase119.
+
+
+## Phase 120 — Strict Supabase Topology Seal
+
+- Brian file:
+  - `brian2026/phase120_strict_supabase_topology.py`
+- Phase120 removes the last implicit project-routing ambiguity before readiness/scheduler entrypoints:
+  - `BRIAN_SENSOR_SUPABASE_*`, `BRIAN_EDGE_SUPABASE_*`, `BRIAN_COST_SUPABASE_*`, and `BRIAN_RUNTIME_SUPABASE_*` are all required explicitly;
+  - generic `SUPABASE_URL` / generic secret fallback remains available only to lower-level/manual adapters for backward compatibility, but Phase116/117 no longer accept it as a substitute for scoped authority;
+  - every scoped binding must use a secure URL and a server-side secret/service-role key; publishable keys are rejected;
+  - no secret value is placed into topology reports.
+- The topology is content-addressed from project URLs + key-source names (never secret values) and emits only a non-secret host/source summary plus co-location flags.
+- Phase116 now refuses to run a readiness probe if any authority scope is implicit.
+- Phase117 now refuses to construct either the readiness gate or the worker if any authority scope is implicit, preventing accidental single-project fallback after the realtime/market split.
+- Scoped `*_SUPABASE_SECRET_KEYS` JSON values are also scrubbed from machine error diagnostics.
+- Phase120 performs no database mutation, migration apply, scheduler creation, or live exchange action.
