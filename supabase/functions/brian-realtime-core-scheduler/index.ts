@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v7-isolated-actions";
+const VERSION="brian.realtime-core-scheduler.v8-readiness-cost";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -17,7 +17,7 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
   try{
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
-      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
+      : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"\n      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
     const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
@@ -57,7 +57,7 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 
 function planned(minute:number){
   const actions:string[]=[];
-  if(minute%2===0) actions.push("direct_wire");
+  if(minute%2===0) actions.push("direct_wire");\n  if(minute%3===0) actions.push("readiness_cost");
   // Existing DIP trigger runs last: its failure must not starve Frontier actions.
 
   if(minute%3===1) actions.push("alpha_sync");
