@@ -744,3 +744,123 @@ def test_external_grounded_price_points_reject_future_row_before_sensor_read() -
 
     assert network_calls == 0
 
+def test_sensor_query_filters_to_supported_live_horizons_and_families() -> None:
+    asset = "crypto:BTCUSDT"
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith(
+            "/rest/v1/brian_sensor_observations"
+        ):
+            seen["horizon"] = request.url.params.get("horizon")
+            seen["sensor_family"] = request.url.params.get("sensor_family")
+            return httpx.Response(200, json=[
+                _sensor(
+                    asset,
+                    "eye-structure",
+                    "price_structure",
+                    "price_structure",
+                )
+            ])
+        if request.url.path.endswith("/rest/v1/brian_micro_book_ticks"):
+            rows = _closed_price_points(
+                asset,
+                base=100.0,
+                crypto=True,
+            ) + [_current_mark(asset, price=104.0, crypto=True)]
+            return httpx.Response(200, json=list(reversed(rows)))
+        raise AssertionError(str(request.url))
+
+    reader, client = _reader(handler)
+    try:
+        reader.load(
+            asset_ids=(asset,),
+            decision_timestamp=TS,
+        )
+    finally:
+        client.close()
+
+    assert seen["horizon"] is not None
+    assert "EVENT_DRIVEN" not in seen["horizon"]
+    assert "DAILY" not in seen["horizon"]
+    assert "FAST_5_30M" in seen["horizon"]
+    assert "MICRO_1_5M" in seen["horizon"]
+    assert "taker_flow" in seen["sensor_family"]
+    assert "open_interest" in seen["sensor_family"]
+    assert "funding_crowding" in seen["sensor_family"]
+
+
+@pytest.mark.parametrize(
+    ("family", "group"),
+    [
+        ("taker_flow", "derivatives_taker"),
+        ("open_interest", "derivatives_oi"),
+        ("funding_crowding", "derivatives_funding"),
+    ],
+)
+def test_live_derivative_sensor_families_map_to_derivatives_source_kind(
+    family,
+    group,
+) -> None:
+    asset = "crypto:BTCUSDT"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith(
+            "/rest/v1/brian_sensor_observations"
+        ):
+            return httpx.Response(200, json=[
+                _sensor(
+                    asset,
+                    f"eye-{family}",
+                    family,
+                    group,
+                )
+            ])
+        if request.url.path.endswith("/rest/v1/brian_micro_book_ticks"):
+            rows = _closed_price_points(
+                asset,
+                base=100.0,
+                crypto=True,
+            ) + [_current_mark(asset, price=104.0, crypto=True)]
+            return httpx.Response(200, json=list(reversed(rows)))
+        raise AssertionError(str(request.url))
+
+    reader, client = _reader(handler)
+    try:
+        result = reader.load(
+            asset_ids=(asset,),
+            decision_timestamp=TS,
+        )
+    finally:
+        client.close()
+
+    assert result.asset_inputs[asset].source_kind_by_eye == {
+        f"eye-{family}": "derivatives",
+    }
+
+
+def test_from_env_prefers_scoped_sensor_supabase_credentials() -> None:
+    scoped_url = "https://sensor-project.supabase.co"
+    scoped_key = "sb_secret_sensor_phase110_abcdefghijklmnopqrstuvwxyz"
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=[])
+        )
+    )
+    reader = SupabaseGroundedMarketPrefetchReader.from_env(
+        env={
+            "SUPABASE_URL": "https://generic.supabase.co",
+            "SUPABASE_SECRET_KEY":
+                "sb_secret_generic_phase110_abcdefghijklmnopqrstuvwxyz",
+            "BRIAN_SENSOR_SUPABASE_URL": scoped_url,
+            "BRIAN_SENSOR_SUPABASE_SECRET_KEY": scoped_key,
+        },
+        client=client,
+    )
+    try:
+        assert reader.config.project_url == scoped_url
+        assert reader.config.key_source == "BRIAN_SENSOR_SUPABASE_SECRET_KEY"
+        assert reader._api_key == scoped_key
+    finally:
+        client.close()
+
