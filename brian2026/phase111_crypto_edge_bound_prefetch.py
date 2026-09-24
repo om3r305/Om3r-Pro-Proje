@@ -16,9 +16,9 @@ from .phase94_binance_spot_recovery_evidence import (
 from .phase107_edge_bound_recovery_worker import PrefetchedLaggedEdgeGroundedCycle
 from .phase108_supabase_lagged_edge_reader import SupabaseLaggedEdgeReader
 from .phase109_pit_edge_prefetch_builder import build_pit_edge_prefetch_bundle
-from .phase110_supabase_grounded_market_prefetch import (
-    GroundedMarketPrefetch,
-    SupabaseGroundedMarketPrefetchReader,
+from .phase110_supabase_grounded_market_prefetch import GroundedMarketPrefetch
+from .phase113_binance_grounded_market_prefetch import (
+    BinanceGroundedMarketPrefetchReader,
 )
 
 PHASE111_SCHEMA_VERSION = "brian.phase111-crypto-edge-bound-prefetch.v1"
@@ -137,7 +137,8 @@ def _bundle_identity_payload(
 class CryptoEdgeBoundPrefetchProvider:
     """Zero-argument Phase107 prefetch provider for canonical crypto assets.
 
-    Phase110 freezes grounded sensor/price/return history at one decision time.
+    Phase113 freezes completed public Binance 5m price history and delegates
+    grounded Supabase sensor parsing/alignment to Phase110 at one decision time.
     Phase108 supplies only lagged PIT reliability/cost evidence at that time.
     Phase94 then collects fresh public Binance depth/exchange-info evidence for
     paper execution. Canonical crypto:BTCUSDT ids are mapped to Binance BTCUSDT
@@ -153,7 +154,7 @@ class CryptoEdgeBoundPrefetchProvider:
         asset_ids: Sequence[str],
         model_weights: Mapping[str, float],
         config: IntegratedShadowConfig,
-        market_reader: SupabaseGroundedMarketPrefetchReader,
+        market_reader,
         edge_reader: SupabaseLaggedEdgeReader,
         execution_provider: BinanceSpotRecoveryEvidenceProvider,
         max_slippage_bps: float,
@@ -225,7 +226,7 @@ class CryptoEdgeBoundPrefetchProvider:
         ttl_seconds: int,
         minimum_net_margin_bps: float = 2.0,
         env: Mapping[str, str] | None = None,
-        market_reader_factory=SupabaseGroundedMarketPrefetchReader.from_env,
+        market_reader_factory=BinanceGroundedMarketPrefetchReader.from_env,
         edge_reader_factory=SupabaseLaggedEdgeReader.from_env,
         execution_provider_factory=BinanceSpotRecoveryEvidenceProvider,
         clock: Callable[[], float] = time.time,
