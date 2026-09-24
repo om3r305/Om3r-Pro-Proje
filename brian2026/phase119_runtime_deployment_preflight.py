@@ -25,12 +25,15 @@ DeploymentState = Literal[
 @dataclass(frozen=True, slots=True)
 class RuntimeMigrationRequirement:
     version: str
+    name: str
     source_path: str
     phase: int
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"\d{12,14}", self.version):
             raise ValueError("migration version must be a 12-14 digit prefix")
+        if not re.fullmatch(r"[a-z0-9_]+", self.name):
+            raise ValueError("migration name must be snake_case")
         if not self.source_path.startswith("supabase/migrations/"):
             raise ValueError("runtime migration must live under supabase/migrations")
         if self.phase < 70 or self.phase > 87:
@@ -42,8 +45,12 @@ def _migration_requirement(path: str, phase: int) -> RuntimeMigrationRequirement
     match = re.match(r"^(\d{12,14})_", filename)
     if match is None:
         raise ValueError(f"migration path has no timestamp prefix: {path}")
+    name = filename[match.end():]
+    if name.endswith(".sql"):
+        name = name[:-4]
     return RuntimeMigrationRequirement(
         version=match.group(1),
+        name=name,
         source_path=path,
         phase=phase,
     )
@@ -71,8 +78,11 @@ def _required_migrations(
         key=lambda row: (row.version, row.phase, row.source_path),
     ))
     versions = [row.version for row in migrations]
+    names = [row.name for row in migrations]
     if len(versions) != len(set(versions)):
         raise ValueError("runtime migration versions must be unique")
+    if len(names) != len(set(names)):
+        raise ValueError("runtime migration names must be unique")
     phases = [row.phase for row in migrations]
     if phases != sorted(phases):
         raise ValueError(
@@ -94,6 +104,9 @@ class RuntimeDeploymentPreflightReport:
     missing_migration_versions: tuple[str, ...]
     applied_migration_versions: tuple[str, ...]
     required_migration_versions: tuple[str, ...]
+    missing_migration_names: tuple[str, ...]
+    applied_migration_names: tuple[str, ...]
+    required_migration_names: tuple[str, ...]
     target_label: str
     report_id: str = field(init=False)
     schema_version: str = PHASE119_SCHEMA_VERSION
@@ -126,15 +139,28 @@ class RuntimeDeploymentPreflightReport:
             self.required_migration_versions
         ):
             raise ValueError("required migration versions must be unique/sorted")
+        for label, values in (
+            ("missing migration names", self.missing_migration_names),
+            ("applied migration names", self.applied_migration_names),
+            ("required migration names", self.required_migration_names),
+        ):
+            if tuple(sorted(set(values))) != values:
+                raise ValueError(f"{label} must be unique/sorted")
 
         all_caps_missing = not self.present_capabilities
-        no_versions_applied = not self.applied_migration_versions
+        no_migrations_applied = (
+            not self.applied_migration_versions
+            and not self.applied_migration_names
+        )
         all_caps_present = not self.missing_capabilities
-        all_versions_applied = not self.missing_migration_versions
+        all_migrations_applied = (
+            not self.missing_migration_versions
+            and not self.missing_migration_names
+        )
         expected_state: DeploymentState
-        if all_caps_missing and no_versions_applied:
+        if all_caps_missing and no_migrations_applied:
             expected_state = "SAFE_CLEAN_INSTALL"
-        elif all_caps_present and all_versions_applied:
+        elif all_caps_present and all_migrations_applied:
             expected_state = "ALREADY_DEPLOYED"
         else:
             expected_state = "BLOCKED_PARTIAL"
@@ -181,6 +207,9 @@ class RuntimeDeploymentPreflightReport:
             "required_migration_versions": list(
                 self.required_migration_versions
             ),
+            "missing_migration_names": list(self.missing_migration_names),
+            "applied_migration_names": list(self.applied_migration_names),
+            "required_migration_names": list(self.required_migration_names),
             "target_label": self.target_label,
             "schema_version": self.schema_version,
             "read_only": self.read_only,
@@ -195,6 +224,7 @@ def evaluate_runtime_deployment(
     functions: Iterable[str],
     applied_migration_versions: Iterable[str],
     target_label: str,
+    applied_migration_names: Iterable[str] = (),
     requirements: Sequence[RuntimeCapabilityRequirement] =
         RUNTIME_ROLLOUT_REQUIREMENTS,
     migrations: Sequence[RuntimeMigrationRequirement] =
@@ -225,16 +255,31 @@ def evaluate_runtime_deployment(
     missing = required_capabilities - present
 
     required_versions = {row.version for row in migrations}
-    applied = {
+    required_names = {row.name for row in migrations}
+    supplied_versions = {
         str(value).strip()
         for value in applied_migration_versions
-        if str(value).strip() in required_versions
+        if str(value).strip()
     }
-    missing_versions = required_versions - applied
+    supplied_names = {
+        str(value).strip()
+        for value in applied_migration_names
+        if str(value).strip()
+    }
+    applied_rows = {
+        row
+        for row in migrations
+        if row.version in supplied_versions or row.name in supplied_names
+    }
+    applied_versions = {row.version for row in applied_rows}
+    applied_names = {row.name for row in applied_rows}
+    missing_rows = set(migrations) - applied_rows
+    missing_versions = {row.version for row in missing_rows}
+    missing_names = {row.name for row in missing_rows}
 
-    if not present and not applied:
+    if not present and not applied_rows:
         state: DeploymentState = "SAFE_CLEAN_INSTALL"
-    elif not missing and not missing_versions:
+    elif not missing and not missing_rows:
         state = "ALREADY_DEPLOYED"
     else:
         state = "BLOCKED_PARTIAL"
@@ -246,8 +291,11 @@ def evaluate_runtime_deployment(
         missing_capabilities=tuple(sorted(missing)),
         present_capabilities=tuple(sorted(present)),
         missing_migration_versions=tuple(sorted(missing_versions)),
-        applied_migration_versions=tuple(sorted(applied)),
+        applied_migration_versions=tuple(sorted(applied_versions)),
         required_migration_versions=tuple(sorted(required_versions)),
+        missing_migration_names=tuple(sorted(missing_names)),
+        applied_migration_names=tuple(sorted(applied_names)),
+        required_migration_names=tuple(sorted(required_names)),
         target_label=str(target_label).strip(),
     )
 
@@ -264,19 +312,25 @@ def build_read_only_deployment_probe_sql(
     functions = tuple(sorted({
         row.name for row in requirements if row.kind == "FUNCTION"
     }))
-    versions = tuple(sorted({row.version for row in migrations}))
+    migration_rows = tuple(sorted(
+        ((row.version, row.name) for row in migrations),
+        key=lambda row: (row[0], row[1]),
+    ))
 
     rel_values = ",".join(f"('{name}')" for name in relations) or "('')"
     fn_values = ",".join(f"('{name}')" for name in functions) or "('')"
-    version_values = ",".join(f"('{version}')" for version in versions) or "('')"
+    migration_values = ",".join(
+        f"('{version}','{name}')"
+        for version, name in migration_rows
+    ) or "('','')"
 
     return (
         "with required_relations(name) as (values "
         + rel_values
         + "), required_functions(name) as (values "
         + fn_values
-        + "), required_versions(version) as (values "
-        + version_values
+        + "), required_migrations(version,name) as (values "
+        + migration_values
         + "), capability_rows as ("
         + "select 'RELATION'::text as kind,r.name,"
         + "(to_regclass('public.'||r.name) is not null) as present "
@@ -286,10 +340,11 @@ def build_read_only_deployment_probe_sql(
         + "join pg_catalog.pg_namespace n on n.oid=p.pronamespace "
         + "where n.nspname='public' and p.proname=f.name"
         + ") as present from required_functions f), migration_rows as ("
-        + "select 'MIGRATION'::text as kind,v.version as name,exists("
+        + "select 'MIGRATION'::text as kind,"
+        + "(v.name || '@' || v.version) as name,exists("
         + "select 1 from supabase_migrations.schema_migrations m "
-        + "where m.version=v.version"
-        + ") as present from required_versions v) "
+        + "where m.version=v.version or m.name=v.name"
+        + ") as present from required_migrations v) "
         + "select kind,name,present from capability_rows "
         + "union all select kind,name,present from migration_rows "
         + "order by kind,name;"
