@@ -365,6 +365,9 @@ class SupabaseLaggedEdgeReader:
             },
         )
         result: list[LaggedReliabilityEvidence] = []
+        seen_groups: set[str] = set()
+        expected_window_end = _timestamp(window_end, "window_end")
+        expected_generated_at = _timestamp(generated_at, "generated_at")
         for row in rows:
             if row.get("shadow_only") is not True:
                 raise SupabaseLaggedEdgeReaderResponseError(
@@ -374,6 +377,38 @@ class SupabaseLaggedEdgeReader:
                 raise SupabaseLaggedEdgeReaderResponseError(
                     "reliability row crossed live boundary"
                 )
+            if str(row.get("evidence_class") or "") != "PROSPECTIVE_DEVELOPMENT_SHADOW":
+                raise SupabaseLaggedEdgeReaderResponseError(
+                    "reliability row has wrong evidence class"
+                )
+            row_window_end = _timestamp(row.get("window_end"), "window_end")
+            row_generated_at = _timestamp(row.get("generated_at"), "generated_at")
+            if (
+                abs(row_window_end - expected_window_end) > 1e-6
+                or abs(row_generated_at - expected_generated_at) > 1e-6
+                or row_window_end > decision_timestamp
+                or row_generated_at > decision_timestamp
+            ):
+                raise SupabaseLaggedEdgeReaderResponseError(
+                    "reliability row escaped selected PIT window"
+                )
+            horizon = _integer(
+                row.get("outcome_horizon_seconds"),
+                "outcome_horizon_seconds",
+            )
+            if horizon != self.config.outcome_horizon_seconds:
+                raise SupabaseLaggedEdgeReaderResponseError(
+                    "reliability row has wrong outcome horizon"
+                )
+            group = _identifier(
+                row.get("independent_group"),
+                "independent_group",
+            )
+            if group in seen_groups:
+                raise SupabaseLaggedEdgeReaderResponseError(
+                    f"ambiguous reliability rows for independent group {group}"
+                )
+            seen_groups.add(group)
             hit = row.get("bayesian_hit_rate_beta10_10")
             avg = row.get("avg_signed_bps")
             after = row.get("avg_cost_adjusted_signed_bps")
@@ -381,10 +416,7 @@ class SupabaseLaggedEdgeReader:
                 # An immature/incomplete group contributes no fabricated prior.
                 continue
             result.append(LaggedReliabilityEvidence(
-                group=_identifier(
-                    row.get("independent_group"),
-                    "independent_group",
-                ),
+                group=group,
                 sample_count=_integer(
                     row.get("sample_count"),
                     "sample_count",
@@ -398,18 +430,9 @@ class SupabaseLaggedEdgeReader:
                     after,
                     "avg_cost_adjusted_signed_bps",
                 ),
-                outcome_horizon_seconds=_integer(
-                    row.get("outcome_horizon_seconds"),
-                    "outcome_horizon_seconds",
-                ),
-                snapshot_window_end=_timestamp(
-                    row.get("window_end"),
-                    "window_end",
-                ),
-                snapshot_generated_at=_timestamp(
-                    row.get("generated_at"),
-                    "generated_at",
-                ),
+                outcome_horizon_seconds=horizon,
+                snapshot_window_end=row_window_end,
+                snapshot_generated_at=row_generated_at,
                 evidence_class=str(
                     row.get("evidence_class")
                     or "PROSPECTIVE_DEVELOPMENT_SHADOW"
@@ -462,6 +485,10 @@ class SupabaseLaggedEdgeReader:
                 )
             if row.get("fillable") is not True:
                 continue
+            if str(row.get("quality") or "") == "UNAVAILABLE":
+                raise SupabaseLaggedEdgeReaderResponseError(
+                    "cost row quality is unavailable"
+                )
             observed = _timestamp(row.get("observed_at"), "cost observed_at")
             if observed > decision_timestamp:
                 raise SupabaseLaggedEdgeReaderResponseError(
