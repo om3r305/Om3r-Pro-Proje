@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Literal
 
@@ -166,9 +166,27 @@ class RuntimeDeploymentPreflightReport:
         )
 
     def identity_payload(self) -> dict[str, object]:
-        payload = asdict(self)
-        payload.pop("report_id", None)
-        return payload
+        return {
+            "state": self.state,
+            "safe_to_apply_migrations": self.safe_to_apply_migrations,
+            "safe_to_schedule_phase117": self.safe_to_schedule_phase117,
+            "missing_capabilities": list(self.missing_capabilities),
+            "present_capabilities": list(self.present_capabilities),
+            "missing_migration_versions": list(
+                self.missing_migration_versions
+            ),
+            "applied_migration_versions": list(
+                self.applied_migration_versions
+            ),
+            "required_migration_versions": list(
+                self.required_migration_versions
+            ),
+            "target_label": self.target_label,
+            "schema_version": self.schema_version,
+            "read_only": self.read_only,
+            "shadow_only": self.shadow_only,
+            "live_execution": self.live_execution,
+        }
 
 
 def evaluate_runtime_deployment(
