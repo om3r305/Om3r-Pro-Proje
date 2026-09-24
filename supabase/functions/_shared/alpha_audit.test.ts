@@ -1,5 +1,5 @@
 import { assertEquals, assert } from "jsr:@std/assert@1";
-import { resolveAlphaAuditHorizon } from "./alpha_audit.ts";
+import { resolveAlphaAuditGrossHorizon, resolveAlphaAuditHorizon } from "./alpha_audit.ts";
 
 Deno.test("auditor uses immutable decision reference instead of first later tick", () => {
   const resolved = resolveAlphaAuditHorizon({
@@ -162,3 +162,61 @@ Deno.test("VETO keeps two-sided raw excursion semantics even when compiler direc
   assert(resolved.longOpportunity);
   assert(resolved.shortOpportunity);
 });
+
+Deno.test("gross outcome can resolve without inventing transaction cost", () => {
+  const decision = {
+    observedAt: "2026-09-04T12:00:00Z",
+    action: "WAIT" as const,
+    direction: 0 as const,
+    referencePrice: 100,
+    estimatedRoundTripCostBps: null,
+  };
+  const points = [
+    {
+      observed_at: "2026-09-04T12:01:00Z",
+      observed_mid_price: 101,
+      estimated_round_trip_cost_bps: null,
+    },
+    {
+      observed_at: "2026-09-04T12:05:00Z",
+      observed_mid_price: 102,
+      estimated_round_trip_cost_bps: null,
+    },
+  ];
+
+  const gross = resolveAlphaAuditGrossHorizon(decision, 300, points);
+  const costAware = resolveAlphaAuditHorizon(decision, 300, points);
+
+  assert(gross);
+  assertEquals(gross.reference, 100);
+  assertEquals(gross.resolved, 102);
+  assert(Math.abs(gross.gross - 0.02) < 1e-12);
+  assertEquals(costAware, null);
+});
+
+Deno.test("gross-only resolver keeps the same causal horizon and excursion rules", () => {
+  const resolved = resolveAlphaAuditGrossHorizon({
+    observedAt: "2026-09-04T12:00:00Z",
+    action: "WAIT",
+    direction: 0,
+    referencePrice: 100,
+    estimatedRoundTripCostBps: null,
+  }, 300, [
+    {
+      observed_at: "2026-09-04T12:04:59Z",
+      observed_mid_price: 99,
+      estimated_round_trip_cost_bps: null,
+    },
+    {
+      observed_at: "2026-09-04T12:06:00Z",
+      observed_mid_price: 150,
+      estimated_round_trip_cost_bps: null,
+    },
+  ]);
+
+  assert(resolved);
+  assertEquals(resolved.resolved, 150);
+  assert(Math.abs(resolved.upExcursion - (-0.01)) < 1e-12);
+  assert(Math.abs(resolved.downExcursion - (-0.01)) < 1e-12);
+});
+
