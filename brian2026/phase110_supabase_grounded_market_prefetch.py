@@ -813,34 +813,30 @@ class SupabaseGroundedMarketPrefetchReader:
                     buckets[bucket] = row
         return buckets
 
-    def load(
+    def _assemble_prefetch(
         self,
         *,
-        asset_ids: Sequence[str],
-        decision_timestamp: float,
+        assets: tuple[str, ...],
+        timestamp: float,
+        sensor_rows: Mapping[str, Sequence[_SensorRow]],
+        price_rows: Mapping[str, Sequence[GroundedPricePoint]],
     ) -> GroundedMarketPrefetch:
-        timestamp = float(decision_timestamp)
-        if not math.isfinite(timestamp):
-            raise ValueError("decision_timestamp must be finite")
-        if timestamp < DEVELOPMENT_CUTOFF:
+        if set(sensor_rows) != set(assets):
             raise SupabaseGroundedMarketPrefetchError(
-                "Phase110 requires post-cutoff prospective decision time"
+                "sensor rows must cover requested assets exactly"
             )
-        assets = tuple(sorted({_asset_id(value) for value in asset_ids}))
-        if not assets:
-            raise ValueError("asset_ids are required")
-
-        sensor_rows = self._sensor_rows(
-            assets,
-            decision_timestamp=timestamp,
-        )
-        price_rows = self._price_rows(
-            assets,
-            decision_timestamp=timestamp,
-        )
+        if set(price_rows) != set(assets):
+            raise SupabaseGroundedMarketPrefetchError(
+                "price rows must cover requested assets exactly"
+            )
 
         latest_marks: dict[str, float] = {}
-        for asset, rows in price_rows.items():
+        for asset in assets:
+            rows = tuple(price_rows[asset])
+            if not rows:
+                raise SupabaseGroundedMarketPrefetchError(
+                    f"no PIT market prices for {asset}"
+                )
             latest = max(rows, key=lambda row: row.observed_at)
             age = timestamp - latest.observed_at
             if age < -1e-9:
@@ -854,8 +850,8 @@ class SupabaseGroundedMarketPrefetchReader:
             latest_marks[asset] = latest.price
 
         buckets_by_asset = {
-            asset: self._bucket_prices(rows)
-            for asset, rows in price_rows.items()
+            asset: self._bucket_prices(tuple(price_rows[asset]))
+            for asset in assets
         }
         common = set.intersection(
             *(set(rows) for rows in buckets_by_asset.values())
@@ -901,7 +897,7 @@ class SupabaseGroundedMarketPrefetchReader:
                 source_ids=tuple(row.source_id for row in selected),
             )
 
-            rows = sensor_rows[asset]
+            rows = tuple(sensor_rows[asset])
             observations: list[SensorObservation] = []
             source_kind_by_eye: dict[str, str] = {}
             for row in rows:
@@ -940,6 +936,111 @@ class SupabaseGroundedMarketPrefetchReader:
                 asset: asset for asset in assets
             },
             common_return_buckets=bucket_times,
+        )
+
+    def load_with_price_points(
+        self,
+        *,
+        asset_ids: Sequence[str],
+        decision_timestamp: float,
+        price_points_by_asset: Mapping[str, Sequence[GroundedPricePoint]],
+    ) -> GroundedMarketPrefetch:
+        """Use the same Supabase sensor reader with externally prefetched prices.
+
+        This is intentionally a composition hook, not an open network surface.
+        The caller must provide typed shadow-only price points whose timestamps
+        are at/before the decision snapshot. Phase113 uses it with completed
+        public Binance klines so crypto covariance does not depend on sparse
+        signal-triggered micro-book ticks.
+        """
+        timestamp = float(decision_timestamp)
+        if not math.isfinite(timestamp):
+            raise ValueError("decision_timestamp must be finite")
+        if timestamp < DEVELOPMENT_CUTOFF:
+            raise SupabaseGroundedMarketPrefetchError(
+                "Phase110 requires post-cutoff prospective decision time"
+            )
+        assets = tuple(sorted({_asset_id(value) for value in asset_ids}))
+        if not assets:
+            raise ValueError("asset_ids are required")
+        if set(price_points_by_asset) != set(assets):
+            raise SupabaseGroundedMarketPrefetchError(
+                "external price-point assets must match request exactly"
+            )
+
+        clean_prices: dict[str, tuple[GroundedPricePoint, ...]] = {}
+        for asset in assets:
+            rows: list[GroundedPricePoint] = []
+            for value in price_points_by_asset[asset]:
+                if not isinstance(value, GroundedPricePoint):
+                    raise TypeError(
+                        "price_points_by_asset requires GroundedPricePoint rows"
+                    )
+                if value.asset_id != asset:
+                    raise SupabaseGroundedMarketPrefetchError(
+                        f"{asset} external price-point identity mismatch"
+                    )
+                if value.observed_at > timestamp + 1e-9:
+                    raise SupabaseGroundedMarketPrefetchError(
+                        f"{asset} external price point is after decision time"
+                    )
+                if value.observed_at < DEVELOPMENT_CUTOFF:
+                    raise SupabaseGroundedMarketPrefetchError(
+                        f"{asset} external price point reuses pre-cutoff data"
+                    )
+                if not value.shadow_only or value.live_execution:
+                    raise SupabaseGroundedMarketPrefetchError(
+                        f"{asset} external price point crossed shadow boundary"
+                    )
+                rows.append(value)
+            if not rows:
+                raise SupabaseGroundedMarketPrefetchError(
+                    f"no external PIT market prices for {asset}"
+                )
+            rows.sort(key=lambda row: (row.observed_at, row.source_id))
+            clean_prices[asset] = tuple(rows)
+
+        sensor_rows = self._sensor_rows(
+            assets,
+            decision_timestamp=timestamp,
+        )
+        return self._assemble_prefetch(
+            assets=assets,
+            timestamp=timestamp,
+            sensor_rows=sensor_rows,
+            price_rows=clean_prices,
+        )
+
+    def load(
+        self,
+        *,
+        asset_ids: Sequence[str],
+        decision_timestamp: float,
+    ) -> GroundedMarketPrefetch:
+        timestamp = float(decision_timestamp)
+        if not math.isfinite(timestamp):
+            raise ValueError("decision_timestamp must be finite")
+        if timestamp < DEVELOPMENT_CUTOFF:
+            raise SupabaseGroundedMarketPrefetchError(
+                "Phase110 requires post-cutoff prospective decision time"
+            )
+        assets = tuple(sorted({_asset_id(value) for value in asset_ids}))
+        if not assets:
+            raise ValueError("asset_ids are required")
+
+        sensor_rows = self._sensor_rows(
+            assets,
+            decision_timestamp=timestamp,
+        )
+        price_rows = self._price_rows(
+            assets,
+            decision_timestamp=timestamp,
+        )
+        return self._assemble_prefetch(
+            assets=assets,
+            timestamp=timestamp,
+            sensor_rows=sensor_rows,
+            price_rows=price_rows,
         )
 
     def close(self) -> None:
