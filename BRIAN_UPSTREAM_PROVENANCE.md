@@ -1681,3 +1681,76 @@ This document records external open-source behaviors studied for Brian. It is no
 - The reader must return exactly one edge context per decision asset.
 - Phase109 introduces no scheduler, SQL mutation, live execution, or automatic promotion.
 
+## Phase 110 — Grounded Supabase Market Prefetch
+
+- Brian file:
+  - `brian2026/phase110_supabase_grounded_market_prefetch.py`
+- Phase110 replaces caller-built Phase54 market/evidence inputs with a bounded, read-only Supabase adapter.
+- Sensor evidence:
+  - GET-only `brian_sensor_observations`;
+  - only `PROSPECTIVE_DEVELOPMENT_SHADOW`, `shadow_only=true`, `live_execution=false`;
+  - future/pre-cutoff observations are rejected;
+  - only the newest row per logical eye is retained, and conflicting equal-time eye states fail closed;
+  - the persisted observation id is retained in provenance even though the immutable Python SensorObservation has its own content identity.
+- Market history:
+  - the original direct reader supports `brian_micro_book_ticks` for crypto and `brian_multiasset_market_marks` for non-crypto;
+  - return histories use the common closed-bucket intersection across all requested assets;
+  - there is no forward-fill, padding or synthetic zero return;
+  - the still-open decision-time bucket may be a mark but cannot enter covariance history.
+- Expert snapshot construction is deliberately sparse and deterministic:
+  - current structure state from grounded price-structure evidence;
+  - point-in-time return, acceleration, EMA slope and price-series z-score;
+  - RSI, volume, divergence, support/resistance and other unavailable features are not invented.
+- Phase110 now also exposes typed `GroundedPricePoint` and `load_with_price_points()` so a proven external public price-history adapter can reuse the same sensor parsing/alignment/feature logic without adding an open network surface to Phase43.
+
+## Phase 111 — Crypto Edge-Bound Prefetch Provider
+
+- Brian file:
+  - `brian2026/phase111_crypto_edge_bound_prefetch.py`
+- Phase111 is the zero-argument normal-work prefetch provider consumed by Phase107:
+  - canonical `crypto:BTCUSDT` ids remain unchanged through decision/risk state;
+  - only at the public Binance execution-data boundary are they mapped to `BTCUSDT`;
+  - Phase108 supplies lagged PIT expected-edge context;
+  - Phase94 supplies fresh public depth/exchange-info evidence for paper execution marks, tick size and minimum notional;
+  - Phase109 seals the final point-in-time bundle.
+- Non-crypto execution is intentionally not synthesized: Phase111 fails closed until a proven venue depth/risk-rule adapter exists.
+- Bundle identity covers evidence, returns, edge context, execution evidence **and decision/execution policy** (model weights, Phase54 config, max slippage and TTL), so a policy change cannot reuse the same bundle identity.
+- The default crypto market-history reader is Phase113 rather than sparse signal-triggered micro-book history.
+
+## Phase 112 — Edge-Bound Crypto Shadow Service
+
+- Brian file:
+  - `brian2026/phase112_edge_bound_crypto_shadow_service.py`
+- Phase112 owns the Phase107 + Phase111 lifecycle:
+  - it does not prefetch itself; it only hands the Phase111 callable to Phase107, preserving recovery-before-prefetch ordering;
+  - owned normal-prefetch resources close before the recovery/runtime session;
+  - externally supplied components remain externally owned.
+- Phase112 adds no scheduler, SQL migration, live execution or promotion path.
+
+## Phase 113 — Completed Public Binance Kline Prefetch
+
+- Brian file:
+  - `brian2026/phase113_binance_grounded_market_prefetch.py`
+- Phase113 closes the sparse-return-history problem for crypto covariance:
+  - only public Binance `/api/v3/klines` is used;
+  - only completed 5-minute candles whose close time is at/before the frozen decision timestamp are admitted;
+  - a currently-open candle is discarded even if the venue returns it;
+  - duplicate close times, invalid OHLC ordering, malformed timestamps and insufficient history fail closed;
+  - 418/429 is surfaced as a rate-limit condition; bounded 5xx failures may fail over only across the existing public Binance host allowlist.
+- Each admitted close becomes a typed Phase110 `GroundedPricePoint` with a deterministic content/source hash.
+- Phase110 remains responsible for grounded Supabase sensors, common bucket alignment, causal returns and expert snapshot construction.
+- No Binance API key, signed endpoint, account API, private data or order endpoint exists in this path.
+
+## Phase 114 — Crypto Shadow Machine Entrypoint
+
+- Brian file:
+  - `brian2026/phase114_crypto_shadow_machine_entrypoint.py`
+- Phase114 makes the Phase112 service machine-invokable for one bounded cycle without inventing strategy policy:
+  - policy JSON is mandatory and explicitly supplies asset ids, model weights, Phase54 portfolio/covariance/turnover policy and execution edge/slippage/TTL limits;
+  - unknown fields and invalid types fail closed;
+  - only canonical `crypto:*USDT` assets are accepted by this entrypoint;
+  - recovery and normal worker claim tokens are required to be distinct;
+  - configured Supabase secrets are redacted from bounded machine errors.
+- Output is bounded JSON containing recovery state, bundle identity, decision pipeline/status and shadow execution receipt identity. A blocked recovery path emits no fabricated decision/execution object.
+- Phase114 is still one-shot and scheduler-neutral. It does not merge, deploy SQL, place a live order, or enable automatic promotion.
+
