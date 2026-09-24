@@ -15,7 +15,8 @@ from .phase54_integrated_shadow_decision import AssetDecisionInput
 from .phase91_supabase_rpc_transport import (
     SupabaseRecoveryRpcConfigurationError,
     _is_secure_project_url,
-    _read_secret_key_from_env,
+    _read_scoped_project_url,
+    _read_scoped_secret_key_from_env,
     _sanitize_error_payload,
     _validate_server_key,
 )
@@ -45,6 +46,11 @@ _SOURCE_KIND_BY_FAMILY: Mapping[str, str] = {
     "social_psychology": "social_psychology",
     "cross_asset": "cross_asset",
     "macro": "macro",
+    # Live realtime collectors use concrete derivative family names while
+    # Phase43 reasons at the broader source-kind boundary.
+    "taker_flow": "derivatives",
+    "open_interest": "derivatives",
+    "funding_crowding": "derivatives",
 }
 
 _SUPPORTED_HORIZONS = frozenset({
@@ -54,6 +60,7 @@ _SUPPORTED_HORIZONS = frozenset({
     "SWING_6H_7D",
     "MACRO_1D_PLUS",
 })
+_SUPPORTED_SENSOR_FAMILIES = frozenset(_SOURCE_KIND_BY_FAMILY)
 
 
 class SupabaseGroundedMarketPrefetchError(RuntimeError):
@@ -357,12 +364,14 @@ class SupabaseGroundedMarketPrefetchReader:
         client: httpx.Client | None = None,
     ) -> "SupabaseGroundedMarketPrefetchReader":
         source = os.environ if env is None else env
-        project_url = source.get("SUPABASE_URL", "").strip().rstrip("/")
-        if not project_url:
-            raise SupabaseRecoveryRpcConfigurationError(
-                "SUPABASE_URL is required"
-            )
-        key, key_source = _read_secret_key_from_env(source)
+        project_url, _project_url_source = _read_scoped_project_url(
+            source,
+            "BRIAN_SENSOR",
+        )
+        key, key_source = _read_scoped_secret_key_from_env(
+            source,
+            "BRIAN_SENSOR",
+        )
         _validate_server_key(key, key_source)
 
         def _float(name: str, default: float) -> float:
@@ -499,6 +508,10 @@ class SupabaseGroundedMarketPrefetchReader:
                     "evidence_class,shadow_only,live_execution"
                 ),
                 "asset_id": "in.(" + ",".join(assets) + ")",
+                "horizon": "in.(" + ",".join(sorted(_SUPPORTED_HORIZONS)) + ")",
+                "sensor_family": (
+                    "in.(" + ",".join(sorted(_SUPPORTED_SENSOR_FAMILIES)) + ")"
+                ),
                 "observed_at": f"lte.{decision_iso}",
                 "and": f"(observed_at.gte.{lower_iso})",
                 "order": "observed_at.desc,observation_id.asc",
