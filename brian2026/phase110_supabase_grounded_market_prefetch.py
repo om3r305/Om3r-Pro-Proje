@@ -527,7 +527,12 @@ class SupabaseGroundedMarketPrefetchReader:
                 raise SupabaseGroundedMarketPrefetchResponseError(
                     f"unsupported sensor horizon: {horizon}"
                 )
-            direction = int(_number(row.get("direction"), "direction"))
+            direction_value = _number(row.get("direction"), "direction")
+            if not direction_value.is_integer():
+                raise SupabaseGroundedMarketPrefetchResponseError(
+                    "sensor direction must be an integer"
+                )
+            direction = int(direction_value)
             if direction not in (-1, 0, 1):
                 raise SupabaseGroundedMarketPrefetchResponseError(
                     "sensor direction must be -1,0,1"
