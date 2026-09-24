@@ -17,6 +17,9 @@ from .phase114_crypto_shadow_machine_entrypoint import (
 from .phase115_crypto_shadow_readiness_gate import (
     CryptoShadowReadinessGate,
 )
+from .phase120_strict_supabase_topology import (
+    load_strict_supabase_topology,
+)
 
 PHASE116_SCHEMA_VERSION = "brian.phase116-crypto-shadow-readiness-entrypoint.v1"
 
@@ -112,6 +115,7 @@ def main(
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
     gate_factory=CryptoShadowReadinessGate.from_env,
+    topology_loader=load_strict_supabase_topology,
     clock=time.time,
 ) -> int:
     source = os.environ if env is None else env
@@ -142,6 +146,7 @@ def main(
             raise CryptoShadowReadinessEntrypointError(
                 "runtime_id is required via --runtime-id or BRIAN_RUNTIME_ID"
             )
+        topology = topology_loader(source)
     except (
         CryptoShadowReadinessEntrypointError,
         CryptoShadowMachineEntrypointError,
@@ -185,6 +190,7 @@ def main(
 
     payload = report.to_dict()
     payload["entrypoint_schema_version"] = PHASE116_SCHEMA_VERSION
+    payload["topology_id"] = topology.topology_id
     print(
         json.dumps(
             payload,
