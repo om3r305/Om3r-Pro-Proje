@@ -173,7 +173,7 @@ def test_remote_plain_http_project_url_is_rejected_but_localhost_is_allowed() ->
     assert config.project_url.startswith("http://127.0.0.1")
 
 
-def test_only_exact_phase70_and_phase81_to_phase87_rpc_surface_is_allowed() -> None:
+def test_only_exact_phase70_and_phase73_to_phase87_runtime_surface_is_allowed() -> None:
     transport = SupabaseRecoveryRpcTransport(
         config=SupabaseRecoveryRpcConfig(
             project_url=URL,
@@ -184,6 +184,18 @@ def test_only_exact_phase70_and_phase81_to_phase87_rpc_surface_is_allowed() -> N
     )
     assert transport(
         "brian_read_shadow_runtime_checkpoint",
+        {"p_runtime_id": "runtime-91"},
+    ) == {"ok": True}
+    assert transport(
+        "brian_read_operational_risk_ledger",
+        {"p_runtime_id": "runtime-91"},
+    ) == {"ok": True}
+    assert transport(
+        "brian_authorize_and_persist_governed_cycle",
+        {"p_runtime_id": "runtime-91"},
+    ) == {"ok": True}
+    assert transport(
+        "brian_commit_claimed_shadow_runtime_checkpoint",
         {"p_runtime_id": "runtime-91"},
     ) == {"ok": True}
 
