@@ -1602,3 +1602,82 @@ This document records external open-source behaviors studied for Brian. It is no
 - Red-team coverage includes blocked-before-prefetch ordering, ready recovery → prefetch → Phase102 ordering, already-ready reuse, separate claim identities, invalid prefetch, prefetch failure, owned/external cleanup and post-close rejection.
 - Phase104 remains scheduler-neutral and hard shadow/paper-only. A concrete Supabase prefetch adapter is intentionally a later layer because expected edge must be evidence-backed rather than synthesized from confidence.
 
+## Phase 105 — Lagged Prospective Expected Edge
+
+- Brian file:
+  - `brian2026/phase105_lagged_prospective_edge.py`
+- Phase105 ports the already-proven ALPHA Evolution expected-edge challenger semantics into the Python recovery-first runtime instead of inventing edge from confidence.
+- Proven upstream basis:
+  - `supabase/functions/_shared/evolution_alpha_intelligence.ts`;
+  - bounded reliability shrinks toward 0.50, mature groups require at least 100 resolved samples, at least two mature independent groups are required, gross directional edge is capped, dispersion/maturity create an uncertainty penalty, freshness creates decay, and decision-time round-trip cost is subtracted.
+- Causal guarantees:
+  - reliability snapshots generated/windowed after the decision timestamp are rejected;
+  - future source observations contaminate the estimate;
+  - missing cost is `COST_UNAVAILABLE`;
+  - insufficient mature evidence is `INSUFFICIENT_LAGGED_EVIDENCE`;
+  - only PIT-clear positive net edge above the configured margin becomes `ALLOW_EDGE`.
+- `eligible_expected_edge_bps_by_asset` exposes only eligible *net* edge values. Missing/denied assets stay absent on purpose rather than receiving a synthetic default.
+- Phase105 remains hard shadow-only and cannot auto-promote.
+
+## Phase 106 — Decision-Bound Lagged Edge Gate
+
+- Brian file:
+  - `brian2026/phase106_decision_bound_lagged_edge.py`
+- Phase106 binds Phase105 to the completed Phase54 decision:
+  - only assets that actually require new/increasing risk or an opposite-side reversal open require edge;
+  - only Phase43 support groups aligned with the planned new-risk direction may contribute;
+  - current Phase44 conviction is used only as the bounded evidence-score field; it is not converted into basis points;
+  - future cost evidence and missing/misaligned support groups fail closed.
+- Caller-provided expected-edge injection is forbidden in the Phase106 runtime wrapper.
+- The resulting eligible edge map and blocked-new-risk set are forwarded to Phase101/69/55.
+- Phase55/69/101 gained additive default-off support for `blocked_new_risk_assets`:
+  - a blocked OPEN/INCREASE is skipped;
+  - a blocked reversal still permits the existing position to close to flat but creates no pending opposite-side open;
+  - same-side reductions/closures are never blocked merely because new-risk edge is unavailable.
+- This preserves the system's existing “risk reduction must not depend on alpha” invariant.
+
+## Phase 107 — Edge-Bound Recovery-First Worker
+
+- Brian file:
+  - `brian2026/phase107_edge_bound_recovery_worker.py`
+- Phase107 connects the Phase105/106 edge gate into the real Phase100→102 worker lifecycle:
+  - recovery runs first;
+  - if recovery is blocked, no intelligence/market prefetch occurs;
+  - once READY, one typed prefetch bundle provides lagged edge contexts, not arbitrary edge numbers;
+  - Phase107 builds Phase101, wraps it with Phase106, then runs Phase102 with an intentionally empty raw edge map.
+- Recovery claim identity and normal Phase77 execution claim identity remain separate.
+- Owned Phase100 workers are closed by the Phase107 context manager; externally supplied workers remain externally owned.
+
+## Phase 108 — Read-Only Supabase Lagged Edge Reader
+
+- Brian file:
+  - `brian2026/phase108_supabase_lagged_edge_reader.py`
+- Phase108 provides the first concrete backend data adapter for Phase105/106, using GET-only PostgREST reads and a strict two-table allowlist:
+  - `brian_sensor_reliability_shadow_snapshots`;
+  - `brian_dynamic_cost_quotes`.
+- Reliability selection mirrors the existing ALPHA challenger:
+  - choose one latest common reliability window whose `window_end` and `generated_at` both existed by decision time;
+  - then load only requested independent groups from that exact window/horizon;
+  - escaped/future rows, wrong evidence class, live-enabled rows, wrong horizon, or ambiguous duplicate group rows fail closed.
+- Cost selection:
+  - latest fillable non-`UNAVAILABLE` quote at/before decision time;
+  - configurable maximum cost age;
+  - stale cost becomes unavailable rather than fabricated.
+- The transport has no mutation, RPC, exchange, or order surface; secrets are header-only and sanitized from diagnostics.
+
+## Phase 109 — Point-in-Time Edge Prefetch Builder
+
+- Brian file:
+  - `brian2026/phase109_pit_edge_prefetch_builder.py`
+- Phase109 assembles a Phase107 bundle while sealing another leakage gap: covariance return history.
+- `PointInTimeReturnSeries` requires:
+  - explicit asset identity;
+  - finite returns;
+  - observation start/end timestamps;
+  - non-empty source lineage;
+  - `observed_until <= Phase54 decision_timestamp`.
+- The builder also validates every Phase54 SensorObservation as post-cutoff prospective shadow evidence and rejects future observations or asset-identity drift before any edge-reader I/O.
+- Independent-group requirements are derived directly from the prefetched observations and sent to Phase108; callers may map local asset ids to the persisted cost-quote asset namespace explicitly.
+- The reader must return exactly one edge context per decision asset.
+- Phase109 introduces no scheduler, SQL mutation, live execution, or automatic promotion.
+
