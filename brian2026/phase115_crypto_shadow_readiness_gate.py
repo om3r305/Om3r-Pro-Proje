@@ -302,6 +302,8 @@ class SupabaseReadinessRpcTransport:
                 f"Supabase readiness RPC {function_name} returned HTTP "
                 f"{response.status_code}: {detail}"
             )
+        if not response.content.strip():
+            return None
         try:
             payload: Any = response.json()
         except ValueError as exc:
