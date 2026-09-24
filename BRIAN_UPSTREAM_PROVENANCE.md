@@ -1821,3 +1821,17 @@ A read-only audit of the two active Brian Supabase projects showed that the curr
 - A green readiness probe is not treated as an authorization that can bypass later controls: Phase100/107 still run recovery first, Phase101 reloads persisted risk, and later durable gates may re-block execution if state changes after preflight.
 - Recovery and normal execution claim tokens remain distinct.
 - Phase117 is one-shot, shadow-only and scheduler-neutral. It performs no live-order action and creates no periodic job.
+
+
+## Phase 118 — Runtime Rollout Capability Manifest
+
+- Brian file:
+  - `brian2026/phase118_runtime_rollout_manifest.py`
+- Phase118 makes the durable-runtime deployment boundary explicit before any Phase117 scheduling:
+  - enumerates the required Phase70 and Phase73→87 relations/functions from their repository SQL sources;
+  - distinguishes official `supabase/migrations/` lineage (Phase70,73–78) from still-draft `brian2026/sql/` lineage (Phase79–87);
+  - evaluates a database capability snapshot without mutating it;
+  - emits a deterministic report containing missing capabilities, remaining draft sources and `safe_to_schedule_phase117`.
+- Even if every SQL object were manually present, `safe_to_schedule_phase117` remains false while required Phase79–87 sources are still draft SQL rather than official migrations. This prevents an ad-hoc/manual partial rollout from being treated as production-ready lineage.
+- Phase118 also generates a bounded **SELECT-only** Postgres capability probe using `to_regclass` and `pg_catalog.pg_proc`; a guard rejects DDL/mutation tokens.
+- The 2026-09-24 read-only live probe found **none** of the Phase70/73→87 runtime capabilities in either active Brian Supabase project. No migration was applied.
