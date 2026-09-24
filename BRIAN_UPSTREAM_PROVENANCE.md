@@ -1807,3 +1807,17 @@ A read-only audit of the two active Brian Supabase projects showed that the curr
 - Phase110 now filters PostgREST sensor reads to supported horizons/families at query time and maps the concrete live derivative families `taker_flow`, `open_interest` and `funding_crowding` into the existing grounded `derivatives` source-kind boundary.
 - Unsupported live families/horizons (for example current EVENT_DRIVEN/DAILY rows not accepted by Phase43's current horizon contract) no longer poison an otherwise valid crypto sensor prefetch.
 - No live database migration was applied as part of this audit.
+
+
+## Phase 117 — Readiness-Guarded Crypto Shadow Runner
+
+- Brian file:
+  - `brian2026/phase117_readiness_guarded_crypto_shadow.py`
+- Phase117 composes Phase115 and Phase112 without adding a scheduler:
+  - Phase115 runs first using the exact requested runtime id and Phase114 policy;
+  - if readiness is `SAFE_FAIL_CLOSED_ONLY` or `NOT_READY`, Phase112 is **not even constructed**;
+  - only `READY_FOR_EDGE_BOUND_SHADOW` is allowed to construct the recovery-first worker service and attempt one shadow cycle.
+- The runtime id supplied to readiness is injected into the worker environment and an identity mismatch after worker startup is treated as a machine failure.
+- A green readiness probe is not treated as an authorization that can bypass later controls: Phase100/107 still run recovery first, Phase101 reloads persisted risk, and later durable gates may re-block execution if state changes after preflight.
+- Recovery and normal execution claim tokens remain distinct.
+- Phase117 is one-shot, shadow-only and scheduler-neutral. It performs no live-order action and creates no periodic job.
