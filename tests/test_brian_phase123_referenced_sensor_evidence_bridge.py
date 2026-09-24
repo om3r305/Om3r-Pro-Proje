@@ -12,6 +12,10 @@ EXPORT = ROOT / (
     "supabase/functions/"
     "brian-realtime-referenced-sensor-export/index.ts"
 )
+SAFE_BATCH_MIGRATION = ROOT / (
+    "supabase/migrations/"
+    "20260924192500_brian_referenced_sensor_bridge_safe_batch.sql"
+)
 
 
 def _sql() -> str:
@@ -108,3 +112,13 @@ def test_export_batch_cap_stays_below_large_postgrest_in_filter() -> None:
     assert "gateway/query-string limits" in source
     assert "const MAX_IDS = 500;" not in source
 
+
+
+def test_scheduled_sync_uses_proven_200_row_batch_bound() -> None:
+    sql = SAFE_BATCH_MIGRATION.read_text(encoding="utf-8")
+
+    assert "'brian-referenced-sensor-evidence-sync-2m'" in sql
+    assert "'1-59/2 * * * *'" in sql
+    assert "sync_realtime_referenced_sensor_evidence_v1(" in sql
+    assert "200," in sql
+    assert "500," not in sql
