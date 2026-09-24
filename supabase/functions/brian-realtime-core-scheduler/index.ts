@@ -17,7 +17,8 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
   try{
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
-      : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"\n      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
+      : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"
+      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
     const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
@@ -57,7 +58,8 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 
 function planned(minute:number){
   const actions:string[]=[];
-  if(minute%2===0) actions.push("direct_wire");\n  if(minute%3===0) actions.push("readiness_cost");
+  if(minute%2===0) actions.push("direct_wire");
+  if(minute%3===0) actions.push("readiness_cost");
   // Existing DIP trigger runs last: its failure must not starve Frontier actions.
 
   if(minute%3===1) actions.push("alpha_sync");
