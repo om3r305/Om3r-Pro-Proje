@@ -22,6 +22,7 @@ from .phase105_lagged_prospective_edge import LaggedReliabilityEvidence
 from .phase106_decision_bound_lagged_edge import AssetLaggedEdgeContext
 
 PHASE108_SCHEMA_VERSION = "brian.phase108-supabase-lagged-edge-reader.v1"
+READINESS_COST_COMPILER_VERSION = "brian.readiness-cost-sampler.v1"
 
 _ALLOWED_TABLES = frozenset({
     "brian_sensor_reliability_shadow_snapshots",
@@ -545,6 +546,7 @@ class SupabaseLaggedEdgeReader:
                     "fillable,quality,shadow_only,live_execution"
                 ),
                 "asset_id": "in.(" + ",".join(assets) + ")",
+                "compiler_version": f"eq.{READINESS_COST_COMPILER_VERSION}",
                 "observed_at": f"lte.{decision_iso}",
                 "fillable": "eq.true",
                 "quality": "neq.UNAVAILABLE",
