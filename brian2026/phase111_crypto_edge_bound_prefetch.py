@@ -6,7 +6,7 @@ import math
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 from .phase54_integrated_shadow_decision import IntegratedShadowConfig
 from .phase94_binance_spot_recovery_evidence import (
@@ -85,6 +85,12 @@ def _bundle_identity_payload(
                 }
                 for asset, row in sorted(market.return_series_by_asset.items())
             },
+        },
+        "decision_policy": {
+            "model_weights": dict(sorted(bundle.model_weights.items())),
+            "config": asdict(bundle.config),
+            "max_slippage_bps": bundle.max_slippage_bps,
+            "ttl_seconds": bundle.ttl_seconds,
         },
         "edge_contexts": {
             asset: {
