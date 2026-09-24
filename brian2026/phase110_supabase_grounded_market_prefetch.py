@@ -138,11 +138,25 @@ class SupabaseGroundedMarketPrefetchConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class _PricePoint:
+class GroundedPricePoint:
     asset_id: str
     observed_at: float
     price: float
     source_id: str
+    schema_version: str = PHASE110_SCHEMA_VERSION
+    shadow_only: bool = True
+    live_execution: bool = False
+
+    def __post_init__(self) -> None:
+        _asset_id(self.asset_id)
+        if not math.isfinite(float(self.observed_at)):
+            raise ValueError("price-point observed_at must be finite")
+        if not math.isfinite(float(self.price)) or float(self.price) <= 0:
+            raise ValueError("price-point price must be finite and positive")
+        if not str(self.source_id).strip():
+            raise ValueError("price-point source_id is required")
+        if not self.shadow_only or self.live_execution:
+            raise ValueError("GroundedPricePoint must remain shadow-only")
 
 
 @dataclass(frozen=True, slots=True)
@@ -632,7 +646,7 @@ class SupabaseGroundedMarketPrefetchReader:
         assets: Sequence[str],
         *,
         decision_timestamp: float,
-    ) -> dict[str, tuple[_PricePoint, ...]]:
+    ) -> dict[str, tuple[GroundedPricePoint, ...]]:
         decision_iso = _iso_utc(decision_timestamp)
         lower_iso = _iso_utc(
             decision_timestamp - self.config.price_lookback_seconds
