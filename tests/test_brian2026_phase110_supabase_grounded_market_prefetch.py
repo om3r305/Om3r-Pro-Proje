@@ -9,6 +9,7 @@ from brian2026.phase91_supabase_rpc_transport import (
     SupabaseRecoveryRpcConfigurationError,
 )
 from brian2026.phase110_supabase_grounded_market_prefetch import (
+    GroundedPricePoint,
     SupabaseGroundedMarketPrefetchConfig,
     SupabaseGroundedMarketPrefetchError,
     SupabaseGroundedMarketPrefetchReader,
@@ -647,3 +648,99 @@ def test_from_env_rejects_publishable_key() -> None:
                 "SUPABASE_SECRET_KEY": "sb_publishable_not_server",
             }
         )
+
+def test_external_grounded_price_points_reuse_phase110_sensor_and_alignment_logic() -> None:
+    asset = "crypto:BTCUSDT"
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith(
+            "/rest/v1/brian_sensor_observations"
+        ):
+            return httpx.Response(200, json=[
+                _sensor(
+                    asset,
+                    "eye-external",
+                    "price_structure",
+                    "price_structure",
+                )
+            ])
+        raise AssertionError(
+            "external price composition must not query a Phase110 price table"
+        )
+
+    points = tuple(
+        GroundedPricePoint(
+            asset_id=asset,
+            observed_at=(CURRENT_BUCKET - 31 + index) * BUCKET
+                + (BUCKET - 1),
+            price=100.0 + index,
+            source_id=f"external-kline-{index:03d}",
+        )
+        for index in range(31)
+    ) + (
+        GroundedPricePoint(
+            asset_id=asset,
+            observed_at=TS - 10,
+            price=140.0,
+            source_id="external-current-mark",
+        ),
+    )
+
+    reader, client = _reader(handler)
+    try:
+        result = reader.load_with_price_points(
+            asset_ids=(asset,),
+            decision_timestamp=TS,
+            price_points_by_asset={asset: points},
+        )
+    finally:
+        client.close()
+
+    assert len(requests) == 1
+    assert requests[0].url.path.endswith(
+        "/rest/v1/brian_sensor_observations"
+    )
+    assert len(result.return_series_by_asset[asset].values) == 30
+    assert result.return_series_by_asset[asset].observed_until < (
+        CURRENT_BUCKET * BUCKET
+    )
+    assert result.marks[asset] == pytest.approx(140.0)
+    assert result.asset_inputs[asset].snapshot["structure_state"] == pytest.approx(1.0)
+
+
+def test_external_grounded_price_points_reject_future_row_before_sensor_read() -> None:
+    asset = "crypto:BTCUSDT"
+    network_calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal network_calls
+        network_calls += 1
+        return httpx.Response(200, json=[])
+
+    reader, client = _reader(handler)
+    try:
+        with pytest.raises(
+            SupabaseGroundedMarketPrefetchError,
+            match="after decision time",
+        ):
+            reader.load_with_price_points(
+                asset_ids=(asset,),
+                decision_timestamp=TS,
+                price_points_by_asset={
+                    asset: (
+                        GroundedPricePoint(
+                            asset_id=asset,
+                            observed_at=TS + 1,
+                            price=100.0,
+                            source_id="future-price",
+                        ),
+                    )
+                },
+            )
+    finally:
+        client.close()
+
+    assert network_calls == 0
+
