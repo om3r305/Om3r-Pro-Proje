@@ -13,7 +13,8 @@ import httpx
 from .phase91_supabase_rpc_transport import (
     SupabaseRecoveryRpcConfigurationError,
     _is_secure_project_url,
-    _read_secret_key_from_env,
+    _read_scoped_project_url,
+    _read_scoped_secret_key_from_env,
     _sanitize_error_payload,
     _validate_server_key,
 )
@@ -109,6 +110,8 @@ def _identifier(value: object, label: str) -> str:
 class SupabaseLaggedEdgeReaderConfig:
     project_url: str
     key_source: str
+    cost_project_url: str | None = None
+    cost_key_source: str | None = None
     timeout_seconds: float = 10.0
     cost_max_age_seconds: float = 300.0
     outcome_horizon_seconds: int = 900
@@ -124,6 +127,19 @@ class SupabaseLaggedEdgeReaderConfig:
             )
         if not self.key_source.strip():
             raise ValueError("key_source is required")
+        if self.cost_project_url is not None:
+            if not _is_secure_project_url(self.cost_project_url):
+                raise ValueError(
+                    "cost_project_url must use https (http allowed only for localhost)"
+                )
+            if not str(self.cost_key_source or "").strip():
+                raise ValueError(
+                    "cost_key_source is required with cost_project_url"
+                )
+        elif self.cost_key_source is not None:
+            raise ValueError(
+                "cost_key_source requires cost_project_url"
+            )
         if (
             not math.isfinite(self.timeout_seconds)
             or self.timeout_seconds <= 0
@@ -157,6 +173,7 @@ class SupabaseLaggedEdgeReader:
         *,
         config: SupabaseLaggedEdgeReaderConfig,
         api_key: str,
+        cost_api_key: str | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         if not api_key.strip():
@@ -164,8 +181,21 @@ class SupabaseLaggedEdgeReader:
                 "Supabase API key is required"
             )
         _validate_server_key(api_key, config.key_source)
+        resolved_cost_key = api_key if cost_api_key is None else cost_api_key
+        resolved_cost_source = (
+            config.key_source
+            if config.cost_key_source is None
+            else config.cost_key_source
+        )
+        _validate_server_key(resolved_cost_key, resolved_cost_source)
         self.config = config
         self._api_key = api_key
+        self._cost_api_key = resolved_cost_key
+        self._cost_project_url = (
+            config.project_url
+            if config.cost_project_url is None
+            else config.cost_project_url
+        )
         self._owns_client = client is None
         self._client = client or httpx.Client(
             timeout=config.timeout_seconds,
@@ -181,13 +211,55 @@ class SupabaseLaggedEdgeReader:
         client: httpx.Client | None = None,
     ) -> "SupabaseLaggedEdgeReader":
         source = os.environ if env is None else env
-        project_url = source.get("SUPABASE_URL", "").strip().rstrip("/")
-        if not project_url:
-            raise SupabaseRecoveryRpcConfigurationError(
-                "SUPABASE_URL is required"
-            )
-        key, key_source = _read_secret_key_from_env(source)
+        project_url, _project_url_source = _read_scoped_project_url(
+            source,
+            "BRIAN_EDGE",
+        )
+        key, key_source = _read_scoped_secret_key_from_env(
+            source,
+            "BRIAN_EDGE",
+        )
         _validate_server_key(key, key_source)
+
+        cost_scope_names = (
+            "BRIAN_COST_SUPABASE_URL",
+            "BRIAN_COST_SUPABASE_SECRET_KEY",
+            "BRIAN_COST_SUPABASE_SECRET_KEYS",
+            "BRIAN_COST_SUPABASE_SERVICE_ROLE_KEY",
+        )
+        cost_scope_requested = any(
+            str(source.get(name, "")).strip()
+            for name in cost_scope_names
+        )
+        if cost_scope_requested:
+            cost_project_url = str(
+                source.get("BRIAN_COST_SUPABASE_URL", "")
+            ).strip().rstrip("/")
+            if not cost_project_url:
+                raise SupabaseRecoveryRpcConfigurationError(
+                    "BRIAN_COST_SUPABASE_URL is required when cost scope is configured"
+                )
+            scoped_key_present = any(
+                str(source.get(name, "")).strip()
+                for name in (
+                    "BRIAN_COST_SUPABASE_SECRET_KEY",
+                    "BRIAN_COST_SUPABASE_SECRET_KEYS",
+                    "BRIAN_COST_SUPABASE_SERVICE_ROLE_KEY",
+                )
+            )
+            if not scoped_key_present:
+                raise SupabaseRecoveryRpcConfigurationError(
+                    "scoped BRIAN_COST Supabase server key is required"
+                )
+            cost_key, cost_key_source = _read_scoped_secret_key_from_env(
+                source,
+                "BRIAN_COST",
+            )
+            _validate_server_key(cost_key, cost_key_source)
+        else:
+            cost_project_url = None
+            cost_key = key
+            cost_key_source = None
 
         def _float(name: str, default: float) -> float:
             raw = source.get(name)
@@ -220,6 +292,8 @@ class SupabaseLaggedEdgeReader:
             config=SupabaseLaggedEdgeReaderConfig(
                 project_url=project_url,
                 key_source=key_source,
+                cost_project_url=cost_project_url,
+                cost_key_source=cost_key_source,
                 timeout_seconds=_float(
                     "BRIAN_EDGE_READER_TIMEOUT_SECONDS",
                     10.0,
@@ -231,6 +305,7 @@ class SupabaseLaggedEdgeReader:
                 outcome_horizon_seconds=horizon,
             ),
             api_key=key,
+            cost_api_key=cost_key,
             client=client,
         )
 
@@ -244,9 +319,16 @@ class SupabaseLaggedEdgeReader:
             raise SupabaseLaggedEdgeReaderError(
                 f"table is not allowed by Phase108: {table}"
             )
-        url = f"{self.config.project_url}/rest/v1/{table}"
+        use_cost_source = table == "brian_dynamic_cost_quotes"
+        project_url = (
+            self._cost_project_url
+            if use_cost_source
+            else self.config.project_url
+        )
+        api_key = self._cost_api_key if use_cost_source else self._api_key
+        url = f"{project_url}/rest/v1/{table}"
         headers = {
-            "apikey": self._api_key,
+            "apikey": api_key,
             "accept": "application/json",
             "user-agent": "brian-phase108-lagged-edge-reader/1",
         }
