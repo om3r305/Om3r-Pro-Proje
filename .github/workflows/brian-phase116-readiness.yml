@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   readiness:
-    if: github.ref == 'refs/heads/brian-2027-r1-robustness-alpha-lab'
+    if: github.ref == 'refs/heads/brian-2027-r1-robustness-alpha-lab' || github.ref == 'refs/heads/brian-2026'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
