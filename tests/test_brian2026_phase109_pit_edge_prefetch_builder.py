@@ -350,4 +350,3 @@ def test_return_history_shorter_than_covariance_minimum_fails_before_edge_reader
         )
 
     assert reader.calls == []
-
