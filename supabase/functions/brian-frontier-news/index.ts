@@ -214,7 +214,7 @@ Deno.serve(async (req: Request) => {
         entity_ids:[],
         narrative_ids:[],
         provenance_uri:row.provenance_uri,
-        scout_latency_seconds:row.metadata?.source_latency_seconds??null,
+        scout_latency_seconds:(row.metadata as Record<string, unknown> | null)?.source_latency_seconds ?? null,
         fast_lane:true,
       };
     });
