@@ -31,10 +31,10 @@ jobs:
       BRIAN_COST_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
       BRIAN_RUNTIME_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
       BRIAN_RUNTIME_ID: ${{ inputs.runtime_id }}
-      BRIAN_SENSOR_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_SENSOR_SUPABASE_SECRET_KEY }}
-      BRIAN_EDGE_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_EDGE_SUPABASE_SECRET_KEY }}
-      BRIAN_COST_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_COST_SUPABASE_SECRET_KEY }}
-      BRIAN_RUNTIME_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_RUNTIME_SUPABASE_SECRET_KEY }}
+      BRIAN_SENSOR_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_REALTIME_SUPABASE_SECRET_KEY }}
+      BRIAN_EDGE_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_MARKET_INTELLIGENCE_SUPABASE_SECRET_KEY }}
+      BRIAN_COST_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_REALTIME_SUPABASE_SECRET_KEY }}
+      BRIAN_RUNTIME_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_REALTIME_SUPABASE_SECRET_KEY }}
 
     steps:
       - name: Require explicit paper-only confirmation
@@ -63,18 +63,16 @@ jobs:
         run: |
           python - <<'PY'
           import os
-          required = (
-              "BRIAN_SENSOR_SUPABASE_SECRET_KEY",
-              "BRIAN_EDGE_SUPABASE_SECRET_KEY",
-              "BRIAN_COST_SUPABASE_SECRET_KEY",
-              "BRIAN_RUNTIME_SUPABASE_SECRET_KEY",
-          )
-          missing = [name for name in required if not os.environ.get(name, "").strip()]
+          missing = []
+          if not os.environ.get("BRIAN_SENSOR_SUPABASE_SECRET_KEY", "").strip():
+              missing.append("BRIAN_REALTIME_SUPABASE_SECRET_KEY")
+          if not os.environ.get("BRIAN_EDGE_SUPABASE_SECRET_KEY", "").strip():
+              missing.append("BRIAN_MARKET_INTELLIGENCE_SUPABASE_SECRET_KEY")
           if missing:
               raise SystemExit(
                   "Phase117 blocked: missing GitHub Actions secrets: " + ", ".join(missing)
               )
-          print("All four scoped backend secrets are configured.")
+          print("Both backend project secrets are configured and mapped to the four Phase120 scopes.")
           PY
 
       - name: Re-run Phase116 immediately before worker construction
