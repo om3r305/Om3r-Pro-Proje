@@ -2,7 +2,12 @@ name: Brian Cloud Shadow Runner
 
 on:
   schedule:
-    - cron: "2-57/5 * * * *"
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - ".github/workflows/brian-cloud-shadow-runner.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -45,7 +50,7 @@ jobs:
       - name: Check out reviewed Brian 2027 R1 revision
         uses: actions/checkout@v4
         with:
-          ref: ae06b6f2c85d06d97424f392517c89afef0d9c7f
+          ref: a07d59753cd9f460091db69a4e4f896202248594
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -111,7 +116,7 @@ jobs:
           exit "${{ steps.phase116.outputs.exit_code }}"
 
       - name: Run one readiness-guarded paper shadow cycle
-        if: github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot'
+        if: github.event_name == 'schedule' || github.event_name == 'push' || inputs.mode == 'phase117-paper-one-shot'
         id: phase117
         shell: bash
         run: |
@@ -123,7 +128,7 @@ jobs:
           exit 0
 
       - name: Upload Phase117 result
-        if: always() && (github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot') && hashFiles('phase117-result.json') != ''
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'push' || inputs.mode == 'phase117-paper-one-shot') && hashFiles('phase117-result.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: phase117-result-${{ github.run_id }}
