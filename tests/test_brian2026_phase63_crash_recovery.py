@@ -16,6 +16,7 @@ from brian2026.phase61_stateful_paper_venue import PaperVenue, PaperVenueConfig
 from brian2026.phase63_crash_recovery import (
     PaperVenueCheckpoint,
     RuntimeRecoveryError,
+    ShadowRuntimeCheckpoint,
     create_paper_venue_checkpoint,
     create_runtime_checkpoint,
     restore_paper_venue,
@@ -317,6 +318,33 @@ def test_checkpoint_dict_roundtrip_accepts_jsonb_integral_numeric_rendering() ->
     assert restored.checkpoint_id == checkpoint.checkpoint_id
     assert restored.config.starting_cash_usd == 5000.0
     assert restored.config.fee_bps == 10.0
+
+
+def test_runtime_checkpoint_from_dict_accepts_jsonb_integral_numeric_rendering() -> None:
+    venue = PaperVenue(
+        PaperVenueConfig(
+            account_id="paper-acct",
+            starting_cash_usd=1000.0,
+            fee_bps=10.0,
+        )
+    )
+    ledger = ShadowStateLedger(_genesis())
+    checkpoint = create_runtime_checkpoint(ledger, venue)
+    payload = checkpoint.to_dict()
+
+    payload["paper"]["cash_usd"] = 1000
+    payload["paper"]["config"]["starting_cash_usd"] = 1000
+    payload["paper"]["config"]["fee_bps"] = 10
+    for state in payload["shadow_ledger_manifest"]["states"].values():
+        state["observed_at"] = int(state["observed_at"])
+        state["equity_usd"] = int(state["equity_usd"])
+        state["available_cash_usd"] = int(state["available_cash_usd"])
+
+    restored = ShadowRuntimeCheckpoint.from_dict(payload)
+
+    assert restored.checkpoint_id == checkpoint.checkpoint_id
+    assert restored.paper.checkpoint_id == checkpoint.paper.checkpoint_id
+    assert restored.shadow_ledger_manifest == checkpoint.shadow_ledger_manifest
 
 
 def test_runtime_checkpoint_rejects_account_identity_split_brain() -> None:
