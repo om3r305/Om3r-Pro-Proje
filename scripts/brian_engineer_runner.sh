@@ -245,8 +245,9 @@ fi
 CURRENT_STAGE="ANALYSIS"
 python scripts/brian_engineer_prompt.py analysis > /tmp/brian-engineer-analysis-prompt.txt
 ai_call analysis /tmp/brian-engineer-analysis-prompt.txt /tmp/brian-engineer-analysis.txt read
-grep -Eq '^UNDERSTAND([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
-grep -Eq '^PLAN([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
+test "$(wc -c < /tmp/brian-engineer-analysis.txt)" -ge 200
+grep -Eqi '(^|[^A-Za-z])UNDERSTAND([^A-Za-z]|$)' /tmp/brian-engineer-analysis.txt
+grep -Eqi '(^|[^A-Za-z])PLAN([^A-Za-z]|$)' /tmp/brian-engineer-analysis.txt
 test -z "$(git status --porcelain)" || { echo 'Read-only analysis mutated the worktree'; exit 1; }
 record_event UNDERSTAND UNDERSTAND '' '{"evidence":"Read-only repository inspection completed through provider-continuity runner"}'
 record_event PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan completed before source mutation"}'
