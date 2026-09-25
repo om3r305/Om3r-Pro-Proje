@@ -295,6 +295,30 @@ def test_shadow_ledger_manifest_roundtrip_and_tamper_detection() -> None:
         restore_shadow_state_ledger(tampered)
 
 
+def test_checkpoint_dict_roundtrip_accepts_jsonb_integral_numeric_rendering() -> None:
+    venue = PaperVenue(
+        PaperVenueConfig(
+            account_id="BRIAN-PAPER-RUNTIME",
+            starting_cash_usd=5000.0,
+            fee_bps=10.0,
+        )
+    )
+    checkpoint = create_paper_venue_checkpoint(venue)
+    payload = checkpoint.to_dict()
+
+    # PostgreSQL jsonb may serialize semantically integral numerics without a
+    # decimal point on the read path (5000.0 -> 5000, 10.0 -> 10).
+    payload["cash_usd"] = 5000
+    payload["config"]["starting_cash_usd"] = 5000
+    payload["config"]["fee_bps"] = 10
+
+    restored = PaperVenueCheckpoint.from_dict(payload)
+
+    assert restored.checkpoint_id == checkpoint.checkpoint_id
+    assert restored.config.starting_cash_usd == 5000.0
+    assert restored.config.fee_bps == 10.0
+
+
 def test_runtime_checkpoint_rejects_account_identity_split_brain() -> None:
     venue = PaperVenue(
         PaperVenueConfig(
