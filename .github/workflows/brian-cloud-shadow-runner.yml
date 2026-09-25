@@ -1,6 +1,8 @@
 name: Brian Cloud Shadow Runner
 
 on:
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -40,10 +42,10 @@ jobs:
       BRIAN_RUNTIME_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_REALTIME_SUPABASE_SECRET_KEY }}
 
     steps:
-      - name: Check out reviewed Brian 2027 R1 branch
+      - name: Check out reviewed Brian 2027 R1 revision
         uses: actions/checkout@v4
         with:
-          ref: brian-2027-r1-robustness-alpha-lab
+          ref: d9a071642b57c0281eb55b9965e49095a856030d
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -73,7 +75,7 @@ jobs:
           PY
 
       - name: Require explicit Phase117 confirmation
-        if: inputs.mode == 'phase117-paper-one-shot'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'phase117-paper-one-shot'
         shell: bash
         run: |
           if [ "${{ inputs.confirmation }}" != "RUN_PAPER_SHADOW_ONE_SHOT" ]; then
@@ -109,7 +111,7 @@ jobs:
           exit "${{ steps.phase116.outputs.exit_code }}"
 
       - name: Run one readiness-guarded paper shadow cycle
-        if: inputs.mode == 'phase117-paper-one-shot'
+        if: github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot'
         id: phase117
         shell: bash
         run: |
@@ -121,7 +123,7 @@ jobs:
           exit 0
 
       - name: Upload Phase117 result
-        if: always() && inputs.mode == 'phase117-paper-one-shot' && hashFiles('phase117-result.json') != ''
+        if: always() && (github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot') && hashFiles('phase117-result.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: phase117-result-${{ github.run_id }}
@@ -130,7 +132,7 @@ jobs:
           retention-days: 14
 
       - name: Enforce Phase117 success
-        if: inputs.mode == 'phase117-paper-one-shot' && steps.phase117.outputs.exit_code != '0'
+        if: (github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot') && steps.phase117.outputs.exit_code != '0'
         shell: bash
         run: |
           echo "Phase117 one-shot did not complete successfully."
