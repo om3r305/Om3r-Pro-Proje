@@ -4,7 +4,7 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-multiasset-market-eye.v3-market-hours";
+const VERSION="brian.realtime-multiasset-market-eye.v4-meta-price-fallback";
 const COLLECTOR_ID="brian-realtime-multiasset-market-eye-v1";
 
 type Spec={asset_id:string;asset_class:string;symbol:string;themes:string[];priority:number};
@@ -66,34 +66,52 @@ async function fetchOne(spec:Spec){
   const highs:Array<number|null>=Array.isArray(q.high)?q.high:[];
   const lows:Array<number|null>=Array.isArray(q.low)?q.low:[];
   const vols:Array<number|null>=Array.isArray(q.volume)?q.volume:[];
+  const meta=result?.meta??{};
   let idx=-1;
   for(let i=Math.min(ts.length,closes.length)-1;i>=0;i--){if(n(closes[i])!==null){idx=i;break}}
-  if(idx<0)throw new Error(`${spec.asset_id}:NO_PRICE`);
-  const price=n(closes[idx])!;
-  const providerMs=Number(ts[idx])*1000;
+
+  let price:number;
+  let providerMs:number;
+  let openPrice:number|null=null,highPrice:number|null=null,lowPrice:number|null=null,volume:number|null=null;
+  let ret5:number|null=null,ret1h:number|null=null;
+  let priceFallback:string|null=null;
+
+  if(idx>=0){
+    price=n(closes[idx])!;
+    providerMs=Number(ts[idx])*1000;
+    openPrice=n(opens[idx]);highPrice=n(highs[idx]);lowPrice=n(lows[idx]);volume=n(vols[idx]);
+    const at=(offset:number)=>{const i=idx-offset;return i>=0?n(closes[i]):null};
+    const p5=at(1),p1h=at(12);
+    ret5=p5&&p5>0?price/p5-1:null;
+    ret1h=p1h&&p1h>0?price/p1h-1:null;
+  }else{
+    const metaPrice=n(meta.regularMarketPrice);
+    const metaTime=Number(meta.regularMarketTime)*1000;
+    if(metaPrice===null)throw new Error(`${spec.asset_id}:NO_PRICE`);
+    if(!Number.isFinite(metaTime)||metaTime<=0)throw new Error(`${spec.asset_id}:BAD_TIMESTAMP`);
+    price=metaPrice;
+    providerMs=metaTime;
+    priceFallback="META_REGULAR_MARKET_PRICE";
+  }
+
   if(!Number.isFinite(providerMs)||providerMs<=0)throw new Error(`${spec.asset_id}:BAD_TIMESTAMP`);
-  const at=(offset:number)=>{const i=idx-offset;return i>=0?n(closes[i]):null};
-  const p5=at(1),p1h=at(12);
-  const ret5=p5&&p5>0?price/p5-1:null;
-  const ret1h=p1h&&p1h>0?price/p1h-1:null;
-  const meta=result?.meta??{};
   const prev=n(meta.chartPreviousClose??meta.previousClose);
   const observed=new Date().toISOString();
   const providerTime=new Date(providerMs).toISOString();
   const latency=Math.max(0,(Date.now()-providerMs)/1000);
-  const state=String(meta.marketState??(latency<=15*60?"OPEN":"STALE_OR_CLOSED"));
+  const state=latency<=15*60?String(meta.marketState??"OPEN"):"STALE_OR_CLOSED";
   const markId=await sha(`${VERSION}|${spec.asset_id}|${providerTime}|${price}`);
   return {
     mark_id:markId,asset_id:spec.asset_id,asset_class:spec.asset_class,provider_symbol:spec.symbol,
     provider:"yahoo_chart_public",provider_quality:"PUBLIC_UNOFFICIAL_SHADOW_ONLY",
     observed_at:observed,provider_time:providerTime,price,
-    open_price:n(opens[idx]),high_price:n(highs[idx]),low_price:n(lows[idx]),
-    previous_close:prev,volume:n(vols[idx]),return_5m:ret5,return_1h:ret1h,
+    open_price:openPrice,high_price:highPrice,low_price:lowPrice,
+    previous_close:prev,volume,return_5m:ret5,return_1h:ret1h,
     session_state:state,data_latency_seconds:latency,
     metadata:{
       version:VERSION,currency:meta.currency??null,exchange_name:meta.exchangeName??null,
       instrument_type:meta.instrumentType??null,regular_market_time:meta.regularMarketTime??null,
-      provider_endpoint:"query1.finance.yahoo.com/v8/finance/chart",
+      provider_endpoint:"query1.finance.yahoo.com/v8/finance/chart",price_fallback:priceFallback,
       execution_grade:false,public_unofficial_source:true,
       themes:spec.themes,priority:spec.priority
     },
