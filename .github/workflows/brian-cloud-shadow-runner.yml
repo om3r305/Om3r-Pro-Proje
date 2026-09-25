@@ -50,7 +50,7 @@ jobs:
       - name: Check out reviewed Brian 2027 R1 revision
         uses: actions/checkout@v4
         with:
-          ref: bacb674da384c28fd0036e630e5de7f3fed83ae9
+          ref: 4cbf04004bcba87ee274352964f44ea3aa152a06
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
