@@ -646,4 +646,3 @@ def test_pending_durable_cycle_blocks_new_risk_until_recovery_resolves_it() -> N
     assert report.safe_to_invoke_shadow_worker is True
     assert report.new_risk_ready is False
     assert _check_map(report)["RUNTIME_CONTINUITY"].status == "FAIL"
-
