@@ -101,7 +101,7 @@ jobs:
           name: phase116-readiness-${{ github.run_id }}
           path: phase116-readiness.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
       - name: Enforce Phase116 READY
         if: steps.phase116.outputs.exit_code != '0'
@@ -129,7 +129,7 @@ jobs:
           name: phase117-result-${{ github.run_id }}
           path: phase117-result.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
       - name: Enforce Phase117 success
         if: (github.event_name == 'schedule' || inputs.mode == 'phase117-paper-one-shot') && steps.phase117.outputs.exit_code != '0'
