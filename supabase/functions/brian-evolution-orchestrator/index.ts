@@ -124,7 +124,8 @@ async function loadInputs(observedAt: string): Promise<{ runs: CollectorRunLike[
     syntheticSuccess("brian-world-discovery-aggregate", latestNewsEvidence?.finished_at ?? latestNewsEvidence?.started_at),
   ].filter((row): row is CollectorRunLike => row !== null);
 
-  const externalRuns = (externalQ.data ?? []).map((row: any): CollectorRunLike => ({
+  const externalRows = (externalQ.data ?? []) as Record<string, unknown>[];
+  const externalRuns = externalRows.map((row): CollectorRunLike => ({
     collector_id: String(row.collector_id),
     started_at: String(row.observed_at),
     finished_at: String(row.observed_at),
@@ -155,23 +156,25 @@ async function resolveRecoveredRuntimeGaps(
     .limit(1000);
   if (q.error) throw new Error(`resolved_gaps_lookup:${q.error.message}`);
 
-  const latest = new Map<string, any>();
+  const latest = new Map<string, Record<string, unknown>>();
   for (const row of q.data ?? []) {
     const id = String(row.gap_id ?? "");
     if (id && !latest.has(id)) latest.set(id, row);
   }
 
   const existingIds = capabilities.map((row) => row.capabilityId);
-  const plannedQ = existingIds.length
-    ? await db.from("brian_evolution_gap_snapshots")
-        .select("gap_id,capability_id,domain,severity,observed_at,evidence_refs")
-        .in("capability_id", existingIds)
-        .like("gap_id", "planned:%")
-        .order("observed_at", { ascending: false })
-        .limit(500)
-    : { data: [], error: null } as any;
-  if (plannedQ.error) throw new Error(`resolved_planned_gaps_lookup:${plannedQ.error.message}`);
-  for (const row of plannedQ.data ?? []) {
+  let plannedRows: Record<string, unknown>[] = [];
+  if (existingIds.length) {
+    const plannedQ = await db.from("brian_evolution_gap_snapshots")
+      .select("gap_id,capability_id,domain,severity,observed_at,evidence_refs")
+      .in("capability_id", existingIds)
+      .like("gap_id", "planned:%")
+      .order("observed_at", { ascending: false })
+      .limit(500);
+    if (plannedQ.error) throw new Error(`resolved_planned_gaps_lookup:${plannedQ.error.message}`);
+    plannedRows = (plannedQ.data ?? []) as Record<string, unknown>[];
+  }
+  for (const row of plannedRows) {
     const id = String(row.gap_id ?? "");
     if (id && !latest.has(id)) latest.set(id, row);
   }
