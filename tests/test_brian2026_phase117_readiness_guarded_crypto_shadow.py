@@ -141,6 +141,14 @@ class _Service:
                 decision=SimpleNamespace(
                     pipeline_id="p" * 64,
                     status="REBALANCE_PLANNED",
+                    current_weights={"crypto:BTCUSDT": 0.0},
+                    final_planned_weights={"crypto:BTCUSDT": 0.25},
+                    asset_results={
+                        "crypto:BTCUSDT": SimpleNamespace(
+                            analyst_direction=1,
+                            analyst_confidence=0.75,
+                        )
+                    },
                 ),
                 execution=SimpleNamespace(
                     status="SHADOW_EXECUTED",
@@ -258,6 +266,10 @@ def test_fully_ready_report_constructs_worker_only_after_gate() -> None:
     assert payload["worker_invoked"] is True
     assert payload["status"] == "SHADOW_EXECUTED"
     assert payload["worker"]["runtime_id"] == "runtime-117"
+    assert payload["worker"]["current_weights"] == {"crypto:BTCUSDT": 0.0}
+    assert payload["worker"]["final_planned_weights"] == {"crypto:BTCUSDT": 0.25}
+    assert payload["worker"]["analyst_direction_by_asset"] == {"crypto:BTCUSDT": 1}
+    assert payload["worker"]["analyst_confidence_by_asset"] == {"crypto:BTCUSDT": 0.75}
     assert payload["worker"]["executed"] is True
     assert payload["readiness_report_id"] == gate.report.report_id
     assert len(payload["topology_id"]) == 64
