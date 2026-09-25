@@ -290,6 +290,27 @@ def test_duplicate_receipt_is_idempotent() -> None:
     assert len(ledger.entries) == 1
 
 
+def test_manifest_restore_accepts_jsonb_integral_policy_numerics() -> None:
+    ledger = OperationalRiskLedger(
+        _policy(
+            stoploss_required_profit=0.0,
+            max_market_data_age_seconds=30.0,
+        )
+    )
+    ledger.append(_evaluate(ledger.governor(), now=TS))
+    manifest = copy.deepcopy(ledger.manifest())
+
+    manifest["policy"]["stoploss_required_profit"] = 0
+    manifest["policy"]["max_market_data_age_seconds"] = 30
+
+    restored = restore_operational_risk_ledger(manifest)
+
+    assert restored.policy_hash == ledger.policy_hash
+    assert restored.manifest()["ledger_hash"] == ledger.manifest()["ledger_hash"]
+    assert restored.policy.stoploss_required_profit == 0.0
+    assert restored.policy.max_market_data_age_seconds == 30.0
+
+
 def test_manifest_tamper_policy_and_chain_are_detected() -> None:
     ledger = OperationalRiskLedger(_policy())
     ledger.append(_evaluate(ledger.governor(), now=TS))
