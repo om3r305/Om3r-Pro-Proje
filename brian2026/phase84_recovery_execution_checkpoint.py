@@ -790,4 +790,3 @@ class PersistedRecoveryExecutionSupervisor:
             persisted_version=core.persisted_version,
             checkpoint_id=core.checkpoint_id,
         )
-
