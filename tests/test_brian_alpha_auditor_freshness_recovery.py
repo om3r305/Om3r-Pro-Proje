@@ -77,4 +77,3 @@ def test_reliability_measurement_cadences_return_to_declared_repository_rates() 
     assert "'brian-sensor-reliability-calibration-5m'" in sql
     assert "'4-59/5 * * * *'" in sql
     assert "brian_resolve_sensor_reliability_prospective_calibration" in sql
-
