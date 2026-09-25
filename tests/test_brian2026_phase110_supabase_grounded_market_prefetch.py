@@ -863,4 +863,3 @@ def test_from_env_prefers_scoped_sensor_supabase_credentials() -> None:
         assert reader._api_key == scoped_key
     finally:
         client.close()
-
