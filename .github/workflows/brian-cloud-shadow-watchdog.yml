@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          cutoff="$(date -u -d '1 minute ago' +%s)"
+          cutoff="$(date -u -d '8 minutes ago' +%s)"
           runs="$({ gh api "repos/$REPO/actions/workflows/brian-cloud-shadow-runner.yml/runs?branch=brian-2026&per_page=12" || true; })"
 
           recent_any="$(printf '%s' "$runs" | jq --argjson cutoff "$cutoff" '
@@ -47,7 +47,7 @@ jobs:
             exit 0
           fi
 
-          echo "No Brian Cloud Shadow Runner run in the last 1 minute; dispatching one guarded paper/shadow cycle."
+          echo "No Brian Cloud Shadow Runner run in the last 8 minutes; dispatching one guarded paper/shadow cycle."
           gh workflow run brian-cloud-shadow-runner.yml \
             --repo "$REPO" \
             --ref brian-2026 \
