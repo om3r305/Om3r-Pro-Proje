@@ -483,4 +483,3 @@ def test_strict_topology_failure_blocks_readiness_and_worker_construction() -> N
     payload = json.loads(stderr.getvalue())
     assert payload["status"] == "INPUT_ERROR"
     assert "BRIAN_RUNTIME_SUPABASE_URL" in payload["error"]
-
