@@ -168,6 +168,31 @@ class _Service:
             if self.ready
             else None
         )
+        edge_resolution = (
+            SimpleNamespace(
+                required_new_risk_assets=("crypto:BTCUSDT",),
+                blocked_new_risk_assets=(),
+                expected_edge_bps_by_asset=(("crypto:BTCUSDT", 4.25),),
+                estimates=(
+                    (
+                        "crypto:BTCUSDT",
+                        SimpleNamespace(
+                            recommendation="ALLOW_EDGE",
+                            expected_net_edge_bps=4.25,
+                            mature_group_count=2,
+                        ),
+                    ),
+                ),
+                reasons_by_asset=(
+                    (
+                        "crypto:BTCUSDT",
+                        ("expected net edge clears margin",),
+                    ),
+                ),
+            )
+            if self.ready
+            else None
+        )
         return SimpleNamespace(
             runtime_id=self.runtime_id,
             status=(
@@ -179,6 +204,7 @@ class _Service:
             prefetched=self.ready,
             bundle_ref="b" * 64 if self.ready else None,
             cycle=cycle,
+            edge_resolution=edge_resolution,
         )
 
     def __enter__(self):
@@ -282,6 +308,23 @@ def test_fully_ready_report_constructs_worker_only_after_gate() -> None:
     assert payload["worker"]["analyst_confidence_by_asset"] == {"crypto:BTCUSDT": 0.75}
     assert payload["worker"]["support_groups_by_asset"] == {
         "crypto:BTCUSDT": ["micro_taker_flow", "micro_velocity"]
+    }
+    assert payload["worker"]["required_new_risk_assets"] == ["crypto:BTCUSDT"]
+    assert payload["worker"]["blocked_new_risk_assets"] == []
+    assert payload["worker"]["eligible_expected_edge_bps_by_asset"] == {
+        "crypto:BTCUSDT": 4.25
+    }
+    assert payload["worker"]["edge_recommendation_by_asset"] == {
+        "crypto:BTCUSDT": "ALLOW_EDGE"
+    }
+    assert payload["worker"]["expected_net_edge_bps_by_asset"] == {
+        "crypto:BTCUSDT": 4.25
+    }
+    assert payload["worker"]["mature_edge_group_count_by_asset"] == {
+        "crypto:BTCUSDT": 2
+    }
+    assert payload["worker"]["edge_reasons_by_asset"] == {
+        "crypto:BTCUSDT": ["expected net edge clears margin"]
     }
     assert payload["worker"]["executed"] is True
     assert payload["readiness_report_id"] == gate.report.report_id
