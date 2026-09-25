@@ -232,4 +232,3 @@ def test_probe_accepts_matching_migration_name_or_repo_version() -> None:
     assert "required_migrations(version,name)" in sql
     assert "m.version=v.version or m.name=v.name" in sql
     assert RUNTIME_MIGRATION_REQUIREMENTS[0].name in sql
-
