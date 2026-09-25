@@ -155,6 +155,12 @@ def _error(status: str, message: str) -> dict[str, object]:
 
 def _receipt_summary(receipt) -> dict[str, object]:
     cycle = receipt.cycle
+    decision = None if cycle is None else cycle.decision
+    asset_results = (
+        {}
+        if decision is None
+        else dict(getattr(decision, "asset_results", {}))
+    )
     return {
         "runtime_id": receipt.runtime_id,
         "status": receipt.status,
@@ -169,8 +175,44 @@ def _receipt_summary(receipt) -> dict[str, object]:
         ),
         "decision_status": (
             None
-            if cycle is None
-            else cycle.decision.status
+            if decision is None
+            else decision.status
+        ),
+        "current_weights": (
+            None
+            if decision is None
+            else dict(sorted(
+                (str(asset), float(weight))
+                for asset, weight in dict(
+                    getattr(decision, "current_weights", {})
+                ).items()
+            ))
+        ),
+        "final_planned_weights": (
+            None
+            if decision is None
+            else dict(sorted(
+                (str(asset), float(weight))
+                for asset, weight in dict(
+                    getattr(decision, "final_planned_weights", {})
+                ).items()
+            ))
+        ),
+        "analyst_direction_by_asset": (
+            None
+            if decision is None
+            else {
+                str(asset): int(getattr(result, "analyst_direction", 0))
+                for asset, result in sorted(asset_results.items())
+            }
+        ),
+        "analyst_confidence_by_asset": (
+            None
+            if decision is None
+            else {
+                str(asset): float(getattr(result, "analyst_confidence", 0.0))
+                for asset, result in sorted(asset_results.items())
+            }
         ),
         "execution_status": (
             None
