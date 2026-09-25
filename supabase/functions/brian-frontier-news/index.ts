@@ -182,11 +182,13 @@ Deno.serve(async (req: Request) => {
       .limit(80),
   ]);
   if (q.error || scoutQ.error) return out({ status: "DEGRADED", error: q.error?.message ?? scoutQ.error?.message, items: [], shadow_only: true, live_execution: false }, 500, origin);
-  const worldClaims = new Set((q.data ?? []).map((row:any)=>String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
-  const earlyItems = (scoutQ.data ?? [])
-    .filter((row:any)=>!worldClaims.has(String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()))
+  const worldRows = (q.data ?? []) as Record<string, unknown>[];
+  const scoutRows = (scoutQ.data ?? []) as Record<string, unknown>[];
+  const worldClaims = new Set(worldRows.map((row)=>String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
+  const earlyItems = scoutRows
+    .filter((row)=>!worldClaims.has(String(row.claim??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()))
     .slice(0,10)
-    .map((row:any)=>{
+    .map((row)=>{
       const official=String(row.trust_class)==="OFFICIAL_PRIMARY";
       const published=row.published_at??row.first_observed_at;
       const ageMinutes=Math.max(0,(Date.now()-Date.parse(String(published)))/60000);
