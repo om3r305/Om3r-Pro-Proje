@@ -161,6 +161,24 @@ def _receipt_summary(receipt) -> dict[str, object]:
         if decision is None
         else dict(getattr(decision, "asset_results", {}))
     )
+    support_groups_by_asset: dict[str, list[str]] = {}
+    for asset, result in sorted(asset_results.items()):
+        direction = int(getattr(result, "analyst_direction", 0))
+        groups: set[str] = set()
+        for claim in getattr(result, "analyst_claims", ()):
+            if (
+                int(getattr(claim, "direction", 0)) == direction
+                and float(getattr(claim, "grounded_confidence", 0.0)) > 0
+            ):
+                groups.update(
+                    str(value)
+                    for value in getattr(
+                        claim,
+                        "independent_support_groups",
+                        (),
+                    )
+                )
+        support_groups_by_asset[str(asset)] = sorted(groups)
     return {
         "runtime_id": receipt.runtime_id,
         "status": receipt.status,
@@ -213,6 +231,11 @@ def _receipt_summary(receipt) -> dict[str, object]:
                 str(asset): float(getattr(result, "analyst_confidence", 0.0))
                 for asset, result in sorted(asset_results.items())
             }
+        ),
+        "support_groups_by_asset": (
+            None
+            if decision is None
+            else support_groups_by_asset
         ),
         "execution_status": (
             None
