@@ -135,6 +135,25 @@ function renderNews(){
   $('criticalNews').innerHTML=items.length?items.slice(0,7).map(n=>`<div class="news"><div class="news-top"><div class="news-title">${esc(n.title)}</div><div class="severity ${String(n.urgency).toLowerCase()}">${esc(n.freshnessLabel||'BAĞLAM')} · ${n.urgency==='CRITICAL'?'KRİTİK':n.urgency==='HIGH'?'YÜKSEK':'ORTA'}</div></div><div class="news-meta">${esc(n.summary)}${n.asset?` · ${esc(n.asset)}`:''}<br>${age(n.time)} önce · ${esc(n.source||'Brian')}</div>${n.original?`<details class="news-meta"><summary>Orijinal kaynak</summary>${esc(n.original)}</details>`:''}</div>`).join(''):'<div class="news"><div class="news-title">Brian filtresinden geçen kritik gelişme henüz yok.</div><div class="news-meta">Bu bir genel haber akışı değildir; yalnız Brian için değerli gelişmeler görünür.</div></div>';
   const top=items.slice(0,4),h=top.length?top.map(n=>`<div class="ticker-item"><span class="dot ${n.urgency==='CRITICAL'?'bad':n.urgency==='HIGH'?'warn':'info'}"></span><b>Brian:</b> ${esc(n.title)}</div>`).join(''):'<div class="ticker-item"><span class="dot info"></span><b>Brian:</b> dünya akışı izleniyor · kritik gelişme yok</div>';$('tickerTrack').innerHTML=h+h;
 }
+function renderMarketRadar(){
+  const r=S.control?.market_radar||S.control?.alpha_v2?.market_radar||{};
+  const hot=Array.isArray(r.hot)?r.hot:[];
+  const candidates=Array.isArray(r.candidates)?r.candidates:[];
+  const rows=hot.length?hot:candidates.slice(0,10);
+  const badge=$('radarBadge');
+  if(badge){
+    badge.textContent=r.status==='ONLINE'?`${rows.length} SICAK`:r.status==='STALE'?'ESKİ VERİ':'TARANIYOR';
+    badge.className=`badge ${r.status==='ONLINE'?'ok':'warn'}`;
+  }
+  const root=$('marketRadarList');
+  if(!root)return;
+  root.innerHTML=rows.length?rows.slice(0,10).map(x=>{
+    const move=num(x.price_change_pct),range=num(x.range_pct),score=num(x.radar_score),spread=num(x.spread_bps);
+    const reasons=Array.isArray(x.reasons)?x.reasons.slice(0,3).join(' · '):'';
+    const tone=move!=null&&Math.abs(move)>=10?'bad':move!=null&&Math.abs(move)>=5?'warn':'info';
+    return `<div class="module"><div class="module-icon">🔥</div><div class="module-main"><div class="module-name">${esc(x.symbol||x.base_asset||'—')} · skor ${score==null?'—':score.toFixed(2)}</div><div class="module-meta">24s ${move==null?'—':(move>=0?'+':'')+move.toFixed(2)+'%'} · aralık ${range==null?'—':range.toFixed(2)+'%'} · spread ${spread==null?'—':spread.toFixed(2)+' bps'}${reasons?'<br>'+esc(reasons):''}</div></div><span class="dot ${tone}"></span></div>`;
+  }).join(''):'<div class="module"><span class="dot info"></span><div class="module-main"><div class="module-name">Şu anda radar eşiğini aşan varlık yok</div><div class="module-meta">Universe taraması devam ediyor; bu liste ALPHA kararlarından bağımsızdır.</div></div></div>';
+}
 function renderAlpha(){
   const a=S.control?.alpha_v2||{},ds=a.decisions||[],d=ds[0];
   const truth=moduleRows().find(x=>x.key==='alpha')||null;
@@ -179,7 +198,7 @@ function renderMaster(summary){
   $('syncText').textContent=S.lastSync?`Canlı senkron ${clock(S.lastSync.toISOString())}`:'Bağlanıyor';
 }
 function renderMeeting(rows){const f=k=>rows.find(x=>x.key===k);[['mWorld','world'],['mAlpha','alpha'],['mTreasury','treasury'],['roomWorld','world'],['roomAlpha','alpha'],['roomTreasury','treasury'],['roomResearch','research']].forEach(([id,k])=>{const r=f(k);if($(id))$(id).textContent=r?stateText(r.state):'—'});$('roomSkeptic').textContent=news().length?'Karşı kanıt tarıyor':'Kanıt bekliyor'}
-function render(){renderControls();const summary=renderModules();renderNews();renderAlpha();renderTreasury();renderWorld();renderResearch();renderBehavior();renderBelief();renderAlerts(summary.rows);renderMaster(summary);renderMeeting(summary.rows)}
+function render(){renderControls();const summary=renderModules();renderNews();renderMarketRadar();renderAlpha();renderTreasury();renderWorld();renderResearch();renderBehavior();renderBelief();renderAlerts(summary.rows);renderMaster(summary);renderMeeting(summary.rows)}
 
 async function runControl(action){if(S.busy)return;S.busy=true;document.querySelector('#command')?.classList.add('energy-booting');renderControls();try{const body={action};if(action==='start'||action==='restart')body.starting_equity=S.selectedAmount;const result=await post(SYSTEM,body);if(action==='start'||action==='restart'){S.amountDirty=false}bubble(action==='stop'?'Sistemi durdur':action==='restart'?'Sistemi yeniden başlat':'Sistemi başlat','user');bubble(result.command_status==='RUNNING'||result.command_status==='RESTARTED'?'Brian komutu kabul etti. Beyin enerji topluyor; taze heartbeatleri doğruluyorum.':result.command_status==='STOPPED'?'Brian arka plan işleri durduruldu. DIP etkilenmedi.':String(result.status||result.command_status||'Komut tamamlandı'),'brian');await refresh()}catch(e){bubble(`Kontrol hatası: ${e.message}`,'brian');if(e.status===409&&e.payload?.error)$('controlFeedback').innerHTML=`<span class="dot bad"></span><span>${esc(e.payload.error)}</span>`}finally{S.busy=false;document.querySelector('#command')?.classList.remove('energy-booting');await refresh();renderControls()}}
 function chooseAmount(v){const n=Number(v);if(!Number.isFinite(n)||n<100||n>1000000)return;S.selectedAmount=Math.round(n*100)/100;S.amountDirty=true;renderControls()}
