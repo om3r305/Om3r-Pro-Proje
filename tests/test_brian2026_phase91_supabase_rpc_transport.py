@@ -366,4 +366,3 @@ def test_scoped_secret_key_still_rejects_publishable_or_legacy_value() -> None:
             },
             client=_client(lambda request: httpx.Response(200, json={"ok": True})),
         )
-
