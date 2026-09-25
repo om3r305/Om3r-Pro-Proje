@@ -427,4 +427,3 @@ def test_phase111_identity_changes_when_decision_policy_changes() -> None:
     )()
 
     assert first.bundle_ref != second.bundle_ref
-
