@@ -12,9 +12,9 @@ on:
           - phase116-readiness
           - phase117-paper-one-shot
       confirmation:
-        description: For Phase117 only, type RUN_PAPER_SHADOW_ONE_SHOT
+        description: Phase117 paper/shadow confirmation
         required: false
-        default: ""
+        default: "RUN_PAPER_SHADOW_ONE_SHOT"
         type: string
 
 permissions:
