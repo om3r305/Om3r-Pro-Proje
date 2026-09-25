@@ -235,4 +235,3 @@ def test_expected_edge_gate_turns_blocked_reversal_into_close_to_flat_only() -> 
     assert instruction.planned_weight == pytest.approx(0.0)
     assert instruction.planned_delta == pytest.approx(-0.30)
     assert instruction.reduction_intent.resulting_weight == pytest.approx(0.0)
-
