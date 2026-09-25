@@ -87,11 +87,17 @@ def analysis_prompt(task):
         - Preserve shadow_only=true and live_execution=false.
 
         Output contract:
-        - Return exactly two top-level sections named UNDERSTAND and PLAN.
+        - Return exactly two top-level sections named UNDERSTAND and PLAN, with no preamble or closing text.
         - The first non-empty output line must be exactly UNDERSTAND at column 1.
         - The PLAN heading must be exactly PLAN at column 1.
         - Do not prefix either heading with Markdown markers such as #, ##, bullets, or numbering.
+        - Use this literal shape:
+          UNDERSTAND
+          <read-only findings>
+          PLAN
+          <implementation and evidence plan>
         - Do not claim that code or tests have run.
+        - Before answering, silently verify that both literal heading lines are present exactly once.
         """
     )
 
