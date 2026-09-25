@@ -147,6 +147,16 @@ class _Service:
                         "crypto:BTCUSDT": SimpleNamespace(
                             analyst_direction=1,
                             analyst_confidence=0.75,
+                            analyst_claims=(
+                                SimpleNamespace(
+                                    direction=1,
+                                    grounded_confidence=0.75,
+                                    independent_support_groups=(
+                                        "micro_taker_flow",
+                                        "micro_velocity",
+                                    ),
+                                ),
+                            ),
                         )
                     },
                 ),
@@ -270,6 +280,9 @@ def test_fully_ready_report_constructs_worker_only_after_gate() -> None:
     assert payload["worker"]["final_planned_weights"] == {"crypto:BTCUSDT": 0.25}
     assert payload["worker"]["analyst_direction_by_asset"] == {"crypto:BTCUSDT": 1}
     assert payload["worker"]["analyst_confidence_by_asset"] == {"crypto:BTCUSDT": 0.75}
+    assert payload["worker"]["support_groups_by_asset"] == {
+        "crypto:BTCUSDT": ["micro_taker_flow", "micro_velocity"]
+    }
     assert payload["worker"]["executed"] is True
     assert payload["readiness_report_id"] == gate.report.report_id
     assert len(payload["topology_id"]) == 64
