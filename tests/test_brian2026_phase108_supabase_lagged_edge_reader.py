@@ -515,4 +515,3 @@ def test_partial_cost_scope_configuration_fails_closed() -> None:
                     "sb_secret_cost_only_abcdefghijklmnopqrstuvwxyz",
             }
         )
-
