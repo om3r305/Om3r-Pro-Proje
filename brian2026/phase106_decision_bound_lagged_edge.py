@@ -308,6 +308,7 @@ class DecisionBoundLaggedEdgeRuntime:
         self.base_runtime = base_runtime
         self.worker = base_runtime.worker
         self.contexts_by_asset = dict(contexts_by_asset)
+        self.last_resolution: DecisionBoundEdgeResolution | None = None
 
     def process_integrated_decision(
         self,
@@ -324,6 +325,7 @@ class DecisionBoundLaggedEdgeRuntime:
             decision,
             contexts_by_asset=self.contexts_by_asset,
         )
+        self.last_resolution = resolution
         return self.base_runtime.process_integrated_decision(
             decision,
             expected_edge_bps_by_asset=resolution.edge_map,
