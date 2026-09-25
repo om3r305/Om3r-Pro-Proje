@@ -161,6 +161,17 @@ def _receipt_summary(receipt) -> dict[str, object]:
         if decision is None
         else dict(getattr(decision, "asset_results", {}))
     )
+    edge_resolution = getattr(receipt, "edge_resolution", None)
+    edge_estimates = (
+        {}
+        if edge_resolution is None
+        else dict(getattr(edge_resolution, "estimates", ()))
+    )
+    edge_reasons = (
+        {}
+        if edge_resolution is None
+        else dict(getattr(edge_resolution, "reasons_by_asset", ()))
+    )
     support_groups_by_asset: dict[str, list[str]] = {}
     for asset, result in sorted(asset_results.items()):
         direction = int(getattr(result, "analyst_direction", 0))
@@ -236,6 +247,64 @@ def _receipt_summary(receipt) -> dict[str, object]:
             None
             if decision is None
             else support_groups_by_asset
+        ),
+        "required_new_risk_assets": (
+            None
+            if edge_resolution is None
+            else list(getattr(edge_resolution, "required_new_risk_assets", ()))
+        ),
+        "blocked_new_risk_assets": (
+            None
+            if edge_resolution is None
+            else list(getattr(edge_resolution, "blocked_new_risk_assets", ()))
+        ),
+        "eligible_expected_edge_bps_by_asset": (
+            None
+            if edge_resolution is None
+            else {
+                str(asset): float(value)
+                for asset, value in getattr(
+                    edge_resolution,
+                    "expected_edge_bps_by_asset",
+                    (),
+                )
+            }
+        ),
+        "edge_recommendation_by_asset": (
+            None
+            if edge_resolution is None
+            else {
+                str(asset): str(getattr(estimate, "recommendation", "UNKNOWN"))
+                for asset, estimate in sorted(edge_estimates.items())
+            }
+        ),
+        "expected_net_edge_bps_by_asset": (
+            None
+            if edge_resolution is None
+            else {
+                str(asset): (
+                    None
+                    if getattr(estimate, "expected_net_edge_bps", None) is None
+                    else float(estimate.expected_net_edge_bps)
+                )
+                for asset, estimate in sorted(edge_estimates.items())
+            }
+        ),
+        "mature_edge_group_count_by_asset": (
+            None
+            if edge_resolution is None
+            else {
+                str(asset): int(getattr(estimate, "mature_group_count", 0))
+                for asset, estimate in sorted(edge_estimates.items())
+            }
+        ),
+        "edge_reasons_by_asset": (
+            None
+            if edge_resolution is None
+            else {
+                str(asset): [str(reason)[:200] for reason in reasons]
+                for asset, reasons in sorted(edge_reasons.items())
+            }
         ),
         "execution_status": (
             None
