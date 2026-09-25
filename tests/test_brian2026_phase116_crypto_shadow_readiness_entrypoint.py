@@ -298,4 +298,3 @@ def test_strict_topology_failure_blocks_gate_before_any_readiness_io() -> None:
     payload = json.loads(stderr.getvalue())
     assert payload["status"] == "INPUT_ERROR"
     assert "BRIAN_EDGE_SUPABASE_URL" in payload["error"]
-
