@@ -1,0 +1,132 @@
+name: Brian Phase117 Paper Shadow One-Shot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_PAPER_SHADOW_ONE_SHOT to continue
+        required: true
+        type: string
+      runtime_id:
+        description: Shadow runtime id
+        required: true
+        default: brian-shadow-main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-phase117-shadow-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  one-shot:
+    if: github.ref == 'refs/heads/brian-2027-r1-robustness-alpha-lab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BRIAN_SENSOR_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_EDGE_SUPABASE_URL: https://qbcjuxhvhwagvqbjyemo.supabase.co
+      BRIAN_COST_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_RUNTIME_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_RUNTIME_ID: ${{ inputs.runtime_id }}
+      BRIAN_SENSOR_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_SENSOR_SUPABASE_SECRET_KEY }}
+      BRIAN_EDGE_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_EDGE_SUPABASE_SECRET_KEY }}
+      BRIAN_COST_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_COST_SUPABASE_SECRET_KEY }}
+      BRIAN_RUNTIME_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_RUNTIME_SUPABASE_SECRET_KEY }}
+
+    steps:
+      - name: Require explicit paper-only confirmation
+        shell: bash
+        run: |
+          if [ "${{ inputs.confirmation }}" != "RUN_PAPER_SHADOW_ONE_SHOT" ]; then
+            echo "Confirmation mismatch; Phase117 remains blocked."
+            exit 30
+          fi
+
+      - name: Check out requested branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify scoped backend secrets are present
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          required = (
+              "BRIAN_SENSOR_SUPABASE_SECRET_KEY",
+              "BRIAN_EDGE_SUPABASE_SECRET_KEY",
+              "BRIAN_COST_SUPABASE_SECRET_KEY",
+              "BRIAN_RUNTIME_SUPABASE_SECRET_KEY",
+          )
+          missing = [name for name in required if not os.environ.get(name, "").strip()]
+          if missing:
+              raise SystemExit(
+                  "Phase117 blocked: missing GitHub Actions secrets: " + ", ".join(missing)
+              )
+          print("All four scoped backend secrets are configured.")
+          PY
+
+      - name: Re-run Phase116 immediately before worker construction
+        id: preflight
+        shell: bash
+        run: |
+          set +e
+          python -m brian2026.phase116_crypto_shadow_readiness_entrypoint             --policy config/brian-shadow-machine-policy-v1.json             --runtime-id "$BRIAN_RUNTIME_ID"             > phase116-before-phase117.json 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat phase116-before-phase117.json
+          exit 0
+
+      - name: Publish preflight artifact
+        if: always() && hashFiles('phase116-before-phase117.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase116-before-phase117-${{ github.run_id }}
+          path: phase116-before-phase117.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Block worker unless Phase116 is READY
+        if: steps.preflight.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          echo "Phase117 blocked because Phase116 was not READY."
+          exit "${{ steps.preflight.outputs.exit_code }}"
+
+      - name: Run one readiness-guarded paper shadow cycle
+        id: worker
+        shell: bash
+        run: |
+          set +e
+          python -m brian2026.phase117_readiness_guarded_crypto_shadow             --policy config/brian-shadow-machine-policy-v1.json             --runtime-id "$BRIAN_RUNTIME_ID"             > phase117-shadow-result.json 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat phase117-shadow-result.json
+          exit 0
+
+      - name: Publish bounded Phase117 artifact
+        if: always() && hashFiles('phase117-shadow-result.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase117-shadow-result-${{ github.run_id }}
+          path: phase117-shadow-result.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce successful one-shot worker result
+        if: steps.worker.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          echo "Phase117 one-shot did not complete successfully."
+          exit "${{ steps.worker.outputs.exit_code }}"
