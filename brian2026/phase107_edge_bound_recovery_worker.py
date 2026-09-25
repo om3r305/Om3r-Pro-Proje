@@ -27,6 +27,7 @@ from .phase102_grounded_decision_worker_cycle import (
 )
 from .phase106_decision_bound_lagged_edge import (
     AssetLaggedEdgeContext,
+    DecisionBoundEdgeResolution,
     DecisionBoundLaggedEdgeRuntime,
 )
 
@@ -78,6 +79,7 @@ class EdgeBoundRecoveryWorkerReceipt:
     prefetched: bool
     bundle_ref: str | None
     cycle: GroundedDecisionWorkerCycleReceipt | None
+    edge_resolution: DecisionBoundEdgeResolution | None = None
     schema_version: str = PHASE107_SCHEMA_VERSION
     shadow_only: bool = True
     live_execution: bool = False
@@ -273,6 +275,7 @@ class EdgeBoundRecoveryWorker:
             prefetched=True,
             bundle_ref=bundle.bundle_ref,
             cycle=cycle,
+            edge_resolution=edge_runtime.last_resolution,
         )
 
     def close(self) -> bool:
