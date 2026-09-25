@@ -555,4 +555,3 @@ def test_nonpositive_mark_is_rejected_before_durable_work() -> None:
 
     assert risk_store.calls == []
     assert worker.calls == []
-
