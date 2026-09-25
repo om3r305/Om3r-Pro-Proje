@@ -342,6 +342,86 @@ def test_http_error_is_sanitized_and_secret_is_not_echoed() -> None:
     assert "XX001" in str(exc.value)
 
 
+def test_get_retries_transient_timeouts_then_succeeds() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise httpx.ReadTimeout("temporary timeout", request=request)
+        return httpx.Response(200, json=[])
+
+    reader, client = _reader(handler)
+    try:
+        rows = reader._get(
+            "brian_sensor_reliability_shadow_snapshots",
+            params={"select": "window_end"},
+        )
+    finally:
+        client.close()
+
+    assert rows == []
+    assert calls == 3
+
+
+def test_get_retries_retryable_http_status_then_succeeds() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, json={"message": "temporary upstream"})
+        return httpx.Response(200, json=[])
+
+    reader, client = _reader(handler)
+    try:
+        rows = reader._get(
+            "brian_sensor_reliability_shadow_snapshots",
+            params={"select": "window_end"},
+        )
+    finally:
+        client.close()
+
+    assert rows == []
+    assert calls == 2
+
+
+def test_get_stays_fail_closed_after_bounded_timeouts() -> None:
+    calls = 0
+    secret = "sb_secret_phase108"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ReadTimeout("temporary timeout", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    reader = SupabaseLaggedEdgeReader(
+        config=SupabaseLaggedEdgeReaderConfig(
+            project_url="https://example.supabase.co",
+            key_source="SUPABASE_SECRET_KEY",
+        ),
+        api_key=secret,
+        client=client,
+    )
+    try:
+        with pytest.raises(
+            SupabaseLaggedEdgeReaderError,
+            match="after 3 attempts",
+        ) as exc:
+            reader._get(
+                "brian_sensor_reliability_shadow_snapshots",
+                params={"select": "window_end"},
+            )
+    finally:
+        client.close()
+
+    assert calls == 3
+    assert secret not in str(exc.value)
+
+
 def test_disallowed_table_has_no_generic_read_surface() -> None:
     reader, client = _reader(
         lambda request: (_ for _ in ()).throw(
