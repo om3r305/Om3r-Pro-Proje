@@ -1,4 +1,4 @@
-# Phase116 retry after runtime checkpoint jsonb fix
+# Phase116 retry after risk policy jsonb fix
 name: Brian Cloud Shadow Runner
 
 on:
