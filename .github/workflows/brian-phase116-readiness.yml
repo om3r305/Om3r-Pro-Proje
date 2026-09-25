@@ -1,0 +1,117 @@
+name: Brian Phase116 Cloud Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_id:
+        description: Shadow runtime id
+        required: true
+        default: brian-shadow-main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-phase116-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    if: github.ref == 'refs/heads/brian-2027-r1-robustness-alpha-lab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BRIAN_SENSOR_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_EDGE_SUPABASE_URL: https://qbcjuxhvhwagvqbjyemo.supabase.co
+      BRIAN_COST_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_RUNTIME_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
+      BRIAN_RUNTIME_ID: ${{ inputs.runtime_id }}
+      BRIAN_SENSOR_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_SENSOR_SUPABASE_SECRET_KEY }}
+      BRIAN_EDGE_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_EDGE_SUPABASE_SECRET_KEY }}
+      BRIAN_COST_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_COST_SUPABASE_SECRET_KEY }}
+      BRIAN_RUNTIME_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_RUNTIME_SUPABASE_SECRET_KEY }}
+
+    steps:
+      - name: Check out requested branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install runtime requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Verify scoped backend secrets are present
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          required = (
+              "BRIAN_SENSOR_SUPABASE_SECRET_KEY",
+              "BRIAN_EDGE_SUPABASE_SECRET_KEY",
+              "BRIAN_COST_SUPABASE_SECRET_KEY",
+              "BRIAN_RUNTIME_SUPABASE_SECRET_KEY",
+          )
+          missing = [name for name in required if not os.environ.get(name, "").strip()]
+          if missing:
+              raise SystemExit(
+                  "Phase116 blocked: missing GitHub Actions secrets: " + ", ".join(missing)
+              )
+          print("All four scoped backend secrets are configured.")
+          PY
+
+      - name: Run read-only Phase116 readiness probe
+        id: probe
+        shell: bash
+        run: |
+          set +e
+          python -m brian2026.phase116_crypto_shadow_readiness_entrypoint             --policy config/brian-shadow-machine-policy-v1.json             --runtime-id "$BRIAN_RUNTIME_ID"             > phase116-readiness.json 2>&1
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat phase116-readiness.json
+          exit 0
+
+      - name: Publish bounded readiness artifact
+        if: always() && hashFiles('phase116-readiness.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase116-readiness-${{ github.run_id }}
+          path: phase116-readiness.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Write readiness summary
+        if: always() && hashFiles('phase116-readiness.json') != ''
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          raw = Path("phase116-readiness.json").read_text(encoding="utf-8").strip()
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          try:
+              payload = json.loads(raw)
+              lines = [
+                  "## Brian Phase116 readiness",
+                  "",
+                  f"- Status: `{payload.get('status', 'UNKNOWN')}`",
+                  f"- Shadow only: `{payload.get('shadow_only')}`",
+                  f"- Live execution: `{payload.get('live_execution')}`",
+                  f"- Topology id: `{payload.get('topology_id', 'n/a')}`",
+              ]
+          except Exception:
+              lines = ["## Brian Phase116 readiness", "", "- Output could not be parsed as JSON."]
+          summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Enforce READY result
+        if: steps.probe.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          echo "Phase116 did not return READY_FOR_EDGE_BOUND_SHADOW."
+          exit "${{ steps.probe.outputs.exit_code }}"
