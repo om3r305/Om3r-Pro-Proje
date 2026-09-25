@@ -1,0 +1,54 @@
+name: Brian Cloud Shadow Watchdog
+
+on:
+  schedule:
+    - cron: "4-59/5 * * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - ".github/workflows/brian-cloud-shadow-watchdog.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: brian-cloud-shadow-watchdog
+  cancel-in-progress: true
+
+jobs:
+  ensure-shadow-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch guarded paper shadow runner when cadence is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cutoff="$(date -u -d '8 minutes ago' +%s)"
+          runs="$({ gh api "repos/$REPO/actions/workflows/brian-cloud-shadow-runner.yml/runs?branch=brian-2026&per_page=12" || true; })"
+
+          recent_any="$(printf '%s' "$runs" | jq --argjson cutoff "$cutoff" '
+            [.workflow_runs[]?
+             | select((.created_at | fromdateiso8601) >= $cutoff)]
+            | length
+          ')"
+          recent_any="${recent_any:-0}"
+
+          if [ "$recent_any" -gt 0 ]; then
+            echo "Brian Cloud Shadow Runner has $recent_any recent run(s); watchdog stays idle."
+            exit 0
+          fi
+
+          echo "No Brian Cloud Shadow Runner run in the last 8 minutes; dispatching one guarded paper/shadow cycle."
+          gh workflow run brian-cloud-shadow-runner.yml \
+            --repo "$REPO" \
+            --ref brian-2026 \
+            -f mode=phase117-paper-one-shot \
+            -f confirmation=RUN_PAPER_SHADOW_ONE_SHOT
