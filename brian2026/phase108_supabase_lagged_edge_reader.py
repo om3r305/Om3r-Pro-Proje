@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,6 +30,9 @@ _ALLOWED_TABLES = frozenset({
     "brian_dynamic_cost_quotes",
 })
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+_READ_MAX_ATTEMPTS = 3
+_READ_RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+_READ_RETRY_BACKOFF_SECONDS = 0.25
 
 
 class SupabaseLaggedEdgeReaderError(RuntimeError):
@@ -333,26 +337,49 @@ class SupabaseLaggedEdgeReader:
             "accept": "application/json",
             "user-agent": "brian-phase108-lagged-edge-reader/1",
         }
-        try:
-            response = self._client.get(
-                url,
-                headers=headers,
-                params=dict(params),
-            )
-        except httpx.TimeoutException as exc:
-            raise SupabaseLaggedEdgeReaderError(
-                f"Supabase read timeout for {table}"
-            ) from exc
-        except httpx.TransportError as exc:
+        response: httpx.Response | None = None
+        last_transport_error: BaseException | None = None
+        for attempt in range(1, _READ_MAX_ATTEMPTS + 1):
+            try:
+                response = self._client.get(
+                    url,
+                    headers=headers,
+                    params=dict(params),
+                )
+                last_transport_error = None
+            except httpx.TimeoutException as exc:
+                last_transport_error = exc
+                if attempt >= _READ_MAX_ATTEMPTS:
+                    raise SupabaseLaggedEdgeReaderError(
+                        f"Supabase read timeout for {table} "
+                        f"after {_READ_MAX_ATTEMPTS} attempts"
+                    ) from exc
+            except httpx.TransportError as exc:
+                last_transport_error = exc
+                if attempt >= _READ_MAX_ATTEMPTS:
+                    raise SupabaseLaggedEdgeReaderError(
+                        f"Supabase read transport failure for {table} "
+                        f"after {_READ_MAX_ATTEMPTS} attempts"
+                    ) from exc
+            else:
+                if 200 <= response.status_code < 300:
+                    break
+                if (
+                    response.status_code not in _READ_RETRYABLE_STATUS
+                    or attempt >= _READ_MAX_ATTEMPTS
+                ):
+                    detail = _sanitize_error_payload(response)
+                    raise SupabaseLaggedEdgeReaderResponseError(
+                        f"Supabase read {table} returned HTTP "
+                        f"{response.status_code}: {detail}"
+                    )
+            if attempt < _READ_MAX_ATTEMPTS:
+                time.sleep(_READ_RETRY_BACKOFF_SECONDS * attempt)
+
+        if response is None:
             raise SupabaseLaggedEdgeReaderError(
                 f"Supabase read transport failure for {table}"
-            ) from exc
-        if response.status_code < 200 or response.status_code >= 300:
-            detail = _sanitize_error_payload(response)
-            raise SupabaseLaggedEdgeReaderResponseError(
-                f"Supabase read {table} returned HTTP "
-                f"{response.status_code}: {detail}"
-            )
+            ) from last_transport_error
         try:
             payload = response.json()
         except ValueError as exc:
