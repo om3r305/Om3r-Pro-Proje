@@ -446,9 +446,17 @@ class ShadowRuntimeCheckpoint:
         ledger_raw = raw.get("shadow_ledger_manifest")
         if not isinstance(paper_raw, Mapping) or not isinstance(ledger_raw, Mapping):
             raise RuntimeRecoveryError("runtime checkpoint payload is missing paper/ledger state")
+        # Rebuild the typed shadow ledger before validating the outer
+        # runtime checkpoint hash. PostgreSQL jsonb may render integral floats
+        # (for example 5000.0) as integers (5000); the typed restore path
+        # canonicalizes those semantic numerics back to their original float
+        # representation and validates the ledger's own hashes first.
+        canonical_ledger_manifest = restore_shadow_state_ledger(
+            ledger_raw,
+        ).manifest()
         checkpoint = cls(
             paper=PaperVenueCheckpoint.from_dict(paper_raw),
-            shadow_ledger_manifest=dict(ledger_raw),
+            shadow_ledger_manifest=canonical_ledger_manifest,
             pending_cycle_id=(
                 None
                 if raw.get("pending_cycle_id") is None
