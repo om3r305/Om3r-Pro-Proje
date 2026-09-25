@@ -1,12 +1,6 @@
-# Phase116 retry after risk policy jsonb fix
 name: Brian Cloud Shadow Runner
 
 on:
-  push:
-    branches:
-      - brian-2026
-    paths:
-      - .github/workflows/brian-cloud-shadow-runner.yml
   workflow_dispatch:
     inputs:
       mode:
