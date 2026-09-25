@@ -120,7 +120,15 @@ class PaperVenueCheckpoint:
     def from_dict(cls, payload: Mapping[str, object]) -> "PaperVenueCheckpoint":
         raw = dict(payload)
         expected_id = str(raw.pop("checkpoint_id"))
-        config = PaperVenueConfig(**dict(raw["config"]))  # type: ignore[arg-type]
+        config_raw = dict(raw["config"])  # type: ignore[arg-type]
+        # PostgreSQL jsonb does not preserve the lexical distinction between
+        # integral numerics such as 10 and 10.0. Paper checkpoint identity was
+        # originally hashed from Python floats, so normalize semantic numeric
+        # config fields back to float before recomputing the content hash.
+        for numeric_key in ("starting_cash_usd", "fee_bps"):
+            if numeric_key in config_raw:
+                config_raw[numeric_key] = float(config_raw[numeric_key])
+        config = PaperVenueConfig(**config_raw)  # type: ignore[arg-type]
 
         fills = tuple(
             PaperFill(**dict(row))  # type: ignore[arg-type]
