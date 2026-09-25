@@ -219,4 +219,3 @@ Deno.test("gross-only resolver keeps the same causal horizon and excursion rules
   assert(Math.abs(resolved.upExcursion - (-0.01)) < 1e-12);
   assert(Math.abs(resolved.downExcursion - (-0.01)) < 1e-12);
 });
-
