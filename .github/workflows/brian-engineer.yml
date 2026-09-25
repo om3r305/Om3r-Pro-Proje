@@ -3,6 +3,13 @@ name: Brian Engineer
 on:
   schedule:
     - cron: '7,22,37,52 * * * *'
+  push:
+    branches:
+      - brian-2026
+    paths:
+      - '.github/workflows/brian-engineer.yml'
+      - 'scripts/brian_engineer_prompt.py'
+      - 'scripts/brian_engineer_runner.sh'
   workflow_dispatch:
     inputs:
       request_id:
