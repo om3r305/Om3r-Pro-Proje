@@ -280,7 +280,18 @@ def restore_operational_risk_ledger(
             "operational-risk ledger is missing policy/entries"
         )
     try:
-        policy = OperationalRiskPolicy(**dict(policy_raw))
+        policy_values = dict(policy_raw)
+        # PostgreSQL jsonb can render integral floats without a decimal point.
+        # Normalize the float-valued policy fields before recomputing identity.
+        for numeric_key in (
+            "max_drawdown_fraction",
+            "max_daily_loss_fraction",
+            "stoploss_required_profit",
+            "max_market_data_age_seconds",
+        ):
+            if numeric_key in policy_values:
+                policy_values[numeric_key] = float(policy_values[numeric_key])
+        policy = OperationalRiskPolicy(**policy_values)
     except (TypeError, ValueError) as exc:
         raise OperationalRiskLedgerError(f"invalid operational-risk policy: {exc}") from exc
 
