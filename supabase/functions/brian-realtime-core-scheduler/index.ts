@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v10-single-core-lane";
+const VERSION="brian.realtime-core-scheduler.v11-realtime-auditor-owner";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -18,7 +18,9 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
       : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"
-      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
+      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive"
+      : action==="missed_auditor" ? "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-missed-opportunity-auditor-v3"
+      : CORE_BRIDGE;
     const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
@@ -76,8 +78,8 @@ function coreActionForMinute(minute:number){
   if([5,15,25,35,45,55].includes(m)) return "multiasset";
   if([7,17,27,37,47,57].includes(m)) return "source_observer";
   if([8,18,28,38,48,58].includes(m)) return "recovery";
-  if([9,29,49].includes(m)) return "discovery";
-  if([19,39,59].includes(m)) return "meeting_sync";
+  if([9,29,49].includes(m)) return "missed_auditor";
+  if([19,39,59].includes(m)) return "discovery";
   if([0,30].includes(m)) return "source_registry";
   if([10,40].includes(m)) return "watchdog";
   if([20,50].includes(m)) return "meeting_sync";
