@@ -15,7 +15,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h-realtime-owned";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
@@ -64,6 +64,31 @@ function errorText(error: unknown): string {
   return String(error);
 }
 
+const REALTIME_INTERNAL_KEY_SHA256 = "b0549b2b41a5b832b37455389583e1d166d210490a8c6fe43cda2748aca7c38a";
+
+function constantTimeEqual(left: string, right: string): boolean {
+  if (left.length !== right.length) return false;
+  let diff = 0;
+  for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  return diff === 0;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
+  );
+  return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function requireSchedulerAuth(req: Request): Promise<void> {
+  const internal = (req.headers.get("x-brian-internal-key") ?? "").trim();
+  if (internal) {
+    const digest = await sha256Hex(internal);
+    if (constantTimeEqual(digest, REALTIME_INTERNAL_KEY_SHA256)) return;
+  }
+  await requireCronAuth(req, supabase);
+}
+
 async function recordRun(
   startedAt: string,
   status: "SUCCESS" | "FAILED",
@@ -99,7 +124,7 @@ async function recordRun(
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "POST required" }, 405);
   try {
-    await requireCronAuth(req, supabase);
+    await requireSchedulerAuth(req);
   } catch (error) {
     const message = errorText(error);
     const unauthorized = message.includes("UNAUTHORIZED_CRON");
