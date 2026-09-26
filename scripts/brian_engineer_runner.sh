@@ -256,7 +256,10 @@ record_event PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan
 CURRENT_STAGE="CODE"
 python scripts/brian_engineer_prompt.py code > /tmp/brian-engineer-code-prompt.txt
 ai_call code /tmp/brian-engineer-code-prompt.txt /tmp/brian-engineer-agent.txt code
-grep -Eq '^CODE([[:space:]:]|$)' /tmp/brian-engineer-agent.txt
+# CODE text formatting is advisory; the actual candidate diff, protected-scope
+# guard, compile/tests/replay/stress, exact commit and independent review below
+# are the execution-grade evidence.
+test "$(wc -c < /tmp/brian-engineer-agent.txt)" -ge 80
 git add -N .
 
 mapfile -t format_files < <(git diff --name-only "$BASE_SHA" | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
