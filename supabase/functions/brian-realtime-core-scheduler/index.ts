@@ -1,26 +1,51 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v11-realtime-auditor-owner";
+const VERSION="brian.realtime-core-scheduler.v12-async-core-dispatch";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const CORE_BRIDGE="https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-core-scheduler-bridge";
 
 type Result={action:string;ok:boolean;http_status:number;target_status:string;elapsed_ms:number;body?:unknown;error?:string};
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
 function err(e:unknown){return e instanceof Error?`${e.name}: ${e.message}`:String(e)}
 
+async function enqueueCoreAction(action:string):Promise<Result>{
+  const started=Date.now();
+  try{
+    const q=await rtDb.rpc("brian_realtime_enqueue_core_action_v1",{p_action:action});
+    if(q.error){
+      return {action,ok:false,http_status:0,target_status:"ENQUEUE_FAILED",elapsed_ms:Date.now()-started,error:q.error.message.slice(0,1000)};
+    }
+    const body=q.data&&typeof q.data==="object"&&!Array.isArray(q.data)
+      ? q.data as Record<string,unknown>
+      : {raw:q.data};
+    const target=String(body.status??"");
+    const ok=["QUEUED","SKIPPED_BUSY","SUCCESS"].includes(target);
+    return {
+      action,
+      ok,
+      http_status:target==="QUEUED"?202:200,
+      target_status:target||"UNKNOWN",
+      elapsed_ms:Date.now()-started,
+      body
+    };
+  }catch(e){
+    return {action,ok:false,http_status:0,target_status:"ENQUEUE_FAILED",elapsed_ms:Date.now()-started,error:err(e).slice(0,1000)};
+  }
+}
+
 async function runAction(action:string,key:string,timeoutMs=12000):Promise<Result>{
+  if(!isLocalAction(action)) return enqueueCoreAction(action);
+
   const started=Date.now();
   try{
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
-      : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"
-      : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive"
-      : action==="missed_auditor" ? "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-missed-opportunity-auditor-v3"
-      : CORE_BRIDGE;
+      : action==="readiness_cost"
+        ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"
+        : RT_URL+"/functions/v1/brian-realtime-archive";
     const r=await fetch(targetUrl,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-internal-key":key},
