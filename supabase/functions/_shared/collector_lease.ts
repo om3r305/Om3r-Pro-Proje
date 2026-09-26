@@ -5,7 +5,9 @@ import postgres from "npm:postgres@3.4.7";
 // The database lease remains the source of truth. This client wrapper adds bounded retry and
 // structured error normalization around the three idempotent lease RPCs so a transient
 // PostgREST/schema-cache/connection wobble does not immediately take every collector down with
-// an opaque "[object Object]" failure.
+// an opaque "[object Object]" failure. The normal path is PostgREST RPC first; direct Postgres
+// is a bounded fallback only after RPC exhaustion because Edge Runtime direct port-5432
+// connectivity can be intermittently unavailable and must not add latency to every heartbeat.
 
 export interface RpcClient {
   rpc(fn: string, params: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
@@ -163,14 +165,18 @@ export async function acquireCollectorLease(
   ownerToken: string,
   leaseSeconds: number,
 ): Promise<boolean> {
-  const direct = await directLeaseCall("acquire", collectorId, ownerToken, leaseSeconds);
-  if (direct !== null) return direct;
-  const data = await rpcWithRetry(client, "brian_acquire_collector_lease", {
-    p_collector_id: collectorId,
-    p_owner_token: ownerToken,
-    p_lease_seconds: leaseSeconds,
-  });
-  return data === true;
+  try {
+    const data = await rpcWithRetry(client, "brian_acquire_collector_lease", {
+      p_collector_id: collectorId,
+      p_owner_token: ownerToken,
+      p_lease_seconds: leaseSeconds,
+    });
+    return data === true;
+  } catch (rpcError) {
+    const direct = await directLeaseCall("acquire", collectorId, ownerToken, leaseSeconds);
+    if (direct !== null) return direct;
+    throw rpcError;
+  }
 }
 
 export async function renewCollectorLease(
@@ -179,14 +185,18 @@ export async function renewCollectorLease(
   ownerToken: string,
   leaseSeconds: number,
 ): Promise<boolean> {
-  const direct = await directLeaseCall("renew", collectorId, ownerToken, leaseSeconds);
-  if (direct !== null) return direct;
-  const data = await rpcWithRetry(client, "brian_renew_collector_lease", {
-    p_collector_id: collectorId,
-    p_owner_token: ownerToken,
-    p_lease_seconds: leaseSeconds,
-  });
-  return data === true;
+  try {
+    const data = await rpcWithRetry(client, "brian_renew_collector_lease", {
+      p_collector_id: collectorId,
+      p_owner_token: ownerToken,
+      p_lease_seconds: leaseSeconds,
+    });
+    return data === true;
+  } catch (rpcError) {
+    const direct = await directLeaseCall("renew", collectorId, ownerToken, leaseSeconds);
+    if (direct !== null) return direct;
+    throw rpcError;
+  }
 }
 
 export async function releaseCollectorLease(
@@ -194,13 +204,17 @@ export async function releaseCollectorLease(
   collectorId: string,
   ownerToken: string,
 ): Promise<boolean> {
-  const direct = await directLeaseCall("release", collectorId, ownerToken);
-  if (direct !== null) return direct;
-  const data = await rpcWithRetry(client, "brian_release_collector_lease", {
-    p_collector_id: collectorId,
-    p_owner_token: ownerToken,
-  });
-  return data === true;
+  try {
+    const data = await rpcWithRetry(client, "brian_release_collector_lease", {
+      p_collector_id: collectorId,
+      p_owner_token: ownerToken,
+    });
+    return data === true;
+  } catch (rpcError) {
+    const direct = await directLeaseCall("release", collectorId, ownerToken);
+    if (direct !== null) return direct;
+    throw rpcError;
+  }
 }
 
 export async function withCollectorLease<T>(
