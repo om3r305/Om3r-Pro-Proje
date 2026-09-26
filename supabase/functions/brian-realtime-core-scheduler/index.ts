@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v8-readiness-cost";
+const VERSION="brian.realtime-core-scheduler.v9-market-backpressure";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -46,6 +46,9 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
 }
 
 function includes(minute:number,values:number[]){return values.includes(minute)}
+function isLocalAction(action:string){
+  return action==="direct_wire" || action==="readiness_cost" || action==="archive";
+}
 async function tableFresh(table:string,maxAgeMs:number){
   const q=await rtDb.from(table).select("observed_at").order("observed_at",{ascending:false}).limit(1).maybeSingle();
   if(q.error||!q.data)return false;
@@ -83,7 +86,7 @@ function planned(minute:number){
   if(includes(minute,[5,20,35,50])) actions.push("watchdog");
 
   if(minute%10===4)actions.push("archive");
-  actions.push("dip");
+  if(minute%3===2) actions.push("dip");
   return [...new Set(actions)];
 }
 
@@ -114,16 +117,36 @@ async function handle(req:Request){
   if(minute%15===7 && await collectorFresh("phase39-ecb-fx",90*60_000)){
     actions.push("fx_heartbeat");
   }
-  if(await collectorFresh("brian-direct-wire-eye-v1",6*60_000)){
+  if(minute%5===2 && await collectorFresh("brian-direct-wire-eye-v1",6*60_000)){
     actions.push("direct_wire_heartbeat");
   }
   const results:Result[]=[];
+  let marketCircuitOpen=false;
 
   for(const action of [...new Set(actions)]){
-    results.push(await runAction(action,key,action==="archive"?20000:action==="recovery"||action==="watchdog"?15000:12000));
-    if(results[results.length-1].ok===false && action==="dip"){
-      // A Core transport failure should not create a retry storm in the same minute.
-      break;
+    if(!isLocalAction(action) && marketCircuitOpen){
+      results.push({
+        action,
+        ok:false,
+        http_status:0,
+        target_status:"SKIPPED_MARKET_CIRCUIT_OPEN",
+        elapsed_ms:0
+      });
+      continue;
+    }
+
+    const result=await runAction(
+      action,
+      key,
+      action==="archive" ? 20000
+        : action==="recovery"||action==="watchdog" ? 12000
+        : isLocalAction(action) ? 12000
+        : 8000
+    );
+    results.push(result);
+
+    if(!isLocalAction(action) && !result.ok){
+      marketCircuitOpen=true;
     }
   }
 
