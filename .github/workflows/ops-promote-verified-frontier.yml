@@ -1,5 +1,5 @@
 name: Ops Promote Verified Frontier
-# Includes prospective per-decision outcome visibility.
+# Includes prospective outcomes, independent market-radar and Phase127 horizon visibility.
 
 on:
   push:
