@@ -32,6 +32,7 @@ jobs:
           supabase/functions/_shared/cron_auth.ts
           supabase/functions/brian-alpha-decision-compiler/index.ts
           supabase/functions/brian-missed-opportunity-auditor/index.ts
+          supabase/functions/brian-missed-opportunity-auditor-v3/index.ts
           supabase/functions/brian-official-macro-eye/index.ts
       - name: Run ALPHA v2 behavioral tests
         run: >-
@@ -54,6 +55,7 @@ jobs:
           supabase/functions/_shared/cron_auth.ts
           supabase/functions/brian-alpha-decision-compiler/index.ts
           supabase/functions/brian-missed-opportunity-auditor/index.ts
+          supabase/functions/brian-missed-opportunity-auditor-v3/index.ts
           supabase/functions/brian-official-macro-eye/index.ts
       - name: Verify clean patch formatting
         run: git diff --check

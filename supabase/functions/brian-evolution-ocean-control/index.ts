@@ -55,7 +55,7 @@ async function preflight(nowIso=new Date().toISOString()){
   }
   const probes:OceanPreflightProbe[]=[
     {label:"Treasury snapshot",observedAt:treasuryQ.data?.observed_at?String(treasuryQ.data.observed_at):null,maxAgeSeconds:TREASURY_MAX_AGE_SECONDS},
-    {label:"Layer-4 expected-edge observation",observedAt:edgeQ.data?.observed_at?String(edgeQ.data.observed_at):null,maxAgeSeconds:EDGE_MAX_AGE_SECONDS},
+    {label:"Layer-4 expected-edge evaluation",observedAt:edgeQ.data?.evaluated_at?String(edgeQ.data.evaluated_at):(edgeQ.data?.observed_at?String(edgeQ.data.observed_at):null),maxAgeSeconds:EDGE_MAX_AGE_SECONDS},
   ];
   for(const requirement of REQUIRED_COLLECTORS){
     const rows=rowsByCollector.get(requirement.id)??[],latest=rows[0];

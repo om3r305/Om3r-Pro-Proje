@@ -404,17 +404,31 @@ def reason_market(
     single_timeframe: bool = False,
     use_volume: bool = True,
     use_divergence: bool = True,
+    selected_experts: Sequence[str] | None = None,
+    _prospective_shadow: bool = False,
 ) -> ExpertDecision:
-    if float(timestamp) >= DEVELOPMENT_CUTOFF:
+    if float(timestamp) >= DEVELOPMENT_CUTOFF and not _prospective_shadow:
         raise ValueError("2026 data is INVALID_CONTAMINATED and forbidden for Phase 2.8")
 
-    experts = (
+    available_experts = (
         structure_expert(snapshot),
         trend_expert(snapshot, single_timeframe=single_timeframe),
         momentum_expert(snapshot, use_divergence=use_divergence),
         volume_expert(snapshot, enabled=use_volume),
         mean_reversion_expert(snapshot),
     )
+    if selected_experts is None:
+        experts = available_experts
+    else:
+        names = tuple(dict.fromkeys(str(name) for name in selected_experts))
+        if not names:
+            raise ValueError("selected_experts must contain at least one expert")
+        unknown = tuple(name for name in names if name not in WEIGHTS)
+        if unknown:
+            raise ValueError(f"unknown selected experts: {unknown}")
+        by_name = {item.name: item for item in available_experts}
+        experts = tuple(by_name[name] for name in names)
+
     denominator = sum(WEIGHTS[item.name] * item.confidence for item in experts)
     raw_edge = 0.0 if denominator <= 0 else sum(
         WEIGHTS[item.name] * item.confidence * item.bias for item in experts
@@ -495,9 +509,43 @@ def reason_market(
         "dip_score": _finite(snapshot, "dip_score"),
         "rally_score": _finite(snapshot, "rally_score"),
     }
-    all_experts: Sequence[ExpertOpinion] = experts + ((critic,) if use_risk_critic else ())
+    returned_experts: Sequence[ExpertOpinion] = experts + ((critic,) if use_risk_critic else ())
     return ExpertDecision(
         float(timestamp), action, edge, confidence, agreement, setup, regime, thesis,
-        invalidation, bull_case, bear_case, no_trade_case, tuple(all_experts),
+        invalidation, bull_case, bear_case, no_trade_case, tuple(returned_experts),
         tuple(contradictions), evidence,
+    )
+
+
+def reason_market_prospective(
+    snapshot: Mapping[str, object],
+    *,
+    timestamp: float,
+    config: ExpertReasonerConfig = ExpertReasonerConfig(),
+    use_risk_critic: bool = True,
+    single_timeframe: bool = False,
+    use_volume: bool = True,
+    use_divergence: bool = True,
+    selected_experts: Sequence[str] | None = None,
+) -> ExpertDecision:
+    """Run the same deterministic reasoner on prospective shadow evidence.
+
+    This entrypoint exists only for post-cutoff prospective runtime data. The
+    original reason_market() keeps the frozen pre-2026 development boundary, so
+    post-cutoff observations cannot leak back into historical tuning/backtests.
+    """
+    if float(timestamp) < DEVELOPMENT_CUTOFF:
+        raise ValueError(
+            "prospective reasoner is reserved for post-cutoff shadow observations"
+        )
+    return reason_market(
+        snapshot,
+        timestamp=timestamp,
+        config=config,
+        use_risk_critic=use_risk_critic,
+        single_timeframe=single_timeframe,
+        use_volume=use_volume,
+        use_divergence=use_divergence,
+        selected_experts=selected_experts,
+        _prospective_shadow=True,
     )

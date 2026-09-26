@@ -16,20 +16,54 @@ function avg(values:number[]){return values.length?values.reduce((a,b)=>a+b,0)/v
 Deno.serve(async(req:Request)=>{
   const origin=req.headers.get("origin");if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});if(req.method!=="POST")return out({error:"POST required"},405,origin);
   try{await requireDashboardAuth(req);}catch(error){return out({error:String(error)},401,origin);}
-  const [edgesQ,runsQ]=await Promise.all([
+  const [edgesQ,runsQ,horizonQ]=await Promise.all([
     db.from("brian_alpha_expected_edge_challenger")
       .select("edge_id,decision_id,observed_at,evaluated_at,asset_id,canonical_action,direction,canonical_evidence_score,support_groups,reliability_window_end,reliability_generated_at,expected_gross_move_bps,estimated_round_trip_cost_bps,uncertainty_penalty_bps,event_decay_penalty_bps,expected_net_edge_bps,minimum_net_margin_bps,recommendation,eligible,mature_group_count,reliability_weights,pit_clear,reasons,model_version")
       .order("observed_at",{ascending:false}).limit(120),
     db.from("brian_collector_runs")
       .select("collector_id,status,started_at,finished_at,observed_records,stored_records,error_class,error_message,metadata")
       .eq("collector_id","brian-evolution-alpha-edge-challenger-v1").order("started_at",{ascending:false}).limit(20),
+    db.from("brian_alpha_horizon_challenger")
+      .select("comparison_id,decision_id,outcome_horizon_seconds,observed_at,evaluated_at,asset_id,canonical_action,expected_gross_move_bps,estimated_round_trip_cost_bps,uncertainty_penalty_bps,event_decay_penalty_bps,expected_net_edge_bps,minimum_net_margin_bps,recommendation,eligible,mature_group_count,pit_clear,reasons,model_version")
+      .order("observed_at",{ascending:false}).limit(240),
   ]);
-  if(edgesQ.error||runsQ.error)return out({status:"DEGRADED",errors:[edgesQ.error?.message,runsQ.error?.message].filter(Boolean),shadow_only:true,live_execution:false},500,origin);
+  if(edgesQ.error||runsQ.error||horizonQ.error)return out({status:"DEGRADED",errors:[edgesQ.error?.message,runsQ.error?.message,horizonQ.error?.message].filter(Boolean),shadow_only:true,live_execution:false},500,origin);
   const edges=edgesQ.data??[],resolved=edges.filter(row=>Number.isFinite(Number(row.expected_net_edge_bps))),net=resolved.map(row=>Number(row.expected_net_edge_bps));
   const allow=edges.filter(row=>String(row.recommendation)==="ALLOW_EDGE").length,downgrade=edges.filter(row=>String(row.recommendation)==="DOWNGRADE_TO_WAIT").length;
   const failClosed=edges.length-allow-downgrade,pitClear=edges.filter(row=>row.pit_clear===true).length;
+  const horizonRows=horizonQ.data??[];
+  const latestByAssetHorizon=new Map<string,(typeof horizonRows)[number]>();
+  for(const row of horizonRows){
+    const key=`${String(row.asset_id)}|${Number(row.outcome_horizon_seconds)}`;
+    if(!latestByAssetHorizon.has(key))latestByAssetHorizon.set(key,row);
+  }
+  const horizonLatest=[...latestByAssetHorizon.values()];
+  const horizonSummary=(horizon:number)=>{
+    const rows=horizonLatest.filter(row=>Number(row.outcome_horizon_seconds)===horizon);
+    const resolvedRows=rows.filter(row=>Number.isFinite(Number(row.expected_net_edge_bps)));
+    return{
+      horizon_seconds:horizon,
+      assets:rows.length,
+      eligible:rows.filter(row=>row.eligible===true).length,
+      allow_edge:rows.filter(row=>String(row.recommendation)==="ALLOW_EDGE").length,
+      downgrade_to_wait:rows.filter(row=>String(row.recommendation)==="DOWNGRADE_TO_WAIT").length,
+      insufficient:rows.filter(row=>String(row.recommendation)==="INSUFFICIENT_LAGGED_EVIDENCE").length,
+      avg_expected_net_edge_bps:avg(resolvedRows.map(row=>Number(row.expected_net_edge_bps))),
+      best_expected_net_edge_bps:resolvedRows.length?Math.max(...resolvedRows.map(row=>Number(row.expected_net_edge_bps))):null,
+      latest_evaluated_at:rows.map(row=>String(row.evaluated_at??"")).filter(Boolean).sort().at(-1)??null,
+    };
+  };
   return out({
     status:"ONLINE",observed_at:new Date().toISOString(),summary:{evaluated:edges.length,allow_edge:allow,downgrade_to_wait:downgrade,fail_closed:failClosed,pit_clear:pitClear,avg_expected_net_edge_bps:avg(net),positive_expected_net_edge:resolved.filter(row=>Number(row.expected_net_edge_bps)>0).length,resolved_edge:resolved.length},
-    edges,runs:runsQ.data??[],canonical_mutation:false,direct_alpha_influence:false,bounded_reliability_feedback:true,shadow_only:true,live_execution:false,
+    edges,runs:runsQ.data??[],
+    horizon_challenger:{
+      status:horizonLatest.length?"ONLINE":"WAITING_FOR_EVIDENCE",
+      reference_900:horizonSummary(900),
+      challenger_3600:horizonSummary(3600),
+      latest:horizonLatest,
+      canonical_mutation:false,automatic_promotion:false,direct_alpha_influence:false,
+      shadow_only:true,live_execution:false,
+    },
+    canonical_mutation:false,direct_alpha_influence:false,bounded_reliability_feedback:true,shadow_only:true,live_execution:false,
   },200,origin);
 });

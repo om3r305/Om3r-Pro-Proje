@@ -1,0 +1,41 @@
+{
+  "asset_ids": [
+    "crypto:BTCUSDT",
+    "crypto:ETHUSDT",
+    "crypto:SOLUSDT",
+    "crypto:XRPUSDT"
+  ],
+  "model_weights": {
+    "market_snapshot_analyst": 1.0,
+    "orderbook_analyst": 1.0,
+    "derivatives_analyst": 1.0,
+    "onchain_analyst": 1.0,
+    "verified_news_analyst": 1.0,
+    "social_psychology_analyst": 1.0,
+    "cross_asset_analyst": 1.0,
+    "macro_analyst": 1.0
+  },
+  "decision": {
+    "gross_target": 0.5,
+    "position_limits": {
+      "max_position_pct": 0.3,
+      "max_gross_exposure": 0.5
+    },
+    "covariance": {
+      "alpha": "lw",
+      "min_observations": 30,
+      "max_period_volatility": 0.025,
+      "nan_policy": "reject"
+    },
+    "turnover": {
+      "max_l1_turnover": 0.25,
+      "risk_reduction_bypass": true
+    },
+    "market_neutral": false
+  },
+  "execution": {
+    "max_slippage_bps": 20.0,
+    "ttl_seconds": 60,
+    "minimum_net_margin_bps": 2.0
+  }
+}

@@ -4,6 +4,15 @@ const DEFAULT_AUTH_ID = "control-v3";
 const DEFAULT_CRON_KEY_SHA256_FALLBACK = "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab";
 const CLOUDFLARE_KEY_SHA256 = "8d348396f3da9bbffde9bef6f6f8d802af542bdcb3354743f92d3ece260fea51";
 
+type CronAuthLookupResult = {
+  data: { cron_key_sha256?: string | null } | null;
+  error: { message?: string } | null;
+};
+
+type AbortableCronAuthQuery = {
+  abortSignal?: (signal: AbortSignal) => Promise<CronAuthLookupResult>;
+};
+
 function constantTimeEqual(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
   let diff = 0;
@@ -64,18 +73,22 @@ export async function requireCronAuth(
     if (constantTimeEqual(suppliedHash, DEFAULT_CRON_KEY_SHA256_FALLBACK)) return;
   }
 
-  let result: any;
+  let result: CronAuthLookupResult;
   try {
-    const authQuery: any = supabase.from("brian_dashboard_auth")
-    .select("cron_key_sha256")
-    .eq("auth_id", authId)
-    .single();
-  result = typeof authQuery.abortSignal === "function"
-    ? await authQuery.abortSignal(AbortSignal.timeout(4_000))
-    : await Promise.race([
+    const authQuery = supabase.from("brian_dashboard_auth")
+      .select("cron_key_sha256")
+      .eq("auth_id", authId)
+      .single();
+    const abortable = authQuery as unknown as AbortableCronAuthQuery;
+    const resolved = typeof abortable.abortSignal === "function"
+      ? await abortable.abortSignal(AbortSignal.timeout(4_000))
+      : await Promise.race([
         Promise.resolve(authQuery),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error("CRON_AUTH_LOOKUP_TIMEOUT")), 4_000)),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("CRON_AUTH_LOOKUP_TIMEOUT")), 4_000)
+        ),
       ]);
+    result = resolved as CronAuthLookupResult;
   } catch (error) {
     if (authId === DEFAULT_AUTH_ID && isTransientAuthLookupFailure(String(error))) {
       const expected = DEFAULT_CRON_KEY_SHA256_FALLBACK;

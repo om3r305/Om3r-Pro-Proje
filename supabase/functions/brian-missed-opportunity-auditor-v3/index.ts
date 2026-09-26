@@ -2,10 +2,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { withCollectorLease } from "https://raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/688203fed061a7d45653aeba4a11b0d52b473334/supabase/functions/_shared/collector_lease.ts";
 import { requireCronAuth } from "https://raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/688203fed061a7d45653aeba4a11b0d52b473334/supabase/functions/_shared/cron_auth.ts";
 import {
+  resolveAlphaAuditGrossHorizon,
   resolveAlphaAuditHorizon,
   type AlphaAuditAction,
   type AlphaAuditPricePoint,
-} from "https://raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/688203fed061a7d45653aeba4a11b0d52b473334/supabase/functions/_shared/alpha_audit.ts";
+} from "https://raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/53990a79fdc08508e6cc77e1530a3d7f74676d99/supabase/functions/_shared/alpha_audit.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -15,7 +16,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.bounded-queue-36h";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.gross-outcomes-cost-aware-receipts.v1";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
@@ -162,6 +163,9 @@ Deno.serve(async (req: Request) => {
       const missedRows: Record<string, unknown>[] = [];
       let skippedMissingReferencePrice = 0;
       let skippedUnresolved = 0;
+      let grossOnlyOutcomeCount = 0;
+      let costCoveredOutcomeCount = 0;
+      let skippedCostUncoveredReceipt = 0;
       let alphaReferencePathPoints = 0;
       let intrabarPathPoints = 0;
 
@@ -218,17 +222,41 @@ Deno.serve(async (req: Request) => {
             if (Date.parse(d.observed_at) + horizon * 1000 > nowMs) continue;
             if (existing.has(`${d.decision_id}|${horizon}`)) continue;
 
-            const resolved = resolveAlphaAuditHorizon({
+            const decisionInput = {
               observedAt: d.observed_at,
               action: d.action,
               direction: d.direction,
               referencePrice: d.observed_reference_price,
               estimatedRoundTripCostBps: d.estimated_round_trip_cost_bps,
-            }, horizon, points);
+            };
+            const costAware = resolveAlphaAuditHorizon(
+              decisionInput,
+              horizon,
+              points,
+            );
+            const grossOnly = costAware
+              ? null
+              : resolveAlphaAuditGrossHorizon(
+                decisionInput,
+                horizon,
+                points,
+              );
+            const resolved = costAware ?? grossOnly;
             if (!resolved) {
               skippedUnresolved++;
               continue;
             }
+
+            const costCovered = costAware !== null;
+            if (costCovered) costCoveredOutcomeCount++;
+            else grossOnlyOutcomeCount++;
+            const classification = costAware?.classification ??
+              "OUTCOME_RESOLVED_COST_UNAVAILABLE";
+            const explanation = costAware?.explanation ??
+              "terminal gross outcome resolved prospectively; transaction cost was unavailable, so no cost-dependent missed-opportunity receipt or after-cost claim was produced";
+            const costBps = costAware?.costBps ?? null;
+            const longOpportunity = costAware?.longOpportunity ?? null;
+            const shortOpportunity = costAware?.shortOpportunity ?? null;
 
             const outcomeId = await sha(`alpha-outcome|${d.decision_id}|${horizon}`);
             outcomeRows.push({
@@ -244,8 +272,8 @@ Deno.serve(async (req: Request) => {
               direction_adjusted_return: resolved.directionAdjusted,
               mfe: resolved.mfe,
               mae: resolved.mae,
-              classification: resolved.classification,
-              explanation: resolved.explanation,
+              classification,
+              explanation,
               metadata: {
                 auditor_runtime_version: AUDITOR_RUNTIME_VERSION,
                 reference_price_source: "brian_alpha_decisions.observed_reference_price",
@@ -254,39 +282,48 @@ Deno.serve(async (req: Request) => {
                   "brian_intrabar_reaction_events.observed_mid_price",
                 ],
                 original_action: d.action,
-                estimated_round_trip_cost_bps: resolved.costBps,
+                cost_covered: costCovered,
+                estimated_round_trip_cost_bps: costBps,
                 up_excursion: resolved.upExcursion,
                 down_excursion: resolved.downExcursion,
-                long_opportunity: resolved.longOpportunity,
-                short_opportunity: resolved.shortOpportunity,
+                long_opportunity: longOpportunity,
+                short_opportunity: shortOpportunity,
               },
               evidence_class: EVIDENCE,
               shadow_only: true,
               live_execution: false,
             });
 
-            if (d.action === "WAIT" || d.action === "VETO") {
-              const bestExcursion = Math.max(resolved.upExcursion, -resolved.downExcursion);
+            if ((d.action === "WAIT" || d.action === "VETO") && costAware) {
+              const bestExcursion = Math.max(
+                costAware.upExcursion,
+                -costAware.downExcursion,
+              );
               const receiptId = await sha(`alpha-missed|${d.decision_id}|${horizon}`);
               missedRows.push({
                 receipt_id: receiptId,
                 asset_id: d.asset_id,
                 horizon: `${horizon}s`,
                 observed_at: d.observed_at,
-                resolved_at: resolved.resolvedAt,
+                resolved_at: costAware.resolvedAt,
                 opportunity_score: Math.max(0, Math.min(1, finite(d.evidence_score))),
                 brian_action: "WAIT",
                 hindsight_gross_return: bestExcursion,
-                hindsight_net_return: bestExcursion - resolved.costBps / 10_000,
-                mfe: resolved.upExcursion,
-                mae: resolved.downExcursion,
-                classification: resolved.classification,
-                explanation: `${d.action}: ${resolved.explanation}`,
+                hindsight_net_return: bestExcursion - costAware.costBps / 10_000,
+                mfe: costAware.upExcursion,
+                mae: costAware.downExcursion,
+                classification: costAware.classification,
+                explanation: `${d.action}: ${costAware.explanation}`,
                 source_observation_ids: d.source_observation_ids ?? [],
                 evidence_class: EVIDENCE,
                 shadow_only: true,
                 live_execution: false,
               });
+            } else if (
+              (d.action === "WAIT" || d.action === "VETO") &&
+              !costAware
+            ) {
+              skippedCostUncoveredReceipt++;
             }
           }
         }
@@ -310,10 +347,13 @@ Deno.serve(async (req: Request) => {
         missed_receipt_count: missedRows.length,
         skipped_missing_reference_price: skippedMissingReferencePrice,
         skipped_unresolved: skippedUnresolved,
+        gross_only_outcome_count: grossOnlyOutcomeCount,
+        cost_covered_outcome_count: costCoveredOutcomeCount,
+        skipped_cost_uncovered_receipt: skippedCostUncoveredReceipt,
         alpha_reference_path_points: alphaReferencePathPoints,
         intrabar_path_points: intrabarPathPoints,
         audit_path_semantics: "bounded_pending_queue_alpha_reference_primary_plus_intrabar_secondary",
-        audit_cost_semantics: "fail_closed_no_zero_fallback",
+        audit_cost_semantics: "gross_outcome_resolves_without_cost_but_cost_dependent_receipts_fail_closed",
         reference_price_source: "brian_alpha_decisions.observed_reference_price",
         horizons_seconds: HORIZONS,
       });
@@ -324,6 +364,9 @@ Deno.serve(async (req: Request) => {
         decisions_considered: decisions.length,
         skipped_missing_reference_price: skippedMissingReferencePrice,
         skipped_unresolved: skippedUnresolved,
+        gross_only_outcomes_written: grossOnlyOutcomeCount,
+        cost_covered_outcomes_written: costCoveredOutcomeCount,
+        skipped_cost_uncovered_receipt: skippedCostUncoveredReceipt,
         outcomes_written: outcomeRows.length,
         missed_receipts_written: missedRows.length,
         alpha_reference_path_points: alphaReferencePathPoints,

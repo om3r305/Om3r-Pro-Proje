@@ -54,8 +54,14 @@ jobs:
             echo 'Broken Bash JSON default reintroduced.'
             exit 1
           fi
-          grep -Fq 'first non-empty output line must be exactly UNDERSTAND at column 1' scripts/brian_engineer_prompt.py
-          grep -Fq 'first non-empty output line must be exactly CODE at column 1' scripts/brian_engineer_prompt.py
+          # Provider prose formatting is advisory. Execution-grade evidence is the
+          # substantive read-only analysis plus the guarded candidate/test pipeline.
+          grep -Fq 'analysis_bytes="$(wc -c < /tmp/brian-engineer-analysis.txt)"' scripts/brian_engineer_runner.sh
+          grep -Fq 'test "$analysis_bytes" -ge 80' scripts/brian_engineer_runner.sh
+          grep -Fq 'Read-only analysis mutated the worktree' scripts/brian_engineer_runner.sh
+          grep -Fq 'Agent produced no material change.' scripts/brian_engineer_runner.sh
+          grep -Fq 'A changed non-protected replay test is mandatory.' scripts/brian_engineer_runner.sh
+          grep -Fq 'A changed adversarial stress test is mandatory.' scripts/brian_engineer_runner.sh
 
       - name: Run engineering guard behavioral tests
         run: deno test supabase/functions/_shared/evolution_engineer_guard.test.ts

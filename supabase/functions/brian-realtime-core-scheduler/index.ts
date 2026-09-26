@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v7-isolated-actions";
+const VERSION="brian.realtime-core-scheduler.v9-market-backpressure";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -17,6 +17,7 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
   try{
     const targetUrl=action==="direct_wire"
       ? RT_URL+"/functions/v1/brian-direct-wire-eye"
+      : action==="readiness_cost" ? RT_URL+"/functions/v1/brian-realtime-readiness-cost-sampler"
       : action==="archive" ? RT_URL+"/functions/v1/brian-realtime-archive" : CORE_BRIDGE;
     const r=await fetch(targetUrl,{
       method:"POST",
@@ -25,10 +26,18 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
       signal:AbortSignal.timeout(timeoutMs)
     });
     const text=await r.text();
-    let body:any={};
-    try{body=JSON.parse(text)}catch{body={raw:text.slice(0,1000)}}
-    const target=String(body?.status??"");
-    const nested=String(body?.result?.status??"");
+    let body:Record<string,unknown>={};
+    try{
+      const parsed:unknown=JSON.parse(text);
+      body=parsed&&typeof parsed==="object"&&!Array.isArray(parsed)
+        ? parsed as Record<string,unknown>
+        : {raw:text.slice(0,1000)};
+    }catch{body={raw:text.slice(0,1000)}}
+    const nestedBody=body.result&&typeof body.result==="object"&&!Array.isArray(body.result)
+      ? body.result as Record<string,unknown>
+      : {};
+    const target=String(body.status??"");
+    const nested=String(nestedBody.status??"");
     const ok=r.ok&&![target,nested].some(s=>["FAILED","FAILED_CLOSED","UNAUTHORIZED","INVALID_ACTION","DEGRADED"].includes(s));
     return {action,ok,http_status:r.status,target_status:target,elapsed_ms:Date.now()-started,body};
   }catch(e){
@@ -37,6 +46,9 @@ async function runAction(action:string,key:string,timeoutMs=12000):Promise<Resul
 }
 
 function includes(minute:number,values:number[]){return values.includes(minute)}
+function isLocalAction(action:string){
+  return action==="direct_wire" || action==="readiness_cost" || action==="archive";
+}
 async function tableFresh(table:string,maxAgeMs:number){
   const q=await rtDb.from(table).select("observed_at").order("observed_at",{ascending:false}).limit(1).maybeSingle();
   if(q.error||!q.data)return false;
@@ -58,6 +70,7 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 function planned(minute:number){
   const actions:string[]=[];
   if(minute%2===0) actions.push("direct_wire");
+  if(minute%3===0) actions.push("readiness_cost");
   // Existing DIP trigger runs last: its failure must not starve Frontier actions.
 
   if(minute%3===1) actions.push("alpha_sync");
@@ -73,7 +86,7 @@ function planned(minute:number){
   if(includes(minute,[5,20,35,50])) actions.push("watchdog");
 
   if(minute%10===4)actions.push("archive");
-  actions.push("dip");
+  if(minute%3===2) actions.push("dip");
   return [...new Set(actions)];
 }
 
@@ -104,16 +117,36 @@ async function handle(req:Request){
   if(minute%15===7 && await collectorFresh("phase39-ecb-fx",90*60_000)){
     actions.push("fx_heartbeat");
   }
-  if(await collectorFresh("brian-direct-wire-eye-v1",6*60_000)){
+  if(minute%5===2 && await collectorFresh("brian-direct-wire-eye-v1",6*60_000)){
     actions.push("direct_wire_heartbeat");
   }
   const results:Result[]=[];
+  let marketCircuitOpen=false;
 
   for(const action of [...new Set(actions)]){
-    results.push(await runAction(action,key,action==="archive"?20000:action==="recovery"||action==="watchdog"?15000:12000));
-    if(results[results.length-1].ok===false && action==="dip"){
-      // A Core transport failure should not create a retry storm in the same minute.
-      break;
+    if(!isLocalAction(action) && marketCircuitOpen){
+      results.push({
+        action,
+        ok:false,
+        http_status:0,
+        target_status:"SKIPPED_MARKET_CIRCUIT_OPEN",
+        elapsed_ms:0
+      });
+      continue;
+    }
+
+    const result=await runAction(
+      action,
+      key,
+      action==="archive" ? 20000
+        : action==="recovery"||action==="watchdog" ? 12000
+        : isLocalAction(action) ? 12000
+        : 8000
+    );
+    results.push(result);
+
+    if(!isLocalAction(action) && !result.ok){
+      marketCircuitOpen=true;
     }
   }
 

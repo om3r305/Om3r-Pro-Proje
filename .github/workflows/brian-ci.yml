@@ -83,6 +83,9 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-realtime-referenced-sensor-export/index.ts
+          supabase/functions/brian-realtime-readiness-cost-sampler/index.ts
+          supabase/functions/brian-realtime-core-scheduler/index.ts
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
@@ -124,6 +127,9 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-realtime-referenced-sensor-export/index.ts
+          supabase/functions/brian-realtime-readiness-cost-sampler/index.ts
+          supabase/functions/brian-realtime-core-scheduler/index.ts
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
@@ -168,4 +174,20 @@ jobs:
           tests/test_brian2026_emergent_mover_postgres.py
           tests/test_brian2026_control_center_postgres.py
           tests/test_brian2026_l2_capture_postgres.py
+          tests/test_brian2026_phase70_durable_runtime_postgres.py
+          tests/test_brian2026_phase73_operational_risk_postgres.py
+          tests/test_brian2026_phase74_governed_cycle_binding_postgres.py
+          tests/test_brian2026_phase75_atomic_governed_writeahead_postgres.py
+          tests/test_brian2026_phase76_shadow_execution_outbox_postgres.py
+          tests/test_brian2026_phase77_execution_claim_lifecycle_postgres.py
+          tests/test_brian2026_phase78_execution_kill_switch_postgres.py
+          tests/test_brian2026_phase79_atomic_execution_start_postgres.py
+          tests/test_brian2026_phase80_claim_fenced_checkpoint_postgres.py
+          tests/test_brian2026_phase81_cancel_recovery_directive_postgres.py
+          tests/test_brian2026_phase82_recovery_claim_fencing_postgres.py
+          tests/test_brian2026_phase83_atomic_recovery_start_postgres.py
+          tests/test_brian2026_phase84_recovery_execution_checkpoint_postgres.py
+          tests/test_brian2026_phase85_recovery_completion_audit_postgres.py
+          tests/test_brian2026_phase86_recovery_admission_interlock_postgres.py
+          tests/test_brian2026_phase87_recovery_restart_resume_postgres.py
           -v
