@@ -1,3 +1,4 @@
+# brian-engineer analysis repair verification
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -181,7 +182,11 @@ record_blocked() {
   if [[ -f "$PROVIDER_STATUS_FILE" ]] && jq -e '.all_exhausted == true' "$PROVIDER_STATUS_FILE" >/dev/null 2>&1; then
     payload="$(jq -c --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer AI providers unavailable",provider_exhausted:true,resume_required:true,failure_stage:$stage,exit_code:$exit_code,provider_state:.}' "$PROVIDER_STATUS_FILE")"
   else
-    payload="$(jq -nc --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer workflow failed before GPT evidence approval",provider_exhausted:false,failure_stage:$stage,exit_code:$exit_code}')"
+    if [[ -f "$PROVIDER_STATUS_FILE" ]]; then
+      payload="$(jq -c --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer workflow failed before GPT evidence approval",provider_exhausted:false,failure_stage:$stage,exit_code:$exit_code,provider_state:.}' "$PROVIDER_STATUS_FILE")"
+    else
+      payload="$(jq -nc --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer workflow failed before GPT evidence approval",provider_exhausted:false,failure_stage:$stage,exit_code:$exit_code}')"
+    fi
   fi
   record_event BLOCKED BLOCKED "$commit_sha" "$payload" >/dev/null 2>&1 || true
 }
@@ -245,8 +250,22 @@ fi
 CURRENT_STAGE="ANALYSIS"
 python scripts/brian_engineer_prompt.py analysis > /tmp/brian-engineer-analysis-prompt.txt
 ai_call analysis /tmp/brian-engineer-analysis-prompt.txt /tmp/brian-engineer-analysis.txt read
+# Treat provider text as evidence, but require enough substance to justify the
+# UNDERSTAND/PLAN audit events. One bounded read-only expansion is allowed for
+# terse local/provider output; repository mutation is still forbidden.
 analysis_bytes="$(wc -c < /tmp/brian-engineer-analysis.txt)"
-echo "Brian Engineer analysis bytes: $analysis_bytes" >> "$GITHUB_STEP_SUMMARY"
+echo "Brian Engineer analysis bytes (first pass): $analysis_bytes" >> "$GITHUB_STEP_SUMMARY"
+if [[ "$analysis_bytes" -lt 80 ]]; then
+  {
+    cat /tmp/brian-engineer-analysis-prompt.txt
+    printf '\n\nThe previous read-only answer was too terse for audit evidence. Expand it to at least 200 characters. Do not edit files. Preserve the same task scope and provide concrete repository findings plus a bounded implementation/test plan.\n\nPREVIOUS_ANSWER:\n'
+    cat /tmp/brian-engineer-analysis.txt
+  } > /tmp/brian-engineer-analysis-expand-prompt.txt
+  ai_call analysis_expand /tmp/brian-engineer-analysis-expand-prompt.txt /tmp/brian-engineer-analysis-expanded.txt read
+  mv /tmp/brian-engineer-analysis-expanded.txt /tmp/brian-engineer-analysis.txt
+  analysis_bytes="$(wc -c < /tmp/brian-engineer-analysis.txt)"
+  echo "Brian Engineer analysis bytes (expanded): $analysis_bytes" >> "$GITHUB_STEP_SUMMARY"
+fi
 test "$analysis_bytes" -ge 80
 test -z "$(git status --porcelain)" || { echo 'Read-only analysis mutated the worktree'; exit 1; }
 record_event UNDERSTAND UNDERSTAND '' '{"evidence":"Read-only repository inspection completed through provider-continuity runner"}'
@@ -255,6 +274,9 @@ record_event PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan
 CURRENT_STAGE="CODE"
 python scripts/brian_engineer_prompt.py code > /tmp/brian-engineer-code-prompt.txt
 ai_call code /tmp/brian-engineer-code-prompt.txt /tmp/brian-engineer-agent.txt code
+# CODE text formatting is advisory; the actual candidate diff, protected-scope
+# guard, compile/tests/replay/stress, exact commit and independent review below
+# are the execution-grade evidence.
 test "$(wc -c < /tmp/brian-engineer-agent.txt)" -ge 80
 git add -N .
 
