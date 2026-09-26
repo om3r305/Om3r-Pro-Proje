@@ -2,7 +2,7 @@ name: Brian Engineer Watchdog
 
 on:
   schedule:
-    - cron: '11,26,41,56 * * * *'
+    - cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *'
   workflow_dispatch:
   push:
     branches:
@@ -39,3 +39,25 @@ jobs:
           fi
           echo "No recent active/successful Brian Engineer run detected; dispatching the canonical workflow so failed autonomous retries continue immediately (retry-5 check)."
           gh workflow run brian-engineer.yml --repo "$REPO" --ref brian-2026
+
+
+  ensure-shadow-running:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch guarded shadow runner when cadence is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cutoff="$(date -u -d '8 minutes ago' +%s)"
+          runs="$({ gh api "repos/$REPO/actions/workflows/brian-cloud-shadow-runner.yml/runs?branch=brian-2026&per_page=12" || true; })"
+          recent="$(printf '%s' "$runs" | jq --argjson cutoff "$cutoff" '[.workflow_runs[]? | select((.created_at | fromdateiso8601) >= $cutoff)] | length')"
+          recent="${recent:-0}"
+          if [ "$recent" -gt 0 ]; then
+            echo "Cloud shadow runner has $recent recent run(s); fallback stays idle."
+            exit 0
+          fi
+          echo "No cloud shadow runner in the last 8 minutes; dispatching one guarded paper/shadow cycle."
+          gh workflow run brian-cloud-shadow-runner.yml --repo "$REPO" --ref brian-2026             -f mode=phase117-paper-one-shot             -f confirmation=RUN_PAPER_SHADOW_ONE_SHOT
