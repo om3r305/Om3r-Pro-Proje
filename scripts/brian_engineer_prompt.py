@@ -123,8 +123,6 @@ def code_prompt(task):
         Output guidance:
         - Summarize the implementation, test design, risks, and blockers after making the allowed worktree changes.
         - A CODE heading is preferred for readability but is not a safety boundary; the workflow validates the real diff and evidence independently.
-        - Then include sections TEST DESIGN, RISKS, and BLOCKERS.
-        - Do not prefix CODE with Markdown markers such as #, ##, bullets, or numbering.
         """
     )
 
