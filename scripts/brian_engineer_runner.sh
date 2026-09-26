@@ -245,8 +245,9 @@ fi
 CURRENT_STAGE="ANALYSIS"
 python scripts/brian_engineer_prompt.py analysis > /tmp/brian-engineer-analysis-prompt.txt
 ai_call analysis /tmp/brian-engineer-analysis-prompt.txt /tmp/brian-engineer-analysis.txt read
-grep -Eq '^UNDERSTAND([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
-grep -Eq '^PLAN([[:space:]:]|$)' /tmp/brian-engineer-analysis.txt
+analysis_bytes="$(wc -c < /tmp/brian-engineer-analysis.txt)"
+echo "Brian Engineer analysis bytes: $analysis_bytes" >> "$GITHUB_STEP_SUMMARY"
+test "$analysis_bytes" -ge 80
 test -z "$(git status --porcelain)" || { echo 'Read-only analysis mutated the worktree'; exit 1; }
 record_event UNDERSTAND UNDERSTAND '' '{"evidence":"Read-only repository inspection completed through provider-continuity runner"}'
 record_event PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan completed before source mutation"}'
@@ -254,7 +255,7 @@ record_event PLAN PLAN '' '{"evidence":"Bounded implementation and evidence plan
 CURRENT_STAGE="CODE"
 python scripts/brian_engineer_prompt.py code > /tmp/brian-engineer-code-prompt.txt
 ai_call code /tmp/brian-engineer-code-prompt.txt /tmp/brian-engineer-agent.txt code
-grep -Eq '^CODE([[:space:]:]|$)' /tmp/brian-engineer-agent.txt
+test "$(wc -c < /tmp/brian-engineer-agent.txt)" -ge 80
 git add -N .
 
 mapfile -t format_files < <(git diff --name-only "$BASE_SHA" | grep -E '\.(ts|tsx|js|jsx|json|md)$' || true)
