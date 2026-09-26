@@ -15,12 +15,12 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.bounded-queue-36h";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
-const PENDING_BATCH = 120;
-const LOOKBACK = "36 hours";
+const PENDING_BATCH = 60;
+const LOOKBACK = "6 hours";
 
 type Decision = {
   decision_id: string;
