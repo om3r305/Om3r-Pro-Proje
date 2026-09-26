@@ -1,6 +1,6 @@
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v9-intel-sync";
+const VERSION = "brian.realtime-orchestrator.v11-heartbeat-1m";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -116,16 +116,30 @@ Deno.serve(async(req:Request)=>{
   const minute=Math.floor(Date.now()/60000);
 
   const eyePromise=call("official_eye",ENDPOINTS.eye,key,50000);
-  const intelSyncPromise=eyePromise.then(()=>call("intel_sync",ENDPOINTS.intelSync,key,15000));
   const marketPromise=marketLane(key,minute);
-  const scoutPromise=minute%2===0
-    ? call("breaking_scout",ENDPOINTS.breakingScout,key,30000)
+
+  // Cross-project pressure is intentionally serialized:
+  // odd minutes drain the durable intel queue, even minutes run the breaking scout.
+  // Frontier UI declares the system stale after ~3 minutes.
+  // Refresh heartbeat every minute so a healthy backend never falls into a false 0/6 state.
+  const intelSyncPromise=minute%2===1
+    ? eyePromise.then(()=>call("intel_sync",ENDPOINTS.intelSync,key,12000))
     : Promise.resolve(null);
-  const heartbeatPromise=call("frontier_heartbeat_refresh",ENDPOINTS.heartbeatRefresh,key,9000);
+  const scoutPromise=minute%2===0
+    ? call("breaking_scout",ENDPOINTS.breakingScout,key,20000)
+    : Promise.resolve(null);
+  const heartbeatPromise=call("frontier_heartbeat_refresh",ENDPOINTS.heartbeatRefresh,key,8000);
 
   const [eye,intelSync,market,scout,heartbeat]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise]);
   const catalyst=await call("catalyst_reaction",ENDPOINTS.catalyst,key,50000);
-  const results=[eye,intelSync,...market,...(scout?[scout]:[]),heartbeat,catalyst];
+  const results=[
+    eye,
+    ...(intelSync?[intelSync]:[]),
+    ...market,
+    ...(scout?[scout]:[]),
+    ...(heartbeat?[heartbeat]:[]),
+    catalyst
+  ];
 
   const failed=results.filter((r:any)=>r.ok===false);
   return out({
