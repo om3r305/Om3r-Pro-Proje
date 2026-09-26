@@ -1,18 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { requireCronAuth } from "../_shared/cron_auth.ts";
-import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 import {
   estimateExpectedNetEdge,
   EVOLUTION_ALPHA_INTELLIGENCE_VERSION,
   type EvidenceFreshness,
   type LaggedReliabilityEvidence,
 } from "../_shared/evolution_alpha_intelligence.ts";
-import {
-  bindLaggedReliabilityToDecision,
-  type DecisionSourceObservation,
-  type ReliabilitySnapshotCandidate,
-} from "../_shared/evolution_alpha_reliability_mapping.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,6 +25,40 @@ type DecisionRow={
   support_groups:string[]|null;source_observation_ids:string[]|null;estimated_round_trip_cost_bps:number|string|null;
 };
 type ReliabilityWindow={window_end:string;generated_at:string};
+type DecisionSourceObservation={
+  observationId:string;independentGroup:string;sensorFamily:string;sensorHorizon:string;direction:-1|1;observedAt:string;
+};
+type ReliabilitySnapshotCandidate={
+  independentGroup:string;sensorFamily:string;sensorHorizon:string;sampleCount:number;bayesianHitRate:number;
+  avgSignedBps:number;avgCostAdjustedSignedBps:number;outcomeHorizonSeconds:number;snapshotWindowEnd:string;snapshotGeneratedAt:string;
+};
+const INTRABAR_TAPE_GROUPS=new Set(["micro_velocity","micro_volume","micro_breakout","micro_reclaim","micro_taker_flow"]);
+function canonicalIndependentGroup(group:string){return INTRABAR_TAPE_GROUPS.has(group)?"intrabar_tape":group;}
+function bindLaggedReliabilityToDecision(params:{direction:-1|1;supportGroups:string[];sourceObservations:DecisionSourceObservation[];snapshotCandidates:ReliabilitySnapshotCandidate[]}):LaggedReliabilityEvidence[]{
+  const support=new Set(params.supportGroups.map(String));
+  const byTuple=new Map<string,ReliabilitySnapshotCandidate[]>();
+  const tuple=(g:string,f:string,h:string)=>`${g}\u0000${f}\u0000${h}`;
+  for(const row of params.snapshotCandidates){
+    const key=tuple(row.independentGroup,row.sensorFamily,row.sensorHorizon);
+    const rows=byTuple.get(key)??[];rows.push(row);byTuple.set(key,rows);
+  }
+  const selected=new Map<string,LaggedReliabilityEvidence>();
+  for(const source of params.sourceObservations){
+    if(source.direction!==params.direction)continue;
+    const canonical=canonicalIndependentGroup(source.independentGroup);
+    if(!support.has(canonical))continue;
+    for(const row of byTuple.get(tuple(source.independentGroup,source.sensorFamily,source.sensorHorizon))??[]){
+      const candidate:LaggedReliabilityEvidence={
+        group:canonical,sampleCount:row.sampleCount,bayesianHitRate:row.bayesianHitRate,
+        avgSignedBps:row.avgSignedBps,avgCostAdjustedSignedBps:row.avgCostAdjustedSignedBps,
+        outcomeHorizonSeconds:row.outcomeHorizonSeconds,snapshotWindowEnd:row.snapshotWindowEnd,snapshotGeneratedAt:row.snapshotGeneratedAt,
+      };
+      const prior=selected.get(canonical);
+      if(!prior||candidate.sampleCount>prior.sampleCount)selected.set(canonical,candidate);
+    }
+  }
+  return[...selected.values()].sort((a,b)=>a.group.localeCompare(b.group));
+}
 type HorizonResult={decision_id:string;asset_id:string;horizon:number;recommendation:string;eligible:boolean;expected_net_edge_bps:number|null;mature_groups:number;pit_clear:boolean};
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}});}
@@ -133,7 +161,7 @@ async function persistHorizon(decision:DecisionRow,sources:DecisionSourceObserva
     group_contributions:decomposition.groupContributions,reliability_weights:decomposition.reliabilityWeights,pit_clear:decomposition.pitClear,
     reasons:decomposition.reasons,model_version:decomposition.version,
     metadata:{phase:"PHASE127",role:horizon===900?"REFERENCE_15M":"CHALLENGER_60M",canonical_mutation:false,automatic_promotion:false,direct_alpha_influence:false,decision_time_reliability_only:true,decision_time_cost_only:true,reliability_horizon_seconds:horizon,reliability_rows:reliability.length,source_freshness_rows:freshness.length,comparison_version:VERSION},
-    evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,automatic_promotion:false,canonical_mutation:false,
+    evidence_class:"PROSPECTIVE_EVOLUTION_SHADOW",shadow_only:true,live_execution:false,automatic_promotion:false,canonical_mutation:false,
   };
   const ins=await db.from("brian_alpha_horizon_challenger").insert(row);
   if(ins.error&&!String(ins.error.code??"").includes("23505"))throw new Error(`persist_horizon_${horizon}:${ins.error.message}`);
@@ -142,7 +170,7 @@ async function persistHorizon(decision:DecisionRow,sources:DecisionSourceObserva
 
 async function recordRun(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,metadata:Record<string,unknown>={},error?:unknown){
   const finishedAt=new Date().toISOString(),runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"PHASE127_HORIZON_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,metadata:{comparison_version:VERSION,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,horizons:[...HORIZONS],reference_horizon_seconds:900,challenger_horizon_seconds:3600,canonical_mutation:false,automatic_promotion:false,direct_alpha_influence:false,...metadata},evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false});
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"PHASE127_HORIZON_ERROR":null,error_message:error?errorText(error).slice(0,1200):null,metadata:{comparison_version:VERSION,model_version:EVOLUTION_ALPHA_INTELLIGENCE_VERSION,horizons:[...HORIZONS],reference_horizon_seconds:900,challenger_horizon_seconds:3600,canonical_mutation:false,automatic_promotion:false,direct_alpha_influence:false,...metadata},evidence_class:"PROSPECTIVE_EVOLUTION_SHADOW",shadow_only:true,live_execution:false});
   if(q.error)console.error("phase127 run receipt",q.error.message);
 }
 
