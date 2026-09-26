@@ -120,10 +120,9 @@ def code_prompt(task):
         - Preserve point-in-time evidence boundaries, shadow-only operation, and live_execution=false.
         - Do not fake evidence or success markers. The workflow runs all evidence independently after you finish.
 
-        Output contract:
-        - The first non-empty output line must be exactly CODE at column 1.
-        - Then include sections TEST DESIGN, RISKS, and BLOCKERS.
-        - Do not prefix CODE with Markdown markers such as #, ##, bullets, or numbering.
+        Output guidance:
+        - Summarize the implementation, test design, risks, and blockers after making the allowed worktree changes.
+        - A CODE heading is preferred for readability but is not a safety boundary; the workflow validates the real diff and evidence independently.
         """
     )
 
