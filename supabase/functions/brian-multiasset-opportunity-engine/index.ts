@@ -1,9 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.multiasset-opportunity-engine.v3-registry";
+const VERSION="brian.multiasset-opportunity-engine.v4-verified-session";
 const COLLECTOR_ID="brian-multiasset-opportunity-engine-v1";
 const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-multiasset-export";
 
@@ -43,6 +44,14 @@ function classify(claim:string,source:string){
 function markThemes(mark:Mark):string[]{
   const raw=mark.metadata?.themes;
   return Array.isArray(raw)?raw.map(String).filter(Boolean):[];
+}
+function directlyLinkedAssets(event:EventRow):string[]{
+  const assets=new Set<string>();
+  if(event.primary_asset)assets.add(event.primary_asset);
+  // Explicit metals references also work when the headline has no macro theme.
+  if(/\b(gold|bullion)\b/i.test(event.claim)){assets.add("commodity:GOLD");assets.add("etf:GLD")}
+  if(/\bsilver\b/i.test(event.claim))assets.add("commodity:SILVER");
+  return [...assets];
 }
 function threshold(assetClass:string){
   return assetClass==="fx"?0.0007:
@@ -100,14 +109,22 @@ Deno.serve(async(req:Request)=>{
     }
     for(const ev of events){
       const themes=classify(String(ev.claim??""),String(ev.source_id??""));
-      if(!themes.length)continue;
       const eventAt=Date.parse(String(ev.published_at??ev.observed_at));
+      if(!Number.isFinite(eventAt)||eventAt>Date.now()+5_000)continue;
       const ageH=Math.max(0,(Date.now()-eventAt)/3600000);
       const sourceWeight=String(ev.source_id).startsWith("official:") ? 1 : String(ev.source_id).startsWith("institutional:") ? .85 : .72;
       const decay=Math.exp(-ageH/4);
+      const linked=new Set<string>();
+      for(const asset of directlyLinkedAssets(ev)){
+        const arr=linksByAsset.get(asset)??[];
+        arr.push({event:ev,weight:sourceWeight*decay,theme:"DIRECT_ASSET"});
+        linksByAsset.set(asset,arr);linked.add(asset);
+      }
       for(const theme of themes){
         for(const mark of marksByTheme.get(theme)??[]){
           const asset=String(mark.asset_id);
+          if(linked.has(asset))continue;
+          linked.add(asset);
           const arr=linksByAsset.get(asset)??[];
           arr.push({event:ev,weight:sourceWeight*decay,theme});
           linksByAsset.set(asset,arr);
@@ -119,7 +136,9 @@ Deno.serve(async(req:Request)=>{
     for(const m of marks){
       const price=n(m.price);
       if(!(price>0))continue;
-      const links=(linksByAsset.get(String(m.asset_id))??[]).sort((a,b)=>b.weight-a.weight).slice(0,8);
+      const seenEvents=new Set<string>();
+      const links=(linksByAsset.get(String(m.asset_id))??[]).sort((a,b)=>b.weight-a.weight)
+        .filter(l=>{if(seenEvents.has(l.event.event_id))return false;seenEvents.add(l.event.event_id);return true}).slice(0,8);
       const eventStrength=clip(links.reduce((s,l)=>s+l.weight,0)/2.2);
       const r5=n(m.return_5m,0),r1=n(m.return_1h,0);
       const reaction=Math.abs(r5)*.45+Math.abs(r1)*.55;
@@ -127,7 +146,8 @@ Deno.serve(async(req:Request)=>{
       const reactionScore=clip(reaction/(th*2.2));
       const signed=r1!==0?r1:r5;
       const direction=signed>0?1:signed<0?-1:0;
-      const fresh=n(m.data_latency_seconds,1e9)<=15*60 && String(m.session_state).toUpperCase()==="REGULAR";
+      const session=assessMarketSession(m.provider_time,m.metadata?.regular_session_start,m.metadata?.regular_session_end);
+      const fresh=session.eligible;
       const relevant=links.length>0&&eventStrength>=.18;
       const moving=reaction>=th;
       const groups:string[]=[];
@@ -163,12 +183,15 @@ Deno.serve(async(req:Request)=>{
         reason:action==="WAIT"
           ?`multi-asset watch: ${veto}; event_strength=${eventStrength.toFixed(3)} reaction=${(reaction*100).toFixed(3)}%`
           :`event-linked market reaction confirmed across event_link + market_reaction; score=${score.toFixed(3)}`,
-        veto_reason:veto,session_state:String(m.session_state),data_latency_seconds:n(m.data_latency_seconds,1e9),
+        veto_reason:veto,session_state:session.sessionState,data_latency_seconds:session.latency??1e9,
         metadata:{
           version:VERSION,provider_quality:m.provider_quality,event_strength:eventStrength,reaction_score:reactionScore,
           return_5m:r5,return_1h:r1,threshold:th,linked_themes:[...new Set(links.map(l=>l.theme))],
           direction_source:"OBSERVED_MARKET_REACTION_NOT_HEADLINE_GUESS",
           data_quality_gate:"REGULAR_SESSION_AND_15M_FRESHNESS",
+          data_quality_reason:session.reason,
+          regular_session_start:m.metadata?.regular_session_start??null,
+          regular_session_end:m.metadata?.regular_session_end??null,
           crowd_behavior_role:"RISK_CONTEXT_NOT_INDEPENDENT_EVIDENCE",
           crowd_behavior_context:crowd??null,
           crowd_behavior_risk_applied:crowdConflict||crowdExtremeChase,

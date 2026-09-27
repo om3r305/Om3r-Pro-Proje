@@ -1,10 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
+import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.realtime-multiasset-market-eye.v4-meta-price-fallback";
+const VERSION="brian.realtime-multiasset-market-eye.v5-verified-session";
 const COLLECTOR_ID="brian-realtime-multiasset-market-eye-v1";
 
 type Spec={asset_id:string;asset_class:string;symbol:string;themes:string[];priority:number};
@@ -98,8 +99,10 @@ async function fetchOne(spec:Spec){
   const prev=n(meta.chartPreviousClose??meta.previousClose);
   const observed=new Date().toISOString();
   const providerTime=new Date(providerMs).toISOString();
-  const latency=Math.max(0,(Date.now()-providerMs)/1000);
-  const state=latency<=15*60?String(meta.marketState??"OPEN"):"STALE_OR_CLOSED";
+  const regular=meta.currentTradingPeriod?.regular;
+  const session=assessMarketSession(providerTime,regular?.start,regular?.end);
+  const latency=session.latency??1e9;
+  const state=session.sessionState;
   const markId=await sha(`${VERSION}|${spec.asset_id}|${providerTime}|${price}`);
   return {
     mark_id:markId,asset_id:spec.asset_id,asset_class:spec.asset_class,provider_symbol:spec.symbol,
@@ -111,6 +114,8 @@ async function fetchOne(spec:Spec){
     metadata:{
       version:VERSION,currency:meta.currency??null,exchange_name:meta.exchangeName??null,
       instrument_type:meta.instrumentType??null,regular_market_time:meta.regularMarketTime??null,
+      regular_session_start:regular?.start??null,regular_session_end:regular?.end??null,
+      session_reason:session.reason,provider_market_state:meta.marketState??null,
       provider_endpoint:"query1.finance.yahoo.com/v8/finance/chart",price_fallback:priceFallback,
       execution_grade:false,public_unofficial_source:true,
       themes:spec.themes,priority:spec.priority
