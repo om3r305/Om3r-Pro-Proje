@@ -24,3 +24,13 @@ The branch's worker source was older than production. Restore the actually deplo
 Worker previous version 38: pinned fc963cd21846cd8b2dfe7edfc109fa4dfa572c97. Guardian previous version 11: pinned 054e910c2f1fc25cafdf1d807a6f26ed08ae2c60. Previous status source is available in brian-2026 parent. Disable the guardian job by its name if required. Do not erase events, reset balances, or enable real execution during rollback.
 
 Deployment and fresh shadow-session observation are recorded after verification. No future profitability claim is made.
+
+## Live verification and six-hour observation
+- Code commit: 66f2a05e3a2d4672e05093675f20f1bbedd40f81; Vercel dpl_H7pDnNmFXWq3WiXUkjuTf9jwM8j1 READY on the requested brian-2026 alias.
+- Worker version 39, Guardian version 12, status version 24 deployed. Main probe request 160802: HTTP 200 RUNNING, no market errors; 105 universe symbols and 32 deep scans.
+- Guardian probe 160804: HTTP 200 COMPLETE, 8 successful idle ticks over 35.354s, no orders. Conditional cron 93 active every minute; first observed no-position run took ~8ms. Dispatch remains denied to anon/authenticated; security-advisor finding counts unchanged.
+- Same session/cash/history resumed at 2026-09-27 07:38 UTC for 18 hours, until 2026-09-28 01:38 UTC (03:38 Berlin). Main 996.245302463026 USDT; arena 969.433984893621 USDT remains RISK_FROZEN under its session loss limit.
+- At 13:38 UTC the automatic heartbeat was current with no market errors. Radar history contained 120 automatic scans from 07:41 through 13:38; adding the initial probe gives 121 evaluation minutes. 3,872 evaluations, 111 distinct symbols, 0 READY decisions and 0 new trades. 3,326 evaluations (85.90%) failed economics; median modeled net forecast -18.37 bps. These are model classifications, not proof that no profitable market opportunities occurred.
+- 11 confirmation messages comprised 9 EARLY_SCOUT candidates in an already-disabled strategy and 2 isolated core/winner confirmations. Disabled scout messages now say WAIT_SCOUT_DISABLED rather than implying an imminent entry. No gates were loosened to force trades.
+- Follow-up found the worker's legacy triggerFill could book stale stop/trail prices after a gap. Clamp exits to the worse of observed bid and trigger, matching guardian semantics. A regression test covers stop, ratchet, harvest and protective trail gaps. New worker policy .2; 13 behavioral tests pass. Earlier historical P&L is retained, not retrospectively rewritten.
+- This observation establishes scheduler continuity, not profitable edge or live-money readiness. Full authenticated visual browser verification was not performed; frontend deployment and backend execution were verified.

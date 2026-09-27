@@ -5,8 +5,8 @@ declare const Deno: any;
 const DB_URL=Deno.env.get('SUPABASE_DB_URL')!;
 const ENGINE_ID='dip-multiasset-v1';
 const ARENA_ID='dip-aggressive-arena-v1';
-const ENGINE_VERSION='V8.9.9';
-const POLICY_VERSION='dip-v899-risk-guard-20260927.1';
+const ENGINE_VERSION='V8.9.9.1';
+const POLICY_VERSION='dip-v899-risk-guard-20260927.2';
 const RISK_ENGINE='V899_RISK_GUARD';
 const MAX_DEEP_SCAN=32,CORE_SCAN_SLOTS=24,INTERRUPT_SLOTS=4,EXPLORER_SLOTS=4,LANE_TOP=6,MEMORY_MAX=48,MEMORY_TTL_MS=60*60_000;
 const MAX_POSITIONS=3,FEE_BPS=10,MIN_SHADOW_NOTIONAL=8,MAX_TOTAL_GROSS_PCT=.30,LOSS_STREAK_PAUSE_MS=60*60_000;
@@ -343,7 +343,7 @@ function monsterScalePulseOk(p:EntryPulse,stage:number){
 }
 async function insertEvent(sql:any,row:any){await sql`insert into public.brian_dip_multiasset_events (engine_id,observed_at,symbol,action,price,qty,notional,pnl,reason,metadata) values (${ENGINE_ID},${new Date(row.observed_at)},${row.symbol},${row.action},${row.price},${row.qty},${row.notional},${row.pnl},${row.reason},${sql.json(row.metadata||{})})`;}
 async function learnMissed(sql:any,state:State,now:number){const prev=(state.last_scan as any)?.learning_summary??{},lastAt=Date.parse(String((state.last_scan as any)?.learning_at||''));if(Number.isFinite(lastAt)&&now-lastAt<5*60_000)return{at:String((state.last_scan as any)?.learning_at||iso()),summary:prev};try{const from=new Date(now-80*60_000),to=new Date(now-62*60_000),rows=await sql`select distinct on (symbol) evaluation_id,observed_at,symbol,price,signal_score,reason,metadata from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and action='WAIT' and signal_score>=0.70 and observed_at>=${from} and observed_at<=${to} and coalesce(metadata->>'outcome_checked','false')<>'true' order by symbol,signal_score desc limit 4`;for(const r of rows){try{const start=Date.parse(String(r.observed_at)),end=start+60*60_000,raw=await marketJson(`/api/v3/klines?symbol=${encodeURIComponent(String(r.symbol))}&interval=1m&startTime=${start}&endTime=${end}&limit=65`,4500);if(!Array.isArray(raw)||!raw.length)continue;const entry=num(r.price),hi=Math.max(...raw.map((x:any)=>num(x[2]))),lo=Math.min(...raw.map((x:any)=>num(x[3]))),up=pct(hi,entry),down=pct(lo,entry),label=up>=5?'MISSED_A_PLUS':up>=2.5?'MISSED_WINNER':down<=-2.5?'GOOD_REJECT':'NEUTRAL',meta={...((r.metadata||{}) as J),outcome_checked:true,outcome_label:label,future_max_60m_pct:up,future_min_60m_pct:down,outcome_checked_at:iso()};await sql`update public.brian_dip_multiasset_evaluations set metadata=${sql.json(meta)} where evaluation_id=${r.evaluation_id}`;}catch{}}const since=new Date(now-24*60*60_000),stats=await sql`select count(*) filter(where metadata->>'outcome_label'='MISSED_A_PLUS')::int as missed_a_plus,count(*) filter(where metadata->>'outcome_label'='MISSED_WINNER')::int as missed_winner,count(*) filter(where metadata->>'outcome_label'='GOOD_REJECT')::int as good_reject,count(*) filter(where metadata->>'outcome_checked'='true')::int as checked from public.brian_dip_multiasset_evaluations where engine_id=${ENGINE_ID} and observed_at>=${since}`;return{at:iso(),summary:{...(stats[0]||prev),window_hours:24}};}catch{return{at:iso(),summary:prev};}}
-function triggerFill(reason:string,p:Position,m:Market,slip:number){const extra=slip+2;if(reason==='STOP')return p.stop*(1-extra/10000);if((reason==='HARVEST_TRAIL'||reason==='PROTECT_TRAIL'||reason==='PROFIT_RATCHET')&&p.trail)return p.trail*(1-extra/10000);return m.bid*(1-slip/10000);}
+function triggerFill(reason:string,p:Position,m:Market,slip:number){const extra=slip+2;if(reason==='STOP')return Math.min(m.bid,p.stop)*(1-extra/10000);if((reason==='HARVEST_TRAIL'||reason==='PROTECT_TRAIL'||reason==='PROFIT_RATCHET')&&p.trail)return Math.min(m.bid,p.trail)*(1-extra/10000);return m.bid*(1-slip/10000);}
 function cooldownMs(reason:string,pnl:number){if(pnl<0){if(reason==='THESIS_BREAK'||reason==='FORECAST_THESIS_BREAK'||reason==='BRAIN_THESIS_BREAK')return 12*60_000;return 30*60_000;}if(reason==='PROFIT_RATCHET'||reason==='PROTECT_TRAIL')return 3*60_000;if(reason==='HARVEST_TRAIL'||reason==='PEAK_REVERSAL'||reason==='FORECAST_REVERSAL')return 7*60_000;return 10*60_000;}
 
 async function loadArenaState(sql:any,main:State){
@@ -674,7 +674,7 @@ for(const c of radar.rows){
       emergencyReady?'EMERGENCY_SCOUT':surgeReady?'SURGE_SCOUT':coreReady?'CORE':winnerReady?'WINNER_SCOUT':hunterReady?'HUNTER':scoutReady?'EARLY_SCOUT':'WAIT',
     reason=open?'POSITION_OPEN':reentry.active&&!reentry.eligible?reentry.reason:reentryReady?reentry.reason:
       emergencyReady?'V880_EMERGENCY_SCOUT':surgeReady?'V880_SURGE_SCOUT':coreReady?'V875_CORE_EDGE':winnerReady?'V875_WINNER_SCOUT':hunterReady?'V875_HUNTER_EDGE':scoutReady?'V875_EARLY_SCOUT':
-      lateCore?'WAIT_LATE_ENTRY':ev.coreRaw?'WAIT_CORE_CONFIRM':ev.winnerRaw?'WAIT_WINNER_CONFIRM':ev.hunterRaw?'WAIT_HUNTER_CONFIRM':ev.scoutRaw?'WAIT_SCOUT_CONFIRM':ev.reason,
+      lateCore?'WAIT_LATE_ENTRY':ev.coreRaw?'WAIT_CORE_CONFIRM':ev.winnerRaw?'WAIT_WINNER_CONFIRM':ev.hunterRaw?'WAIT_HUNTER_CONFIRM':ev.scoutRaw?'WAIT_SCOUT_DISABLED':ev.reason,
     rec:any={symbol:c.symbol,price:m.mid,radar_score:c.radar_score,radar_lane:c.lane||'UNKNOWN',signal_score:ev.score,opportunity_score:ev.opp,opportunity_tier:ev.tier,
       capital_score:ev.capitalScore,explosion_score:ev.explosionScore,shock_up_15m_bps:m.shock_up_15m_bps,shock_age_min:m.shock_age_min,estimated_cost_bps:ev.cost,
       forecast_gross_bps:ev.gross,forecast_net_bps:ev.net,continuation_prob:ev.forecast.continuation,forecast:ev.forecast,pullback_pct:m.pullbackPct,bounce_pct:m.bouncePct,

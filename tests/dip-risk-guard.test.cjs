@@ -115,3 +115,14 @@ test('arena confirmation survives a three-minute cycle but not a missed cycle',a
   assert.equal((await arenaRun({},.85,190000)).result.positions.length,1);
   assert.equal((await arenaRun({},.85,370000)).result.positions.length,0);
 });
+
+test('worker gap exits never fill above the observed bid',()=>{
+  const w=load('brian-dip-multiasset-worker-v860');
+  for(const [reason,p,bid] of [
+    ['STOP',{stop:95},90],
+    ['PROFIT_RATCHET',{trail:103},101],
+    ['HARVEST_TRAIL',{trail:103},101],
+    ['PROTECT_TRAIL',{trail:103},101]
+  ]) assert.ok(w.triggerFill(reason,p,{bid},2)<=bid);
+  assert.equal(w.triggerFill('STOP',{stop:95},{bid:90},2),90*.9996);
+});
