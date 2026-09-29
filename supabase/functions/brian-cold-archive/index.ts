@@ -7,8 +7,8 @@ const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
 const BUCKET="brian-cold-archive";
 const GRACE_HOURS=24;
-const MAX_ARCHIVES_PER_RUN=3;
-const MAX_PURGES_PER_RUN=3;
+const MAX_ARCHIVES_PER_RUN=6;
+const MAX_PURGES_PER_RUN=6;
 const ALLOWED=new Set([
   "brian_treasury_shadow_snapshots",
   "brian_treasury_shadow_actions",
@@ -18,6 +18,15 @@ const ALLOWED=new Set([
   "brian_alpha_decisions",
   "brian_sensor_observations",
   "brian_intel_events",
+  "brian_dip_multiasset_evaluations",
+  "brian_world_asset_impact_candidates",
+  "brian_world_scenario_snapshots",
+  "brian_world_narrative_snapshots",
+  "brian_world_causal_mechanisms",
+  "brian_world_entity_observations",
+  "brian_world_event_frames",
+  "brian_alpha_phase37_comparisons",
+  "brian_alpha_reliability_shadow_features",
 ]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
@@ -115,32 +124,30 @@ async function archivePolicy(policy:any){
 
 async function purgeVerified(){
   const before=new Date(Date.now()-GRACE_HOURS*3600_000).toISOString();
+  // Only purge-enabled tables are eligible; otherwise retained manifests of
+  // hot-policy tables would sit at the head of the queue and starve purges.
+  const enabled=await db.from("brian_archive_policies").select("table_name").eq("purge_enabled",true);
+  if(enabled.error)throw enabled.error;
+  const tables=(enabled.data??[]).map(p=>String(p.table_name)).filter(t=>ALLOWED.has(t));
+  if(!tables.length)return [];
   const q=await db.from("brian_archive_manifests")
-    .select("archive_id,table_name,storage_path,content_sha256,pk_values,verified_at,state,metadata")
-    .eq("state","UPLOADED_VERIFIED").lt("verified_at",before)
+    .select("archive_id,table_name,storage_path,content_sha256,verified_at,state")
+    .eq("state","UPLOADED_VERIFIED").lt("verified_at",before).in("table_name",tables)
     .order("verified_at",{ascending:true}).limit(MAX_PURGES_PER_RUN);
   if(q.error)throw q.error;
   const results:any[]=[];
   for(const m of q.data??[]){
-    const p=await db.from("brian_archive_policies").select("pk_column,purge_enabled").eq("table_name",m.table_name).single();
-    if(p.error)throw p.error;
-    if(!p.data.purge_enabled){results.push({archive_id:m.archive_id,table:m.table_name,status:"RETAIN_HOT_POLICY"});continue}
-
     const dl=await db.storage.from(BUCKET).download(String(m.storage_path));
     if(dl.error)throw dl.error;
     const compressed=new Uint8Array(await dl.data.arrayBuffer());
     if(await sha(compressed)!==String(m.content_sha256))throw new Error(`purge checksum mismatch: ${m.archive_id}`);
 
-    const ids=Array.isArray(m.pk_values)?m.pk_values:[];
-    let deleted=0;
-    for(const group of chunks(ids,200)){
-      const del=await db.from(String(m.table_name)).delete().in(String(p.data.pk_column),group).select(String(p.data.pk_column));
-      if(del.error)throw del.error;
-      deleted+=(del.data??[]).length;
-    }
-    const upd=await db.from("brian_archive_manifests").update({state:"PURGED",purged_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(m.metadata??{}),purge_verified_again:true,deleted_rows:deleted}}).eq("archive_id",m.archive_id);
-    if(upd.error)throw upd.error;
-    results.push({archive_id:m.archive_id,table:m.table_name,status:"PURGED",deleted});
+    // Archived tables are append-only (brian_reject_mutation only admits the
+    // postgres role), so the delete runs in an owner-privileged RPC that
+    // re-checks manifest state, grace period and retention window itself.
+    const del=await db.rpc("brian_archive_purge_manifest",{p_archive_id:m.archive_id});
+    if(del.error)throw del.error;
+    results.push({archive_id:m.archive_id,table:m.table_name,status:"PURGED",deleted:Number(del.data??0)});
   }
   return results;
 }
