@@ -1,0 +1,128 @@
+{
+ "BTC buy&hold":{
+  "cagr":40.2,
+  "sharpe":0.8752147609,
+  "max_dd":-77.0,
+  "turnover_yr":0.0,
+  "h1_cagr":34.8,
+  "h2_cagr":45.8,
+  "exposure":100.0
+ },
+ "PIT EW buy&hold (weekly)":{
+  "cagr":28.5,
+  "sharpe":0.7173757846,
+  "max_dd":-84.5,
+  "turnover_yr":4.4386296604,
+  "h1_cagr":39.5,
+  "h2_cagr":18.4,
+  "exposure":98.4
+ },
+ "TS trend SMA50 (PIT EW)":{
+  "cagr":13.2,
+  "sharpe":0.5076276368,
+  "max_dd":-63.6,
+  "turnover_yr":145.4230885578,
+  "h1_cagr":17.8,
+  "h2_cagr":8.7,
+  "exposure":43.9
+ },
+ "BTC trend SMA50":{
+  "cagr":-0.3,
+  "sharpe":0.1875830878,
+  "max_dd":-73.6,
+  "turnover_yr":149.3896997656,
+  "h1_cagr":-4.9,
+  "h2_cagr":4.6,
+  "exposure":51.0
+ },
+ "TS trend SMA100 (PIT EW)":{
+  "cagr":28.4,
+  "sharpe":0.811614715,
+  "max_dd":-55.7,
+  "turnover_yr":95.9605233306,
+  "h1_cagr":31.7,
+  "h2_cagr":25.1,
+  "exposure":43.3
+ },
+ "BTC trend SMA100":{
+  "cagr":11.4,
+  "sharpe":0.4759400273,
+  "max_dd":-53.3,
+  "turnover_yr":95.5630341072,
+  "h1_cagr":5.1,
+  "h2_cagr":18.1,
+  "exposure":50.5
+ },
+ "TS trend SMA200 (PIT EW)":{
+  "cagr":32.2,
+  "sharpe":0.8748839568,
+  "max_dd":-54.6,
+  "turnover_yr":66.6042879831,
+  "h1_cagr":33.4,
+  "h2_cagr":31.1,
+  "exposure":42.9
+ },
+ "BTC trend SMA200":{
+  "cagr":31.2,
+  "sharpe":0.9492041917,
+  "max_dd":-37.4,
+  "turnover_yr":57.1390758527,
+  "h1_cagr":26.0,
+  "h2_cagr":36.7,
+  "exposure":48.4
+ },
+ "XS mom 14d top3 +BTC gate":{
+  "cagr":78.1,
+  "sharpe":1.1570530253,
+  "max_dd":-71.9,
+  "turnover_yr":34.614686531,
+  "h1_cagr":65.1,
+  "h2_cagr":92.1,
+  "exposure":49.8
+ },
+ "XS mom 14d top5 +BTC gate":{
+  "cagr":71.9,
+  "sharpe":1.1691255242,
+  "max_dd":-68.6,
+  "turnover_yr":31.3022763367,
+  "h1_cagr":81.9,
+  "h2_cagr":62.5,
+  "exposure":49.8
+ },
+ "XS mom 30d top3 +BTC gate":{
+  "cagr":84.0,
+  "sharpe":1.1941326449,
+  "max_dd":-69.4,
+  "turnover_yr":26.4440747183,
+  "h1_cagr":86.2,
+  "h2_cagr":81.8,
+  "exposure":49.8
+ },
+ "XS mom 30d top5 +BTC gate":{
+  "cagr":66.5,
+  "sharpe":1.105277825,
+  "max_dd":-66.7,
+  "turnover_yr":25.2074415791,
+  "h1_cagr":80.3,
+  "h2_cagr":53.8,
+  "exposure":49.8
+ },
+ "XS mom 60d top3 +BTC gate":{
+  "cagr":39.1,
+  "sharpe":0.8224641581,
+  "max_dd":-77.2,
+  "turnover_yr":24.7878696211,
+  "h1_cagr":59.7,
+  "h2_cagr":21.1,
+  "exposure":48.5
+ },
+ "XS mom 60d top5 +BTC gate":{
+  "cagr":54.9,
+  "sharpe":1.0086954801,
+  "max_dd":-65.1,
+  "turnover_yr":21.2325493458,
+  "h1_cagr":53.0,
+  "h2_cagr":56.7,
+  "exposure":48.5
+ }
+}

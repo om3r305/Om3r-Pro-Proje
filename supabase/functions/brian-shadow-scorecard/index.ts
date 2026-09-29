@@ -59,7 +59,10 @@ Deno.serve(async(req:Request)=>{
           from public.brian_alpha_decisions where observed_at>=${start} and observed_at<=least(now(),${end}::timestamptz) and shadow_only and not live_execution order by observed_at,decision_id limit 501) d
         left join public.brian_alpha_decision_outcomes o on o.decision_id=d.decision_id and o.horizon_seconds=3600 and o.shadow_only and not o.live_execution
         order by d.observed_at,d.decision_id`:[];
-      return {version:'forward-scorecard-v1',generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),shadow_only:true,live_execution:false};
+      // Every OPEN decision net of its contemporaneous round-trip cost, 30 days.
+      const netScoreboard=await tx`select horizon_seconds,action,decisions,cost_bps,gross_bps,net_bps,t_net,win_rate,verdict
+        from public.brian_scoreboard_net_30d order by horizon_seconds,action`;
+      return {version:'forward-scorecard-v1',generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,shadow_only:true,live_execution:false};
     });
     cache=payload;cacheAt=Date.now();return response(payload);
   }catch(error){console.error('shadow-scorecard',error instanceof Error?error.message:'QUERY_FAILED');return response({error:'SCORECARD_UNAVAILABLE',shadow_only:true,live_execution:false},503)}
