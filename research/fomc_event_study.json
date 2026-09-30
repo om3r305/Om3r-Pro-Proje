@@ -1,0 +1,46 @@
+{
+ "pre 24h -> statement":{
+  "n_events":46,
+  "event_mean_%":0.255,
+  "base_mean_%":0.08,
+  "t_vs_base":0.446,
+  "up_share":0.587,
+  "event_abs_%":1.958,
+  "base_abs_%":2.033,
+  "abs_ratio":0.963,
+  "trade_long_net_%":-0.045
+ },
+ "statement -> +2h":{
+  "n_events":46,
+  "event_mean_%":-0.015,
+  "base_mean_%":0.0,
+  "t_vs_base":-0.041,
+  "up_share":0.457,
+  "event_abs_%":1.778,
+  "base_abs_%":0.555,
+  "abs_ratio":3.205,
+  "trade_long_net_%":-0.315
+ },
+ "+2h -> +24h":{
+  "n_events":46,
+  "event_mean_%":-0.159,
+  "base_mean_%":0.1,
+  "t_vs_base":-0.585,
+  "up_share":0.457,
+  "event_abs_%":2.329,
+  "base_abs_%":1.932,
+  "abs_ratio":1.206,
+  "trade_long_net_%":-0.459
+ },
+ "statement -> +24h":{
+  "n_events":46,
+  "event_mean_%":-0.17,
+  "base_mean_%":0.099,
+  "t_vs_base":-0.458,
+  "up_share":0.478,
+  "event_abs_%":3.026,
+  "base_abs_%":2.011,
+  "abs_ratio":1.504,
+  "trade_long_net_%":-0.47
+ }
+}
