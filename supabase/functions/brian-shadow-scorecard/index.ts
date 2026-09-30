@@ -62,7 +62,10 @@ Deno.serve(async(req:Request)=>{
       // Every OPEN decision net of its contemporaneous round-trip cost, 30 days.
       const netScoreboard=await tx`select horizon_seconds,action,decisions,cost_bps,gross_bps,net_bps,t_net,win_rate,verdict
         from public.brian_scoreboard_net_30d order by horizon_seconds,action`;
-      return {version:'forward-scorecard-v1',generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,shadow_only:true,live_execution:false};
+      // BTC/ETH trend paper portfolio (trend-ensemble-v1), newest 120 days.
+      const trendShadow=await tx`select day::text as day,days_live,nav,return_since_start,btc_hold_return,half_half_return,drawdown,target_weights,rebalanced
+        from public.brian_trend_shadow_performance where policy_version='trend-ensemble-v1' order by day desc limit 120`;
+      return {version:'forward-scorecard-v1',generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,trend_shadow:trendShadow.reverse(),shadow_only:true,live_execution:false};
     });
     cache=payload;cacheAt=Date.now();return response(payload);
   }catch(error){console.error('shadow-scorecard',error instanceof Error?error.message:'QUERY_FAILED');return response({error:'SCORECARD_UNAVAILABLE',shadow_only:true,live_execution:false},503)}
