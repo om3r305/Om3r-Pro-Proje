@@ -29,15 +29,15 @@ concurrency:
 jobs:
   research:
     if: github.ref == 'refs/heads/brian-2026'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 330
     env:
       BRIAN_RESEARCH_MODE: ${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -45,7 +45,7 @@ jobs:
       - name: Install runtime requirements
         run: python -m pip install -r requirements.txt
       - name: Restore verified research cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: research_data
           key: ${{ runner.os }}-brian-research-v2-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase24.py', 'brian2026/parquet_store.py') }}-${{ github.run_id }}
@@ -55,7 +55,7 @@ jobs:
       - name: Run public-data shadow research
         run: python -m brian2026.cloud_runner --mode "$BRIAN_RESEARCH_MODE"
       - name: Upload review outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: brian-${{ github.event_name == 'push' && 'phase27-development' || inputs.mode }}-${{ github.run_id }}
           if-no-files-found: error

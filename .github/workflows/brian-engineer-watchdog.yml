@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   ensure-engineer-running:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Dispatch Brian Engineer when healthy cadence is missing
@@ -42,7 +42,7 @@ jobs:
 
 
   ensure-shadow-running:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Dispatch guarded shadow runner when cadence is missing

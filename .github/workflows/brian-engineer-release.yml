@@ -27,14 +27,14 @@ jobs:
       github.event.review.user.login == github.repository_owner &&
       github.event.pull_request.base.ref == 'brian-2026' &&
       startsWith(github.event.pull_request.head.ref, 'brian-engineer/')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - name: Check out exact approved candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -114,7 +114,7 @@ jobs:
 
       - name: Set up Supabase CLI for backend release and rollback
         if: steps.deploy_plan.outputs.needs_supabase == 'true'
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v2
         with:
           version: latest
 

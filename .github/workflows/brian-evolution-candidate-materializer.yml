@@ -25,11 +25,11 @@ permissions:
 
 jobs:
   materialize-candidate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out canonical Brian branch without persisted credentials
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: brian-2026
           fetch-depth: 0

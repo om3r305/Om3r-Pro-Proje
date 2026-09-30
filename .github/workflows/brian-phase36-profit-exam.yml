@@ -24,10 +24,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -37,7 +37,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Restore verified public archive cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: research_data
           key: ${{ runner.os }}-brian-phase36-v1-${{ hashFiles('brian2026/archive.py', 'brian2026/phase36_frozen_profit_exam.py') }}-${{ github.run_id }}
@@ -74,7 +74,7 @@ jobs:
             --checkpoint phase35_source/cloud_results/phase35_training_checkpoint.json
 
       - name: Upload Phase 3.6 exam artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: brian-phase36-profit-exam-${{ github.run_id }}
           if-no-files-found: error

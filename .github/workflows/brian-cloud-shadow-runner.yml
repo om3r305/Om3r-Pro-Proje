@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   cloud-runner:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       BRIAN_SENSOR_SUPABASE_URL: https://dliediwlldojkfjzlznm.supabase.co
@@ -48,12 +48,12 @@ jobs:
 
     steps:
       - name: Check out reviewed Brian 2027 R1 revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: db0f4a705ef2d7c449d16376133dc70fbe8deef5
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload Phase116 result
         if: always() && hashFiles('phase116-readiness.json') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: phase116-readiness-${{ github.run_id }}
           path: phase116-readiness.json
@@ -129,7 +129,7 @@ jobs:
 
       - name: Upload Phase117 result
         if: always() && (github.event_name == 'schedule' || github.event_name == 'push' || inputs.mode == 'phase117-paper-one-shot') && hashFiles('phase117-result.json') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: phase117-result-${{ github.run_id }}
           path: phase117-result.json

@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   postgres-contract:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     services:
       postgres:
@@ -33,7 +33,7 @@ jobs:
       PGPASSWORD: postgres
       PGDATABASE: v84_ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify PostgreSQL client
         run: psql --version
       - name: Create Supabase-style database roles

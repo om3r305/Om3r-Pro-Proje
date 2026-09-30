@@ -18,13 +18,13 @@ concurrency:
 jobs:
   smoke:
     if: github.ref == 'refs/heads/brian-2026'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -32,7 +32,7 @@ jobs:
       - name: Install runtime requirements
         run: python -m pip install -r requirements.txt
       - name: Restore verified smoke-data cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: research_data
           key: ${{ runner.os }}-brian-phase33-smoke-v1-${{ hashFiles('requirements.txt', 'brian2026/archive.py', 'brian2026/phase33_learning_smoke.py') }}-${{ github.run_id }}
@@ -46,7 +46,7 @@ jobs:
           --output cloud_results/phase33_learning_smoke.json
           --checkpoint-output cloud_results/phase33_learner_checkpoint.json
       - name: Upload training diagnostics
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: brian-phase33-learning-smoke-${{ github.run_id }}
           if-no-files-found: error

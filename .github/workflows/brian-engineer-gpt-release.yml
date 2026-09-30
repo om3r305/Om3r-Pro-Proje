@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
@@ -62,7 +62,7 @@ jobs:
           case "$BRANCH_NAME" in brian-engineer/*) ;; *) echo 'Invalid candidate branch'; exit 1;; esac
 
       - name: Check out exact GPT-approved candidate
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 0
@@ -124,7 +124,7 @@ jobs:
 
       - name: Set up Supabase CLI
         if: steps.plan.outputs.needs_supabase == 'true'
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v2
         with:
           version: latest
 
