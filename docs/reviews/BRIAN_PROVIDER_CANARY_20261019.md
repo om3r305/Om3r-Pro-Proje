@@ -44,3 +44,13 @@ Follow-up repairs remove the duplicate selected-provider retry in hosted-only mo
 ## Independent evaluator boundary
 
 The guard already protected its scripts, migrations and workflows, but did not protect the fixed baseline test files invoked by those scripts. The guard now rejects autonomous changes to the operator-owned Node baseline and fixed Deno regression suite. Candidate-specific unit/replay/stress tests remain writable, and explicit operator maintenance retains the existing override while preserving other limits. Four behavioral checks exercise these boundaries and verify the actual invoked Deno paths. Guard version is `brian.engineer-guard.v1.1-operator-tests`; the expanded local baseline is 18 files / 93 passing tests.
+
+The first hosted guard test run exposed an old expectation that evolution_research.test.ts was writable. Operator maintenance updates that case to a candidate-owned test and adds explicit Deno rejection/maintenance coverage for fixed evaluator tests. The new protection remains in place; the test no longer describes the superseded policy.
+
+## Controlled resume result
+
+Run `2eb5993b-f8f6-4ad3-82f0-b74c9591bf7a` completed analysis and planning, then hit the single 360-second CODE timeout at 00:51:20 Berlin. Telemetry shows **five changed files**, code stdout 332 bytes, and TIMEOUT / exit 124. No committed, compiled, tested or measured candidate and no PR were recorded. Those uncommitted files are not counted as delivered software. Evidence: https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39173517588 .
+
+This distinguishes working provider access/file editing from reliable repository-task completion. Further model calls are stopped for this session. Next engineering work must address bounded implementation steps, durable preservation of incomplete work and completion diagnostics before claiming the internal writer is ready. The current provider_exhausted compatibility field / green handled-deferral workflow must not be read as proof of provider outage or successful engineering. The database BLOCKED state and explicit CODE/TIMEOUT evidence are authoritative.
+
+At 00:41 Berlin the diagnostic latest-300 cohort had 284 mature five-minute decisions, 139 resolved outcomes and 31 directional cost-known observations; mean directional net result was -17.18 bps. This nonrandom, incomplete diagnostic cohort is neither realized P&L nor proof of profitability. Automated claims and real-money execution remain disabled; no generated candidate was promoted.

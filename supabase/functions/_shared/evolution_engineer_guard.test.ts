@@ -17,13 +17,24 @@ Deno.test("engineer guard allows ordinary Brian source and tests", () => {
   const result = validateEngineerChangeSet({
     changedPaths: [
       "supabase/functions/_shared/evolution_research.ts",
-      "supabase/functions/_shared/evolution_research.test.ts",
+      "supabase/functions/_shared/evolution_candidates/research.test.ts",
     ],
     patchBytes: 4096,
     addedText: "export const value = 1;",
   });
   assertEquals(result.valid, true);
   assertEquals(result.reasons, []);
+});
+
+Deno.test("engineer guard keeps fixed evaluator tests operator-owned", () => {
+  for (const path of [
+    "supabase/functions/_shared/evolution_research.test.ts",
+    "supabase/functions/_shared/evolution_engineer_guard.test.ts",
+    "tests/open-world-cycle.test.cjs",
+  ]) {
+    assertEquals(validateEngineerChangeSet({ changedPaths: [path], patchBytes: 100 }).valid, false);
+    assertEquals(validateEngineerChangeSet({ changedPaths: [path], patchBytes: 100, allowControlPlane: true }).valid, true);
+  }
 });
 
 Deno.test("engineer guard blocks its own control plane", () => {
