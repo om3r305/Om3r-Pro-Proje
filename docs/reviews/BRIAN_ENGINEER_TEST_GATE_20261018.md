@@ -21,3 +21,9 @@ Research remains separate from engineering capability: 12 external source record
 Open items remain: a capable provider canary and metadata reconciliation; an actual generated and independently verified code improvement; economic event dossiers and counter-evidence; prospectively evaluated psychology features; complete cost/outcome coverage; positive prospective strategy evidence. Full delivery is not established by this change. Real-money execution remains disabled.
 
 Reference: https://docs.github.com/en/enterprise-cloud%40latest/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models
+
+## Follow-up: display real engineering receipts
+
+The status API returns raw event kinds. The UI previously searched for TEST, REVIEW, PREVIEW and MEASURE, while the actual gateway writes UNIT_REGRESSION, INDEPENDENT_REVIEW, VERCEL_PREVIEW / PREVIEW_EQUIVALENT and ENGINEERING_MEASURE. These receipts now map to the correct check. Exact candidate SHA and explicit boolean result remain mandatory; an unrelated phase or prior candidate does not pass, and the newest failed receipt overrides an older passing one. Existing legacy event kinds still work. The model asset query version is updated.
+
+The expanded baseline now has **14 files / 76 passing tests**, zero skipped. The first commit's hosted Node, Deno, Postgres integration, Python and control-plane checks all succeeded: https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39171454842 . These hosted checks do not establish successful autonomous generation.
