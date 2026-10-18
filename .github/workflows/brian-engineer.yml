@@ -7,6 +7,11 @@ on:
         description: 'Optional exact Evolution codegen request id'
         required: false
         type: string
+      candidate_only:
+        description: 'Stop after candidate verification and measurement; do not approve or release'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -38,21 +43,9 @@ jobs:
       - name: Check Brian Engineer queue
         id: preflight
         shell: bash
-        run: |
-          set +e
-          oidc_json="$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ENGINEERING_AUDIENCE}")"
-          token="$(printf '%s' "$oidc_json" | jq -er '.value')"
-          response="$(curl -fsS -X POST "$ENGINEERING_GATEWAY" -H "Authorization: Bearer $token" -H 'content-type: application/json' --data '{"action":"preflight"}')"
-          rc=$?
-          if [ "$rc" -ne 0 ] || [ -z "$response" ]; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Brian Engineer preflight unavailable; deferring safely without consuming a worker." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          should_run="$(printf '%s' "$response" | jq -r '.should_run // false')"
-          reason="$(printf '%s' "$response" | jq -r '.reason // "UNKNOWN"')"
-          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
-          echo "Brian Engineer preflight: should_run=$should_run reason=$reason" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          REQUEST_ID: ${{ inputs.request_id || '' }}
+        run: bash scripts/brian_engineer_preflight.sh
 
       - name: Set up Deno
         if: steps.preflight.outputs.should_run == 'true'
@@ -74,10 +67,10 @@ jobs:
 
       - name: Install GitHub Copilot CLI
         if: steps.preflight.outputs.should_run == 'true'
-        run: npm install -g @github/copilot@latest
+        run: npm install -g @github/copilot@1.0.98
 
       - name: Prepare quota-independent local AI fallback
-        if: steps.preflight.outputs.should_run == 'true'
+        if: steps.preflight.outputs.should_run == 'true' && inputs.candidate_only != true
         env:
           EXTERNAL_OPENAI_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY }}
           OLLAMA_VERSION: v0.34.0
@@ -117,6 +110,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
           REQUEST_ID: ${{ inputs.request_id || '' }}
+          BRIAN_CANDIDATE_ONLY: ${{ inputs.candidate_only && 'true' || 'false' }}
+          BRIAN_HOSTED_ONLY: ${{ inputs.candidate_only && 'true' || 'false' }}
           BRIAN_OPENAI_API_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY || 'ollama-local' }}
           BRIAN_OPENAI_BASE_URL: ${{ secrets.BRIAN_OPENAI_BASE_URL || 'http://127.0.0.1:11434/v1' }}
           BRIAN_OPENAI_MODEL: ${{ vars.BRIAN_OPENAI_MODEL || 'qwen2.5-coder:1.5b' }}

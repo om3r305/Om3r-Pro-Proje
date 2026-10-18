@@ -1,0 +1,28 @@
+name: Brian Engineer One Shot
+
+on:
+  push:
+    branches: [brian-2026]
+    paths: ['.github/workflows/brian-engineer-one-shot.yml']
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify successful capability receipt and dispatch one exact candidate task
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$REPO/actions/runs/39172553427" > /tmp/brian-canary-run.json
+          jq -e '.conclusion == "success" and .head_sha == "e00226014c2d06100f023f5c96c0ab619ac4b3f5" and .path == ".github/workflows/brian-engineer-canary.yml"' /tmp/brian-canary-run.json
+          gh workflow run brian-engineer.yml --repo "$REPO" --ref brian-2026 \
+            -f request_id=265eeba91eb4286e20701ffdfd9843e90566eba8f03de2bcfceab75a027aba0b \
+            -f candidate_only=true
+          echo 'One exact manual request dispatched in candidate-only mode; autonomous claims remain disabled.' >> "$GITHUB_STEP_SUMMARY"

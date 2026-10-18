@@ -77,3 +77,19 @@ test('independent evaluator rejects missing-cost substitution and placeholder ou
   assert.notEqual(evaluate(root, reference.replace('!Number.isFinite(r.cost_bps) ||', '')).status, 0);
   assert.notEqual(evaluate(root, 'module.exports.assessEvidence=()=>[];').status, 0);
 });
+test('a provider rejection creates one sanitized failed receipt and never runs generated code', t => {
+  const root = fixture(t), executable = path.join(root, 'timeout'), report = path.join(root, 'receipt.json');
+  fs.writeFileSync(executable, '#!/bin/sh\necho "401 invalid token CANARY_SECRET_SENTINEL" >&2\nexit 1\n', { mode: 0o755 });
+  const env = { ...process.env, PATH: root + path.delimiter + process.env.PATH,
+    TMPDIR: root, BRIAN_CANARY_REPORT: report }; delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, [path.resolve(__dirname, '../scripts/brian_engineer_canary.cjs')],
+    { env, encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 1);
+  const receipt = JSON.parse(fs.readFileSync(report, 'utf8'));
+  assert.equal(receipt.error, 'AUTH'); assert.equal(receipt.stage, 'PROVIDER');
+  assert.equal(receipt.attempts, 1); assert.equal(receipt.acceptance_passed, false);
+  assert.equal(receipt.production_task_claimed, false); assert.equal(receipt.autonomous_worker_enabled, false);
+  assert.ok(!result.stdout.includes('CANARY_SECRET_SENTINEL'));
+  assert.ok(!fs.readFileSync(report, 'utf8').includes('CANARY_SECRET_SENTINEL'));
+  assert.ok(!fs.readdirSync(root).some(name => name.startsWith('brian-model-canary-')));
+});

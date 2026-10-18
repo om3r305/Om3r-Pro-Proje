@@ -47,7 +47,7 @@ run_copilot_attempt() {
   local rc=0 err_class="NONE"
   local timeout_seconds
   local -a args
-  args=(-p "$(cat "$prompt_file")" -s --disable-builtin-mcps)
+  args=(-p "$(cat "$prompt_file")" -s --disable-builtin-mcps --no-ask-user --no-auto-update)
   if [[ "$mode" == "code" ]]; then
     args+=(--agent=brian-engineer --allow-tool=write)
   else
@@ -64,9 +64,10 @@ run_copilot_attempt() {
   echo "AI provider attempt: phase=$phase provider=$provider model=$model timeout=${timeout_seconds}s" >> "$GITHUB_STEP_SUMMARY"
 
   if [[ "$provider" == "COPILOT_HOSTED" ]]; then
+    if [[ "$model" != auto ]]; then args+=(--model "$model"); fi
     if timeout --foreground --signal=TERM --kill-after=15s "$timeout_seconds" env \
       -u COPILOT_PROVIDER_BASE_URL -u COPILOT_PROVIDER_TYPE -u COPILOT_PROVIDER_API_KEY -u COPILOT_MODEL -u COPILOT_OFFLINE \
-      copilot "${args[@]}" --model "$model" >"$stdout_file" 2>"$stderr_file"; then
+      copilot "${args[@]}" >"$stdout_file" 2>"$stderr_file"; then
       rc=0
     else
       rc=$?
@@ -140,6 +141,10 @@ ai_call() {
     if run_copilot_attempt "$phase" COPILOT_HOSTED auto "$prompt_file" "$output_file" "$mode"; then
       return 0
     fi
+    if [[ "${BRIAN_HOSTED_ONLY:-false}" == true ]]; then
+      provider_summary
+      return 75
+    fi
     if [[ "$HOSTED_QUOTA_EXHAUSTED" != true ]]; then
       for hosted_model in gpt-5.3-codex claude-haiku-4.5 gemini-3.7-flash; do
         if run_copilot_attempt "$phase" COPILOT_HOSTED "$hosted_model" "$prompt_file" "$output_file" "$mode"; then
@@ -149,6 +154,11 @@ ai_call() {
     else
       echo "Hosted Copilot quota is exhausted; skipping duplicate hosted-model attempts and moving to independent fallback." >> "$GITHUB_STEP_SUMMARY"
     fi
+  fi
+
+  if [[ "${BRIAN_HOSTED_ONLY:-false}" == true ]]; then
+    provider_summary
+    return 75
   fi
 
   if [[ -n "${BRIAN_OPENAI_API_KEY:-}" ]]; then
@@ -416,6 +426,11 @@ measurement="$(jq -nc \
   '{measurement_kind:"EXACT_COMMIT_ENGINEERING",exact_commit_sha:$exact_commit_sha,patch_bytes:$patch_bytes,changed_files:$changed_files,source_files:$source_files,test_files:$test_files,replay_files:$replay_files,stress_files:$stress_files,compile_passed:true,regression_passed:true,replay_passed:true,stress_passed:true,independent_review_passed:true,preview_passed:true,preview_kind:$preview_kind,protected_scope_clear:true,indirect_dip_dependency_clear:true,canonical_behavior_promotion:false,shadow_only:true,provider_continuity:true}')"
 bash scripts/brian_engineer_gateway.sh measure "$RUN_ID" "$CANDIDATE_SHA" "$measurement" | tee /tmp/brian-measure.json
 test "$(jq -r '.status' /tmp/brian-measure.json)" = 'MEASURED'
+
+if [[ "${BRIAN_CANDIDATE_ONLY:-false}" == true ]]; then
+  echo "Exact candidate $CANDIDATE_SHA verified and measured at $PR_URL. Waiting for separate review; no approval or release was requested." >> "$GITHUB_STEP_SUMMARY"
+  exit 0
+fi
 
 CURRENT_STAGE="GPT_APPROVAL"
 objective="$(jq -r '.claim.task.objective' /tmp/brian-engineer-claim.json)"

@@ -24,3 +24,15 @@ Official references:
 - https://github.com/github/copilot-cli/releases/tag/v1.0.98
 - https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference
 - https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools
+
+## Observed hosted result
+
+At 00:31:34 Berlin, the actual hosted run completed CAPABILITY_CANARY_PASSED. One provider attempt wrote candidate SHA-256 `8990c3ab0964ceac65717c1fafc3946bb0b075edee7bf19cd8a9b93b366aa440`; the network-free container passed all eight acceptance tests. Provider and evaluator exit codes were both zero. The actual routed model remains UNVERIFIED. Source: https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39172553427 . All four regular CI jobs for this commit also passed.
+
+## Exact real-task follow-up
+
+The existing database claim function explicitly permits an exact operator request while autonomous claims are disabled. The workflow's generic automatic preflight previously prevented that intended manual path from being reached. Preflight now distinguishes a valid exact request from automatic queue polling. Server-side OIDC, concurrency, shadow-only eligibility, current-request and approval guards still decide whether a claim is accepted; no database permission or claim rule is relaxed.
+
+The engineering CLI is pinned to the version just tested. The controlled candidate-only mode uses hosted Copilot only, skips the ineffective local-model bootstrap, and stops after independent verification/measurement before approval or release. An operator-owned, unscheduled one-shot workflow verifies the successful canary run/commit and dispatches only request `265eeba91eb4286e20701ffdfd9843e90566eba8f03de2bcfceab75a027aba0b` (measurement coverage). It cannot claim another task if the selected request has become ineligible. Autonomous claims remain false. This is an attempted real repository task, not a claim that the full task succeeded.
+
+Seven canary harness tests and four manual/automatic preflight tests pass locally. The additional canary failure-path test verifies one sanitized receipt, no acceptance execution and temporary-workspace cleanup after a rejected provider call.
