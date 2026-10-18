@@ -13,6 +13,32 @@ permissions:
   contents: read
 
 jobs:
+  verify-node-regressions:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run required Brian Node regressions and changed tests
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="${PR_BASE_SHA:-${PUSH_BASE_SHA:-}}"
+          if [[ "$base" =~ ^[a-f0-9]{40}$ ]] && [[ "$base" != 0000000000000000000000000000000000000000 ]]; then
+            node scripts/brian_engineer_node_tests.cjs "$base"
+          else
+            node scripts/brian_engineer_node_tests.cjs --baseline
+          fi
+
   verify:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
     runs-on: ubuntu-24.04

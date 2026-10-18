@@ -60,6 +60,12 @@ jobs:
         with:
           deno-version: '2.1.4'
 
+      - name: Set up Node for Brian regression tests
+        if: steps.preflight.outputs.should_run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
       - name: Set up Python
         if: steps.preflight.outputs.should_run == 'true'
         uses: actions/setup-python@v6

@@ -310,6 +310,7 @@ if [[ "${#py_files[@]}" -gt 0 ]]; then python -m py_compile "${py_files[@]}"; fi
 record_event COMPILE COMPILE "$CANDIDATE_SHA" '{"evidence":"Exact candidate syntax and type checks passed"}'
 
 CURRENT_STAGE="TEST"
+node scripts/brian_engineer_node_tests.cjs "$BASE_SHA"
 mapfile -t deno_tests < <(git diff --name-only "$BASE_SHA...HEAD" | grep -E '\.test\.ts$' || true)
 if [[ "${#deno_tests[@]}" -gt 0 ]]; then deno test --allow-read "${deno_tests[@]}"; fi
 deno test --allow-read \
