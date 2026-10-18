@@ -4,7 +4,7 @@ Bu rapor aynı günkü BRIAN_RESEARCH_START_20261018.md raporunun çalışma mod
 
 ## Çalışan bağlantılar
 
-07:58 ve 08:07 UTC üretim heartbeat verisi, mevcut frontier-status-truth.js durum hesabıyla kontrol edildi: Dünya, Davranış, ALPHA, Hazine, Araştırma ve Okyanus altısı da güncel. Bu, bağlantı/son çalışma sağlığıdır; tüm kaynakların tamamlandığı veya kararların kârlı olduğu anlamına gelmez. Üretim /api/brian/brian-frontier-heartbeat-public HTTP 200 / OK; news_pipeline HEALTHY, pipeline_stalled=false. 08:07 örneğinde backlog 7 olay, en eski 56 saniye; eşik 720 saniye.
+07:58 ve son olarak 08:13 UTC üretim heartbeat verisi, mevcut frontier-status-truth.js durum hesabıyla kontrol edildi: Dünya, Davranış, ALPHA, Hazine, Araştırma ve Okyanus altısı da güncel. Bu, bağlantı/son çalışma sağlığıdır; tüm kaynakların tamamlandığı veya kararların kârlı olduğu anlamına gelmez. Üretim /api/brian/brian-frontier-heartbeat-public HTTP 200 / OK; news_pipeline HEALTHY, pipeline_stalled=false. 08:07 örneğinde backlog 7 olay, en eski 56 saniye; eşik 720 saniye.
 
 | Hat | Doğrulama |
 |---|---|
@@ -41,19 +41,21 @@ Yeni incelemede WAIT kararlarında maliyet kanıtının yokluğu saptandı. Comp
 
 Auditor Core'daki en fazla 60 pending kararın metadata'sını yükler. Audit-only maliyeti yalnız WAIT/VETO için, kaynağı/provenansı doğru ve örnek karar öncesinde en fazla 120 saniyelikse kabul eder. Gelecek, eski, geçersiz veya eksik maliyet sıfır sayılmaz. Sonuç metadata'sı maliyet kaynağını taşır. Eski kayıtlara sonradan maliyet eklenmedi, geçmiş zarar/kararlar silinmedi. 08:04:05 UTC yeni WAIT kararlarında gerçek L2 provenance görüldü; 08:05 Core aktarımında da korundu.
 
-Canlı olgun sonuç üretimi son kontrolde ayrıca kaydedilecektir; yeni maliyet kanıtı ilk anda 5 dakika olgunlaşmış değildir.
+08:11 UTC gerçek auditor çağrısı HTTP 200 RESOLVED döndü: 5 sonuç ve 5 missed-opportunity receipt yazıldı. BTC/ETH/BNB/SOL/XRP için 300 saniyelik sonuçlar observed_audit_only maliyet kaynağıyla WAIT_JUSTIFIED_BY_COST sınıfında. Bu ilk örnek kâr veya kaçırılmış büyük fırsat değildir; fiyat hareketi tahmini maliyeti aşmamıştır. Aynı çağrıda 95 olgun ufuk hâlâ unresolved: eski maliyetsiz kararlar, seyrek dönen radar varlıkları veya fiyat boşlukları; veri uydurulmadı. 15/60 dakika sonuçları ilk beş dakikalık örnekle tamamlanmış sayılamaz.
+
+08:10 döngüsünde türev toplayıcısı iki spot sembolü için DEGRADED döndü (SOXLBUSDT/SNDKBUSDT). Spot radarın vadeli sözleşme listesi olmadığı görüldü. Toplayıcı, Binance exchangeInfo kaynağındaki TRADING / PERPETUAL / USDT sözleşmeleriyle kapsamı kesiştirecek şekilde düzeltildi. Kapsam dışı semboller coverage.skipped_non_active_usdt_perpetual alanında açıkça raporlanır; diğer sağlayıcı hataları yine DEGRADED olur, katalog yoksa işlem FAILED olur. Boş kapsam başarı diye sunulmaz. Yayımlanan v2 gerçek çağrısı HTTP 200 CAPTURED döndü: 15 radar adayından 13 aktif sözleşme, 18 gözlem, degraded_sources=[]; iki kapsam dışı sembol açıkça bildirildi. Resmî sözleşme bilgisi: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Exchange-Information.
 
 ## Yayın ve kontroller
 
 - CORE brian-core-scheduler-bridge v7, missed-opportunity-auditor-v3 v9.
-- RT brian-realtime-orchestrator v15; brian-realtime-core-scheduler v19; brian-direct-wire-eye v3; gerçek compiler slug'ı brian-alpha-decision-compiler v9. Repo kaynak dizini brian-realtime-alpha-decision-compiler'dır; bu ad doğrudan deploy slug'ı olarak kullanılmamalıdır. Yanlış isimle oluşan alias 410 DECOMMISSIONED döndüren iş yapmayan uç noktaya çevrildi.
+- RT brian-realtime-derivatives-eye v2; brian-realtime-orchestrator v15; brian-realtime-core-scheduler v19; brian-direct-wire-eye v3; gerçek compiler slug'ı brian-alpha-decision-compiler v9. Repo kaynak dizini brian-realtime-alpha-decision-compiler'dır; bu ad doğrudan deploy slug'ı olarak kullanılmamalıdır. Yanlış isimle oluşan alias 410 DECOMMISSIONED döndüren iş yapmayan uç noktaya çevrildi.
 - JWT kapıları yeniden tasarlanmadı: önceden verify_jwt=false olan bu uç noktaların mevcut internal/cron anahtar doğrulaması korunur; yeni operator_status da aynı doğrulamaya tabidir. Veritabanı fonksiyonunun execute izni yalnız service_role'dadır.
 - Security advisor tekrar çalıştırıldı. Projede önceden bulunan RLS/no-policy bilgi kayıtları ve iki public/authenticated SECURITY DEFINER uyarı sınıfı sürüyor. Bu çalışma genel güvenlik incelemesini tamamlamış sayılmaz. İlgili rehberler: https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable ve https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable.
-- 44 Node kontrolü: ortak STOP/fail-closed, nedensel audit maliyeti, RSS fallback/yayıncı, scheduler cadence, Dip/Brian ayrımı, skor muhasebesi, dashboard veri eskimesi ve haber→sanal karar hattı. Bunlar kârlılık testi değildir.
+- 46 Node kontrolü: ortak STOP/fail-closed, nedensel audit maliyeti, RSS fallback/yayıncı, vadeli sözleşme kapsamı, scheduler cadence, Dip/Brian ayrımı, skor muhasebesi, dashboard veri eskimesi ve haber→sanal karar hattı. Bunlar kârlılık testi değildir.
 - Frontend Dip ayrımı önceki PR #136 üretiminde mevcut; bu değişiklikler Supabase backend'e doğrudan uygulandı. Ana site https://monster-coins-pro-seven.vercel.app/.
 
 ## Açık sınırlar ve takip
 
-Kapsamı tamamlanmamış kaynak adaptörleri, eski Yahoo Finance adresi, Agent Reach işçisi ve yeterli maliyet sonrası strateji kanıtı açık işlerdir. Agent Reach bu çalışmada kurulmuş veya bağlanmış değildir. Tüm dünya haberlerine ücretsiz ve kesintisiz erişim sağlandığı söylenemez. Önceki 30 günlük ölçümde maliyet sonrası avantaj negatifti; yeni altyapı sağlığı bunu kâra dönüştürmüş sayılmaz.
+Kapsamı tamamlanmamış kaynak adaptörleri, eski Yahoo Finance adresi, Agent Reach işçisi ve yeterli maliyet sonrası strateji kanıtı açık işlerdir. Agent Reach bu çalışmada kurulmuş veya bağlanmış değildir. Resmî proje tekrar incelendi: https://github.com/Panniantong/Agent-Reach; bu mevcut Supabase veri adaptörlerine otomatik entegrasyon anlamına gelmez. Tüm dünya haberlerine ücretsiz ve kesintisiz erişim sağlandığı söylenemez. Önceki 30 günlük ölçümde maliyet sonrası avantaj negatifti; yeni altyapı sağlığı bunu kâra dönüştürmüş sayılmaz.
 
 Mevcut Brian saatlik çalışma takibi yeni SHADOW_INTEGRATED moduna güncellendi; salt okunur izleme yeni ve anlamlı eksik/kesinti/kaçan fırsat/ölçüm raporlayacak. Kullanıcı stop verirse otomatik açma, gerçek emir, eşik/risk/bakiye değişikliği veya ücretli servis yok. Görev enabled=true; servis yanıtında next_run_time=null döndüğü için gelecekteki teslimat zamanı ayrıca garanti edilmez.

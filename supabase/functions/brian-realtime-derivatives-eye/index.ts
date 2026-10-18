@@ -3,12 +3,14 @@ import { gzip } from "npm:pako@2.1.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
+import { selectDerivativesUniverse } from "../_shared/derivatives_universe.ts";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 const COLLECTOR_ID = "phase39-binance-usdm-derivatives";
-const RUNTIME_VERSION = "brian.realtime-derivatives-eye.v1";
+const RUNTIME_VERSION = "brian.realtime-derivatives-eye.v2-contract-universe";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const BUCKET = "brian-intelligence-raw";
 const TOP_N = 15;
@@ -36,9 +38,9 @@ async function rawCapture(payload: unknown, observedAt: string) {
   if (ins.error) throw ins.error; return id;
 }
 
-async function recordRun(startedAt:string, status:string, observed:number, stored:number, degraded:string[], error?:unknown) {
+async function recordRun(startedAt:string, status:string, observed:number, stored:number, degraded:string[], error?:unknown, metadata:Record<string,unknown>={}) {
   const finished = new Date().toISOString(); const runId = await sha(`${COLLECTOR_ID}|${startedAt}|${finished}|${status}`);
-  await supabase.from("brian_collector_runs").insert({ run_id:runId, collector_id:COLLECTOR_ID, started_at:startedAt, finished_at:finished, status, observed_records:observed, stored_records:stored, degraded_sources:degraded, error_class:error ? "COLLECTOR_ERROR" : null, error_message:error ? String(error).slice(0,1000) : null, evidence_class:EVIDENCE, shadow_only:true, live_execution:false });
+  await supabase.from("brian_collector_runs").insert({ run_id:runId, collector_id:COLLECTOR_ID, started_at:startedAt, finished_at:finished, status, observed_records:observed, stored_records:stored, degraded_sources:degraded, metadata, error_class:error ? "COLLECTOR_ERROR" : null, error_message:error ? String(error).slice(0,1000) : null, evidence_class:EVIDENCE, shadow_only:true, live_execution:false });
 }
 
 Deno.serve(async (req) => {
@@ -50,8 +52,17 @@ Deno.serve(async (req) => {
     const radarResp = await supabase.from("brian_universe_snapshots").select("snapshot_id,candidates").order("observed_at",{ascending:false}).limit(1).maybeSingle();
     if (radarResp.error || !radarResp.data) throw radarResp.error ?? new Error("universe radar unavailable");
     const envelope = radarResp.data.candidates as Record<string,unknown>; const rows = Array.isArray(envelope?.candidates) ? envelope.candidates as Candidate[] : [];
-    const symbols = rows.map(x=>String(x.symbol??"")).filter(x=>x.endsWith("USDT")).slice(0,TOP_N);
-    const premiumPayload = await getJson("https://fapi.binance.com/fapi/v1/premiumIndex");
+    const candidates = rows.map(x=>String(x.symbol??"")).filter(x=>x.endsWith("USDT")).slice(0,TOP_N);
+    if (!candidates.length) throw new Error("SPOT_RADAR_EMPTY");
+    const [premiumPayload, contractCatalog] = await Promise.all([
+      getJson("https://fapi.binance.com/fapi/v1/premiumIndex"),
+      getJson("https://fapi.binance.com/fapi/v1/exchangeInfo"),
+    ]);
+    if (!Array.isArray(premiumPayload) || !premiumPayload.length) throw new Error("USDM_PREMIUM_UNAVAILABLE");
+    const {symbols,skipped} = selectDerivativesUniverse(candidates,contractCatalog);
+    if (!symbols.length) throw new Error("NO_SUPPORTED_USDM_CONTRACTS_IN_RADAR");
+    const coverage = {radar_candidates:candidates.length,eligible_contracts:symbols.length,
+      skipped_non_active_usdt_perpetual:skipped,contract_catalog_source:"https://fapi.binance.com/fapi/v1/exchangeInfo"};
     const premiumMap = new Map<string,Record<string,unknown>>(); if (Array.isArray(premiumPayload)) for (const r of premiumPayload) if (r && typeof r === "object") premiumMap.set(String((r as Record<string,unknown>).symbol??""), r as Record<string,unknown>);
     const degraded:string[]=[];
     const market = await mapLimit(symbols,6,async symbol=>{
@@ -64,7 +75,7 @@ Deno.serve(async (req) => {
         return {symbol,premium:premiumMap.get(symbol)??null,oi,taker,klines,error:null};
       } catch (e) { degraded.push(symbol); return {symbol,premium:premiumMap.get(symbol)??null,oi:null,taker:null,klines:null,error:String(e)}; }
     });
-    const observedAt = new Date().toISOString(); const captureId = await rawCapture({schema_version:"brian.phase39.derivatives.v1",observed_at:observedAt,universe_snapshot_id:radarResp.data.snapshot_id,market}, observedAt);
+    const observedAt = new Date().toISOString(); const captureId = await rawCapture({schema_version:"brian.phase39.derivatives.v1",observed_at:observedAt,universe_snapshot_id:radarResp.data.snapshot_id,coverage,market}, observedAt);
     const observations:Obs[]=[];
     for (const row of market) {
       if (row.error) continue; const assetId=`crypto:${row.symbol}`;
@@ -81,8 +92,8 @@ Deno.serve(async (req) => {
       if (ratio>=1.08 || ratio<=0.925) { const direction=ratio>1?1:-1; const strength=clip(Math.abs(Math.log(Math.max(ratio,1e-12)))/0.35); const eye=await sha(`taker-imbalance|${assetId}`); observations.push(await makeObs(eye,"taker-imbalance",assetId,"taker_flow","derivatives_taker",observedAt,direction,strength,0.62,captureId,`public taker buy/sell imbalance ratio=${ratio}`,{buy_sell_ratio:ratio})); }
     }
     if (observations.length) { const ins=await supabase.from("brian_sensor_observations").insert(observations); if(ins.error) throw ins.error; }
-    await recordRun(startedAt,degraded.length?"DEGRADED":"SUCCESS",market.length,observations.length,degraded);
-      return out({status:degraded.length?"DEGRADED":"CAPTURED",runtime:RUNTIME_VERSION,symbols:market.length,stored_observations:observations.length,degraded_sources:degraded,learning_enabled:false,live_execution:false,shadow_only:true});
+    await recordRun(startedAt,degraded.length?"DEGRADED":"SUCCESS",market.length,observations.length,degraded,undefined,coverage);
+      return out({status:degraded.length?"DEGRADED":"CAPTURED",runtime:RUNTIME_VERSION,coverage,symbols:market.length,stored_observations:observations.length,degraded_sources:degraded,learning_enabled:false,live_execution:false,shadow_only:true});
     });
     // Contended: another invocation already owns this collector's lease. No collector work has
     // run and no data has been written -- see supabase/functions/_shared/collector_lease.ts.
