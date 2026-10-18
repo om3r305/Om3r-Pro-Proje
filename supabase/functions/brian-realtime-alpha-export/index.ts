@@ -4,7 +4,7 @@ import { requireBridgeAuth } from "./bridge_auth.ts";
 const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
-const VERSION = "brian.realtime-alpha-export.v2";
+const VERSION = "brian.realtime-alpha-export.v3-audit-price-path";
 
 function out(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -43,10 +43,22 @@ Deno.serve(async (req: Request) => {
     return out({ status: "FAILED_CLOSED", version: VERSION, error: q.error.message, rows: [] }, 500);
   }
 
+  let pricePath: Record<string, unknown>[] = [];
+  if (body.include_price_path === true) {
+    const path = await db.from("brian_intrabar_reaction_events")
+      .select("event_id,asset_id,observed_at,observed_mid_price,estimated_round_trip_cost_bps,shadow_only,live_execution")
+      .gte("observed_at", since).gt("observed_mid_price", 0)
+      .eq("shadow_only", true).eq("live_execution", false)
+      .order("observed_at", { ascending: false }).limit(500);
+    if (path.error) return out({status:"FAILED_CLOSED",version:VERSION,error:path.error.message,rows:[]},500);
+    pricePath = path.data ?? [];
+  }
   return out({
     status: "SUCCESS",
     version: VERSION,
     since,
+    price_path: pricePath,
+    price_path_count: pricePath.length,
     rows: q.data ?? [],
     count: q.data?.length ?? 0,
     shadow_only: true,

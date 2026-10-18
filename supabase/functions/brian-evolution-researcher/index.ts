@@ -20,6 +20,8 @@ import {
   type WorldSourceSignal,
 } from "../_shared/evolution_research.ts";
 
+import { runOpenWorldCycle } from "../_shared/open_world_cycle.ts";
+
 const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -203,8 +205,13 @@ async function loadWorldSources(trustFloor:number): Promise<WorldSourceSignal[]>
   return buildCurrentWorldSourceSignals(assessmentRecords,candidateRecords,trustFloor).slice(0,100);
 }
 
-async function persistHypotheses(inputs: ResearchInputs): Promise<{ hypotheses: number; experiments: number }> {
-  const hypotheses = generateResearchHypotheses(inputs).slice(0, 30);
+async function persistHypotheses(inputs: ResearchInputs, learning: HypothesisCandidate[] = [], contexts: Array<Record<string, any>> = []): Promise<{ hypotheses: number; experiments: number }> {
+  const hypotheses = [...learning, ...generateResearchHypotheses(inputs)].slice(0, 30).map(h => {
+    const evidence = contexts.filter(doc => doc.hypothesis_id === h.hypothesisId).slice(0, 4);
+    return { ...h, evidenceRefs: [...h.evidenceRefs, ...evidence.map(doc => `open_world_document:${doc.document_id}`)],
+      metadata: { ...h.metadata, open_world_context: evidence, external_claims_verified: false,
+        external_content_used_as_instruction: false } };
+  });
   const hypothesisRows: Record<string, unknown>[] = [];
   const experimentRows: Record<string, unknown>[] = [];
   for (const h of hypotheses) {
@@ -239,9 +246,9 @@ async function persistHypotheses(inputs: ResearchInputs): Promise<{ hypotheses: 
   return { hypotheses: hypothesisRows.length, experiments: experimentRows.length };
 }
 
-async function receipt(startedAt:string,status:"SUCCESS"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown):Promise<void>{
+async function receipt(startedAt:string,status:"SUCCESS"|"DEGRADED"|"FAILED"|"SKIPPED",observed:number,stored:number,error?:unknown,details:Record<string,unknown>={}):Promise<void>{
   const finishedAt=new Date().toISOString();const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|${status}`);
-  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_RESEARCHER_ERROR":null,error_message:error?String(error).slice(0,1200):null,evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,metadata:{research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,stable_experiment_identity:true,control_version:ALPHA_COMPILER_VERSION,world_source_metadata_only:true,external_content_used_as_instruction:false}});if(q.error)console.error("research receipt",q.error.message);
+  const q=await db.from("brian_collector_runs").insert({run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status,observed_records:observed,stored_records:stored,degraded_sources:[],error_class:error?"EVOLUTION_RESEARCHER_ERROR":null,error_message:error?String(error).slice(0,1200):null,evidence_class:EVOLUTION_EVIDENCE_CLASS,shadow_only:true,live_execution:false,metadata:{...details,research_version:EVOLUTION_RESEARCH_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,stable_experiment_identity:true,control_version:ALPHA_COMPILER_VERSION,world_source_metadata_only:true,external_content_used_as_instruction:false}});if(q.error)console.error("research receipt",q.error.message);
 }
 
 Deno.serve(async(req:Request)=>{
@@ -259,9 +266,15 @@ Deno.serve(async(req:Request)=>{
         worldPolicy.enabled?loadWorldSources(worldPolicy.trustFloor):Promise.resolve([] as WorldSourceSignal[]),
       ]);
       const inputs:ResearchInputs={gaps,challenger,outcomes,reliability,worldSources,worldSourceTrustFloor:worldPolicy.trustFloor,observedAt};
-      const persisted=await persistHypotheses(inputs);const observed=gaps.length+(challenger?1:0)+outcomes.length+reliability.length+worldSources.length;
-      await receipt(startedAt,"SUCCESS",observed,persisted.hypotheses+persisted.experiments);
-      return{status:"SUCCESS",collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length,world_sources:worldSources.length},...persisted,world_to_engineering_enabled:worldPolicy.enabled,world_source_trust_floor:worldPolicy.trustFloor,stable_experiment_identity:true,world_source_metadata_only:true,external_content_used_as_instruction:false,control_version:ALPHA_COMPILER_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
+      let openWorld: Awaited<ReturnType<typeof runOpenWorldCycle>> | null = null;
+      let openWorldError: string | null = null;
+      try { openWorld = await runOpenWorldCycle(db, generateResearchHypotheses(inputs), observedAt); }
+      catch (error) { openWorldError=String(error).slice(0,1000);console.error("open world research",openWorldError); }
+      const persisted=await persistHypotheses(inputs,openWorld?.learningHypotheses??[],openWorld?.contexts??[]);const observed=gaps.length+(challenger?1:0)+outcomes.length+reliability.length+worldSources.length;
+      const researchStatus=openWorldError||["FAILED","DEGRADED"].includes(openWorld?.status??"")?"DEGRADED":"SUCCESS";
+      await receipt(startedAt,researchStatus,observed,persisted.hypotheses+persisted.experiments,openWorldError,
+        {open_world_research_status:openWorld?.status??"FAILED",open_world_documents:openWorld?.documents??0,open_world_error:openWorldError});
+      return{status:researchStatus,collector_id:COLLECTOR_ID,observed_at:observedAt,inputs:{gaps:gaps.length,challenger:Boolean(challenger),outcome_horizons:outcomes.length,reliability_groups:reliability.length,world_sources:worldSources.length},...persisted,open_world_research:{status:openWorldError?"FAILED":openWorld?.status??"NOT_RUN",documents:openWorld?.documents??0,observations:openWorld?.observations??0,error:openWorldError,external_claims_verified:false},world_to_engineering_enabled:worldPolicy.enabled,world_source_trust_floor:worldPolicy.trustFloor,stable_experiment_identity:true,world_source_metadata_only:true,external_content_used_as_instruction:false,control_version:ALPHA_COMPILER_VERSION,canonical_mutation:false,autonomous_apply_allowed:false,cloud_independent:true,shadow_only:true,live_execution:false};
     });
     if(lease.contended){await receipt(startedAt,"SKIPPED",0,0);return out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false});}
     return out(lease.value);

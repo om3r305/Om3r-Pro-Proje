@@ -17,7 +17,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h-observed-audit-cost";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h-independent-price-path";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
@@ -242,7 +242,14 @@ Deno.serve(async (req: Request) => {
         const intrabarPoints = (intrabarResp.data ?? []) as AlphaAuditPricePoint[];
         intrabarPathPoints += intrabarPoints.length;
 
-        const points = [...alphaPoints, ...intrabarPoints]
+        const sampleResp = await supabase.from("brian_audit_price_samples")
+          .select("observed_at,observed_mid_price,estimated_round_trip_cost_bps")
+          .eq("asset_id", asset).gte("observed_at", minAt).lte("observed_at", maxTarget)
+          .order("observed_at", { ascending: true }).limit(5000);
+        if (sampleResp.error) throw sampleResp.error;
+        const sampledPoints = (sampleResp.data ?? []) as AlphaAuditPricePoint[];
+        intrabarPathPoints += sampledPoints.length;
+        const points = [...alphaPoints, ...intrabarPoints, ...sampledPoints]
           .filter((p) => Number.isFinite(Date.parse(p.observed_at)))
           .sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
 
@@ -287,6 +294,7 @@ Deno.serve(async (req: Request) => {
                 path_price_sources: [
                   "brian_alpha_decisions.observed_reference_price",
                   "brian_intrabar_reaction_events.observed_mid_price",
+                  "brian_audit_price_samples.observed_mid_price",
                 ],
                 original_action: d.action,
                 estimated_round_trip_cost_bps: resolved.costBps,

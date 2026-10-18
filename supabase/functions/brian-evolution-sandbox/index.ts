@@ -202,6 +202,8 @@ async function planCandidates(): Promise<{ planned: number; skippedExisting: num
       required_human_review: true,
       metadata: {
         sandbox_version: EVOLUTION_SANDBOX_VERSION,
+        open_world_context: Array.isArray(h.metadata.open_world_context)?h.metadata.open_world_context.slice(0,4):[],
+        external_content_used_as_instruction: false,
         test_plan: brief.testPlan,
         hypothesis_kind: h.hypothesisKind,
         priority: h.priority,
