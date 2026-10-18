@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v12-async-core-dispatch";
+const VERSION="brian.realtime-core-scheduler.v13-research-only";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -96,21 +96,24 @@ async function collectorFresh(collectorId:string,maxAgeMs:number){
 
 function coreActionForMinute(minute:number){
   const m=((minute%60)+60)%60;
-  if([1,6,11,16,21,26,31,36,41,46,51,56].includes(m)) return "alpha_sync";
-  if([2,12,22,32,42,52].includes(m)) return "treasury";
-  if([3,13,23,33,43,53].includes(m)) return "official_primary";
-  if([4,14,24,34,44,54].includes(m)) return "world";
-  if([5,15,25,35,45,55].includes(m)) return "multiasset";
-  if([7,17,27,37,47,57].includes(m)) return "source_observer";
-  if([8,18,28,38,48,58].includes(m)) return "recovery";
-  if([9,29,49].includes(m)) return "missed_auditor";
-  if([19,39,59].includes(m)) return "discovery";
-  if([0,30].includes(m)) return "source_registry";
-  if([10,40].includes(m)) return "watchdog";
-  if([20,50].includes(m)) return "meeting_sync";
-  return null;
+  // The 5m/15m/60m auditor requires terminal evidence within +120s.
+  // Import the 2m Realtime decision stream on every odd minute; a 5m
+  // bridge cadence can permanently miss that window.
+  if(m%2===1) return "alpha_sync";
+  const lanes=[
+    "source_registry","official_primary","world","source_observer","discovery",
+    "official_primary","world","source_observer","watchdog","meeting_sync",
+    "official_primary","world","source_observer","discovery","source_observer"
+  ];
+  return lanes[(m/2)%lanes.length];
 }
 
+// This release deliberately collects evidence without running position engines.
+// Keep the allowlist explicit: recovery can indirectly launch treasury workers.
+const RESEARCH_ACTIONS=new Set([
+  "direct_wire","readiness_cost","alpha_sync","official_primary","world",
+  "source_observer","source_registry","meeting_sync","watchdog","discovery"
+]);
 function planned(minute:number){
   const actions:string[]=[];
   if(minute%2===0) actions.push("direct_wire");
@@ -122,11 +125,11 @@ function planned(minute:number){
   // This prevents slow Core RPCs from piling up behind each other on small compute.
   const coreAction=coreActionForMinute(minute);
   if(coreAction) actions.push(coreAction);
-  return [...new Set(actions)];
+  return [...new Set(actions)].filter(action=>RESEARCH_ACTIONS.has(action));
 }
 
 async function handle(req:Request){
-  if(req.method==="GET")return out({status:"OK",version:VERSION,role:"REALTIME_SCHEDULER_FOR_CORE",shadow_only:true,live_execution:false});
+  if(req.method==="GET")return out({status:"OK",version:VERSION,role:"REALTIME_SCHEDULER_FOR_CORE",operating_mode:"RESEARCH_ONLY",shadow_only:true,live_execution:false});
   if(req.method!=="POST")return out({error:"POST required"},405);
 
   let key="";
@@ -194,6 +197,7 @@ async function handle(req:Request){
     actions,
     results,
     circuit_breaker:failed.length?{active:true,failed_actions:failed.map(x=>x.action)}:{active:false},
+    operating_mode:"RESEARCH_ONLY",
     scheduler_project:"brian-realtime",
     target_project:"brian-market-intelligence",
     shadow_only:true,
