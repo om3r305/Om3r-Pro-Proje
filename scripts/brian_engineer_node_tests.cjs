@@ -17,6 +17,7 @@ const baseline = [
   'tests/engineer-provider-canary.test.cjs',
   'tests/engineer-preflight.test.cjs',
   'tests/engineer-provider-mode.test.cjs',
+  'tests/engineer-evaluator-boundary.test.cjs',
 ];
 
 function selectTests(changed, required = baseline) {

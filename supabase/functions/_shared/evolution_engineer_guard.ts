@@ -1,4 +1,4 @@
-export const BRIAN_ENGINEER_GUARD_VERSION = "brian.engineer-guard.v1";
+export const BRIAN_ENGINEER_GUARD_VERSION = "brian.engineer-guard.v1.1-operator-tests";
 export const MAX_ENGINEER_CHANGED_FILES = 12;
 export const MAX_ENGINEER_PATCH_BYTES = 500_000;
 
@@ -10,6 +10,28 @@ const CONTROL_PLANE_PREFIXES = [
   "supabase/functions/_shared/evolution_engineer_guard.ts",
   "scripts/brian_engineer_",
 ] as const;
+
+const OPERATOR_TEST_PATHS = new Set([
+  "supabase/functions/_shared/evolution_contract.test.ts",
+  "supabase/functions/_shared/evolution_core.test.ts",
+  "supabase/functions/_shared/evolution_research.test.ts",
+  "supabase/functions/_shared/evolution_sandbox.test.ts",
+  "supabase/functions/_shared/evolution_lab.test.ts",
+  "supabase/functions/_shared/evolution_codegen.test.ts",
+  "supabase/functions/_shared/evolution_alpha_intelligence.test.ts",
+  "supabase/functions/_shared/evolution_alpha_reliability_mapping.test.ts",
+  "supabase/functions/_shared/evolution_prospective_timing.test.ts",
+  "supabase/functions/_shared/evolution_engineer_guard.test.ts",
+  "tests/open-world-cycle.test.cjs", "tests/open-world-research.test.cjs",
+  "tests/alpha-price-path-bridge.test.cjs", "tests/alpha-audit-cost.test.cjs",
+  "tests/operator-state.test.cjs", "tests/research-scheduler.test.cjs",
+  "tests/derivatives-universe.test.cjs", "tests/direct-wire-fallback.test.cjs",
+  "tests/main-multiasset-pipeline.test.cjs", "tests/frontier-reliability.test.cjs",
+  "tests/shadow-scorecard.test.cjs", "tests/shadow-scorecard-page-scope.test.cjs",
+  "tests/engineer-node-tests.test.cjs", "tests/engineering-room-model.test.cjs",
+  "tests/engineer-provider-canary.test.cjs", "tests/engineer-preflight.test.cjs",
+  "tests/engineer-provider-mode.test.cjs", "tests/engineer-evaluator-boundary.test.cjs",
+]);
 
 const AUTH_OR_SECRET_PATTERNS = [
   /(^|\/)(\.env|secrets?)(\.|\/|$)/i,
@@ -50,7 +72,7 @@ export function isDipProtectedPath(value: string): boolean {
 
 export function isEngineerControlPlanePath(value: string): boolean {
   const path = normalizeEngineerPath(value);
-  return CONTROL_PLANE_PREFIXES.some((prefix) => path.startsWith(prefix));
+  return OPERATOR_TEST_PATHS.has(path) || CONTROL_PLANE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 export function validateEngineerChangeSet(input: EngineerGuardInput): EngineerGuardResult {
