@@ -23,6 +23,6 @@ jobs:
           gh api "repos/$REPO/actions/runs/39172553427" > /tmp/brian-canary-run.json
           jq -e '.conclusion == "success" and .head_sha == "e00226014c2d06100f023f5c96c0ab619ac4b3f5" and .path == ".github/workflows/brian-engineer-canary.yml"' /tmp/brian-canary-run.json
           gh workflow run brian-engineer.yml --repo "$REPO" --ref brian-2026 \
-            -f request_id=265eeba91eb4286e20701ffdfd9843e90566eba8f03de2bcfceab75a027aba0b \
+            -f request_id=cac77b561916d0475e3886e1d7ac1e775e035503758edb2fa93291a657a7dcc9 \
             -f candidate_only=true
           echo 'One exact manual request dispatched in candidate-only mode; autonomous claims remain disabled.' >> "$GITHUB_STEP_SUMMARY"

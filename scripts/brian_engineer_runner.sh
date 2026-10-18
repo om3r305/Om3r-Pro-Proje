@@ -28,11 +28,16 @@ classify_provider_error() {
 
 append_provider_attempt() {
   local phase="$1" provider="$2" model="$3" rc="$4" err_class="$5"
+  local stdout_bytes=0 stderr_bytes=0 changed_files=0
+  if [[ -n "${6:-}" && -f "$6" ]]; then stdout_bytes="$(wc -c < "$6")"; fi
+  if [[ -n "${7:-}" && -f "$7" ]]; then stderr_bytes="$(wc -c < "$7")"; fi
+  changed_files="$(git status --porcelain --untracked-files=all 2>/dev/null | wc -l)" || changed_files=0
   jq -nc \
     --arg phase "$phase" --arg provider "$provider" --arg model "$model" \
     --argjson exit_code "$rc" --arg error_class "$err_class" \
+    --argjson stdout_bytes "$stdout_bytes" --argjson stderr_bytes "$stderr_bytes" --argjson worktree_changed_files "$changed_files" \
     --arg observed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{phase:$phase,provider:$provider,model:$model,exit_code:$exit_code,error_class:$error_class,observed_at:$observed_at}' \
+    '{phase:$phase,provider:$provider,model:$model,exit_code:$exit_code,error_class:$error_class,observed_at:$observed_at,stdout_bytes:$stdout_bytes,stderr_bytes:$stderr_bytes,worktree_changed_files:$worktree_changed_files}' \
     >> "$PROVIDER_ATTEMPTS_FILE"
 }
 
@@ -56,6 +61,7 @@ run_copilot_attempt() {
 
   if [[ "$provider" == "COPILOT_HOSTED" ]]; then
     timeout_seconds="${BRIAN_HOSTED_ATTEMPT_TIMEOUT_SECONDS:-120}"
+    if [[ "$mode" == code ]]; then timeout_seconds="${BRIAN_CODE_ATTEMPT_TIMEOUT_SECONDS:-$timeout_seconds}"; fi
   elif [[ "$provider" == "OPENAI_BYOK" && "${BRIAN_OPENAI_BASE_URL:-}" == http://127.0.0.1:* ]]; then
     timeout_seconds="${BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS:-300}"
   else
@@ -106,7 +112,7 @@ run_copilot_attempt() {
     cp "$stdout_file" "$output_file"
     SELECTED_PROVIDER="$provider"
     SELECTED_MODEL="$model"
-    append_provider_attempt "$phase" "$provider" "$model" 0 NONE
+    append_provider_attempt "$phase" "$provider" "$model" 0 NONE "$stdout_file" "$stderr_file"
     jq -s --arg selected_provider "$provider" --arg selected_model "$model" --arg phase "$phase" \
       '{all_exhausted:false,phase:$phase,selected_provider:$selected_provider,selected_model:$selected_model,attempts:.}' \
       "$PROVIDER_ATTEMPTS_FILE" > "$PROVIDER_STATUS_FILE"
@@ -116,10 +122,11 @@ run_copilot_attempt() {
 
   cat "$stdout_file" "$stderr_file" > "${stderr_file}.combined"
   err_class="$(classify_provider_error "${stderr_file}.combined")"
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then err_class=TIMEOUT; fi
   if [[ "$provider" == "COPILOT_HOSTED" && "$err_class" == "QUOTA_EXHAUSTED" ]]; then
     HOSTED_QUOTA_EXHAUSTED=true
   fi
-  append_provider_attempt "$phase" "$provider" "$model" "$rc" "$err_class"
+  append_provider_attempt "$phase" "$provider" "$model" "$rc" "$err_class" "$stdout_file" "$stderr_file"
   echo "AI provider failed over: $provider / $model ($err_class)" >> "$GITHUB_STEP_SUMMARY"
   return 1
 }
@@ -131,6 +138,10 @@ ai_call() {
   if [[ -n "$SELECTED_PROVIDER" && -n "$SELECTED_MODEL" ]]; then
     if run_copilot_attempt "$phase" "$SELECTED_PROVIDER" "$SELECTED_MODEL" "$prompt_file" "$output_file" "$mode"; then
       return 0
+    fi
+    if [[ "${BRIAN_HOSTED_ONLY:-false}" == true ]]; then
+      provider_summary
+      return 75
     fi
     echo "Previously selected AI provider failed; reopening bounded failover search." >> "$GITHUB_STEP_SUMMARY"
     SELECTED_PROVIDER=""
