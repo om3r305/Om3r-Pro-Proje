@@ -18,6 +18,7 @@ const baseline = [
   'tests/engineer-preflight.test.cjs',
   'tests/engineer-provider-mode.test.cjs',
   'tests/engineer-evaluator-boundary.test.cjs',
+  'tests/engineer-checkpoint.test.cjs',
 ];
 
 function selectTests(changed, required = baseline) {

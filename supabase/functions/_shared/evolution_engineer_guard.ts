@@ -31,6 +31,7 @@ const OPERATOR_TEST_PATHS = new Set([
   "tests/engineer-node-tests.test.cjs", "tests/engineering-room-model.test.cjs",
   "tests/engineer-provider-canary.test.cjs", "tests/engineer-preflight.test.cjs",
   "tests/engineer-provider-mode.test.cjs", "tests/engineer-evaluator-boundary.test.cjs",
+  "tests/engineer-checkpoint.test.cjs",
 ]);
 
 const AUTH_OR_SECRET_PATTERNS = [

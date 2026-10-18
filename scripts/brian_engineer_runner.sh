@@ -198,10 +198,31 @@ record_blocked() {
   local rc="$1"
   set +e
   [[ -z "$RUN_ID" ]] && return 0
-  local commit_sha payload
+  local commit_sha payload checkpoint_json='{}' checkpoint_dir checkpoint_sha checkpoint_branch
   commit_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+  if [[ "$CURRENT_STAGE" == CODE && -z "$CANDIDATE_SHA" && -n "$BASE_SHA" ]]; then
+    checkpoint_dir="$(mktemp -d /tmp/brian-checkpoint-tool-XXXXXX)"
+    # The tool and its guard come from the immutable base, not the model worktree.
+    if git show "$BASE_SHA:scripts/brian_engineer_checkpoint.cjs" > "$checkpoint_dir/checkpoint.cjs"; then
+      checkpoint_json="$(node "$checkpoint_dir/checkpoint.cjs" "$BASE_SHA" "$RUN_ID")"
+      if [[ $? -eq 0 ]] && printf '%s' "$checkpoint_json" | jq -e '.state=="INCOMPLETE_NOT_VALIDATED"' >/dev/null; then
+        checkpoint_sha="$(printf '%s' "$checkpoint_json" | jq -r '.commit_sha')"
+        checkpoint_branch="$(printf '%s' "$checkpoint_json" | jq -r '.branch')"
+        if git -c core.hooksPath=/dev/null push origin "$checkpoint_sha:refs/heads/$checkpoint_branch"; then
+          checkpoint_json="$(printf '%s' "$checkpoint_json" | jq '. + {persisted:true}')"
+          commit_sha="$checkpoint_sha"
+        else
+          checkpoint_json="$(printf '%s' "$checkpoint_json" | jq '. + {persisted:false}')"
+        fi
+      fi
+    else
+      checkpoint_json='{"state":"TOOL_UNAVAILABLE","persisted":false}'
+    fi
+    rm -rf "$checkpoint_dir"
+    printf '%s' "$checkpoint_json" | jq -e 'type=="object"' >/dev/null 2>&1 || checkpoint_json='{"state":"REPORT_UNAVAILABLE","persisted":false}'
+  fi
   if [[ -f "$PROVIDER_STATUS_FILE" ]] && jq -e '.all_exhausted == true' "$PROVIDER_STATUS_FILE" >/dev/null 2>&1; then
-    payload="$(jq -c --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer AI providers unavailable",provider_exhausted:true,resume_required:true,failure_stage:$stage,exit_code:$exit_code,provider_state:.}' "$PROVIDER_STATUS_FILE")"
+    payload="$(jq -c --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:(if any(.attempts[]?; .error_class=="TIMEOUT" or .exit_code==124 or .exit_code==137) then "Brian Engineer provider attempt exceeded its time budget" else "Brian Engineer configured provider attempts did not complete" end),provider_exhausted:true,resume_required:true,failure_stage:$stage,exit_code:$exit_code,provider_state:.}' "$PROVIDER_STATUS_FILE")"
   else
     if [[ -f "$PROVIDER_STATUS_FILE" ]]; then
       payload="$(jq -c --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer workflow failed before GPT evidence approval",provider_exhausted:false,failure_stage:$stage,exit_code:$exit_code,provider_state:.}' "$PROVIDER_STATUS_FILE")"
@@ -209,6 +230,7 @@ record_blocked() {
       payload="$(jq -nc --arg stage "$CURRENT_STAGE" --argjson exit_code "$rc" '{error:"Brian Engineer workflow failed before GPT evidence approval",provider_exhausted:false,failure_stage:$stage,exit_code:$exit_code}')"
     fi
   fi
+  payload="$(printf '%s' "$payload" | jq -c --argjson checkpoint "$checkpoint_json" '. + {incomplete_checkpoint:$checkpoint}')"
   record_event BLOCKED BLOCKED "$commit_sha" "$payload" >/dev/null 2>&1 || true
 }
 
@@ -217,8 +239,8 @@ on_error() {
   trap - ERR
   record_blocked "$rc"
   if [[ "$rc" -eq 75 ]]; then
-    echo "::notice::Brian Engineer deferred: all AI providers are temporarily unavailable; checkpoint preserved and provider circuit opened."
-    echo "Provider outage is recorded as a deferred engineering state, not a repository/system failure. No merge or deploy occurred." >> "$GITHUB_STEP_SUMMARY"
+    echo "::notice::Brian Engineer deferred; inspect the BLOCKED receipt for provider attempts and checkpoint persistence status."
+    echo "The BLOCKED receipt records the failure stage and whether incomplete work was persisted. No merge or deploy occurred." >> "$GITHUB_STEP_SUMMARY"
     exit 0
   fi
   exit "$rc"
