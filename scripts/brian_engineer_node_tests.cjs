@@ -14,6 +14,7 @@ const baseline = [
   'tests/shadow-scorecard.test.cjs', 'tests/shadow-scorecard-page-scope.test.cjs',
   'tests/engineer-node-tests.test.cjs',
   'tests/engineering-room-model.test.cjs',
+  'tests/engineer-provider-canary.test.cjs',
 ];
 
 function selectTests(changed, required = baseline) {

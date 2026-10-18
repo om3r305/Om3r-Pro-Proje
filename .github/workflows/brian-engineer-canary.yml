@@ -1,0 +1,50 @@
+name: Brian Engineer Provider Canary
+
+on:
+  push:
+    branches: [brian-2026]
+    paths:
+      - '.github/workflows/brian-engineer-canary.yml'
+      - 'scripts/brian_engineer_canary.cjs'
+      - 'scripts/brian_engineer_canary_eval.cjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  copilot-requests: write
+
+concurrency:
+  group: brian-engineer-provider-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    if: github.ref == 'refs/heads/brian-2026'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Copilot CLI and prepare isolated evaluator
+        run: |
+          set -euo pipefail
+          npm install --global @github/copilot@1.0.98
+          copilot --version
+          docker pull node:24-alpine
+      - name: One scoped generation attempt with independent acceptance tests
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
+          BRIAN_CANARY_REPORT: ${{ runner.temp }}/brian-provider-canary.json
+        run: node scripts/brian_engineer_canary.cjs
+      - name: Preserve diagnostic receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: brian-provider-canary
+          path: ${{ runner.temp }}/brian-provider-canary.json
+          if-no-files-found: warn
+          retention-days: 7
