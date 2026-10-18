@@ -9,7 +9,7 @@ const ALLOWED_SHA256=new Set([
   "814a5df4f8d6e3b15f1b9ac19a4ea823ad69eedc52caa6ad7573fde7aa96eaab"
 ]);
 const ALLOWED_ACTIONS=new Set([
-  "alpha_sync","world","treasury","discovery",
+  "operator_status","alpha_sync","world","treasury","discovery",
   "official_primary","source_observer","source_registry","meeting_sync",
   "recovery","watchdog","dip","multiasset",
   "universe_heartbeat","sensor_heartbeat","intrabar_heartbeat","derivatives_heartbeat","behavior_heartbeat","direct_wire_heartbeat","fx_heartbeat"
@@ -32,6 +32,11 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json().catch(()=>({}));
     const action=String(body?.action??"").trim().toLowerCase();
     if(!ALLOWED_ACTIONS.has(action))return out({status:"INVALID_ACTION",action},400);
+    if(action==="operator_status"){
+      const q=await db.from("brian_evolution_runtime_config").select("config_value").eq("config_key","brian_system_enabled").maybeSingle();
+      if(q.error||!q.data)return out({status:"CONTROL_UNAVAILABLE",shadow_only:true,live_execution:false},503);
+      return out({status:"SUCCESS",enabled:String(q.data.config_value).toLowerCase()==="true",operating_mode:"SHADOW_INTEGRATED",shadow_only:true,live_execution:false});
+    }
     const heartbeatMap:Record<string,string>={
       universe_heartbeat:"market.universe",
       sensor_heartbeat:"market.sensor-mesh",

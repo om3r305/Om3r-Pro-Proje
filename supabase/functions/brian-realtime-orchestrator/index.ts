@@ -1,6 +1,7 @@
+import { readOperatorState } from "../_shared/operator_state.ts";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v11-heartbeat-1m";
+const VERSION = "brian.realtime-orchestrator.v12-operator-controlled";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -112,6 +113,8 @@ Deno.serve(async(req:Request)=>{
   let key="";
   try{key=await requireRealtimeInternal(req)}catch{return out({status:"UNAUTHORIZED"},401)}
 
+  const control=await readOperatorState(key);
+  if(!control.enabled)return out({status:control.status,shadow_only:true,live_execution:false},control.status==="OPERATOR_STOPPED"?200:503);
   const started=Date.now();
   const minute=Math.floor(Date.now()/60000);
 

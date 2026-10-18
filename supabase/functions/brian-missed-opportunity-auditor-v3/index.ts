@@ -7,6 +7,8 @@ import {
   type AlphaAuditPricePoint,
 } from "https://raw.githubusercontent.com/om3r305/Om3r-Pro-Proje/688203fed061a7d45653aeba4a11b0d52b473334/supabase/functions/_shared/alpha_audit.ts";
 
+import { selectDecisionAuditCost } from "../_shared/alpha_audit_cost.ts";
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -15,7 +17,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // Keep the collector id stable so Control Center health remains backward compatible.
 const COLLECTOR_ID = "brian-missed-opportunity-auditor-v2";
-const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h-realtime-owned";
+const AUDITOR_RUNTIME_VERSION = "brian.alpha-auditor-v3.hot-window-6h-observed-audit-cost";
 const EVIDENCE = "PROSPECTIVE_DEVELOPMENT_SHADOW";
 const HORIZONS = [300, 900, 3600] as const;
 const LEASE_SECONDS = 120;
@@ -32,6 +34,7 @@ type Decision = {
   evidence_score: number;
   estimated_round_trip_cost_bps: number | null;
   source_observation_ids: string[];
+  audit_metadata?: Record<string, unknown>;
 };
 
 type ExistingOutcome = { decision_id: string; horizon_seconds: number };
@@ -166,6 +169,11 @@ Deno.serve(async (req: Request) => {
       }
 
       const ids = decisions.map((d) => d.decision_id);
+      const metadataResp = await supabase.from("brian_alpha_decisions")
+        .select("decision_id,metadata").in("decision_id", ids).limit(PENDING_BATCH);
+      if (metadataResp.error) throw metadataResp.error;
+      const metadataById = new Map((metadataResp.data ?? []).map((row) => [row.decision_id, row.metadata]));
+      for (const decision of decisions) decision.audit_metadata = metadataById.get(decision.decision_id);
       const existingResp = await supabase.from("brian_alpha_decision_outcomes")
         .select("decision_id,horizon_seconds")
         .in("decision_id", ids)
@@ -243,12 +251,14 @@ Deno.serve(async (req: Request) => {
             if (Date.parse(d.observed_at) + horizon * 1000 > nowMs) continue;
             if (existing.has(`${d.decision_id}|${horizon}`)) continue;
 
+            const auditCost = selectDecisionAuditCost(d.observed_at, d.action,
+              d.estimated_round_trip_cost_bps, d.audit_metadata);
             const resolved = resolveAlphaAuditHorizon({
               observedAt: d.observed_at,
               action: d.action,
               direction: d.direction,
               referencePrice: d.observed_reference_price,
-              estimatedRoundTripCostBps: d.estimated_round_trip_cost_bps,
+              estimatedRoundTripCostBps: auditCost.costBps,
             }, horizon, points);
             if (!resolved) {
               skippedUnresolved++;
@@ -280,6 +290,8 @@ Deno.serve(async (req: Request) => {
                 ],
                 original_action: d.action,
                 estimated_round_trip_cost_bps: resolved.costBps,
+                cost_evidence_source: auditCost.source,
+                decision_time_audit_cost: auditCost.source === "observed_audit_only" ? d.audit_metadata?.audit_cost : null,
                 up_excursion: resolved.upExcursion,
                 down_excursion: resolved.downExcursion,
                 long_opportunity: resolved.longOpportunity,

@@ -1,7 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { readOperatorState } from "../_shared/operator_state.ts";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION="brian.realtime-core-scheduler.v13-research-only";
+const VERSION="brian.realtime-core-scheduler.v14-integrated-shadow";
 const RT_URL=Deno.env.get("SUPABASE_URL")!;
 const RT_SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const rtDb=createClient(RT_URL,RT_SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
@@ -129,12 +130,14 @@ function planned(minute:number){
 }
 
 async function handle(req:Request){
-  if(req.method==="GET")return out({status:"OK",version:VERSION,role:"REALTIME_SCHEDULER_FOR_CORE",operating_mode:"RESEARCH_ONLY",shadow_only:true,live_execution:false});
+  if(req.method==="GET")return out({status:"OK",version:VERSION,role:"REALTIME_SCHEDULER_FOR_CORE",operating_mode:"SHADOW_INTEGRATED",shadow_only:true,live_execution:false});
   if(req.method!=="POST")return out({error:"POST required"},405);
 
   let key="";
   try{key=await requireRealtimeInternal(req)}catch{return out({status:"UNAUTHORIZED"},401)}
 
+  const control=await readOperatorState(key);
+  if(!control.enabled)return out({status:control.status,operating_mode:"SHADOW_INTEGRATED",shadow_only:true,live_execution:false},control.status==="OPERATOR_STOPPED"?200:503);
   const now=new Date();
   const minute=now.getUTCMinutes();
   const actions=planned(minute);
@@ -197,7 +200,7 @@ async function handle(req:Request){
     actions,
     results,
     circuit_breaker:failed.length?{active:true,failed_actions:failed.map(x=>x.action)}:{active:false},
-    operating_mode:"RESEARCH_ONLY",
+    operating_mode:"SHADOW_INTEGRATED",
     scheduler_project:"brian-realtime",
     target_project:"brian-market-intelligence",
     shadow_only:true,

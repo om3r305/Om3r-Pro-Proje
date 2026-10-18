@@ -5,17 +5,17 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.direct-wire-eye.v1";
+const VERSION="brian.direct-wire-eye.v2-bounded-fallback";
 const COLLECTOR_ID="brian-direct-wire-eye-v1";
 const MAX_AGE_MS=100*60*1000;
 const MAX_ITEMS=60;
 
 type Json=Record<string,unknown>;
-type FeedSpec={id:string;url:string;theme:string;publisher:string;mode:"MARKETS"|"GEOPOLITICS"};
+type FeedSpec={id:string;url:string;fallbackUrls?:string[];fallbackPublisher?:string;theme:string;publisher:string;mode:"MARKETS"|"GEOPOLITICS"};
 type Article={title:string;description:string;url:string;publishedAt:string|null;publisher:string;feedId:string;theme:string};
 
 const FEEDS:FeedSpec[]=[
-  {id:"wire:yahoo-finance",url:"https://finance.yahoo.com/news/rssindex",theme:"markets_macro",publisher:"Yahoo Finance",mode:"MARKETS"},
+  {id:"wire:yahoo-finance",url:"https://finance.yahoo.com/news/rssindex",fallbackUrls:["https://news.yahoo.com/rss/topstories"],fallbackPublisher:"Yahoo News",theme:"markets_macro",publisher:"Yahoo Finance",mode:"MARKETS"},
   {id:"wire:bloomberg-markets",url:"https://feeds.bloomberg.com/markets/news.rss",theme:"markets_macro",publisher:"Bloomberg",mode:"MARKETS"},
   {id:"wire:cnbc-us",url:"https://www.cnbc.com/id/100003114/device/rss/rss.html",theme:"markets_macro",publisher:"CNBC",mode:"MARKETS"},
   {id:"wire:aljazeera",url:"https://www.aljazeera.com/xml/rss/all.xml",theme:"geopolitics",publisher:"Al Jazeera",mode:"GEOPOLITICS"},
@@ -98,14 +98,25 @@ function sourceId(a:Article,spec:FeedSpec){
   return spec.publisher;
 }
 async function fetchFeed(spec:FeedSpec){
-  const r=await fetch(spec.url,{
-    headers:{accept:"application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1","user-agent":"Mozilla/5.0 (compatible; BrianDirectWireEye/1.0; +market-intelligence)"},
-    signal:AbortSignal.timeout(6500)
-  });
-  if(!r.ok)throw new Error(`${spec.id}:HTTP_${r.status}`);
-  const body=await r.text();
-  if(!body.trim())throw new Error(`${spec.id}:EMPTY`);
-  return parseFeed(body,spec);
+  const deadline=Date.now()+6500;
+  const errors:string[]=[];
+  for(const url of [spec.url,...(spec.fallbackUrls??[])]){
+    const remaining=deadline-Date.now();
+    if(remaining<=0)break;
+    try{
+      const r=await fetch(url,{
+        headers:{accept:"application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.1","user-agent":"Mozilla/5.0 (compatible; BrianDirectWireEye/2.0; +market-intelligence)"},
+        signal:AbortSignal.timeout(remaining)
+      });
+      if(!r.ok)throw new Error(`HTTP_${r.status}`);
+      const body=await r.text();
+      if(!body.trim())throw new Error("EMPTY");
+      const items=parseFeed(body,url!==spec.url&&spec.fallbackPublisher?{...spec,publisher:spec.fallbackPublisher}:spec);
+      if(!items.length)throw new Error("NO_FEED_ITEMS");
+      return {items,url,fallbackUsed:url!==spec.url,primaryErrors:errors};
+    }catch(e){errors.push(err(e).slice(0,160));}
+  }
+  throw new Error(`${spec.id}:${errors.join("; ")||"DEADLINE"}`);
 }
 async function recordRun(startedAt:string,status:string,observed:number,stored:number,degraded:string[],metadata:Json){
   const finishedAt=new Date().toISOString();
@@ -139,12 +150,12 @@ Deno.serve(async(req:Request)=>{
         providerStats[spec.id]={status:"FAILED",error:err(s.reason).slice(0,220)};
         return;
       }
-      observed+=s.value.length;
-      const fresh=s.value.filter(a=>isFresh(a,now));
+      observed+=s.value.items.length;
+      const fresh=s.value.items.filter(a=>isFresh(a,now));
       const rel=fresh.filter(a=>relevant(a,spec));
       const selected=rel.filter(a=>spec.id!=="wire:yahoo-finance"||highSignal(a));
       candidates.push(...selected);
-      providerStats[spec.id]={status:"SUCCESS",observed:s.value.length,fresh:fresh.length,relevant:selected.length};
+      providerStats[spec.id]={status:"SUCCESS",observed:s.value.items.length,fresh:fresh.length,relevant:selected.length,feed_url:s.value.url,fallback_used:s.value.fallbackUsed,primary_errors:s.value.primaryErrors};
     });
 
     const unique=new Map<string,Article>();

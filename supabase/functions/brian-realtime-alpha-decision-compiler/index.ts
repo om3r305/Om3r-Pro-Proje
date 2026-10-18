@@ -80,6 +80,7 @@ type ObservedL2Cost = {
   sourceId: string;
   lastUpdateId: string;
   fetchedAt: string;
+  auditRoundTripCostBps: number | null;
 };
 
 class ObservedL2InvalidError extends Error {
@@ -432,12 +433,21 @@ async function fetchObservedL2Cost(asset: string, direction: -1 | 1, notional: n
       bids: snapshot.bids.map(([price, size]) => ({ price, size })),
       asks: snapshot.asks.map(([price, size]) => ({ price, size })),
     });
+    // Observe both sides for WAIT/VETO auditing; this never authorizes an order.
+    const opposite = compileL2Cost({
+      side: direction === 1 ? "SELL" : "BUY", notionalUsd: notional, feeBps: FALLBACK_FEE_BPS,
+      bids: snapshot.bids.map(([price, size]) => ({ price, size })),
+      asks: snapshot.asks.map(([price, size]) => ({ price, size })),
+    });
+    const auditRoundTripCostBps = quote.fillable && opposite.fillable
+      ? Math.max(quote.estimatedRoundTripCostBps, opposite.estimatedRoundTripCostBps) : null;
     const fetchedAt = new Date().toISOString();
     return {
       quote,
       sourceId: `binance_public_rest_depth:${symbol}:${snapshot.lastUpdateId}`,
       lastUpdateId: String(snapshot.lastUpdateId),
       fetchedAt,
+      auditRoundTripCostBps,
     };
   } catch (error) {
     throw new ObservedL2InvalidError(`observed depth snapshot rejected for ${symbol}: ${errorText(error)}`);
@@ -565,13 +575,13 @@ Deno.serve(async (req: Request) => {
       const l2StatusByAsset = new Map<string, RuntimeL2Status>();
       await Promise.all(assets.map(async (asset) => {
         const preliminary = preliminaryByAsset.get(asset);
-        if (!preliminaryIsActionable(preliminary)) {
+        if (poisonByAsset.has(asset)) {
           l2StatusByAsset.set(asset, "NOT_REQUESTED");
           return;
         }
-        const notional = ticketForScore(preliminary.evidenceScore);
+        const notional = ticketForScore(preliminary?.evidenceScore ?? 0);
         try {
-          l2ByAsset.set(asset, await fetchObservedL2Cost(asset, preliminary.direction as -1 | 1, notional));
+          l2ByAsset.set(asset, await fetchObservedL2Cost(asset, preliminary?.direction === -1 ? -1 : 1, notional));
           l2StatusByAsset.set(asset, "OBSERVED");
         } catch (error) {
           const status: RuntimeL2Status = error instanceof ObservedL2InvalidError ? "INVALID" : "UNAVAILABLE";
@@ -696,6 +706,14 @@ Deno.serve(async (req: Request) => {
             gdelt_role: "discovery_only_no_direction_vote",
             frozen_phase37_experiment_id: FROZEN_PHASE37_EXPERIMENT_ID,
             score_is_not_expected_return_bps: true,
+            // Separate observational evidence. compileAlphaDecision still receives cost only
+            // when preliminaryIsActionable; WAIT signals and execution gates are unchanged.
+            audit_cost: observedL2?.auditRoundTripCostBps != null ? {
+              role: "AUDIT_ONLY", quality: "L2_OBSERVED", policy: "max_buy_sell_same_snapshot_v1",
+              estimated_round_trip_cost_bps: observedL2.auditRoundTripCostBps,
+              captured_at: observedL2.fetchedAt, source_id: observedL2.sourceId,
+              requested_notional_usd: observedL2.quote.requestedNotionalUsd,
+            } : null,
             cost_quality: decision.costQuality,
             l2_runtime_status: l2Status,
             intrabar_context_available: intrabarContextAvailable,
