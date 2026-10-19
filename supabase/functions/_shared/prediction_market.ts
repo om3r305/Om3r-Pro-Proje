@@ -192,6 +192,8 @@ export interface PredictionMarket {
   source: "polymarket-gamma";
   marketId: string;
   conditionId: string | null;
+  eventId: string | null;
+  eventTitle: string | null;
   question: string;
   slug: string | null;
   endDate: string | null;
@@ -242,7 +244,16 @@ function parseStringArray(value: unknown): string[] | null {
   return parsed.map((v) => (typeof v === "string" ? v : v === null || v === undefined ? "" : String(v)));
 }
 
-export function normalizeGammaMarket(raw: unknown, receivedAt: string): NormalizeResult<PredictionMarket> {
+export interface GammaEventContext {
+  id: string | null;
+  title: string | null;
+}
+
+export function normalizeGammaMarket(
+  raw: unknown,
+  receivedAt: string,
+  event: GammaEventContext | null = null,
+): NormalizeResult<PredictionMarket> {
   if (typeof raw !== "object" || raw === null) return { ok: false, reason: "market is not an object" };
   const m = raw as Record<string, unknown>;
   const marketId = m.id === undefined || m.id === null ? "" : String(m.id);
@@ -269,6 +280,8 @@ export function normalizeGammaMarket(raw: unknown, receivedAt: string): Normaliz
       source: "polymarket-gamma",
       marketId,
       conditionId: typeof m.conditionId === "string" && m.conditionId !== "" ? m.conditionId : null,
+      eventId: event?.id ?? null,
+      eventTitle: event?.title ?? null,
       question,
       slug: typeof m.slug === "string" && m.slug !== "" ? m.slug : null,
       endDate: isoOrNull(m.endDate),
@@ -334,6 +347,74 @@ export async function* iterateGammaMarkets(
     seen.add(next);
     cursor = next;
   }
+}
+
+// Events carry their markets inline, and -- unlike markets/keyset, which silently ignores it --
+// events/keyset honours `tag_slug`, so topic discovery goes through events.
+export function gammaEventsKeysetUrl(params: {
+  tagSlug: string;
+  limit: number;
+  afterCursor?: string | null;
+  active?: boolean;
+  closed?: boolean;
+}): string {
+  if (!/^[a-z0-9-]{1,64}$/.test(params.tagSlug)) throw new Error(`invalid tag slug: ${params.tagSlug}`);
+  const url = new URL("https://gamma-api.polymarket.com/events/keyset");
+  url.searchParams.set("limit", String(Math.max(1, Math.min(100, Math.trunc(params.limit)))));
+  url.searchParams.set("tag_slug", params.tagSlug);
+  if (params.active !== undefined) url.searchParams.set("active", String(params.active));
+  if (params.closed !== undefined) url.searchParams.set("closed", String(params.closed));
+  if (params.afterCursor) url.searchParams.set("after_cursor", params.afterCursor);
+  return url.toString();
+}
+
+export function flattenGammaEvents(
+  body: unknown,
+  receivedAt: string,
+): { markets: PredictionMarket[]; rejected: { marketId: string | null; reason: string }[]; nextCursor: string | null } {
+  const markets: PredictionMarket[] = [];
+  const rejected: { marketId: string | null; reason: string }[] = [];
+  const b = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
+  const events = Array.isArray(b.events) ? b.events : [];
+  for (const rawEvent of events) {
+    if (typeof rawEvent !== "object" || rawEvent === null) continue;
+    const e = rawEvent as Record<string, unknown>;
+    const context: GammaEventContext = {
+      id: e.id === undefined || e.id === null ? null : String(e.id),
+      title: typeof e.title === "string" ? e.title : null,
+    };
+    for (const rawMarket of Array.isArray(e.markets) ? e.markets : []) {
+      const result = normalizeGammaMarket(rawMarket, receivedAt, context);
+      if (result.ok) markets.push(result.value);
+      else {
+        const id = typeof rawMarket === "object" && rawMarket !== null ? (rawMarket as Record<string, unknown>).id : null;
+        rejected.push({ marketId: id === undefined || id === null ? null : String(id), reason: result.reason });
+      }
+    }
+  }
+  const nextCursor = typeof b.next_cursor === "string" && b.next_cursor !== "" ? b.next_cursor : null;
+  return { markets, rejected, nextCursor };
+}
+
+// Data API activity, oldest first from an inclusive `start` (epoch seconds). Historical offsets are
+// capped at 5000 by the API, so an active trader must be resumed by time, not by offset.
+export const DATA_ACTIVITY_MAX_OFFSET = 5000;
+
+export function dataActivityUrl(params: { wallet: string; startSeconds: number; limit: number; offset: number }): string {
+  if (!WALLET_RE.test(params.wallet)) throw new Error("a full wallet address is required");
+  if (!Number.isInteger(params.startSeconds) || params.startSeconds < 0) throw new Error("startSeconds must be a non-negative integer");
+  const limit = Math.max(1, Math.min(500, Math.trunc(params.limit)));
+  const offset = Math.max(0, Math.trunc(params.offset));
+  if (offset + limit > DATA_ACTIVITY_MAX_OFFSET) throw new Error("activity offset would exceed the API's historical cap");
+  const url = new URL("https://data-api.polymarket.com/activity");
+  url.searchParams.set("user", params.wallet.toLowerCase());
+  url.searchParams.set("type", "TRADE");
+  url.searchParams.set("start", String(params.startSeconds));
+  url.searchParams.set("sortBy", "TIMESTAMP");
+  url.searchParams.set("sortDirection", "ASC");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("offset", String(offset));
+  return url.toString();
 }
 
 // ---------------------------------------------------------------------------------------------

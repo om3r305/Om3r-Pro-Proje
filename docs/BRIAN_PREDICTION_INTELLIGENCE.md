@@ -38,6 +38,32 @@ deno test supabase/functions/_shared/prediction_market.test.ts                  
 PREDICTION_LIVE=1 deno test --allow-net --allow-env supabase/functions/_shared/prediction_market.test.ts   # canlı duman testi
 ```
 
+## Faz 1b — depolama ve sınırlı toplayıcı
+
+**Migrasyon** `202610190001_brian_prediction_intelligence.sql`:
+
+| Tablo | Tür | Not |
+|---|---|---|
+| `brian_prediction_control` | durum (tek satır) | Hepsi **kapalı** başlar; `live_execution` açılamaz (CHECK) |
+| `brian_prediction_wallets` | durum | Yalnızca 42 karakterlik tam adres; VERIFIED için doğrulama zamanı zorunlu; watermark sadece ileri gider |
+| `brian_prediction_markets` | kanıt, append-only | Piyasa tanımı + olay bağlamı |
+| `brian_prediction_market_snapshots` | kanıt, append-only | Olasılıklar; eksik değer NULL; kaynak güncelleme zamanı ve tazelik saniyesi |
+| `brian_prediction_wallet_trades` | kanıt, append-only | Yalnızca VERIFIED cüzdan + takip açıkken saklanır |
+| `brian_prediction_source_health` | kanıt, append-only | Kaynak başına durum, HTTP, deneme, gecikme |
+
+RLS açık; anon/authenticated erişemez; service_role yalnızca gerekli izinlere sahip; yazıcı RPC'ler `SECURITY DEFINER` + sabit `search_path`.
+
+**Toplayıcı** `_shared/prediction_collector.ts` + `brian-prediction-eye`: global Brian anahtarı **ve** `module_enabled` açık değilse hiçbir şey yapmaz; collector lease kullanır; tur başına sınırlı istek (6 etiket sayfası, en fazla 60 piyasa, 2 kimlik isteği, en fazla 2×500 işlem). Watermark yalnızca işlemler veritabanına kabul edildikten sonra ilerler; bir sayfa başarısızsa ilerlemez.
+
+**API bulguları (19 Ekim):** `markets/keyset` `tag_slug`'ı **sessizce yok sayar**, `events/keyset` uygular — konu keşfi olaylar üzerinden. Data API geçmiş offset sınırı 5000 → zaman tabanlı (`start` + ASC) devam.
+
+**Canlı kuru çalıştırma (DB'siz) + yerel Postgres:** 6 etiketten 688 piyasa görüldü, 60 tutuldu, 0 reddedildi; NIULAI4 VERIFIED; 24 saatlik pencerede 1000 işlem (kesildi, sonraki tura devreder). Aynı canlı paket yerel Postgres 16'ya iki kez yazıldı: 1. tur 60/60/1000/11 saklandı, 2. tur 0 — idempotent.
+
+**Bilinen eksikler / dikkat:**
+- NIULAI4 günde binlerce işlem yapıyor (≈13 saatte 2000). Cüzdan takibi açılmadan önce **saklama süresi/boyut sınırı** eklenmeli.
+- Zamanlayıcı (cron) eklenmedi, fonksiyon yayımlanmadı, migrasyon canlı veritabanına uygulanmadı. Bunlar kullanıcı onayıyla ayrı adım.
+- Veriler henüz hiçbir karara bağlanmadı.
+
 ## Sıradaki tek adım
 
-Faz 1b: `prediction_*` tabloları (RLS, idempotent, değiştirilemez gözlem) için migrasyon ve sınırlı sayıda piyasayı aralıklı çeken toplayıcı. Toplayıcı mevcut collector kira (lease) mekanizmasını yeniden kullanmalı.
+Faz 1c: saklama süresi/boyut sınırı, sonra (onayla) migrasyonun uygulanması, fonksiyonun yayımlanması ve düşük sıklıklı zamanlayıcı — ilk aşamada yalnızca piyasa anlık görüntüleri, cüzdan takibi kapalı.
