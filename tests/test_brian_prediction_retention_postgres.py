@@ -185,7 +185,8 @@ def test_storage_function_grants(cur):
 def test_archive_policies_registered_conservatively(cur):
     cur.execute(
         "select table_name, time_column, pk_column, hot_retention_days, archive_enabled, purge_enabled "
-        "from public.brian_archive_policies where table_name like 'brian_prediction%'"
+        "from public.brian_archive_policies where table_name in ('brian_prediction_market_snapshots', "
+        "'brian_prediction_markets', 'brian_prediction_source_health', 'brian_prediction_wallet_trades')"
     )
     # Sorted in Python: ORDER BY on text follows the database collation, which differs between a
     # C-locale cluster and the en_US CI image.

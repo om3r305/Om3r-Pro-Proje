@@ -319,3 +319,29 @@ Deno.test("a cycle never produces more trades than one batch RPC accepts", async
   eq(batch.trades.length, 1000, "bounded");
   assert(batch.summary.activityTruncated, "remaining trades flagged for the next cycle");
 });
+
+Deno.test("resolution capture: bounded, keeps only genuine resolutions, reports the rest as pending", async () => {
+  const { collectResolutions, MAX_RESOLUTION_LOOKUPS } = await import("./prediction_collector.ts");
+  const bodies: Record<string, unknown> = {
+    "1": { id: "1", closed: true, umaResolutionStatus: "resolved", outcomes: '["Yes","No"]', outcomePrices: '["0","1"]', closedTime: "2026-10-29 05:00:00+00" },
+    "2": { id: "2", closed: false, umaResolutionStatus: null, outcomes: '["Yes","No"]', outcomePrices: '["0.4","0.6"]' },
+    "3": { id: "3", closed: true, umaResolutionStatus: "disputed", outcomes: '["Yes","No"]', outcomePrices: '["1","0"]' },
+  };
+  const seen: string[] = [];
+  const fetchImpl = ((input: string | URL | Request) => {
+    const id = new URL(String(input)).pathname.split("/").pop()!;
+    seen.push(id);
+    if (id === "4") return Promise.resolve(new Response("", { status: 503 }));
+    return Promise.resolve(new Response(JSON.stringify(bodies[id]), { status: 200 }));
+  }) as typeof fetch;
+  const out = await collectResolutions(["1", "2", "3", "4", "1", "x/../y"], { fetchImpl, sleep: noSleep, now: () => NOW, maxAttempts: 1 });
+  eq(seen, ["1", "2", "3", "4"], "deduplicated, invalid ids never requested");
+  eq(out.rows.map((r) => [r.market_key, r.yes_outcome]), [["polymarket:1", 0]], "only the genuine resolution is kept");
+  eq(out.pending.map((p) => p.reason), ["NOT_CLOSED", "UMA_STATUS_disputed", "FETCH_ERROR"], "the rest stay pending with a reason");
+  eq(new Set(out.health.map((h) => h.health_id)).size, out.health.length, "health ids unique");
+  const many = await collectResolutions(Array.from({ length: 50 }, (_, i) => String(100 + i)), {
+    fetchImpl: (() => Promise.resolve(new Response(JSON.stringify(bodies["2"]), { status: 200 }))) as typeof fetch,
+    sleep: noSleep, now: () => NOW,
+  });
+  eq(many.requests, MAX_RESOLUTION_LOOKUPS, "lookups per cycle are bounded");
+});

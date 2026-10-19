@@ -252,8 +252,15 @@ def test_evidence_is_append_only_for_postgres_and_unwritable_for_service_role(cu
             cur.execute(f"delete from public.{table}")
         cur.execute("reset role")
     # The trigger also blocks a non-superuser table owner path: postgres is the only exempt role.
-    cur.execute("select count(*) from pg_trigger where tgname like 'brian_prediction_%_append_only' and not tgisinternal")
-    assert cur.fetchone()[0] == 4
+    cur.execute("select array_agg(tgname::text order by tgname) from pg_trigger where tgname like 'brian_prediction_%_append_only' and not tgisinternal")
+    names = set(cur.fetchone()[0])
+    # Later phases may add more append-only tables; these four must always be guarded.
+    assert {
+        "brian_prediction_markets_append_only",
+        "brian_prediction_market_snapshots_append_only",
+        "brian_prediction_wallet_trades_append_only",
+        "brian_prediction_source_health_append_only",
+    } <= names
 
 
 def test_anon_and_authenticated_have_no_access(cur):

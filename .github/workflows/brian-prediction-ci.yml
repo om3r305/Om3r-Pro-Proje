@@ -71,4 +71,4 @@ jobs:
       - name: Run real Postgres migration, grant and append-only tests
         env:
           BRIAN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-        run: python -m pytest -q tests/test_brian_prediction_postgres.py tests/test_brian_prediction_retention_postgres.py tests/test_brian_prediction_schedule_postgres.py tests/test_brian_prediction_changes_postgres.py -v
+        run: python -m pytest -q tests/test_brian_prediction_postgres.py tests/test_brian_prediction_retention_postgres.py tests/test_brian_prediction_schedule_postgres.py tests/test_brian_prediction_changes_postgres.py tests/test_brian_prediction_resolutions_postgres.py -v
