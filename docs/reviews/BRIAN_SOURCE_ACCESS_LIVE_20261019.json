@@ -1,0 +1,389 @@
+{
+  "checked_at": "2026-10-19T19:04:55Z",
+  "ready_for_live_money": false,
+  "shadow_only": true,
+  "live_execution": false,
+  "releases": {
+    "source_access": {
+      "pr": 148,
+      "candidate": "ab65a964b4a4424a0fee7e00ad016ff482e9d216",
+      "merge": "f74dae82a6e3ae0d1bfbdf8e2cb56224131a1024",
+      "migration": "20261019185251_world_research_domain_cooldown.sql",
+      "edge_version": 3,
+      "exact_source_readback": true,
+      "checks": [
+        {
+          "name": "evolution-postgres",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306019745/job/118243191820"
+        },
+        {
+          "name": "evolution-contracts",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306019745/job/118243191364"
+        },
+        {
+          "name": "alpha-postgres",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017726/job/118243185390"
+        },
+        {
+          "name": "verify-edge-functions",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017655/job/118243184794"
+        },
+        {
+          "name": "verify-node-regressions",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017655/job/118243184761"
+        },
+        {
+          "name": "verify-collector-lease",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017655/job/118243184752"
+        },
+        {
+          "name": "alpha-deno",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017726/job/118243184506"
+        },
+        {
+          "name": "verify",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39306017655/job/118243184393"
+        }
+      ],
+      "native": [
+        {
+          "collector_id": "brian-world-evidence-research-v1",
+          "status": "DEGRADED",
+          "started_at": "2026-10-19 18:58:04.536+00",
+          "finished_at": "2026-10-19 18:58:09.502+00",
+          "observed_records": 1,
+          "stored_records": 1,
+          "error_message": null,
+          "metadata": {
+            "version": "brian.world-evidence-review.v2-domain-cooldown",
+            "source_access": {
+              "policy": "OFFICIAL_DOMAIN_ACCESS_COOLDOWN_15M_V1",
+              "status": "PARTIAL_ACCESS",
+              "cooldown_sources": [
+                {
+                  "source_id": "official:cftc:federal_register",
+                  "blocked_at": "2026-10-19T18:48:03.645428+00:00",
+                  "next_retry_at": "2026-10-19T19:03:03.645428+00:00",
+                  "canonical_domain": "federalregister.gov"
+                },
+                {
+                  "source_id": "official:eucouncil:press",
+                  "blocked_at": "2026-10-19T18:48:03.842191+00:00",
+                  "next_retry_at": "2026-10-19T19:03:03.842191+00:00",
+                  "canonical_domain": "consilium.europa.eu"
+                },
+                {
+                  "source_id": "official:federal_register:public_inspection",
+                  "blocked_at": "2026-10-19T18:48:03.645428+00:00",
+                  "next_retry_at": "2026-10-19T19:03:03.645428+00:00",
+                  "canonical_domain": "federalregister.gov"
+                }
+              ]
+            },
+            "failed_document_reads": 1,
+            "external_claims_independently_verified": 0,
+            "market_reaction_is_not_priced_in_probability": true
+          }
+        }
+      ]
+    },
+    "yahoo_rss": {
+      "pr": 149,
+      "candidate": "2f2c354b724e0221405d20d97f2c820d093638ae",
+      "merge": "249668caf251cba121fb32c393071d32912c5ae8",
+      "migration": "20261019185946_repair_yahoo_benchmark_rss.sql",
+      "realtime_edge_version": 4,
+      "exact_source_readback": true,
+      "checks": [
+        {
+          "name": "verify-edge-functions",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008330/job/118246583864"
+        },
+        {
+          "name": "verify",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008330/job/118246583373"
+        },
+        {
+          "name": "verify-node-regressions",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008330/job/118246583265"
+        },
+        {
+          "name": "verify-collector-lease",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008330/job/118246583007"
+        },
+        {
+          "name": "alpha-postgres",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008198/job/118246582097"
+        },
+        {
+          "name": "alpha-deno",
+          "conclusion": "success",
+          "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39307008198/job/118246581955"
+        }
+      ],
+      "native": [
+        {
+          "collector_id": "brian-direct-wire-eye-v1",
+          "status": "SUCCESS",
+          "started_at": "2026-10-19 19:00:02.881+00",
+          "stored_records": 2,
+          "metadata": {
+            "version": "brian.direct-wire-eye.v3-yahoo-benchmark-rss",
+            "direct_wire": true,
+            "feeds_healthy": 4,
+            "coverage_state": "ACTIVE",
+            "discovery_only": true,
+            "feeds_expected": 4,
+            "provider_stats": {
+              "wire:cnbc-us": {
+                "fresh": 4,
+                "status": "SUCCESS",
+                "feed_url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+                "observed": 30,
+                "relevant": 1,
+                "fallback_used": false,
+                "coverage_scope": "REGISTERED_FEED",
+                "primary_errors": []
+              },
+              "wire:aljazeera": {
+                "fresh": 11,
+                "status": "SUCCESS",
+                "feed_url": "https://www.aljazeera.com/xml/rss/all.xml",
+                "observed": 25,
+                "relevant": 2,
+                "fallback_used": false,
+                "coverage_scope": "REGISTERED_FEED",
+                "primary_errors": []
+              },
+              "wire:yahoo-finance": {
+                "fresh": 20,
+                "status": "SUCCESS",
+                "feed_url": "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC%2C%5EIXIC&region=US&lang=en-US",
+                "observed": 20,
+                "relevant": 2,
+                "fallback_used": false,
+                "coverage_scope": "SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO",
+                "primary_errors": []
+              },
+              "wire:bloomberg-markets": {
+                "fresh": 13,
+                "status": "SUCCESS",
+                "feed_url": "https://feeds.bloomberg.com/markets/news.rss",
+                "observed": 20,
+                "relevant": 7,
+                "fallback_used": false,
+                "coverage_scope": "REGISTERED_FEED",
+                "primary_errors": []
+              }
+            },
+            "directional_vote": false,
+            "candidate_records": 12,
+            "direct_alpha_influence": false
+          }
+        }
+      ],
+      "realtime_events": [
+        {
+          "event_id": "2603956dec1bbd0a828381b7cf12717d896114100e024ac6adeeabf839157e77",
+          "published_at": "2026-10-19 18:19:30+00",
+          "first_observed_at": "2026-10-19 19:00:03.553+00",
+          "feed_id": "wire:yahoo-finance",
+          "coverage_scope": "SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO"
+        },
+        {
+          "event_id": "f10b262de016815e5badf8c0337425e78e03c59531f61e3f52d002279a5c5a3f",
+          "published_at": "2026-10-19 18:42:10+00",
+          "first_observed_at": "2026-10-19 19:00:03.554+00",
+          "feed_id": "wire:yahoo-finance",
+          "coverage_scope": "SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO"
+        }
+      ],
+      "core_sync": [
+        {
+          "event_id": "2603956dec1bbd0a828381b7cf12717d896114100e024ac6adeeabf839157e77",
+          "first_observed_at": "2026-10-19 19:00:03.553+00",
+          "created_at": "2026-10-19 19:01:03.531296+00",
+          "feed_id": "wire:yahoo-finance",
+          "coverage_scope": "SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO"
+        },
+        {
+          "event_id": "f10b262de016815e5badf8c0337425e78e03c59531f61e3f52d002279a5c5a3f",
+          "first_observed_at": "2026-10-19 19:00:03.554+00",
+          "created_at": "2026-10-19 19:01:03.531296+00",
+          "feed_id": "wire:yahoo-finance",
+          "coverage_scope": "SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO"
+        }
+      ],
+      "registry_probe": {
+        "error": null,
+        "lifecycle": "VERIFYING",
+        "parseable": true,
+        "reachable": true,
+        "latency_ms": 365,
+        "endpoint_id": "wire_yahoo_finance_rss",
+        "http_status": 200,
+        "origin_match": true,
+        "sample_count": 3,
+        "latest_healthy": true,
+        "composite_score": 0.736,
+        "healthy_samples": 1,
+        "research_eligible": false
+      }
+    }
+  },
+  "recent_price_windows": [
+    {
+      "seconds": 300,
+      "matured_windows": 128,
+      "independent_terminal_found": 128,
+      "independent_terminal_missing": 0,
+      "truncated": false
+    },
+    {
+      "seconds": 900,
+      "matured_windows": 104,
+      "independent_terminal_found": 104,
+      "independent_terminal_missing": 0,
+      "truncated": false
+    }
+  ],
+  "net_validation": [
+    {
+      "status": 200,
+      "edge_validation": {
+        "rows": [
+          {
+            "issues": [
+              "INSUFFICIENT_DIRECTIONAL_SAMPLE",
+              "INSUFFICIENT_DAY_BLOCKS",
+              "DIRECTIONAL_COVERAGE_INCOMPLETE",
+              "ROLLING_DIAGNOSTIC_NOT_PROSPECTIVE_PROOF",
+              "FIXED_PROTOCOL_NOT_FINISHED",
+              "MODELED_COSTS_NOT_EXECUTED_TRADES",
+              "INDEPENDENT_REPLICATION_REQUIRED"
+            ],
+            "sample": "diagnostic",
+            "measured": 11,
+            "selected": 64,
+            "day_blocks": [
+              {
+                "n": 11,
+                "sample": "diagnostic",
+                "day_bucket": "2026-10-19",
+                "mean_net_bps": -7.4922535411747
+              }
+            ],
+            "not_mature": 2,
+            "unresolved": 0,
+            "directional": 13,
+            "mean_net_bps": -7.4922535411747,
+            "missing_cost": 0,
+            "proof_status": "NOT_PROVEN",
+            "late_decision": 0,
+            "missing_entry": 0,
+            "cash_decisions": 51,
+            "interpretation": "NON_POSITIVE_NET_MEASURED",
+            "unknown_policy": 0,
+            "invalid_outcome": 0,
+            "compiler_versions": 1
+          },
+          {
+            "issues": [
+              "INSUFFICIENT_DIRECTIONAL_SAMPLE",
+              "INSUFFICIENT_DAY_BLOCKS",
+              "DIRECTIONAL_COVERAGE_INCOMPLETE",
+              "FIXED_PROTOCOL_NOT_FINISHED",
+              "MODELED_COSTS_NOT_EXECUTED_TRADES",
+              "INDEPENDENT_REPLICATION_REQUIRED"
+            ],
+            "sample": "prospective",
+            "measured": 2,
+            "selected": 24,
+            "day_blocks": [
+              {
+                "n": 2,
+                "sample": "prospective",
+                "day_bucket": "2026-10-19",
+                "mean_net_bps": -65.6590185940803
+              }
+            ],
+            "not_mature": 0,
+            "unresolved": 1,
+            "directional": 3,
+            "mean_net_bps": -65.6590185940803,
+            "missing_cost": 0,
+            "proof_status": "NOT_PROVEN",
+            "late_decision": 0,
+            "missing_entry": 0,
+            "cash_decisions": 21,
+            "interpretation": "NON_POSITIVE_NET_MEASURED",
+            "unknown_policy": 0,
+            "invalid_outcome": 0,
+            "compiler_versions": 1
+          }
+        ],
+        "as_of": "2026-10-19T18:55:09.532+00:00",
+        "status": "AVAILABLE",
+        "protocol": {
+          "id": "alpha-net-probe-20261019-v1",
+          "ends_at": "2026-11-18T16:00:00Z",
+          "final_at": "2026-11-18T16:17:00Z",
+          "benchmark": "Cash = 0 basis points; modeled decision returns, not portfolio P&L",
+          "selection": "First shadow decision per asset in the first 60 seconds of each fixed 18-minute slot; all actions retained",
+          "starts_at": "2026-10-19T16:00:00Z",
+          "proof_status": "NOT_PROVEN",
+          "slot_seconds": 1080,
+          "horizon_seconds": 900,
+          "minimum_day_blocks": 20,
+          "modeled_costs_only": true,
+          "automatic_promotion": false,
+          "entry_window_seconds": 60,
+          "terminal_tolerance_seconds": 120,
+          "minimum_directional_samples": 100
+        },
+        "truncated": false,
+        "proof_status": "NOT_PROVEN",
+        "automatic_promotion": false
+      },
+      "generated_at": "2026-10-19T18:55:11.698Z",
+      "http_reset_curlopt": true
+    }
+  ],
+  "remaining": [
+    "Full document access to SEC/EU Council/Federal Register is partial; feed health is not article-body availability.",
+    "Historical absent terminal marks are retained as absent.",
+    "Semantic independent corroboration and verified counter-claims are not established.",
+    "Event-specific priced-in probability and causal attribution remain unproven.",
+    "Positive cost-adjusted edge is not established; fixed prospective test is unfinished and samples are insufficient."
+  ],
+  "excluded": "DIP and engineering automation were not changed; no trading promotion or monetary execution enabled.",
+  "advisors_new_findings": 0,
+  "registry_second_probe": {
+    "error": null,
+    "lifecycle": "ACTIVE",
+    "parseable": true,
+    "reachable": true,
+    "latency_ms": 374,
+    "endpoint_id": "wire_yahoo_finance_rss",
+    "http_status": 200,
+    "origin_match": true,
+    "sample_count": 3,
+    "latest_healthy": true,
+    "composite_score": 0.786,
+    "healthy_samples": 2,
+    "research_eligible": true
+  }
+}
