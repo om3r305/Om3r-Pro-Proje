@@ -82,3 +82,14 @@ drop table if exists public.brian_prediction_control;
 | Fonksiyon | `brian-prediction-eye` v1 ACTIVE, `verify_jwt=false`, ezbr `739d3d7f…` |
 | Duman testi | Anahtarsız POST → 401, yanlış anahtar → 401, GET → 405. Anahtarlı çağrı yapılmadı (internal key kullanılmadı) |
 | Durum | `module_enabled=false`, cron işi yok, prediction tablolarında 0 satır, lease olayı yok |
+
+## Yayın kaydı — Faz 1c (19 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-1c-oncesi` → `311c34e`; `C:\Brian\brian-backups\2026-10-19-prediction-1c-oncesi\` (bundle verify: okay + `core-state.json`, eski RPC md5 `d842b802…`) |
+| Merge | PR #152 → `0c25ed9` (CI üçü de yeşil, `c1e7b69`; ilk koşudaki hata collation'a bağlı test sıralamasıydı, düzeltildi) |
+| Migrasyon | CORE sürüm `20261019200517` (`brian_prediction_retention`); dosya adı hizalandı |
+| Son kontroller | `max_storage_mb=256`; `brian_prediction_storage_bytes()` = 122880 bayt; yeni RPC md5 `0191f445…`, `SECURITY DEFINER` + sabit `search_path`; iki fonksiyon için yalnızca service_role EXECUTE; modül kapalıyken RPC `OPERATOR_STOPPED`; 4 arşiv politikası eklendi (toplam 21); `brian-cold-archive-daily` cron'u **pasif kaldı** |
+| Fonksiyon | `brian-prediction-eye` v2 ACTIVE (ezbr `310089e7…`), `STORAGE_CAP_REACHED` durumunu tanıyor; anahtarsız POST → 401, GET → 405 |
+| Geri dönüş | `core-state.json` içindeki adımlar: v1 RPC'yi yeniden uygula, `brian_prediction_storage_bytes` ve `max_storage_mb`'ı kaldır, `brian_prediction%` politikalarını sil, eye v1'i tag'den yeniden yayımla |
