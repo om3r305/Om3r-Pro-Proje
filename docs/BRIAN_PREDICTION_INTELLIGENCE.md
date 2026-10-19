@@ -80,6 +80,14 @@ Mevcut soğuk arşiv (`brian-cold-archive`) 3 Ekim'den beri çalışmıyor (cron
 
 Bu migrasyon hiçbir şey silmez ve hiçbir zamanlayıcıyı açmaz.
 
+## Faz 1d — zamanlayıcı ve açılış (yalnız piyasa anlık görüntüleri)
+
+- `brian_prediction_control`: `module_enabled=true`, `wallet_tracking_enabled=false` (migrasyon cüzdan takibini açıkça kapatır).
+- CORE pg_cron işi `brian-prediction-eye-15m`, her saat 5, 20, 35 ve 50. dakikalarda çalışır. Diğer CORE eye'ları gibi vault'taki cron anahtarıyla çağırır; önceki istek pg_net kuyruğundaysa o turu atlar.
+- `brian-prediction-eye` artık cron anahtarını da kabul ediyor; internal key de geçerliliğini koruyor.
+- **Durdurma:** `module_enabled=false`, global `brian_system_enabled=false` ya da `select cron.unschedule('brian-prediction-eye-15m')`.
+- Faz 1c'deki 256 MB sınırı her yazmada uygulanır.
+
 ## Sıradaki tek adım
 
-Faz 1d: düşük sıklıklı zamanlayıcı (önerilen: 15 dakikada bir) ve modülün açılması. İlk aşamada yalnızca piyasa anlık görüntüleri açılır, cüzdan takibi kapalı kalır.
+Faz 2a: olasılık değişimi ölçümü (gelecek bilgisi kullanmadan, yalnızca saklanan anlık görüntülerden) ve veri sağlığı özeti. Cüzdan takibi ayrı bir kararla açılır.
