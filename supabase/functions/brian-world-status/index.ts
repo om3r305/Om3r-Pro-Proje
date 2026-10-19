@@ -79,7 +79,7 @@ Deno.serve(async (req: Request) => {
       .order("started_at", { ascending: false }).limit(24),
     db.from("brian_collector_runs")
       .select("collector_id,status,started_at,finished_at,observed_records,stored_records,degraded_sources,error_class,error_message,metadata")
-      .in("collector_id", ["brian-world-discovery-eye-v1", "brian-world-brain-v1"])
+      .in("collector_id", ["brian-world-discovery-eye-v1", "brian-world-brain-v1", "brian-world-evidence-research-v1"])
       .order("started_at", { ascending: false }).limit(30),
   ]);
   const named = { narrativesQ, futureQ, mechanismsQ, scenariosQ, impactsQ, entitiesQ, relationsQ, runsQ, discoveryQ };
@@ -122,13 +122,17 @@ Deno.serve(async (req: Request) => {
   const latestDiscovery = runs.find((row) => row.collector_id === "brian-world-discovery-eye-v1") ?? null;
   const latestBrain = runs.find((row) => row.collector_id === "brian-world-brain-v1") ?? null;
 
+  const latestResearch = runs.find((row) => row.collector_id === "brian-world-evidence-research-v1") ?? null;
+  const researchDegraded = latestResearch && ["FAILED", "DEGRADED"].includes(latestResearch.status);
+
   return out({
-    status: sourceLookupState === "AVAILABLE" && reviewStatus === "AVAILABLE" ? "ONLINE" : "DEGRADED",
+    status: !researchDegraded && sourceLookupState === "AVAILABLE" && reviewStatus === "AVAILABLE" ? "ONLINE" : "DEGRADED",
     observed_at: responseTime,
     summary: {
       narratives: (narrativesQ.data ?? []).length,
       research_dossiers: dossiers.length,
       primary_review_status: reviewStatus,
+      primary_research_status: latestResearch?.status ?? "NO_DATA",
       recent_evidence_reviews: evidenceReviews.length,
       trade_ready_dossiers: 0,
       source_lookup_status: sourceLookupState,
@@ -152,7 +156,7 @@ Deno.serve(async (req: Request) => {
     scenarios: scenariosQ.data ?? [],
     impacts: impactsQ.data ?? [],
     runs: runsQ.data ?? [],
-    collectors: { discovery: latestDiscovery, world_brain: latestBrain },
+    collectors: { discovery: latestDiscovery, world_brain: latestBrain, evidence_research: latestResearch },
     semantics: {
       discovery_is_truth: false,
       confidence_kind: "HEURISTIC_UNCALIBRATED",
