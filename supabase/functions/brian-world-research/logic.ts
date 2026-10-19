@@ -1,4 +1,4 @@
-export const RESEARCH_VERSION = 'brian.world-evidence-review.v1';
+export const RESEARCH_VERSION = 'brian.world-evidence-review.v2-domain-cooldown';
 export function officialUri(value: unknown, domain: string): string | null {
   try {
     const u = new URL(String(value)), host = domain.toLowerCase().replace(/^www\./, '');
