@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-10-19T19:04:55Z",
+  "checked_at": "2026-10-19T19:09:39Z",
   "ready_for_live_money": false,
   "shadow_only": true,
   "live_execution": false,
@@ -385,5 +385,64 @@
     "composite_score": 0.786,
     "healthy_samples": 2,
     "research_eligible": true
-  }
+  },
+  "bloomberg": {
+    "migration": "20261019190608_repair_bloomberg_feed_origin.sql",
+    "direct_http_status": 200,
+    "rss_bytes": 14705,
+    "first_probe": {
+      "error": null,
+      "lifecycle": "VERIFYING",
+      "parseable": true,
+      "reachable": true,
+      "latency_ms": 277,
+      "endpoint_id": "wire_bloomberg_markets_rss",
+      "http_status": 200,
+      "origin_match": true,
+      "sample_count": 3,
+      "latest_healthy": true,
+      "composite_score": 0.7405,
+      "healthy_samples": 1,
+      "research_eligible": false
+    },
+    "second_probe": {
+      "error": null,
+      "lifecycle": "ACTIVE",
+      "parseable": true,
+      "reachable": true,
+      "latency_ms": 365,
+      "endpoint_id": "wire_bloomberg_markets_rss",
+      "http_status": 200,
+      "origin_match": true,
+      "sample_count": 3,
+      "latest_healthy": true,
+      "composite_score": 0.7905,
+      "healthy_samples": 2,
+      "research_eligible": true
+    },
+    "direct_decision_allowed": false
+  },
+  "final_metadata_commit": "a6dbf84021baa7f9697524bb5802a1b0c0bfd143",
+  "final_metadata_checks": [
+    {
+      "name": "verify",
+      "conclusion": "success",
+      "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39308229715/job/118250741823"
+    },
+    {
+      "name": "verify-node-regressions",
+      "conclusion": "success",
+      "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39308229715/job/118250741759"
+    },
+    {
+      "name": "verify-edge-functions",
+      "conclusion": "success",
+      "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39308229715/job/118250741532"
+    },
+    {
+      "name": "verify-collector-lease",
+      "conclusion": "success",
+      "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39308229715/job/118250741238"
+    }
+  ]
 }
