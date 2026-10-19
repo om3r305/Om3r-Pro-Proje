@@ -22,7 +22,7 @@ ORDER = [
     MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql",
     MIGRATIONS / "20261019200517_brian_prediction_retention.sql",
     MIGRATIONS / "20261019202909_brian_prediction_probability_changes.sql",
-    MIGRATIONS / "20261019204000_brian_prediction_probability_changes_elapsed.sql",
+    MIGRATIONS / "20261019204328_brian_prediction_probability_changes_elapsed.sql",
 ]
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")

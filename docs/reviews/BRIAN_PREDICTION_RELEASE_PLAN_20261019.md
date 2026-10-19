@@ -117,3 +117,13 @@ drop table if exists public.brian_prediction_control;
 | Canlı kontrol (20:29 UTC) | Sağlık özeti: 6 kaynak, hepsi OK, ortalama gecikme 58–98 ms; tur kapsamı gözlenen 2 / beklenen 1 (fazlalık, 20:19'daki elle tetiklenen turdan); depolama 311.296 / 268.435.456 bayt. Değişim fonksiyonu: 60 piyasanın hepsi `INSUFFICIENT_HISTORY` (veri 1 saatten genç; beklenen sonuç, 0 değişim değil) |
 | 20:35 zamanlanmış tur | `succeeded`; 60 yeni anlık görüntü (yeni `source_updated_at` 20:34:46.224Z), 2 yeni piyasa ilk 60'a girdi. Toplam 120 anlık görüntü; 58 piyasada ≥2 gözlem |
 | Bilinen sınır | Tur sayımı dakika bazında; elle tetiklenen turlar da sayılır |
+
+## Yayın kaydı — Faz 2a.1 (19 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-2a1-oncesi` → `4e6e21a`; bundle verify: okay. Önceki fonksiyon md5 `ff568cf3…` |
+| Merge | PR #157 → `b52023e` (CI üçü de yeşil) |
+| Migrasyon | CORE sürüm `20261019204328` (`brian_prediction_probability_changes_elapsed`); yeni md5 `66157adc…`; anon EXECUTE yok; dosya adı hizalandı |
+| Canlı kontrol | Yeni alanlar (`baseline_*_at`, `elapsed_*_seconds`, `relative_change_*`, `change_unit`) dönüyor; veri henüz 1 saatten genç olduğu için hepsi `NULL`/`INSUFFICIENT_HISTORY` |
+| Geri dönüş | 2a migrasyonundaki fonksiyon gövdesini yeniden uygula (`20261019202909_…`) |
