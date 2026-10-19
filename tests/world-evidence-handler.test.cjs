@@ -24,3 +24,14 @@ test('provider failure is stored as failure and operation failure emits FAILED_C
  const d=await(await h.handler(request('test-internal'))).json();assert.equal(d.status,'DEGRADED');assert.equal(h.calls.find(c=>c.table==='brian_world_evidence_reviews').row.status,'FAILED');
  const fail=load();fail.state.fail=true;assert.equal((await fail.handler(request('test-internal'))).status,503);assert.equal(fail.calls.find(c=>c.table==='brian_collector_runs').row.status,'FAILED');
 });
+function loadWorld(failReview=false){
+ let handler;const calls=[];
+ const db={from(table){calls.push(table);const q={select(){return q},eq(){return q},order(){return q},in(){return q},limit(){return q},abortSignal(){return q},single(){return Promise.resolve({data:{dashboard_key_sha256:require('node:crypto').createHash('sha256').update('test-dashboard').digest('hex')}})},then(resolve){resolve(table==='brian_world_evidence_reviews'&&failReview?{error:{message:'offline'}}:{data:[]})}};return q}};
+ vm.runInNewContext(compile('supabase/functions/brian-world-status/index.ts'),{createClient:()=>db,buildWorldDossiers:()=>[],selectDossierEventIds:()=>[],crypto:webcrypto,TextEncoder,Date,Response,Request,AbortSignal,console,Deno:{env:{get:()=> 'test-only'},serve:fn=>{handler=fn}}});return{handler,calls};
+}
+test('World dashboard keeps authentication and exposes failed evidence queries as degraded',async()=>{
+ const h=loadWorld();assert.equal((await h.handler(new Request('https://test.invalid/',{method:'POST'}))).status,401);assert.deepEqual(h.calls,[]);
+ const request=()=>new Request('https://test.invalid/',{method:'POST',headers:{'x-brian-dashboard-key':'test-dashboard'}});
+ const d=await(await h.handler(request())).json();assert.equal(d.evidence_review_status,'AVAILABLE');assert.deepEqual(d.evidence_reviews,[]);assert.equal(d.live_execution,false);
+ const f=loadWorld(true);const failed=await(await f.handler(request())).json();assert.equal(failed.status,'DEGRADED');assert.equal(failed.evidence_review_status,'QUERY_FAILED');
+});

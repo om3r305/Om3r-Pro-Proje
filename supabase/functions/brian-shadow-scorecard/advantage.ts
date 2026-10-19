@@ -12,7 +12,7 @@ scopes as(select 'diagnostic'::text sample,at-interval '6 hours' lo,at hi,'2026-
  union all select 'prospective',starts_at,least(at,ends_at),starts_at from cfg),
 seed as materialized(
  select distinct on(s.sample,d.asset_id,floor(extract(epoch from(d.observed_at-s.anchor))/1080))
- s.sample,d.decision_id,d.asset_id,d.compiler_version,d.observed_at,d.action,d.observed_reference_price
+ s.sample,d.decision_id,d.asset_id,d.compiler_version,d.observed_at,d.action,d.observed_reference_price,d.created_at
  from scopes s join public.brian_alpha_decisions d on d.observed_at>=s.lo and d.observed_at<s.hi cross join cfg
  where d.created_at<=cfg.at and d.shadow_only and not d.live_execution and d.asset_id ~ '^crypto:[A-Z0-9]+USDT$'
  and mod(extract(epoch from(d.observed_at-s.anchor)),1080)>=0 and mod(extract(epoch from(d.observed_at-s.anchor)),1080)<60
@@ -26,6 +26,7 @@ measured as(
  and o.created_at<=cfg.at and o.resolved_at<=cfg.at and o.shadow_only and not o.live_execution
 ), tagged as(
  select *,case when action not in('OPEN_LONG','OPEN_SHORT') then 'CASH_DECISION'
+ when created_at>observed_at+interval '60 seconds' or created_at<observed_at-interval '5 seconds' then 'LATE_DECISION'
  when observed_at+interval '15 minutes'>at then 'NOT_MATURE'
  when observed_reference_price is null or observed_reference_price<=0 or observed_reference_price::text in('NaN','Infinity','-Infinity') then 'MISSING_ENTRY'
  when outcome_id is null then 'UNRESOLVED'
@@ -41,18 +42,20 @@ measured as(
  select s.sample,count(t.decision_id)::int selected,count(*) filter(where t.status='CASH_DECISION')::int cash_decisions,
  count(*) filter(where t.action in('OPEN_LONG','OPEN_SHORT'))::int directional,
  count(*) filter(where t.status='NOT_MATURE')::int not_mature,
+ count(*) filter(where t.status='LATE_DECISION')::int late_decision,
  count(*) filter(where t.status='MISSING_ENTRY')::int missing_entry,
  count(*) filter(where t.status='UNRESOLVED')::int unresolved,
  count(*) filter(where t.status='INVALID_OUTCOME')::int invalid_outcome,
  count(*) filter(where t.status='MISSING_COST')::int missing_cost,
  count(*) filter(where t.status='COST_KNOWN')::int measured,
  avg(direction_adjusted_return*10000-cost) filter(where t.status='COST_KNOWN') mean_net_bps,
- count(distinct t.compiler_version)::int compiler_versions,
+ count(distinct nullif(trim(t.compiler_version),''))::int compiler_versions,
+ count(*) filter(where t.decision_id is not null and nullif(trim(t.compiler_version),'') is null)::int unknown_policy,
  coalesce((select jsonb_agg(to_jsonb(z) order by z.day_bucket) from daily z where z.sample=s.sample),'[]'::jsonb) day_blocks
  from scopes s left join tagged t on t.sample=s.sample group by s.sample
 )
 select jsonb_build_object('as_of',(select at from cfg),'truncated',(select count(*)>20000 from seed),'rows',(select jsonb_agg(to_jsonb(g) order by sample) from grouped g)) validation`;
-type Measurement={sample:string;selected:number;directional:number;measured:number;not_mature:number;missing_entry:number;unresolved:number;invalid_outcome:number;missing_cost:number;mean_net_bps:number|string|null;compiler_versions:number;day_blocks:unknown[]};
+type Measurement={sample:string;selected:number;directional:number;measured:number;not_mature:number;missing_entry:number;unresolved:number;invalid_outcome:number;missing_cost:number;mean_net_bps:number|string|null;compiler_versions:number;unknown_policy?:number;day_blocks:unknown[]};
 export function assessAdvantage(value:{as_of:string;truncated:boolean;rows:Measurement[]}) {
  return {...value,status:'AVAILABLE',protocol:EDGE_PROTOCOL,proof_status:'NOT_PROVEN',rows:value.rows.map(r=>{
   const mean=r.mean_net_bps===null?null:Number(r.mean_net_bps),issues:string[]=[];
@@ -60,7 +63,7 @@ export function assessAdvantage(value:{as_of:string;truncated:boolean;rows:Measu
   if(r.measured<100)issues.push('INSUFFICIENT_DIRECTIONAL_SAMPLE');
   if(r.day_blocks.length<20)issues.push('INSUFFICIENT_DAY_BLOCKS');
   if(r.directional!==r.measured)issues.push('DIRECTIONAL_COVERAGE_INCOMPLETE');
-  if(r.compiler_versions!==1)issues.push('MIXED_OR_UNKNOWN_POLICY_VERSIONS');
+  if(r.compiler_versions!==1||Number(r.unknown_policy??0)>0)issues.push('MIXED_OR_UNKNOWN_POLICY_VERSIONS');
   if(r.sample!=='prospective')issues.push('ROLLING_DIAGNOSTIC_NOT_PROSPECTIVE_PROOF');
   if(Date.parse(value.as_of)<Date.parse(EDGE_PROTOCOL.final_at))issues.push('FIXED_PROTOCOL_NOT_FINISHED');
   issues.push('MODELED_COSTS_NOT_EXECUTED_TRADES','INDEPENDENT_REPLICATION_REQUIRED');

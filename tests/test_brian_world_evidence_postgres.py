@@ -16,6 +16,7 @@ def result(db,at='2026-10-19T17:00:00Z',sample='prospective'):
 
 def decision(db,id,at,action='OPEN_LONG',asset='crypto:BTCUSDT'):
     db("insert into public.brian_alpha_decisions(decision_id,asset_id,observed_at,action) values(%s,%s,%s,%s)",(id,asset,at,action))
+    db("update public.brian_alpha_decisions set created_at=observed_at where decision_id=%s",(id,))
 
 def outcome(db,id,at,cost='20',ret=.01):
     db("insert into public.brian_alpha_decision_outcomes(outcome_id,decision_id,horizon_seconds,resolved_at,created_at,metadata,direction_adjusted_return) values(%s,%s,900,%s,%s,%s::jsonb,%s)",(id,id,at,at,'{"estimated_round_trip_cost_bps":'+cost+'}',ret))
@@ -93,3 +94,13 @@ def test_migration_inputs_append_only_modes_and_grants(db):
     db('rollback to savepoint bad_write')
     with pytest.raises(Exception):
         db("insert into public.brian_world_evidence_reviews(review_id,event_id,assessed_at,version,status,review,live_execution) values('bad','e',now(),'v1','READ','{}',true)")
+
+
+def test_late_decisions_and_unknown_policy_are_explicit(db):
+    decision(db,'late',START)
+    outcome(db,'late','2026-10-19T16:15:00Z')
+    db("update public.brian_alpha_decisions set created_at=observed_at+interval '61 seconds' where decision_id='late'")
+    decision(db,'unknown',START,asset='crypto:ETHUSDT')
+    db("update public.brian_alpha_decisions set compiler_version=null where decision_id='unknown'")
+    r=result(db)
+    assert r['late_decision']==1 and r['unknown_policy']==1 and r['measured']==0
