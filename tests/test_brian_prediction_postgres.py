@@ -1,6 +1,6 @@
 """Real-Postgres tests for the Prediction Intelligence storage migration (Phase 1b).
 
-Applies supabase/migrations/202610190001_brian_prediction_intelligence.sql to a real Postgres
+Applies supabase/migrations/20261019195019_brian_prediction_intelligence.sql to a real Postgres
 database and proves the doctrine the migration claims: everything is OFF by default, evidence is
 append-only and idempotent, missing probabilities stay NULL, only a VERIFIED wallet's trades are
 stored, and anon/authenticated/service_role cannot do more than they are granted.
@@ -21,7 +21,7 @@ import pytest
 psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 is only installed in the Postgres CI job")
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "202610190001_brian_prediction_intelligence.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20261019195019_brian_prediction_intelligence.sql"
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")
 

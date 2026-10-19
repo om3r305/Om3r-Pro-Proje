@@ -40,7 +40,7 @@ PREDICTION_LIVE=1 deno test --allow-net --allow-env supabase/functions/_shared/p
 
 ## Faz 1b — depolama ve sınırlı toplayıcı
 
-**Migrasyon** `202610190001_brian_prediction_intelligence.sql`:
+**Migrasyon** `20261019195019_brian_prediction_intelligence.sql`:
 
 | Tablo | Tür | Not |
 |---|---|---|

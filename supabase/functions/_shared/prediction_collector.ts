@@ -1,7 +1,7 @@
 // Prediction Intelligence -- Phase 1b bounded collection cycle (pure; no database access).
 //
 // One cycle = a small, bounded set of public read requests that produces a batch of rows for
-// brian_record_prediction_batch_v1 (see 202610190001_brian_prediction_intelligence.sql). The edge
+// brian_record_prediction_batch_v1 (see 20261019195019_brian_prediction_intelligence.sql). The edge
 // function owns the lease, operator switch and persistence; this module only decides what to
 // request and how to turn the answers into rows, so every rule here is testable offline.
 //
