@@ -10,7 +10,7 @@ import uuid
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = (ROOT / 'supabase/migrations/20261019132120_independent_outcome_price_capture.sql').read_text()
+MIGRATION = (ROOT / 'supabase/migrations/20261019133025_independent_outcome_price_capture.sql').read_text()
 
 
 @pytest.fixture()
