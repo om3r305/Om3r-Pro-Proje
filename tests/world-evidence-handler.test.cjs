@@ -4,8 +4,8 @@ const dir='supabase/functions/brian-world-research/';
 const compile=p=>stripTypeScriptTypes(fs.readFileSync(p,'utf8')).replace(/^import[^\n]+\n/gm,'').replace(/export /g,'');
 const logic=vm.runInNewContext(compile(dir+'logic.ts')+';({RESEARCH_VERSION,readOfficial,assessPrimaryText,searchCounterEvidence,reactionProbe})',{URL,AbortSignal,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,fetch});
 function load(){
- const state={enabled:true,fail:false,events:[],documentFails:false},calls=[];let handler;
- const db={from(table){const q={select(){return q},eq(){return q},order(){return q},limit(){return q},abortSignal(){return q},single(){return Promise.resolve({data:{config_value:state.enabled?'true':'false'}})},maybeSingle(){return Promise.resolve({data:null})},insert(row){calls.push({table,row});return q},then(resolve){resolve({data:null,error:null})}};return q},rpc(){calls.push('inputs');return{abortSignal(){return Promise.resolve(state.fail?{error:{message:'offline'}}:{data:{events:state.events}})}}}};
+ const state={enabled:true,fail:false,events:[],documentFails:false,sourceAccess:{status:'NO_ACTIVE_COOLDOWN',cooldown_sources:[]}},calls=[];let handler;
+ const db={from(table){const q={select(){return q},eq(){return q},order(){return q},limit(){return q},abortSignal(){return q},single(){return Promise.resolve({data:{config_value:state.enabled?'true':'false'}})},maybeSingle(){return Promise.resolve({data:null})},insert(row){calls.push({table,row});return q},then(resolve){resolve({data:null,error:null})}};return q},rpc(){calls.push('inputs');return{abortSignal(){return Promise.resolve(state.fail?{error:{message:'offline'}}:{data:{events:state.events,source_access:state.sourceAccess}})}}}};
  vm.runInNewContext(compile(dir+'index.ts'),{...logic,createClient:()=>db,requireRealtimeInternal:async req=>{if(req.headers.get('x-brian-internal-key')!=='test-internal')throw Error('UNAUTHORIZED')},withCollectorLease:async(db,id,ttl,work)=>{calls.push('lease');return{contended:false,value:await work()}},documentText:()=>({title:'Title',text:'Central bank interest rates increase. '.repeat(10),indexOnly:false,primaryDocument:null}),readOfficial:async()=>{calls.push('fetch');if(state.documentFails)throw Error('OFFICIAL_HTTP_403');return{uri:'https://example.org/a',hash:'a'.repeat(64),text:'body',bytes:1000,received_at:new Date().toISOString()}},crypto:webcrypto,TextEncoder,Date,Response,Request,AbortSignal,console,Deno:{env:{get:()=> 'test-only'},serve:fn=>{handler=fn}}});
  return {state,calls,handler};
 }
@@ -39,4 +39,15 @@ test('World dashboard keeps authentication and exposes failed evidence queries a
 test('partial official-source reading remains visible in World runtime health',async()=>{
  const h=loadWorld(false,true);const d=await(await h.handler(new Request('https://test.invalid/',{method:'POST',headers:{'x-brian-dashboard-key':'test-dashboard'}}))).json();
  assert.equal(d.status,'DEGRADED');assert.equal(d.summary.primary_research_status,'DEGRADED');assert.equal(d.collectors.evidence_research.status,'DEGRADED');
+});
+
+test('cooling access-denied sources stay degraded without fetching or inventing reviews',async()=>{
+ const h=load();h.state.sourceAccess={status:'PARTIAL_ACCESS',policy:'OFFICIAL_DOMAIN_ACCESS_COOLDOWN_15M_V1',cooldown_sources:[{source_id:'official:blocked',canonical_domain:'example.org',next_retry_at:'2026-10-19T20:00:00Z'}]};
+ const res=await h.handler(request('test-internal')),d=await res.json();
+ assert.equal(res.status,200);assert.equal(d.status,'DEGRADED');assert.equal(d.stored,0);assert.equal(d.assessed,0);
+ assert.deepEqual(d.source_access,h.state.sourceAccess);assert.ok(!h.calls.includes('fetch'));
+ assert.ok(!h.calls.some(c=>c.table==='brian_world_evidence_reviews'));
+ const receipt=h.calls.find(c=>c.table==='brian_collector_runs').row;
+ assert.equal(receipt.status,'DEGRADED');assert.deepEqual(JSON.parse(JSON.stringify(receipt.metadata.source_access)),h.state.sourceAccess);
+ assert.equal(receipt.metadata.external_claims_independently_verified,0);
 });

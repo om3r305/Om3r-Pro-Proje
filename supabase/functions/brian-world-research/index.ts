@@ -21,6 +21,8 @@ Deno.serve(async(req:Request)=>{
    if(last.data?.started_at&&Date.now()-Date.parse(last.data.started_at)<240000)return out({status:'SKIPPED_INTERVAL',shadow_only:true,live_execution:false});
    const input=await db.rpc('brian_world_research_inputs_v1').abortSignal(AbortSignal.timeout(5000));if(input.error)throw Error('RESEARCH_INPUTS_UNAVAILABLE');
    const events=(input.data?.events??[]) as Event[];if(events.length>2)throw Error('RESEARCH_INPUT_BOUND_EXCEEDED');
+   const sourceAccess=input.data?.source_access??{status:'UNKNOWN',cooldown_sources:[]};
+   const cooldownSources=Array.isArray(sourceAccess.cooldown_sources)?sourceAccess.cooldown_sources:[];
    let stored=0,failed=0;
    for(const event of events){
     let status='FAILED',uri:string|null=null,hash:string|null=null,document:Record<string,unknown>={body_received:false,claim_verified_independently:false},error:string|null=null;
@@ -38,10 +40,10 @@ Deno.serve(async(req:Request)=>{
     const ins=await db.from('brian_world_evidence_reviews').insert({review_id:await sha(`${RESEARCH_VERSION}|${event.event_id}|${assessed}|${hash??error}`),event_id:event.event_id,assessed_at:assessed,version:RESEARCH_VERSION,status,document_uri:uri,content_sha256:hash,review,shadow_only:true,live_execution:false}).abortSignal(AbortSignal.timeout(4000));
     if(ins.error)throw Error('RESEARCH_REVIEW_PERSIST_FAILED');stored++;
    }
-   const status=failed?'DEGRADED':'SUCCESS',finished=new Date().toISOString();
-   const record=await db.from('brian_collector_runs').insert({run_id:await sha(`${ID}|${started}|${finished}`),collector_id:ID,started_at:started,finished_at:finished,status,observed_records:events.length,stored_records:stored,degraded_sources:failed?['primary_document_reads_partial']:[],error_class:null,error_message:null,evidence_class:'PROSPECTIVE_EVOLUTION_SHADOW',shadow_only:true,live_execution:false,metadata:{version:RESEARCH_VERSION,failed_document_reads:failed,external_claims_independently_verified:0,market_reaction_is_not_priced_in_probability:true}}).abortSignal(AbortSignal.timeout(4000));
+   const status=failed||cooldownSources.length?'DEGRADED':'SUCCESS',finished=new Date().toISOString();
+   const record=await db.from('brian_collector_runs').insert({run_id:await sha(`${ID}|${started}|${finished}`),collector_id:ID,started_at:started,finished_at:finished,status,observed_records:events.length,stored_records:stored,degraded_sources:failed||cooldownSources.length?['primary_document_reads_partial']:[],error_class:null,error_message:null,evidence_class:'PROSPECTIVE_EVOLUTION_SHADOW',shadow_only:true,live_execution:false,metadata:{version:RESEARCH_VERSION,failed_document_reads:failed,source_access:sourceAccess,external_claims_independently_verified:0,market_reaction_is_not_priced_in_probability:true}}).abortSignal(AbortSignal.timeout(4000));
    if(record.error)throw Error('RESEARCH_RECEIPT_UNAVAILABLE');
-   return out({status,assessed:events.length,stored,failed_document_reads:failed,shadow_only:true,live_execution:false});
+   return out({status,assessed:events.length,stored,failed_document_reads:failed,source_access:sourceAccess,shadow_only:true,live_execution:false});
   });
   return lease.contended?out({status:'SKIPPED_LEASE_CONTENDED',shadow_only:true,live_execution:false}):lease.value!;
  }catch(e){

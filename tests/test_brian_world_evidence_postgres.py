@@ -123,3 +123,56 @@ def test_repaired_inputs_bound_scan_preserve_fairness_and_revisit_sources(db):
     db("insert into public.brian_world_evidence_reviews(review_id,event_id,assessed_at,version,status,review) values('done','b',now(),'v1','READ','{}')")
     r=db('select public.brian_world_research_inputs_v1()')
     assert len(r['events'])==1 and r['events'][0]['source_id']=='official:a'
+
+
+def install_domain_cooldown(db):
+    install(db)
+    migration=next((ROOT/'supabase/migrations').glob('*_world_research_domain_cooldown.sql')).read_text()
+    ns=db("select n.nspname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.oid='public.brian_intel_events'::regclass")
+    db(migration.replace('search_path=pg_catalog,public','search_path=pg_catalog,'+ns).replace('%','%%'))
+    db("insert into public.brian_source_endpoints_v2 values('official:a','example.org','T1_OFFICIAL_PRIMARY','ACTIVE','PUBLIC_NO_KEY'),('official:b','example.org','T1_OFFICIAL_PRIMARY','ACTIVE','PUBLIC_NO_KEY'),('official:c','example.net','T1_OFFICIAL_PRIMARY','ACTIVE','PUBLIC_NO_KEY')")
+    for ident,source,age in [('a','official:a',20),('b','official:b',19),('c','official:c',18)]:
+        db("insert into public.brian_intel_events values(%s,%s,'Central bank rates increase','https://example.org/a',now()-make_interval(mins=>%s),now()-make_interval(mins=>%s),now()-make_interval(mins=>%s),'OFFICIAL_PRIMARY')",(ident,source,age,age,age))
+
+
+def access_review(db,ident,event,status,error,age):
+    import json
+    db("insert into public.brian_world_evidence_reviews(review_id,event_id,assessed_at,captured_at,version,status,review) values(%s,%s,now()-make_interval(mins=>%s),now()-make_interval(mins=>%s),'test',%s,%s::jsonb)",(ident,event,age,age,status,json.dumps({'error':error})))
+
+
+def test_domain_access_cooldown_preserves_other_sources_and_is_explicit(db):
+    install_domain_cooldown(db)
+    access_review(db,'blocked','a','FAILED','OFFICIAL_HTTP_403',1)
+    r=db('select public.brian_world_research_inputs_v1()')
+    assert {e['source_id'] for e in r['events']}=={'official:c'}
+    health=r['source_access']
+    assert health['status']=='PARTIAL_ACCESS'
+    assert {s['source_id'] for s in health['cooldown_sources']}=={'official:a','official:b'}
+    assert all(s['next_retry_at'] is not None for s in health['cooldown_sources'])
+    assert db("select has_function_privilege('anon','public.brian_world_research_inputs_v1()','EXECUTE')") is False
+
+
+@pytest.mark.parametrize('error',['OFFICIAL_HTTP_429','OFFICIAL_REDIRECT_REJECTED','OFFICIAL_DOCUMENT_NOT_READABLE'])
+def test_access_errors_cool_down_the_official_domain(db,error):
+    install_domain_cooldown(db)
+    access_review(db,'blocked','a','FAILED',error,1)
+    assert db('select public.brian_world_research_inputs_v1()')['source_access']['status']=='PARTIAL_ACCESS'
+
+
+def test_cooldown_expires_without_manual_reset_and_transient_failure_does_not_block_host(db):
+    install_domain_cooldown(db)
+    access_review(db,'expired','a','FAILED','OFFICIAL_HTTP_403',16)
+    r=db('select public.brian_world_research_inputs_v1()')
+    assert r['source_access']['cooldown_sources']==[]
+    assert 'official:b' in {e['source_id'] for e in r['events']}
+    access_review(db,'transient','b','FAILED','OFFICIAL_HTTP_503',1)
+    assert db('select public.brian_world_research_inputs_v1()')['source_access']['cooldown_sources']==[]
+
+
+def test_readable_body_resets_domain_cooldown_and_future_receipt_is_not_used(db):
+    install_domain_cooldown(db)
+    access_review(db,'blocked','a','FAILED','OFFICIAL_HTTP_403',10)
+    access_review(db,'recovered','b','READ',None,5)
+    assert db('select public.brian_world_research_inputs_v1()')['source_access']['cooldown_sources']==[]
+    access_review(db,'future','a','FAILED','OFFICIAL_HTTP_403',-5)
+    assert db('select public.brian_world_research_inputs_v1()')['source_access']['cooldown_sources']==[]
