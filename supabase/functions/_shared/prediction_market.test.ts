@@ -349,10 +349,18 @@ Deno.test("identity: never guesses -- every doubtful case stays UNVERIFIED or AM
   eq(verifyProfileIdentity("NIULAI4", good, [anonymous]).status, "UNVERIFIED", "activity never repeats the name");
 });
 
-// Optional live smoke test: only runs when explicitly requested, so CI never depends on the network.
+// Optional live smoke test: only runs when explicitly requested (PREDICTION_LIVE=1 with --allow-env
+// --allow-net), so CI -- which runs with no permissions -- never depends on the network.
+function liveRequested(): boolean {
+  try {
+    return Deno.env.get("PREDICTION_LIVE") === "1";
+  } catch {
+    return false;
+  }
+}
 Deno.test({
   name: "LIVE: public endpoints answer and NIULAI4 verifies (set PREDICTION_LIVE=1)",
-  ignore: Deno.env.get("PREDICTION_LIVE") !== "1",
+  ignore: !liveRequested(),
   fn: async () => {
     const search = await fetchPredictionJson<{ profiles?: unknown[] }>(
       "https://gamma-api.polymarket.com/public-search?q=NIULAI4&search_profiles=true",
