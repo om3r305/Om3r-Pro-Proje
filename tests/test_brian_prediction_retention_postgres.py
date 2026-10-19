@@ -1,6 +1,6 @@
 """Real-Postgres tests for Prediction Intelligence Phase 1c (bounded storage).
 
-Applies the Phase 1b migration and then 20261019210000_brian_prediction_retention.sql, and proves:
+Applies the Phase 1b migration and then 20261019200517_brian_prediction_retention.sql, and proves:
 the storage cap blocks new evidence without deleting anything, health rows still record why, the
 v1 batch contract keeps working under the cap, and the archive policies are registered without
 enabling anything. Skipped unless psycopg2 and BRIAN_TEST_DATABASE_URL are available.
@@ -20,7 +20,7 @@ psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 is only installed in
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
 BASE = MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql"
-RETENTION = MIGRATIONS / "20261019210000_brian_prediction_retention.sql"
+RETENTION = MIGRATIONS / "20261019200517_brian_prediction_retention.sql"
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")
 
