@@ -1,217 +1,168 @@
 <!doctype html>
 <html lang="tr">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Monster Coins Pro — Dashboard</title>
-<link rel="icon" href="/static/logo.png">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#070a12" />
+<meta name="color-scheme" content="dark" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Monster Pro" />
+<title>Monster Coins Pro — Brian Control Center</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/logo.png" />
+<link rel="apple-touch-icon" href="/logo.png" />
 <style>
-  :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--ok:#22c55e;--warn:#eab308;--bad:#ef4444;--brand:#22d3ee;--chip:#1f2937;}
-  *{box-sizing:border-box}
-  body{margin:0;background:#0b1220;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;color:#e5e7eb}
-  .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
-  .header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-  .header img{width:28px;height:28px}
-  .h-title{font-weight:700}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .card{background:linear-gradient(165deg,#101827 0%,#0d1423 100%);border:1px solid #1f2937;border-radius:14px;padding:16px;box-shadow:0 1px 0 #0b1020 inset}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  .kpi{background:#0d1423;border:1px solid #1f2937;border-radius:12px;padding:14px}
-  .kpi .label{color:#9aa6b2;font-size:13px;margin-bottom:8px}
-  .kpi .val{font-size:26px;font-weight:800}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  .chip{background:#0e1626;border:1px solid #213146;color:#b9c3d0;font-size:12px;padding:6px 10px;border-radius:999px}
-  .row{display:flex;gap:16px}
-  .col{flex:1}
-  .btns{display:flex;gap:10px;justify-content:flex-end}
-  .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-  .btn-start{background:#2563eb;color:white}
-  .btn-stop{background:#db2777;color:white}
-  .btn-logout{background:#374151;color:#cbd5e1}
-  .log{font-family:ui-monospace,Consolas,monaco,monospace;background:#0a111f;border-radius:12px;border:1px solid #1f2937;padding:10px;height:190px;overflow:auto}
-  .row h3{margin:0 0 10px 0;font-size:15px;color:#a6b0bc}
-  .toast{position:fixed;right:18px;bottom:18px;background:#0e1626;border:1px solid #1f2937;padding:10px 14px;border-radius:10px;opacity:0;transform:translateY(8px);transition:.2s}
-  .toast.show{opacity:1;transform:none}
-  /* ---- Login overlay ---- */
-  .overlay{position:fixed;inset:0;background:radial-gradient(1200px 600px at 80% 10%,rgba(34,211,238,.08),transparent 60%),linear-gradient(180deg,#0a0f1a 0%,#0b1120 100%);display:none;align-items:center;justify-content:center;padding:24px}
-  .overlay.show{display:flex}
-  .login{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;max-width:980px;width:100%}
-  .panel{background:#0b1220;border:1px solid #1f2937;border-radius:14px;padding:20px}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-  .brand img{width:32px;height:32px}
-  .brand .t1{font-weight:800}
-  .brand .t2{font-size:12px;color:#93a3b8}
-  .pw{display:flex;gap:10px;margin-top:8px}
-  .pw input{flex:1;background:#0d1627;border:1px solid #243041;border-radius:10px;color:#e5e7eb;padding:12px 12px}
-  .pw button{background:#2563eb;border:0;color:white;border-radius:10px;font-weight:700;padding:12px 16px;cursor:pointer}
-  .hints{display:flex;gap:10px;margin-top:10px}
-  .hint{background:#0f192b;border:1px dashed #28344a;color:#98a7b9;font-size:12px;border-radius:9px;padding:8px 10px}
-  .poster{background:#0b1220;border:1px solid #1f2937;border-radius:14px;display:flex;align-items:center;justify-content:center}
-  .poster img{max-width:100%;border-radius:12px}
-  a.link{color:#7dd3fc;text-decoration:none}
+:root{
+  --bg:#05070d;--bg2:#090d16;--panel:#0c111c;--panel2:#101624;--line:#202a3b;
+  --text:#f3f7fb;--muted:#8190a8;--green:#27f2a1;--cyan:#0ed7cb;--purple:#7257ff;
+  --red:#ff5d69;--amber:#f6c85f;--blue:#3997ff;--shadow:0 18px 60px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box} html{background:var(--bg);scroll-behavior:smooth}
+body{margin:0;min-height:100vh;background:
+ radial-gradient(900px 540px at 82% -10%,rgba(114,87,255,.14),transparent 60%),
+ radial-gradient(780px 520px at 8% 0%,rgba(39,242,161,.08),transparent 60%),var(--bg);
+ color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input{font:inherit} button{color:inherit}.hidden{display:none!important}
+.app{display:grid;grid-template-columns:238px minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;padding:20px 16px;border-right:1px solid rgba(114,87,255,.16);background:rgba(5,8,14,.91);backdrop-filter:blur(22px);z-index:20}
+.brand{display:flex;align-items:center;gap:11px;padding:5px 5px 22px}.brand img{width:44px;height:44px;object-fit:cover;border-radius:13px;box-shadow:0 0 26px rgba(39,242,161,.14)}
+.brand-title{font-weight:900;line-height:.95;letter-spacing:.02em;font-size:18px}.brand-title span{display:block;color:var(--green)}
+.nav{display:grid;gap:7px}.nav a{display:flex;align-items:center;gap:12px;text-decoration:none;color:#aeb9c9;padding:11px 13px;border-radius:11px;font-size:14px;font-weight:650;border:1px solid transparent}
+.nav a:hover{background:#0d1420;color:#fff}.nav a.active{color:var(--green);background:linear-gradient(90deg,rgba(39,242,161,.13),rgba(114,87,255,.08));border-color:rgba(39,242,161,.15)}
+.nav-ico{width:20px;text-align:center;opacity:.9}.sidebar-foot{position:absolute;left:16px;right:16px;bottom:18px;display:grid;gap:10px}.status-card{border:1px solid var(--line);background:#0a101a;border-radius:13px;padding:12px;font-size:12px}.dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--green);box-shadow:0 0 12px rgba(39,242,161,.8);margin-right:7px}.dot.off{background:var(--red);box-shadow:none}
+.main{min-width:0;padding:20px 22px 90px}.topbar{display:flex;align-items:flex-start;gap:18px;justify-content:space-between;margin-bottom:18px}.eyebrow{font-size:12px;color:var(--green);text-transform:uppercase;letter-spacing:.14em;font-weight:850}.topbar h1{margin:3px 0 3px;font-size:27px;letter-spacing:-.02em}.subtitle{color:var(--muted);font-size:13px}.top-actions{display:flex;align-items:center;gap:8px}.pill,.btn{border:1px solid var(--line);background:#0d131f;border-radius:11px;padding:9px 11px;font-size:12px;font-weight:750}.pill{display:flex;gap:7px;align-items:center;color:#aab6c7}.btn{cursor:pointer}.btn:hover{border-color:#334259}.btn.green{background:linear-gradient(135deg,#078b5c,#21d992);border-color:#25dc96;color:white}.btn.purple{background:linear-gradient(135deg,#4434bb,#7257ff);border-color:#715cff}.btn.locked{cursor:not-allowed;opacity:.55}.install{display:none}.install.show{display:inline-flex}
+.shadow-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid rgba(39,242,161,.18);background:linear-gradient(90deg,rgba(39,242,161,.08),rgba(114,87,255,.08));border-radius:14px;padding:11px 14px;margin-bottom:14px;font-size:12px}.shadow-banner strong{color:var(--green)}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:12px}.card{background:linear-gradient(150deg,rgba(16,22,36,.96),rgba(8,13,23,.96));border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}
+.kpi{padding:14px;min-height:115px;position:relative;overflow:hidden}.kpi:after{content:"";position:absolute;width:70px;height:70px;right:-25px;bottom:-28px;background:radial-gradient(circle,rgba(114,87,255,.16),transparent 65%)}.kpi-label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}.kpi-value{font-size:23px;font-weight:900;margin-top:8px;white-space:nowrap}.kpi-sub{font-size:11px;margin-top:8px;color:#8fa0b8}.positive{color:var(--green)!important}.negative{color:var(--red)!important}.neutral{color:#a7b4c6!important}
+.layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(310px,.72fr);gap:12px}.stack{display:grid;gap:12px}.panel{padding:15px;min-width:0}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.panel-title{font-weight:850;font-size:14px}.panel-note{font-size:11px;color:var(--muted)}
+.chart-wrap{height:280px;position:relative}.chart-wrap canvas{width:100%;height:100%;display:block}.chart-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12px;pointer-events:none}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}.controls .btn{min-height:42px}.controls .wide{grid-column:1/-1}.mode-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.mode{border-radius:999px;padding:6px 9px;border:1px solid var(--line);font-size:10px;color:#aebbd0}.mode.on{color:var(--green);border-color:rgba(39,242,161,.3);background:rgba(39,242,161,.06)}
+.table-scroll{overflow:auto;border-radius:10px}.trade-table{width:100%;border-collapse:collapse;font-size:11px;min-width:690px}.trade-table th{color:#72829a;text-align:left;font-weight:650;padding:8px 7px;border-bottom:1px solid var(--line)}.trade-table td{padding:9px 7px;border-bottom:1px solid rgba(32,42,59,.62);color:#c6d0dd}.tag{font-size:9px;font-weight:900;padding:3px 6px;border-radius:5px}.tag.buy{color:var(--green);background:rgba(39,242,161,.1)}.tag.sell{color:var(--red);background:rgba(255,93,105,.1)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}.asset-list,.activity,.position-list{display:grid;gap:6px}.asset-row,.activity-row,.position-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:9px 10px;border:1px solid rgba(32,42,59,.68);border-radius:10px;background:#090f19}.asset-main{display:flex;align-items:center;gap:8px;min-width:0}.coin{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,#142237,#241c5b);font-size:10px;font-weight:900;color:var(--green)}.asset-name{font-size:12px;font-weight:800}.asset-meta{font-size:10px;color:var(--muted);margin-top:2px}.activity-row{grid-template-columns:30px minmax(0,1fr) auto}.activity-ico{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:#101a2a}.activity-title{font-size:11px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-meta{font-size:10px;color:var(--muted);margin-top:2px}.activity-time{font-size:9px;color:#64748b}.empty{padding:24px 10px;text-align:center;color:var(--muted);font-size:11px;border:1px dashed var(--line);border-radius:10px}
+.performers{display:grid;grid-template-columns:1fr 1fr;gap:10px}.performer{padding:13px;border-radius:12px;background:#090f19;border:1px solid var(--line)}.performer .symbol{font-size:15px;font-weight:900;margin:7px 0 3px}.performer .pnl{font-weight:900}.performer.best{border-color:rgba(39,242,161,.2)}.performer.worst{border-color:rgba(255,93,105,.2)}
+.reason-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.reason{border:1px solid var(--line);border-radius:12px;padding:12px;background:#090f19}.reason h4{margin:0 0 8px;font-size:12px}.reason ul{padding-left:17px;margin:0;color:#8f9db1;font-size:10px;line-height:1.7}
+.mobile-nav{display:none}.login-overlay{position:fixed;inset:0;z-index:100;background:rgba(2,4,8,.88);backdrop-filter:blur(20px);display:grid;place-items:center;padding:20px}.login-card{width:min(430px,100%);padding:24px;border:1px solid #263248;border-radius:18px;background:linear-gradient(145deg,#101724,#080d16);box-shadow:0 26px 90px rgba(0,0,0,.65)}.login-logo{display:flex;align-items:center;gap:13px;margin-bottom:20px}.login-logo img{width:60px;height:60px;border-radius:16px}.login-card h2{margin:0;font-size:20px}.login-card p{color:var(--muted);font-size:12px;line-height:1.6}.login-form{display:flex;gap:8px}.login-form input{flex:1;min-width:0;border-radius:11px;border:1px solid var(--line);background:#070b13;color:white;padding:12px}.login-error{min-height:18px;color:var(--red);font-size:11px;margin-top:8px}.toast{position:fixed;right:20px;bottom:24px;z-index:110;background:#101827;border:1px solid #2b3950;color:#eaf1f8;padding:11px 14px;border-radius:11px;font-size:12px;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:none}
+@media(max-width:1180px){.kpis{grid-template-columns:repeat(3,1fr)}.layout{grid-template-columns:1fr}.right-grid{grid-template-columns:1fr 1fr}.sidebar{width:210px}.app{grid-template-columns:210px minmax(0,1fr)}}
+@media(max-width:760px){body{padding-top:env(safe-area-inset-top)}.app{display:block}.sidebar{display:none}.main{padding:14px 12px calc(86px + env(safe-area-inset-bottom))}.topbar{align-items:center}.topbar h1{font-size:22px}.subtitle{max-width:68vw}.top-actions .pill,.top-actions .install{display:none}.shadow-banner{align-items:flex-start;flex-direction:column}.kpis{grid-template-columns:repeat(2,1fr);gap:9px}.kpi{min-height:101px;padding:12px}.kpi-value{font-size:19px}.layout{display:block}.stack{margin-bottom:10px}.panel{padding:12px}.chart-wrap{height:220px}.split,.right-grid,.reason-grid{grid-template-columns:1fr}.performers{grid-template-columns:1fr 1fr}.mobile-nav{position:fixed;left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));height:59px;z-index:70;display:grid;grid-template-columns:repeat(5,1fr);border:1px solid rgba(114,87,255,.23);border-radius:17px;background:rgba(7,11,18,.94);backdrop-filter:blur(18px);box-shadow:0 15px 50px rgba(0,0,0,.45)}.mobile-nav a{display:grid;place-items:center;align-content:center;gap:2px;color:#78879c;text-decoration:none;font-size:8px}.mobile-nav a span:first-child{font-size:17px}.mobile-nav a.active{color:var(--green)}.desktop-only{display:none!important}}
+@media(max-width:430px){.kpis{grid-template-columns:1fr 1fr}.kpi-value{font-size:17px}.performers{grid-template-columns:1fr}.top-actions{gap:5px}.btn{padding:8px 9px}.chart-wrap{height:195px}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="header">
-    <img src="/static/logo.png" alt="logo">
-    <div class="h-title">MONSTER COINS PRO</div>
-    <span style="color:#94a3b8">— Live Trading Intelligence Dashboard</span>
-    <div style="flex:1"></div>
-    <div class="btns">
-      <button class="btn btn-start" id="btnStart">Başlat</button>
-      <button class="btn btn-stop"  id="btnStop">Durdur</button>
-      <button class="btn btn-logout" id="btnLogout">Çıkış</button>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><img src="/logo.png" alt="Monster Coins Pro"><div class="brand-title"><span>MONSTER</span>COINS PRO</div></div>
+    <nav class="nav">
+      <a href="#overview" class="active"><span class="nav-ico">▦</span>Dashboard</a>
+      <a href="#markets"><span class="nav-ico">⌁</span>Markets</a>
+      <a href="#positions"><span class="nav-ico">◈</span>Positions</a>
+      <a href="#trades"><span class="nav-ico">⇄</span>Trades</a>
+      <a href="#reports"><span class="nav-ico">▤</span>Reports</a>
+      <a href="#health"><span class="nav-ico">⚙</span>System Health</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="status-card"><span class="dot" id="sideDot"></span><strong id="sideStatus">Connecting</strong><div style="color:var(--muted);margin-top:5px">Brian Market OS · SHADOW ONLY</div></div>
     </div>
-  </div>
+  </aside>
 
-  <div class="card">
-    <div class="kpis">
-      <div class="kpi">
-        <div class="label">Kasa</div>
-        <div class="val" id="vCash">$8,00</div>
-        <div class="chips"><span class="chip"><a class="link" href="/logs/events.csv" target="_blank">logs/events.csv</a></span></div>
+  <main class="main">
+    <header class="topbar">
+      <div><div class="eyebrow">Brian Control Center</div><h1>Dashboard</h1><div class="subtitle">Gerçek piyasa gözlemi · paper/shadow execution · canlı emir kapalı</div></div>
+      <div class="top-actions">
+        <button class="btn install" id="installBtn">＋ Ana ekrana ekle</button>
+        <div class="pill"><span class="dot" id="topDot"></span><span id="topStatus">Bağlanıyor</span></div>
+        <button class="btn" id="refreshBtn" title="Yenile">↻</button>
       </div>
-      <div class="kpi">
-        <div class="label">Günlük PnL</div>
-        <div class="val" id="vDay">$0,00</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Açık Pozisyon</div>
-        <div class="val" id="vOpen">0</div>
-      </div>
-      <div class="kpi">
-        <div class="label">Winrate</div>
-        <div class="val" id="vWr">0%</div>
-      </div>
-    </div>
-    <div class="chips" id="chips"></div>
-  </div>
+    </header>
 
-  <div class="row" style="margin-top:16px">
-    <div class="col card">
-      <h3>Varlık Eğrisi</h3>
-      <canvas id="eq" height="140"></canvas>
-    </div>
-    <div class="col card">
-      <h3>Brain Log (son 100)</h3>
-      <div class="log" id="blog"></div>
-    </div>
-  </div>
-</div>
+    <div class="shadow-banner"><div><strong>SHADOW ONLY</strong> · Bu panel gözlem ve paper-trading içindir. Gerçek emir gönderimi kilitlidir.</div><div id="lastRefresh">Henüz yenilenmedi</div></div>
 
-<!-- Login overlay -->
-<div class="overlay" id="gate">
-  <div class="login">
-    <div class="panel">
-      <div class="brand">
-        <img src="/static/logo.png" alt="">
-        <div>
-          <div class="t1">Monster Coins Pro</div>
-          <div class="t2">Tek Beyin — The Singularity Engine</div>
+    <section class="kpis" id="overview">
+      <article class="card kpi"><div class="kpi-label">Shadow Equity</div><div class="kpi-value" id="kEquity">—</div><div class="kpi-sub" id="kEquitySub">runtime bekleniyor</div></article>
+      <article class="card kpi"><div class="kpi-label">Bugünkü P&amp;L</div><div class="kpi-value" id="kPnl">—</div><div class="kpi-sub">realized / shadow</div></article>
+      <article class="card kpi"><div class="kpi-label">Açık Pozisyon</div><div class="kpi-value" id="kOpen">—</div><div class="kpi-sub" id="kOpenSub">pozisyon</div></article>
+      <article class="card kpi"><div class="kpi-label">Win Rate</div><div class="kpi-value" id="kWin">—</div><div class="kpi-sub" id="kWinSub">kapanan trade</div></article>
+      <article class="card kpi"><div class="kpi-label">Trade Sayısı</div><div class="kpi-value" id="kTrades">—</div><div class="kpi-sub">görünen geçmiş</div></article>
+      <article class="card kpi"><div class="kpi-label">En Çok İşlem</div><div class="kpi-value" id="kTopCoin">—</div><div class="kpi-sub" id="kTopCoinSub">henüz veri yok</div></article>
+    </section>
+
+    <div class="layout">
+      <div class="stack">
+        <section class="card panel" id="markets">
+          <div class="panel-head"><div><div class="panel-title">Performance Overview</div><div class="panel-note">Equity curve · mevcut API verisi</div></div><div class="mode on">SHADOW</div></div>
+          <div class="chart-wrap"><canvas id="equityChart"></canvas><div class="chart-empty" id="chartEmpty">Equity verisi bekleniyor</div></div>
+        </section>
+
+        <section class="card panel" id="trades">
+          <div class="panel-head"><div><div class="panel-title">Recent Trades</div><div class="panel-note">Ne aldı / ne sattı / entry / exit / P&amp;L</div></div><span class="panel-note" id="tradeCount">0 kayıt</span></div>
+          <div class="table-scroll"><table class="trade-table"><thead><tr><th>Zaman</th><th>Side</th><th>Symbol</th><th>Entry</th><th>Exit</th><th>Qty</th><th>P&amp;L</th><th>Status</th></tr></thead><tbody id="tradeBody"></tbody></table></div>
+          <div class="empty hidden" id="tradeEmpty">Henüz trade yok. Bu iyi de olabilir: Brian şartları görmeden pozisyon açmıyor.</div>
+        </section>
+
+        <div class="split">
+          <section class="card panel"><div class="panel-head"><div><div class="panel-title">Most Traded Assets</div><div class="panel-note">işlem adedi ve net P&amp;L</div></div></div><div class="asset-list" id="assetList"></div></section>
+          <section class="card panel" id="positions"><div class="panel-head"><div><div class="panel-title">Open Positions</div><div class="panel-note">aktif shadow pozisyonlar</div></div></div><div class="position-list" id="positionList"></div></section>
         </div>
+
+        <div class="performers">
+          <section class="card performer best"><div class="kpi-label">Best Performer</div><div class="symbol" id="bestSymbol">—</div><div class="pnl positive" id="bestPnl">—</div><div class="kpi-sub" id="bestMeta">trade verisi bekleniyor</div></section>
+          <section class="card performer worst"><div class="kpi-label">Worst Performer</div><div class="symbol" id="worstSymbol">—</div><div class="pnl negative" id="worstPnl">—</div><div class="kpi-sub" id="worstMeta">trade verisi bekleniyor</div></section>
+        </div>
+
+        <section class="card panel" id="reports">
+          <div class="panel-head"><div><div class="panel-title">Insights &amp; Reasons</div><div class="panel-note">yarın L2 / Emergent Mover bağlandığında neden-sonuç katmanı buraya akacak</div></div></div>
+          <div class="reason-grid"><div class="reason"><h4 class="positive">✓ Profit Drivers</h4><ul id="profitReasons"><li>Henüz yeterli gerçekleşmiş trade yok.</li><li>Mevcut ekran canlı emir üretmez.</li></ul></div><div class="reason"><h4 class="negative">! Loss Drivers</h4><ul id="lossReasons"><li>Henüz yeterli gerçekleşmiş trade yok.</li><li>Fee / spread / slippage alanları sonraki Cost Compiler entegrasyonuna hazır.</li></ul></div></div>
+        </section>
       </div>
-      <div style="color:#9fb0c3;font-size:13px">Giriş için parolayı gir (oturum tarayıcıda saklanır).</div>
-      <div class="pw">
-        <input id="pw" type="password" placeholder="Parola">
-        <button id="pwBtn">Giriş</button>
+
+      <div class="stack right-grid">
+        <section class="card panel"><div class="panel-head"><div><div class="panel-title">Quick Controls</div><div class="panel-note">local runtime adapter</div></div></div><div class="controls"><button class="btn green" id="startBtn">▶ Start Shadow</button><button class="btn purple" id="stopBtn">Ⅱ Pause</button><button class="btn wide locked" disabled>🔒 Live Execution — LOCKED</button></div><div class="mode-row"><span class="mode on">SHADOW MODE</span><span class="mode">LIVE DISABLED</span><span class="mode" id="pwaState">PWA READY</span></div></section>
+        <section class="card panel"><div class="panel-head"><div><div class="panel-title">Activity Feed</div><div class="panel-note">Brain log / signals / runtime</div></div></div><div class="activity" id="activityList"></div></section>
+        <section class="card panel" id="health"><div class="panel-head"><div><div class="panel-title">System Health</div><div class="panel-note">gözlem katmanı</div></div></div><div class="asset-list"><div class="asset-row"><div><div class="asset-name">Runtime</div><div class="asset-meta">start / pause adapter</div></div><strong id="healthRuntime">—</strong></div><div class="asset-row"><div><div class="asset-name">Dashboard API</div><div class="asset-meta">status + trades + positions</div></div><strong id="healthApi">—</strong></div><div class="asset-row"><div><div class="asset-name">Execution Safety</div><div class="asset-meta">real-money path</div></div><strong class="positive">LOCKED</strong></div></div></section>
       </div>
-      <div class="hints">
-        <div class="hint"><input type="checkbox" id="ckWatch" checked> <label for="ckWatch">Brian izleme</label></div>
-        <div class="hint"><input type="checkbox" id="ckMetrics" checked> <label for="ckMetrics">Canlı metrikler</label></div>
-      </div>
-      <div class="hint" style="margin-top:8px">Parolayı değiştirmek için dosyada <code>PASS</code> sabitini güncelle.</div>
     </div>
-    <div class="poster">
-      <img src="/static/anime.png" alt="anime">
-    </div>
-  </div>
+  </main>
 </div>
 
+<nav class="mobile-nav"><a class="active" href="#overview"><span>▦</span><span>Dashboard</span></a><a href="#markets"><span>⌁</span><span>Markets</span></a><a href="#positions"><span>◈</span><span>Positions</span></a><a href="#trades"><span>⇄</span><span>Trades</span></a><a href="#health"><span>⚙</span><span>Health</span></a></nav>
+
+<div class="login-overlay" id="loginGate"><div class="login-card"><div class="login-logo"><img src="/logo.png" alt=""><div><div class="eyebrow">Private Control Center</div><h2>Monster Coins Pro</h2></div></div><p>Dashboard parolanı gir. Parola artık HTML içinde tutulmuyor; doğrulama sunucu tarafındaki <code>DASH_PASS</code> üzerinden yapılır.</p><div class="login-form"><input id="password" type="password" autocomplete="current-password" placeholder="Parola"><button class="btn green" id="loginBtn">Giriş</button></div><div class="login-error" id="loginError"></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
-/* ====== Ayarlar ====== */
-const PASS = "monster";               // <— şifren
-const GATE_KEY = "mcp_auth_v1";
-const ctxEq = document.getElementById('eq').getContext('2d');
-let eqChart;
+const $=id=>document.getElementById(id);
+const AUTH_KEY='mcp_dashboard_auth_v2';
+let deferredInstall=null,refreshTimer=null,lastTrades=[];
 
-/* ====== UI helpers ====== */
-const $ = id => document.getElementById(id);
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1600); }
-function formatUsd(x){ return "$" + (Math.round(x*100)/100).toFixed(2) }
-function setKpis(data){
-  $('vCash').textContent = formatUsd(data.cash ?? 0);
-  $('vDay').textContent  = formatUsd(data.today_pnl ?? 0);
-  $('vOpen').textContent = data.open ?? 0;
-  $('vWr').textContent   = ((data.winrate ?? 0)*100).toFixed(1) + "%";
-  const chips = [];
-  if (data.best_today) chips.push(`🟢 En çok kazandıran (bugün): <b>${data.best_today.sym}</b> ${formatUsd(data.best_today.pnl)}`);
-  if (data.worst_today) chips.push(`🔴 En çok kaybettiren (bugün): <b>${data.worst_today.sym}</b> ${formatUsd(data.worst_today.pnl)}`);
-  chips.push(`Status: <b>${data.running ? "RUNNING" : "STOPPED"}</b>`);
-  $('chips').innerHTML = chips.map(x=>`<span class="chip">${x}</span>`).join("");
-}
-function drawEq(seq){
-  if(!eqChart){
-    eqChart = new Chart(ctxEq,{type:"line",data:{labels:seq.map((_,i)=>i+1),datasets:[{label:"Equity",data:seq,tension:.25}]},options:{plugins:{legend:{labels:{color:"#cbd5e1"}}},scales:{x:{display:false},y:{display:true,grid:{color:"#1f2a3b"},ticks:{color:"#94a3b8"}}}}});
-  }else{
-    eqChart.data.labels = seq.map((_,i)=>i+1);
-    eqChart.data.datasets[0].data = seq;
-    eqChart.update('none');
-  }
-}
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function n(v,f=0){const x=Number(v);return Number.isFinite(x)?x:f;}
+function money(v){const x=n(v);return new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(x);}
+function num(v,d=2){return new Intl.NumberFormat('en-US',{maximumFractionDigits:d}).format(n(v));}
+function time(v){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?esc(v):d.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}
+function tone(el,value){el.classList.remove('positive','negative','neutral');el.classList.add(value>0?'positive':value<0?'negative':'neutral');}
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1700);}
+async function json(path,opt){const r=await fetch(path,{cache:'no-store',...opt});if(!r.ok)throw new Error(`${path} ${r.status}`);return r.json();}
 
-/* ====== API ====== */
-async function api(path, opt){ const r=await fetch(path,opt); if(!r.ok) throw new Error(path+" "+r.status); return r.json(); }
-async function refresh(){
-  try{
-    const st = await api("/api/status?v=3");
-    setKpis(st.metrics || {cash:st.cash, open:st.open, today_pnl:st.today_pnl, winrate:st.winrate, running:st.running});
-    const ts = await api("/api/timeseries?limit=180");
-    drawEq((ts.series||[]).map(x=>x.eq||x.equity||0));
-    const bl = await api("/api/brainlog?limit=100");
-    $('blog').innerHTML = (bl.items||[]).map(it => {
-      const t = new Date((it.ts||0)*1000).toLocaleTimeString();
-      return `<div>[${t}] <b>${it.kind||it.k}</b> — ${it.msg||it.m||""}</div>`;
-    }).join("");
-  }catch(e){ /* sessiz */ }
-}
+function setOnline(ok,running){$('healthApi').textContent=ok?'ONLINE':'OFFLINE';$('healthApi').className=ok?'positive':'negative';$('healthRuntime').textContent=running?'RUNNING':'STOPPED';$('healthRuntime').className=running?'positive':'neutral';for(const id of ['sideDot','topDot'])$(id).classList.toggle('off',!ok);$('sideStatus').textContent=ok?(running?'Runtime running':'Runtime stopped'):'API offline';$('topStatus').textContent=ok?(running?'RUNNING':'STOPPED'):'OFFLINE';}
+function updateStatus(st){const cash=n(st.cash??st.equity);const pnl=n(st.today_pnl);const open=n(st.open,0);const wr=n(st.winrate,0);const running=Boolean(st.running??st.status==='RUNNING');$('kEquity').textContent=money(cash);$('kEquitySub').textContent=running?'runtime aktif':'runtime durmuş';$('kPnl').textContent=money(pnl);tone($('kPnl'),pnl);$('kOpen').textContent=String(open);$('kOpenSub').textContent=open?`${open} aktif shadow pozisyon`:'pozisyon yok';$('kWin').textContent=`${wr.toFixed(1)}%`;tone($('kWin'),wr-50);setOnline(true,running);if(st.best_today?.sym){$('bestSymbol').textContent=st.best_today.sym;$('bestPnl').textContent=money(st.best_today.pnl);tone($('bestPnl'),n(st.best_today.pnl));}if(st.worst_today?.sym){$('worstSymbol').textContent=st.worst_today.sym;$('worstPnl').textContent=money(st.worst_today.pnl);tone($('worstPnl'),n(st.worst_today.pnl));}}
 
-/* ====== Start/Stop/Logout ====== */
-$('btnStart').onclick = async ()=>{
-  try{ await api("/api/start",{method:"POST"}); toast("Brain başlatıldı"); }catch(e){ toast("Başlatılamadı"); }
-  refresh();
-};
-$('btnStop').onclick = async ()=>{
-  try{ await api("/api/stop",{method:"POST"}); toast("Brain durduruldu"); }catch(e){ toast("Durdurulamadı"); }
-  refresh();
-};
-$('btnLogout').onclick = ()=>{
-  sessionStorage.removeItem(GATE_KEY);
-  toast("Oturum kapatıldı");
-  setTimeout(()=>{ location.reload(); },350);
-};
+function drawChart(seq){const c=$('equityChart'),wrap=c.parentElement,rect=wrap.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2);c.width=Math.max(1,Math.floor(rect.width*dpr));c.height=Math.max(1,Math.floor(rect.height*dpr));const ctx=c.getContext('2d');ctx.scale(dpr,dpr);const w=rect.width,h=rect.height,p={l:44,r:10,t:15,b:28};ctx.clearRect(0,0,w,h);const vals=(seq||[]).map(Number).filter(Number.isFinite);$('chartEmpty').classList.toggle('hidden',vals.length>1);if(vals.length<2)return;let lo=Math.min(...vals),hi=Math.max(...vals);if(hi===lo){hi+=1;lo-=1}const pad=(hi-lo)*.12;lo-=pad;hi+=pad;ctx.strokeStyle='rgba(108,126,153,.14)';ctx.lineWidth=1;ctx.fillStyle='#6f8098';ctx.font='10px system-ui';for(let i=0;i<5;i++){const y=p.t+(h-p.t-p.b)*i/4;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(w-p.r,y);ctx.stroke();const val=hi-(hi-lo)*i/4;ctx.fillText(money(val),2,y+3)}const x=i=>p.l+(w-p.l-p.r)*i/(vals.length-1),y=v=>p.t+(hi-v)/(hi-lo)*(h-p.t-p.b);const grad=ctx.createLinearGradient(0,p.t,0,h-p.b);grad.addColorStop(0,'rgba(39,242,161,.30)');grad.addColorStop(1,'rgba(39,242,161,0)');ctx.beginPath();vals.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.lineTo(x(vals.length-1),h-p.b);ctx.lineTo(x(0),h-p.b);ctx.closePath();ctx.fillStyle=grad;ctx.fill();ctx.beginPath();vals.forEach((v,i)=>i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v)));ctx.strokeStyle='#27f2a1';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#a8b6c8';ctx.fillText(`son: ${money(vals.at(-1))}`,Math.max(p.l,w-130),h-7);}
 
-/* ====== Login Gate ====== */
-function gateShow(){ $('gate').classList.add('show'); }
-function gateHide(){ $('gate').classList.remove('show'); }
-$('pwBtn').onclick = ()=>{
-  const ok = ($('pw').value||"").trim() === PASS;
-  if(!ok){ alert("Parola hatalı!"); return; }
-  sessionStorage.setItem(GATE_KEY,"1");
-  gateHide();
-  refresh();
-};
-$('pw').addEventListener('keydown',e=>{ if(e.key==="Enter") $('pwBtn').click(); });
+function updateTrades(payload){const items=Array.isArray(payload)?payload:(payload?.items||[]);lastTrades=items;$('kTrades').textContent=String(items.length);$('tradeCount').textContent=`${items.length} kayıt`;$('tradeEmpty').classList.toggle('hidden',items.length>0);$('tradeBody').innerHTML=items.slice(0,20).map(t=>{const side=String(t.side||'—').toUpperCase();const pnl=n(t.pnl);return `<tr><td>${time(t.time||t.ts)}</td><td><span class="tag ${side.includes('BUY')?'buy':'sell'}">${esc(side)}</span></td><td><strong>${esc(t.symbol||t.sym||'—')}</strong></td><td>${esc(t.entry??'—')}</td><td>${esc(t.exit??'—')}</td><td>${esc(t.qty??'—')}</td><td class="${pnl>0?'positive':pnl<0?'negative':''}">${money(pnl)}</td><td>${esc(t.status||'closed')}</td></tr>`}).join('');updateAssets(items);}
+function updateAssets(items){const map=new Map();for(const t of items){const s=String(t.symbol||t.sym||'').toUpperCase();if(!s)continue;const cur=map.get(s)||{count:0,pnl:0};cur.count++;cur.pnl+=n(t.pnl);map.set(s,cur)}const arr=[...map.entries()].sort((a,b)=>b[1].count-a[1].count);if(arr[0]){$('kTopCoin').textContent=arr[0][0].replace('USDT','/USDT');$('kTopCoinSub').textContent=`${arr[0][1].count} trade · ${money(arr[0][1].pnl)}`}$('assetList').innerHTML=arr.length?arr.slice(0,7).map(([s,x])=>`<div class="asset-row"><div class="asset-main"><div class="coin">${esc(s.slice(0,2))}</div><div><div class="asset-name">${esc(s)}</div><div class="asset-meta">${x.count} trade</div></div></div><strong class="${x.pnl>0?'positive':x.pnl<0?'negative':'neutral'}">${money(x.pnl)}</strong></div>`).join(''):'<div class="empty">Trade verisi bekleniyor</div>';const byPnl=[...map.entries()].sort((a,b)=>b[1].pnl-a[1].pnl);if(byPnl.length){const best=byPnl[0],worst=byPnl.at(-1);$('bestSymbol').textContent=best[0];$('bestPnl').textContent=money(best[1].pnl);tone($('bestPnl'),best[1].pnl);$('bestMeta').textContent=`${best[1].count} trade`;$('worstSymbol').textContent=worst[0];$('worstPnl').textContent=money(worst[1].pnl);tone($('worstPnl'),worst[1].pnl);$('worstMeta').textContent=`${worst[1].count} trade`;}}
+function updatePositions(payload){const items=payload?.items||[];$('positionList').innerHTML=items.length?items.map(p=>`<div class="position-row"><div><div class="asset-name">${esc(p.symbol||'—')} · ${esc(p.side||p.slot||'OPEN')}</div><div class="asset-meta">Entry ${esc(p.entry??'—')} · Qty ${esc(p.qty??'—')}</div></div><strong>${esc(p.pnl!==undefined?money(p.pnl):'OPEN')}</strong></div>`).join(''):'<div class="empty">Açık pozisyon yok</div>';}
+function updateActivity(payload){const items=payload?.items||[];$('activityList').innerHTML=items.length?items.slice().reverse().slice(0,12).map((it,i)=>`<div class="activity-row"><div class="activity-ico">${i%3===0?'◈':i%3===1?'⚡':'◎'}</div><div><div class="activity-title">${esc(it.kind||it.k||it.event||'Brian event')}</div><div class="activity-meta">${esc(it.msg||it.m||it.reason||JSON.stringify(it).slice(0,90))}</div></div><div class="activity-time">${time(it.observed_at||it.time||it.ts)}</div></div>`).join(''):'<div class="empty">Brain log bekleniyor</div>';}
 
-/* ====== Init ====== */
-(async function init(){
-  // Chart.js yükle (CDN)
-  const s=document.createElement('script'); s.src="https://cdn.jsdelivr.net/npm/chart.js"; await new Promise(r=>{s.onload=r;document.head.appendChild(s);});
-  if(sessionStorage.getItem(GATE_KEY)==="1"){ gateHide(); } else { gateShow(); }
-  refresh(); setInterval(refresh, 3000);
-})();
+async function refresh(){if(sessionStorage.getItem(AUTH_KEY)!=='1')return;const results=await Promise.allSettled([json('/api/status?v=4'),json('/api/timeseries?limit=180'),json('/api/trades?limit=50'),json('/api/positions'),json('/api/brainlog?limit=30')]);const [st,ts,tr,pos,bl]=results;if(st.status==='fulfilled')updateStatus(st.value);else setOnline(false,false);if(ts.status==='fulfilled'){const data=ts.value;drawChart(data.equity||data.series?.map(x=>x.eq??x.equity)||[])}if(tr.status==='fulfilled')updateTrades(tr.value);else updateTrades([]);if(pos.status==='fulfilled')updatePositions(pos.value);else updatePositions({items:[]});if(bl.status==='fulfilled')updateActivity(bl.value);else updateActivity({items:[]});$('lastRefresh').textContent=`Son yenileme ${new Date().toLocaleTimeString('tr-TR')}`;}
+
+async function login(){const password=$('password').value;$('loginError').textContent='';try{const r=await json('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});if(!r.ok){$('loginError').textContent='Parola hatalı.';return}sessionStorage.setItem(AUTH_KEY,'1');$('loginGate').classList.add('hidden');await refresh();refreshTimer=setInterval(refresh,10000);}catch(e){$('loginError').textContent='Dashboard API erişilemiyor.';}}
+$('loginBtn').onclick=login;$('password').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('refreshBtn').onclick=refresh;
+$('startBtn').onclick=async()=>{try{await json('/api/start',{method:'POST'});toast('Shadow runtime başlatma isteği gönderildi');setTimeout(refresh,700)}catch{toast('Runtime başlatılamadı')}};
+$('stopBtn').onclick=async()=>{try{await json('/api/stop',{method:'POST'});toast('Runtime durdurma isteği gönderildi');setTimeout(refresh,700)}catch{toast('Runtime durdurulamadı')}};
+window.addEventListener('resize',()=>{const ts=lastTrades;void ts;refresh()});document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('installBtn').classList.add('show')});$('installBtn').onclick=async()=>{if(!deferredInstall)return;deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$('installBtn').classList.remove('show')};
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').then(()=>{$('pwaState').textContent='PWA READY'}).catch(()=>{$('pwaState').textContent='PWA SHELL ERROR'})}
+if(sessionStorage.getItem(AUTH_KEY)==='1'){$('loginGate').classList.add('hidden');refresh();refreshTimer=setInterval(refresh,10000)}else setTimeout(()=>$('password').focus(),100);
 </script>
 </body>
 </html>
