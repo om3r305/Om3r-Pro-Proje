@@ -8,7 +8,7 @@ const ID='brian-world-evidence-research-v1';
 const out=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 async function sha(s:string){return[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');}
 async function enabled(){const q=await db.from('brian_evolution_runtime_config').select('config_value').eq('config_key','brian_system_enabled').abortSignal(AbortSignal.timeout(4000)).single();if(q.error)throw Error('OPERATOR_CONTROL_UNAVAILABLE');return q.data?.config_value==='true';}
-type Event=CounterEvent&{canonical_domain:string;probes:Array<{asset_id:string;points:ReactionPoint[]}>;counter_pool:CounterEvent[]};
+type Event=CounterEvent&{canonical_domain:string;counter_pool_scan_limit?:number;counter_pool_scan_truncated?:boolean;probes:Array<{asset_id:string;points:ReactionPoint[]}>;counter_pool:CounterEvent[]};
 Deno.serve(async(req:Request)=>{
  if(req.method!=='POST')return out({error:'POST_REQUIRED'},405);
  try{await requireRealtimeInternal(req);}catch{return out({status:'UNAUTHORIZED'},401);}
@@ -31,7 +31,7 @@ Deno.serve(async(req:Request)=>{
     }catch(e){failed++;error=e instanceof Error?e.message:'DOCUMENT_READ_FAILED';}
     const assessed=new Date().toISOString();
     const review={event:{event_id:event.event_id,source_id:event.source_id,claim:event.claim,first_observed_at:event.first_observed_at,published_at:event.published_at??null},document,
-     counter_evidence:searchCounterEvidence(event,event.counter_pool,assessed),
+     counter_evidence:{...searchCounterEvidence(event,event.counter_pool,assessed),selection_scan_limit:event.counter_pool_scan_limit??null,selection_scan_truncated:event.counter_pool_scan_truncated??null},
      market_reaction:{role:'BTC_ETH_BROAD_MARKET_PROBES_NOT_EVENT_ATTRIBUTION',probes:event.probes.map(p=>({asset_id:p.asset_id,...reactionProbe(p.points,event.first_observed_at,event.published_at??null,assessed)}))},
      error,external_content_used_as_instruction:false,trade_ready:false,direct_alpha_influence:false};
     if(!await enabled())return out({status:'OPERATOR_STOPPED',stored,shadow_only:true,live_execution:false});

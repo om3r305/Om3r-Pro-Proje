@@ -1,10 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.multiasset-opportunity-engine.v4-verified-session";
+const VERSION="brian.multiasset-opportunity-engine.v5-operator-controlled";
 const COLLECTOR_ID="brian-multiasset-opportunity-engine-v1";
 const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-multiasset-export";
 
@@ -29,6 +30,11 @@ async function auth(req:Request){
   let diff=0;for(let i=0;i<digest.length;i++)diff|=digest.charCodeAt(i)^expected.charCodeAt(i);
   if(diff!==0)throw new Error("UNAUTHORIZED_CRON");
   return supplied;
+}
+async function operatorEnabled(){
+ const q=await db.from("brian_evolution_runtime_config").select("config_value").eq("config_key","brian_system_enabled").abortSignal(AbortSignal.timeout(4000)).single();
+ if(q.error||!q.data)throw new Error("OPERATOR_CONTROL_UNAVAILABLE");
+ return q.data.config_value==="true";
 }
 function classify(claim:string,source:string){
   const x=`${claim} ${source}`.toLowerCase();
@@ -73,6 +79,8 @@ Deno.serve(async(req:Request)=>{
   let key="";
   try{key=await auth(req)}catch(e){return out({status:"UNAUTHORIZED",error:errorText(e)},401)}
   try{
+    const lease=await withCollectorLease(db,COLLECTOR_ID,60,async()=>{
+    if(!await operatorEnabled())return out({status:"OPERATOR_STOPPED",shadow_only:true,live_execution:false});
     const exportResp=await fetch(EXPORT_URL,{
       method:"POST",
       headers:{"content-type":"application/json","x-brian-cron-key":key},
@@ -201,24 +209,28 @@ Deno.serve(async(req:Request)=>{
       });
     }
 
+    if(!await operatorEnabled())return out({status:"OPERATOR_STOPPED",shadow_only:true,live_execution:false});
     if(decisions.length){
       const ins=await db.from("brian_multiasset_alpha_decisions").insert(decisions);
       if(ins.error)throw new Error(`persist:${ins.error.message}`);
     }
     const finishedAt=new Date().toISOString();
     const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|SUCCESS`);
-    await db.from("brian_collector_runs").insert({
+    const receipt=await db.from("brian_collector_runs").insert({
       run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status:"SUCCESS",
       observed_records:marks.length+events.length,stored_records:decisions.length,degraded_sources:[],
       metadata:{version:VERSION,marks:marks.length,events:events.length,actionable:decisions.filter(d=>d.action!=="WAIT").length,shadow_only:true,live_execution:false},
       evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
     });
+    if(receipt.error)throw new Error("MULTIASSET_RECEIPT_UNAVAILABLE");
     return out({
       status:"SUCCESS",version:VERSION,marks:marks.length,events:events.length,
       decisions:decisions.length,actionable:decisions.filter(d=>d.action!=="WAIT").length,
       results:decisions.map(d=>({asset_id:d.asset_id,action:d.action,evidence_score:d.evidence_score,veto_reason:d.veto_reason,session_state:d.session_state})),
       shadow_only:true,live_execution:false
     });
+    });
+    return lease.contended?out({status:"SKIPPED_LEASE_CONTENDED",shadow_only:true,live_execution:false}):lease.value!;
   }catch(e){
     const finishedAt=new Date().toISOString();
     const runId=await sha(`${COLLECTOR_ID}|${startedAt}|${finishedAt}|FAILED`);
