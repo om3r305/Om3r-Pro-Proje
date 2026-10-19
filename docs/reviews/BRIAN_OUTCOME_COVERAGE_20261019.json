@@ -1,0 +1,1511 @@
+{
+  "core_snapshot": {
+    "rows": [
+      {
+        "mature": 7,
+        "sampled": 7,
+        "seconds": 300,
+        "asset_id": "crypto:AVAUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 6,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 36,
+        "sampled": 37,
+        "seconds": 300,
+        "asset_id": "crypto:BNBUSDT",
+        "resolved": 31,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 37,
+        "sampled": 38,
+        "seconds": 300,
+        "asset_id": "crypto:BTCUSDT",
+        "resolved": 32,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 300,
+        "asset_id": "crypto:DOGEUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 9,
+        "sampled": 9,
+        "seconds": 300,
+        "asset_id": "crypto:ENAUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 8,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 36,
+        "sampled": 37,
+        "seconds": 300,
+        "asset_id": "crypto:ETHUSDT",
+        "resolved": 33,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 300,
+        "asset_id": "crypto:GTCUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 7,
+        "sampled": 7,
+        "seconds": 300,
+        "asset_id": "crypto:HBARUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 7,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 300,
+        "asset_id": "crypto:INJUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 300,
+        "asset_id": "crypto:INTCBUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 6,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 8,
+        "sampled": 8,
+        "seconds": 300,
+        "asset_id": "crypto:KORUBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 7,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 300,
+        "asset_id": "crypto:MUBUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 300,
+        "asset_id": "crypto:NEARUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 300,
+        "asset_id": "crypto:PUMPUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 300,
+        "asset_id": "crypto:QNTUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 2,
+        "seconds": 300,
+        "asset_id": "crypto:SANDUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 7,
+        "seconds": 300,
+        "asset_id": "crypto:SNDKBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 37,
+        "sampled": 38,
+        "seconds": 300,
+        "asset_id": "crypto:SOLUSDT",
+        "resolved": 34,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 6,
+        "seconds": 300,
+        "asset_id": "crypto:SOXLBUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 300,
+        "asset_id": "crypto:STRKUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 4,
+        "seconds": 300,
+        "asset_id": "crypto:SUIUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 300,
+        "asset_id": "crypto:TIAUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 300,
+        "asset_id": "crypto:UNIUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 300,
+        "asset_id": "crypto:WLDUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 36,
+        "sampled": 37,
+        "seconds": 300,
+        "asset_id": "crypto:XRPUSDT",
+        "resolved": 34,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 7,
+        "seconds": 300,
+        "asset_id": "crypto:ZECUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 6,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 7,
+        "seconds": 900,
+        "asset_id": "crypto:AVAUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 33,
+        "sampled": 37,
+        "seconds": 900,
+        "asset_id": "crypto:BNBUSDT",
+        "resolved": 28,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 34,
+        "sampled": 38,
+        "seconds": 900,
+        "asset_id": "crypto:BTCUSDT",
+        "resolved": 29,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 5,
+        "seconds": 900,
+        "asset_id": "crypto:DOGEUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 9,
+        "sampled": 9,
+        "seconds": 900,
+        "asset_id": "crypto:ENAUSDT",
+        "resolved": 4,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 33,
+        "sampled": 37,
+        "seconds": 900,
+        "asset_id": "crypto:ETHUSDT",
+        "resolved": 30,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 900,
+        "asset_id": "crypto:GTCUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 7,
+        "sampled": 7,
+        "seconds": 900,
+        "asset_id": "crypto:HBARUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 7,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 900,
+        "asset_id": "crypto:INJUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 6,
+        "seconds": 900,
+        "asset_id": "crypto:INTCBUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 8,
+        "sampled": 8,
+        "seconds": 900,
+        "asset_id": "crypto:KORUBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 7,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 5,
+        "seconds": 900,
+        "asset_id": "crypto:MUBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 900,
+        "asset_id": "crypto:NEARUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 900,
+        "asset_id": "crypto:PUMPUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 3,
+        "seconds": 900,
+        "asset_id": "crypto:QNTUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 0,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 2,
+        "seconds": 900,
+        "asset_id": "crypto:SANDUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 7,
+        "seconds": 900,
+        "asset_id": "crypto:SNDKBUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 34,
+        "sampled": 38,
+        "seconds": 900,
+        "asset_id": "crypto:SOLUSDT",
+        "resolved": 32,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 6,
+        "seconds": 900,
+        "asset_id": "crypto:SOXLBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 3,
+        "seconds": 900,
+        "asset_id": "crypto:STRKUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 4,
+        "seconds": 900,
+        "asset_id": "crypto:SUIUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 900,
+        "asset_id": "crypto:TIAUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 6,
+        "sampled": 6,
+        "seconds": 900,
+        "asset_id": "crypto:UNIUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 5,
+        "seconds": 900,
+        "asset_id": "crypto:WLDUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 33,
+        "sampled": 37,
+        "seconds": 900,
+        "asset_id": "crypto:XRPUSDT",
+        "resolved": 30,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 5,
+        "sampled": 7,
+        "seconds": 900,
+        "asset_id": "crypto:ZECUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 7,
+        "seconds": 3600,
+        "asset_id": "crypto:AVAUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 19,
+        "sampled": 37,
+        "seconds": 3600,
+        "asset_id": "crypto:BNBUSDT",
+        "resolved": 13,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 1,
+        "missing_terminal": 5,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 20,
+        "sampled": 38,
+        "seconds": 3600,
+        "asset_id": "crypto:BTCUSDT",
+        "resolved": 16,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 5,
+        "seconds": 3600,
+        "asset_id": "crypto:DOGEUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 9,
+        "seconds": 3600,
+        "asset_id": "crypto:ENAUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 19,
+        "sampled": 37,
+        "seconds": 3600,
+        "asset_id": "crypto:ETHUSDT",
+        "resolved": 15,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 6,
+        "seconds": 3600,
+        "asset_id": "crypto:GTCUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 7,
+        "seconds": 3600,
+        "asset_id": "crypto:HBARUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 3,
+        "seconds": 3600,
+        "asset_id": "crypto:INJUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 6,
+        "seconds": 3600,
+        "asset_id": "crypto:INTCBUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 8,
+        "seconds": 3600,
+        "asset_id": "crypto:KORUBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 5,
+        "seconds": 3600,
+        "asset_id": "crypto:MUBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 1,
+        "sampled": 3,
+        "seconds": 3600,
+        "asset_id": "crypto:NEARUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 6,
+        "seconds": 3600,
+        "asset_id": "crypto:PUMPUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 3,
+        "seconds": 3600,
+        "asset_id": "crypto:QNTUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 2,
+        "seconds": 3600,
+        "asset_id": "crypto:SANDUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 1,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 7,
+        "seconds": 3600,
+        "asset_id": "crypto:SNDKBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 20,
+        "sampled": 38,
+        "seconds": 3600,
+        "asset_id": "crypto:SOLUSDT",
+        "resolved": 16,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 1,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 6,
+        "seconds": 3600,
+        "asset_id": "crypto:SOXLBUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 3,
+        "seconds": 3600,
+        "asset_id": "crypto:STRKUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 3,
+        "sampled": 4,
+        "seconds": 3600,
+        "asset_id": "crypto:SUIUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 2,
+        "sampled": 5,
+        "seconds": 3600,
+        "asset_id": "crypto:TIAUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 6,
+        "seconds": 3600,
+        "asset_id": "crypto:UNIUSDT",
+        "resolved": 2,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 5,
+        "seconds": 3600,
+        "asset_id": "crypto:WLDUSDT",
+        "resolved": 0,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 4,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 19,
+        "sampled": 37,
+        "seconds": 3600,
+        "asset_id": "crypto:XRPUSDT",
+        "resolved": 16,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 1,
+        "missing_terminal": 2,
+        "resolved_action_missing_cost": 0
+      },
+      {
+        "mature": 4,
+        "sampled": 7,
+        "seconds": 3600,
+        "asset_id": "crypto:ZECUSDT",
+        "resolved": 1,
+        "window_open": 0,
+        "missing_entry": 0,
+        "awaiting_auditor": 0,
+        "missing_terminal": 3,
+        "resolved_action_missing_cost": 0
+      }
+    ],
+    "as_of": "2026-10-19T08:27:52.872427+00:00",
+    "freshness": {
+      "price_last": "2026-10-19T08:25:37.163+00:00",
+      "research_last": "2026-10-19T08:24:07.243+00:00",
+      "research_documents": 111
+    },
+    "sample_policy": "latest_300_last_6h_nonrandom"
+  },
+  "rt_gap_crosscheck": [
+    {
+      "asset_id": "crypto:AVAUSDT",
+      "seconds": 300,
+      "gaps": 6,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 6
+    },
+    {
+      "asset_id": "crypto:BNBUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 1,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:BTCUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:DOGEUSDT",
+      "seconds": 300,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:ENAUSDT",
+      "seconds": 300,
+      "gaps": 8,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 8
+    },
+    {
+      "asset_id": "crypto:ETHUSDT",
+      "seconds": 300,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:GTCUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:HBARUSDT",
+      "seconds": 300,
+      "gaps": 7,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 7
+    },
+    {
+      "asset_id": "crypto:INJUSDT",
+      "seconds": 300,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:INTCBUSDT",
+      "seconds": 300,
+      "gaps": 6,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 6
+    },
+    {
+      "asset_id": "crypto:KORUBUSDT",
+      "seconds": 300,
+      "gaps": 7,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 7
+    },
+    {
+      "asset_id": "crypto:MUBUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:NEARUSDT",
+      "seconds": 300,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:PUMPUSDT",
+      "seconds": 300,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:QNTUSDT",
+      "seconds": 300,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:SANDUSDT",
+      "seconds": 300,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SNDKBUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:SOLUSDT",
+      "seconds": 300,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:SOXLBUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:STRKUSDT",
+      "seconds": 300,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SUIUSDT",
+      "seconds": 300,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:TIAUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:UNIUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:WLDUSDT",
+      "seconds": 300,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:XRPUSDT",
+      "seconds": 300,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 1,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:ZECUSDT",
+      "seconds": 300,
+      "gaps": 6,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 6
+    },
+    {
+      "asset_id": "crypto:AVAUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:BNBUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 1,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:BTCUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:DOGEUSDT",
+      "seconds": 900,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:ENAUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:ETHUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:GTCUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:HBARUSDT",
+      "seconds": 900,
+      "gaps": 7,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 7
+    },
+    {
+      "asset_id": "crypto:INJUSDT",
+      "seconds": 900,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:INTCBUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:KORUBUSDT",
+      "seconds": 900,
+      "gaps": 7,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 7
+    },
+    {
+      "asset_id": "crypto:MUBUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:NEARUSDT",
+      "seconds": 900,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:PUMPUSDT",
+      "seconds": 900,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:SANDUSDT",
+      "seconds": 900,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SNDKBUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:SOLUSDT",
+      "seconds": 900,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SOXLBUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:STRKUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:SUIUSDT",
+      "seconds": 900,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:TIAUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:UNIUSDT",
+      "seconds": 900,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:WLDUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:XRPUSDT",
+      "seconds": 900,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 1,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:ZECUSDT",
+      "seconds": 900,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:AVAUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:BNBUSDT",
+      "seconds": 3600,
+      "gaps": 5,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 5
+    },
+    {
+      "asset_id": "crypto:BTCUSDT",
+      "seconds": 3600,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:DOGEUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:ENAUSDT",
+      "seconds": 3600,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:ETHUSDT",
+      "seconds": 3600,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:GTCUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:HBARUSDT",
+      "seconds": 3600,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:INJUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:INTCBUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:KORUBUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:MUBUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:NEARUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:PUMPUSDT",
+      "seconds": 3600,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:QNTUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:SANDUSDT",
+      "seconds": 3600,
+      "gaps": 1,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 1
+    },
+    {
+      "asset_id": "crypto:SNDKBUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SOLUSDT",
+      "seconds": 3600,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:SOXLBUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:STRKUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:SUIUSDT",
+      "seconds": 3600,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    },
+    {
+      "asset_id": "crypto:TIAUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:UNIUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:WLDUSDT",
+      "seconds": 3600,
+      "gaps": 4,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 4
+    },
+    {
+      "asset_id": "crypto:XRPUSDT",
+      "seconds": 3600,
+      "gaps": 2,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 2
+    },
+    {
+      "asset_id": "crypto:ZECUSDT",
+      "seconds": 3600,
+      "gaps": 3,
+      "recoverable_from_existing_rt": 0,
+      "absent_in_rt_intrabar": 3
+    }
+  ],
+  "recovered_source_events": [
+    {
+      "event_id": "4dadd6db579d184f1f83f3a96fb879819822bc436e7845f52ec9891bcb2fd755",
+      "asset_id": "crypto:BNBUSDT",
+      "observed_at": "2026-10-19 08:27:05.375+00",
+      "observed_mid_price": "726.005",
+      "estimated_round_trip_cost_bps": 22.1377400982086,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "event_id": "0ae2ea25d0bb46996057a4e6905416c011024a0d24322fe5865cd73f57b04e07",
+      "asset_id": "crypto:XRPUSDT",
+      "observed_at": "2026-10-19 08:27:05.375+00",
+      "observed_mid_price": "1.31575",
+      "estimated_round_trip_cost_bps": 22.7600228006839,
+      "shadow_only": true,
+      "live_execution": false
+    }
+  ],
+  "manual_backfill_performed": false
+}
