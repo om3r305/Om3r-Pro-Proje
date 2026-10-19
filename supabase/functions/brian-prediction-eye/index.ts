@@ -1,17 +1,29 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { withCollectorLease } from '../_shared/collector_lease.ts';
 import { requireRealtimeInternal } from '../_shared/realtime_internal_auth.ts';
+import { requireCronAuth } from '../_shared/cron_auth.ts';
 import { collectPredictionCycle, DEFAULT_COLLECTOR_CONFIG, PREDICTION_COLLECTOR_VERSION } from '../_shared/prediction_collector.ts';
 
 // Prediction Intelligence eye: one bounded, read-only, shadow-only collection cycle per call.
 // It never places orders and never touches a decision. It does nothing unless BOTH the global
 // Brian switch and brian_prediction_control.module_enabled are on; wallet trades additionally
-// require wallet_tracking_enabled. No schedule is created by this function or its migration.
+// require wallet_tracking_enabled. CORE pg_cron calls it with the vault-held cron key (Phase 1d);
+// the REALTIME internal key is also accepted, like the other CORE eyes.
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false, autoRefreshToken: false } });
 const ID = 'brian-prediction-eye-v1';
 const SAFE = { shadow_only: true, live_execution: false, read_only: true };
 const out = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+
+// A request presenting the internal key is judged on that key alone; otherwise the cron key
+// (or the Cloudflare key, via requireCronAuth) is required. Either failure is a plain 401.
+async function authorize(req: Request) {
+  if ((req.headers.get('x-brian-internal-key') ?? '').trim()) {
+    await requireRealtimeInternal(req);
+    return;
+  }
+  await requireCronAuth(req, db);
+}
 
 async function systemEnabled() {
   const q = await db.from('brian_evolution_runtime_config').select('config_value').eq('config_key', 'brian_system_enabled').abortSignal(AbortSignal.timeout(4000)).single();
@@ -28,7 +40,7 @@ async function readControl() {
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return out({ error: 'POST_REQUIRED' }, 405);
-  try { await requireRealtimeInternal(req); } catch { return out({ status: 'UNAUTHORIZED' }, 401); }
+  try { await authorize(req); } catch { return out({ status: 'UNAUTHORIZED' }, 401); }
   try {
     if (!await systemEnabled()) return out({ status: 'OPERATOR_STOPPED', ...SAFE });
     const control = await readControl();
