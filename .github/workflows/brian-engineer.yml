@@ -1,6 +1,9 @@
 name: Brian Engineer
 
 on:
+  # Best-effort 20m intake; GitHub schedules may be delayed.
+  schedule:
+    - cron: '7,27,47 * * * *'
   workflow_dispatch:
     inputs:
       request_id:
@@ -40,7 +43,21 @@ jobs:
           ref: brian-2026
           fetch-depth: 0
 
+      - name: Block duplicate scheduled candidate PRs
+        id: duplicate_guard
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          count="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&base=brian-2026&per_page=100" --jq '[.[] | select(.head.ref | startswith("brian-engineer/"))] | length')"
+          if [ "$count" -gt 0 ]; then
+            echo 'skip=true' >> "$GITHUB_OUTPUT"
+            echo "Scheduled intake skipped because $count open engineering candidate PR(s) exist." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Check Brian Engineer queue
+        if: steps.duplicate_guard.outputs.skip != 'true'
         id: preflight
         shell: bash
         env:
@@ -70,7 +87,7 @@ jobs:
         run: npm install -g @github/copilot@1.0.98
 
       - name: Prepare quota-independent local AI fallback
-        if: steps.preflight.outputs.should_run == 'true' && inputs.candidate_only != true
+        if: steps.preflight.outputs.should_run == 'true' && github.event_name != 'schedule' && inputs.candidate_only != true
         env:
           EXTERNAL_OPENAI_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY }}
           OLLAMA_VERSION: v0.34.0
@@ -110,8 +127,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN || github.token }}
           REQUEST_ID: ${{ inputs.request_id || '' }}
-          BRIAN_CANDIDATE_ONLY: ${{ inputs.candidate_only && 'true' || 'false' }}
-          BRIAN_HOSTED_ONLY: ${{ inputs.candidate_only && 'true' || 'false' }}
+          BRIAN_CANDIDATE_ONLY: ${{ (github.event_name == 'schedule' || inputs.candidate_only) && 'true' || 'false' }}
+          BRIAN_HOSTED_ONLY: ${{ (github.event_name == 'schedule' || inputs.candidate_only) && 'true' || 'false' }}
           BRIAN_OPENAI_API_KEY: ${{ secrets.BRIAN_OPENAI_API_KEY || 'ollama-local' }}
           BRIAN_OPENAI_BASE_URL: ${{ secrets.BRIAN_OPENAI_BASE_URL || 'http://127.0.0.1:11434/v1' }}
           BRIAN_OPENAI_MODEL: ${{ vars.BRIAN_OPENAI_MODEL || 'qwen2.5-coder:1.5b' }}
@@ -119,7 +136,7 @@ jobs:
           BRIAN_ANTHROPIC_BASE_URL: ${{ secrets.BRIAN_ANTHROPIC_BASE_URL }}
           BRIAN_ANTHROPIC_MODEL: ${{ vars.BRIAN_ANTHROPIC_MODEL }}
           BRIAN_HOSTED_ATTEMPT_TIMEOUT_SECONDS: '120'
-          BRIAN_CODE_ATTEMPT_TIMEOUT_SECONDS: ${{ inputs.candidate_only && '360' || '120' }}
+          BRIAN_CODE_ATTEMPT_TIMEOUT_SECONDS: ${{ (github.event_name == 'schedule' || inputs.candidate_only) && '360' || '120' }}
           BRIAN_BYOK_ATTEMPT_TIMEOUT_SECONDS: '180'
           BRIAN_LOCAL_ATTEMPT_TIMEOUT_SECONDS: '300'
         run: bash scripts/brian_engineer_runner.sh
