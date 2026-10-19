@@ -50,6 +50,7 @@ jobs:
           tests/independent-price-handler.test.cjs
           tests/world-evidence.test.cjs
           tests/world-evidence-handler.test.cjs
+          tests/main-multiasset-pipeline.test.cjs
 
   verify:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
@@ -144,7 +145,7 @@ jobs:
           workers/brian-l2-capture/worker.ts
           workers/brian-l2-capture/main.ts
       - name: Type-check shadow scorecard with outcome coverage
-        run: deno check supabase/functions/brian-shadow-scorecard/index.ts
+        run: deno check supabase/functions/brian-shadow-scorecard/index.ts supabase/functions/brian-multiasset-opportunity-engine/index.ts
       - name: Run behavioral Deno tests
         run: >-
           deno test --allow-read

@@ -104,3 +104,22 @@ def test_late_decisions_and_unknown_policy_are_explicit(db):
     db("update public.brian_alpha_decisions set compiler_version=null where decision_id='unknown'")
     r=result(db)
     assert r['late_decision']==1 and r['unknown_policy']==1 and r['measured']==0
+
+
+def test_repaired_inputs_bound_scan_preserve_fairness_and_revisit_sources(db):
+    install(db)
+    repair=next((ROOT/'supabase/migrations').glob('*_repair_world_research_inputs.sql')).read_text()
+    ns=db("select n.nspname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.oid='public.brian_intel_events'::regclass")
+    db(repair.replace('search_path=pg_catalog,public','search_path=pg_catalog,'+ns).replace('%','%%'))
+    db("insert into public.brian_source_endpoints_v2 values('official:a','example.org','T1_OFFICIAL_PRIMARY','ACTIVE','PUBLIC_NO_KEY'),('official:b','example.net','T1_OFFICIAL_PRIMARY','ACTIVE','PUBLIC_NO_KEY')")
+    db("insert into public.brian_intel_events select 'e'||n,'official:a','Central bank rates increase','https://example.org/a',now()-interval '10 minutes',now()-interval '9 minutes',now()-interval '9 minutes','OFFICIAL_PRIMARY' from generate_series(1,2100) n")
+    db("insert into public.brian_intel_events values('b','official:b','Central bank rates decrease','https://example.net/b',now()-interval '8 minutes',now()-interval '8 minutes',now()-interval '8 minutes','OFFICIAL_PRIMARY')")
+    r=db('select public.brian_world_research_inputs_v1()')
+    assert len(r['events'])==2
+    assert {e['source_id'] for e in r['events']}=={'official:a','official:b'}
+    for e in r['events']:
+        assert e['counter_pool_scan_limit']==2000 and e['counter_pool_scan_truncated'] is True
+        assert len(e['counter_pool'])<=100 and len(e['probes'])==2
+    db("insert into public.brian_world_evidence_reviews(review_id,event_id,assessed_at,version,status,review) values('done','b',now(),'v1','READ','{}')")
+    r=db('select public.brian_world_research_inputs_v1()')
+    assert len(r['events'])==1 and r['events'][0]['source_id']=='official:a'

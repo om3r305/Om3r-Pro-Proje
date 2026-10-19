@@ -29,7 +29,7 @@ function load(name,extras={}){
   let handler;
   const source=fs.readFileSync(path.join(root,name,'index.ts'),'utf8').replace(/^import .*;\s*$/mg,'');
   class Clock extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
-  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,...extras});
+  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,withCollectorLease:async(db,id,ttl,work)=>({contended:false,value:await work()}),...extras});
   vm.runInContext(stripTypeScriptTypes(source),ctx);
   return {ctx,handle:req=>handler(req)};
 }
@@ -40,19 +40,20 @@ test('collector derives REGULAR from actual provider session, not OPEN fallback'
   assert.equal(mark.metadata.regular_session_end,end);
   assert.equal(mark.live_execution,false);
 });
-async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',duplicate=false,reaction=.01}={}){
+async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',duplicate=false,reaction=.01,enabled=true,configFailure=false}={}){
   const writes={};
   const events=[{event_id:'news-1',observed_at:iso(now-60000),published_at:iso(now-60000),source_id:'official:test',claim,primary_asset:null}];
   if(duplicate)events.push({...events[0]});
   const db={from:table=>{
-    const q={select:()=>q,eq:()=>q,gte:()=>q,order:()=>q,limit:()=>q,single:()=>q,
+    const q={select:()=>q,eq:()=>q,gte:()=>q,order:()=>q,limit:()=>q,single:()=>q,abortSignal:()=>q,
       insert:async rows=>{writes[table]=rows;return {error:null}},
-      then:resolve=>resolve({data:table==='brian_dashboard_auth'?{cron_key_sha256:createHash('sha256').update('test-key').digest('hex')}:events,error:null})};
+      then:resolve=>resolve(table==='brian_evolution_runtime_config'?{data:{config_value:enabled?'true':'false'},error:configFailure?{message:'offline'}:null}:{data:table==='brian_dashboard_auth'?{cron_key_sha256:createHash('sha256').update('test-key').digest('hex')}:events,error:null})};
     return q;
   }};
   const mark={asset_id:'commodity:GOLD',asset_class:'commodity',provider_time:iso(now-age*1000),price:100,return_5m:reaction,return_1h:reaction,session_state:'OPEN',data_latency_seconds:1,provider_quality:'PUBLIC_UNOFFICIAL_SHADOW_ONLY',metadata:{themes:['MONETARY','FINANCIAL','FX','GEOPOLITICAL'],regular_session_start:start,regular_session_end:sessionEnd}};
   const {handle}=load('brian-multiasset-opportunity-engine',{createClient:()=>db,fetch:async()=>new Response(JSON.stringify({status:'SUCCESS',marks:[mark],crowd:[]}))});
   const response=await handle(new Request('https://test.local',{method:'POST',headers:{'x-brian-cron-key':'test-key'}}));
+  if(!enabled||configFailure){const body=await response.json();assert.equal(body.status,configFailure?'FAILED_CLOSED':'OPERATOR_STOPPED');assert.equal(writes.brian_multiasset_alpha_decisions,undefined);return body;}
   assert.equal(response.status,200);
   return writes.brian_multiasset_alpha_decisions[0];
 }
@@ -80,3 +81,8 @@ test('closed session and unconfirmed market reaction both wait',async()=>{
 // Existing real treasury planner contract: small shadow entries, costs, exits and closed promotion gate.
 global.Deno={test};
 require('../supabase/functions/_shared/evolution_treasury_multiasset_shadow.test.ts');
+
+test('multiasset decision worker respects STOP and fails closed on unreadable operator control',async()=>{
+ assert.equal((await runEngine({enabled:false})).status,'OPERATOR_STOPPED');
+ assert.equal((await runEngine({configFailure:true})).status,'FAILED_CLOSED');
+});
