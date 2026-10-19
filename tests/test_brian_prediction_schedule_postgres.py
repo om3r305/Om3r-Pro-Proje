@@ -20,7 +20,7 @@ MIGRATIONS = ROOT / "supabase" / "migrations"
 ORDER = [
     MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql",
     MIGRATIONS / "20261019200517_brian_prediction_retention.sql",
-    MIGRATIONS / "20261019220000_brian_prediction_schedule.sql",
+    MIGRATIONS / "20261019201911_brian_prediction_schedule.sql",
 ]
 SCHEDULE = ORDER[-1]
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")

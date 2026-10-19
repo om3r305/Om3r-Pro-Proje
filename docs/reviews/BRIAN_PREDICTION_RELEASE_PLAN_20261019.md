@@ -93,3 +93,16 @@ drop table if exists public.brian_prediction_control;
 | Son kontroller | `max_storage_mb=256`; `brian_prediction_storage_bytes()` = 122880 bayt; yeni RPC md5 `0191f445…`, `SECURITY DEFINER` + sabit `search_path`; iki fonksiyon için yalnızca service_role EXECUTE; modül kapalıyken RPC `OPERATOR_STOPPED`; 4 arşiv politikası eklendi (toplam 21); `brian-cold-archive-daily` cron'u **pasif kaldı** |
 | Fonksiyon | `brian-prediction-eye` v2 ACTIVE (ezbr `310089e7…`), `STORAGE_CAP_REACHED` durumunu tanıyor; anahtarsız POST → 401, GET → 405 |
 | Geri dönüş | `core-state.json` içindeki adımlar: v1 RPC'yi yeniden uygula, `brian_prediction_storage_bytes` ve `max_storage_mb`'ı kaldır, `brian_prediction%` politikalarını sil, eye v1'i tag'den yeniden yayımla |
+
+## Yayın kaydı — Faz 1d (19 Ekim 2026): zamanlayıcı + açılış
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-1d-oncesi` → `7b284c5`; `C:\Brian\brian-backups\2026-10-19-prediction-1d-oncesi\` (bundle verify: okay + `core-state.json`) |
+| Merge | PR #154 → `3c58ec7` (CI üçü de yeşil, `47c4d63`) |
+| Fonksiyon | Migrasyondan **önce** yayımlandı: `brian-prediction-eye` v3 (ezbr `7e39e7e8…`), cron anahtarını kabul ediyor. Anahtarsız → 401, yanlış cron anahtarı → 401 |
+| Migrasyon | CORE sürüm `20261019201911` (`brian_prediction_schedule`); dosya adı hizalandı |
+| Durum | `module_enabled=true`, `wallet_tracking_enabled=false`; cron `brian-prediction-eye-15m` (jobid 103), `5,20,35,50 * * * *`, aktif |
+| İlk gerçek tur | 20:19:22 UTC'de cron komutuyla aynı SQL elle çalıştırıldı (istek 186518) → HTTP 200 `SUCCESS`: 6 etiket, 688 piyasa görüldü, 60 tutuldu, 0 reddedildi; 60 piyasa + 60 anlık görüntü + 6 sağlık satırı saklandı, 0 işlem. Modül depolaması 311.296 bayt |
+| Geri dönüş | `select cron.unschedule('brian-prediction-eye-15m')` + `module_enabled=false`. Toplanan kanıt append-only olduğu için kalır |
+| İlk zamanlanmış tur | 20:20:00 UTC cron jobid 103 `succeeded` → HTTP 200 `SUCCESS`, 6 sağlık satırı; yeni piyasa/anlık görüntü **0**. Sebep: elle tetiklenen turdan 38 saniye sonra çalıştı ve Gamma yanıtı CDN'de önbellekli (`Cache-Control: max-age=300`), yani `updatedAt` aynı kaldı. Aynı gözlem yinelenmedi; bu idempotentliğin beklenen sonucu. 15 dakikalık aralıkta yeni anlık görüntüler beklenir, sonraki turlarda doğrulanacak |
