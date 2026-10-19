@@ -205,7 +205,7 @@ async function loadWorldSources(trustFloor:number): Promise<WorldSourceSignal[]>
   return buildCurrentWorldSourceSignals(assessmentRecords,candidateRecords,trustFloor).slice(0,100);
 }
 
-async function persistHypotheses(inputs: ResearchInputs, learning: HypothesisCandidate[] = [], contexts: Array<Record<string, any>> = []): Promise<{ hypotheses: number; experiments: number }> {
+async function persistHypotheses(inputs: ResearchInputs, learning: HypothesisCandidate[] = [], contexts: Array<Record<string, unknown>> = []): Promise<{ hypotheses: number; experiments: number }> {
   const hypotheses = [...learning, ...generateResearchHypotheses(inputs)].slice(0, 30).map(h => {
     const evidence = contexts.filter(doc => doc.hypothesis_id === h.hypothesisId).slice(0, 4);
     return { ...h, evidenceRefs: [...h.evidenceRefs, ...evidence.map(doc => `open_world_document:${doc.document_id}`)],

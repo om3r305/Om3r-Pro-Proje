@@ -14,7 +14,7 @@ const PER_MECHANISM = 80;
 const eventId = (ref: string) => /^intel_event:([a-f0-9]{64})$/.exec(ref)?.[1] ?? null;
 const uniqueRefs = (m: MechanismInput) => [...new Set(Array.isArray(m.evidence_refs) ? m.evidence_refs : [])];
 const stamp = (value: unknown) => typeof value === "string" && Number.isFinite(Date.parse(value)) ? Date.parse(value) : null;
-const clean = (value: unknown, limit = 420) => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, limit) : "";
+const clean = (value: unknown, limit = 420) => typeof value === "string" ? value.replace(/\p{Cc}/gu, " ").slice(0, limit) : "";
 export function safeSourceUri(value: unknown): string | null {
   try {
     const u = new URL(String(value));
