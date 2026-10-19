@@ -1,7 +1,7 @@
 (function(root){
  'use strict';
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function link(uri,label){try{const u=new URL(uri);if(u.protocol!=='https:'||u.username||u.password||u.port||!(/^[a-z][a-z0-9.-]+\.[a-z]{2,}$/i.test(u.hostname))||/(^|\.)(local|localhost|internal|invalid|test)$/i.test(u.hostname))throw Error();return '<a style="color:#89d9dd" href="'+esc(u.toString())+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>';}catch{return esc(label);}}
+ function link(uri,label){try{const u=new URL(uri);if(u.protocol!=='https:'||u.username||u.password||u.port||!(/^[a-z][a-z0-9.-]+\.[a-z]{2,}$/i.test(u.hostname))||/(^|\.)(local|localhost|internal|invalid|test)$/i.test(u.hostname))throw Error();u.search='';u.hash='';return '<a style="color:#89d9dd" href="'+esc(u.toString())+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>';}catch{return esc(label);}}
  const time=v=>v&&Number.isFinite(Date.parse(v))?esc(new Date(v).toLocaleString('tr-TR',{timeZone:'Europe/Berlin'})):'—';
  const delta=d=>d&&d.bps!==null&&Number.isFinite(Number(d.bps))?Number(d.bps).toFixed(2)+' bps ('+time(d.from)+' → '+time(d.to)+')':'Ölçüm yok';
  const labels={PRIMARY_TEXT_MATCH:'Başlık iddiasının metni belgenin içinde bulundu',PRIMARY_TEXT_MATCH_REVIEW_REQUIRED:'Metin eşleşti; düzeltme dili nedeniyle inceleme gerekli',TITLE_MATCH_ONLY:'Yalnız başlık eşleşti',CLAIM_TEXT_NOT_MATCHED:'İddia metni birebir bulunamadı',INDEX_NOT_CLAIM_VERIFICATION:'Yalnız dosya dizini okundu'};

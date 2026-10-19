@@ -93,4 +93,3 @@ Deno.serve(async(req:Request)=>{
   }catch(error){console.error('shadow-scorecard',error instanceof Error?error.message:'QUERY_FAILED');return response({error:'SCORECARD_UNAVAILABLE',shadow_only:true,live_execution:false},503)}
   finally{await sql.end({timeout:1}).catch(()=>{})}
 });
-

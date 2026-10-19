@@ -9,7 +9,7 @@ create table public.brian_world_evidence_reviews (
 create index brian_world_evidence_reviews_event_time on public.brian_world_evidence_reviews(event_id,captured_at desc);
 create index brian_world_evidence_reviews_time on public.brian_world_evidence_reviews(captured_at desc);
 alter table public.brian_world_evidence_reviews enable row level security;
-revoke all on public.brian_world_evidence_reviews from public,anon,authenticated;
+revoke all on public.brian_world_evidence_reviews from public,anon,authenticated,service_role;
 grant select,insert on public.brian_world_evidence_reviews to service_role;
 create trigger brian_world_evidence_reviews_append_only before update or delete on public.brian_world_evidence_reviews
  for each row execute function public.brian_reject_mutation();

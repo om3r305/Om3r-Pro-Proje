@@ -239,4 +239,3 @@ jobs:
           tests/test_brian_independent_price_postgres.py
           tests/test_brian_world_evidence_postgres.py
           -v
-

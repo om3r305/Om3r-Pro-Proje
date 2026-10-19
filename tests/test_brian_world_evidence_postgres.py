@@ -71,7 +71,7 @@ def install(db):
     schema=db('select current_schema()')
     # Fixture replaces qualified public. references automatically. Read the actual schema via table OID.
     ns=db("select n.nspname from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.oid='public.brian_intel_events'::regclass")
-    db(MIGRATION.replace('search_path=pg_catalog,public','search_path=pg_catalog,'+ns))
+    db(MIGRATION.replace('search_path=pg_catalog,public','search_path=pg_catalog,'+ns).replace('%','%%'))
 
 def test_migration_inputs_append_only_modes_and_grants(db):
     install(db)

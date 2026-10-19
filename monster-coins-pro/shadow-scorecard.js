@@ -51,4 +51,3 @@
  refresh();setInterval(()=>{if(panel.getBoundingClientRect().bottom>0&&panel.getBoundingClientRect().top<innerHeight)refresh()},15000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
 })();
-
