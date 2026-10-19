@@ -1,0 +1,141 @@
+{
+  "release": {
+    "candidate": "b75a1ce20d61dfa7c1e232f7dc515edc90570e6c",
+    "merge": "bb798056c0c553bf33c729d6e22315a5a6046226",
+    "migration_version": "20261019133025",
+    "metadata_sha": "a8e5d9897a66c6262c56cd1bc242d60100c7bd3f",
+    "permanent_test_sha": "491042e2abc892e88b501f3759de62d68cd05a8f",
+    "core_edge_version": 1,
+    "realtime_orchestrator_version": 16
+  },
+  "snapshot": {
+    "at": "2026-10-19 13:35:55.193753+00",
+    "runs": [
+      {
+        "status": "SUCCESS",
+        "metadata": {
+          "version": "brian.outcome-price-eye.v1",
+          "price_only": true,
+          "observed_at": "2026-10-19T13:32:02.332Z",
+          "provider_uri": "https://api.binance.com/api/v3/ticker/bookTicker",
+          "missing_assets": [],
+          "available_quotes": 26,
+          "requested_assets": 26,
+          "provider_requests": 1,
+          "independent_of_radar": true,
+          "quote_time_semantics": "HTTP_RECEIPT_TIME_EXCHANGE_TIME_UNKNOWN"
+        },
+        "started_at": "2026-10-19T13:32:01.339+00:00",
+        "finished_at": "2026-10-19T13:32:02.661+00:00",
+        "stored_records": 26
+      },
+      {
+        "status": "SUCCESS",
+        "metadata": {
+          "version": "brian.outcome-price-eye.v1",
+          "price_only": true,
+          "observed_at": "2026-10-19T13:33:01.813Z",
+          "provider_uri": "https://api.binance.com/api/v3/ticker/bookTicker",
+          "missing_assets": [],
+          "available_quotes": 26,
+          "requested_assets": 26,
+          "provider_requests": 1,
+          "independent_of_radar": true,
+          "quote_time_semantics": "HTTP_RECEIPT_TIME_EXCHANGE_TIME_UNKNOWN"
+        },
+        "started_at": "2026-10-19T13:33:01.075+00:00",
+        "finished_at": "2026-10-19T13:33:01.994+00:00",
+        "stored_records": 26
+      },
+      {
+        "status": "SUCCESS",
+        "metadata": {
+          "version": "brian.outcome-price-eye.v1",
+          "price_only": true,
+          "observed_at": "2026-10-19T13:34:04.476Z",
+          "provider_uri": "https://api.binance.com/api/v3/ticker/bookTicker",
+          "missing_assets": [],
+          "available_quotes": 26,
+          "requested_assets": 26,
+          "provider_requests": 1,
+          "independent_of_radar": true,
+          "quote_time_semantics": "HTTP_RECEIPT_TIME_EXCHANGE_TIME_UNKNOWN"
+        },
+        "started_at": "2026-10-19T13:34:03.525+00:00",
+        "finished_at": "2026-10-19T13:34:04.77+00:00",
+        "stored_records": 26
+      },
+      {
+        "status": "SUCCESS",
+        "metadata": {
+          "version": "brian.outcome-price-eye.v1",
+          "price_only": true,
+          "observed_at": "2026-10-19T13:35:03.115Z",
+          "provider_uri": "https://api.binance.com/api/v3/ticker/bookTicker",
+          "missing_assets": [],
+          "available_quotes": 26,
+          "requested_assets": 26,
+          "provider_requests": 1,
+          "independent_of_radar": true,
+          "quote_time_semantics": "HTTP_RECEIPT_TIME_EXCHANGE_TIME_UNKNOWN"
+        },
+        "started_at": "2026-10-19T13:35:02.321+00:00",
+        "finished_at": "2026-10-19T13:35:03.355+00:00",
+        "stored_records": 26
+      }
+    ],
+    "prices": {
+      "assets": 26,
+      "samples": 104,
+      "last_observed": "2026-10-19T13:35:03.115+00:00",
+      "first_observed": "2026-10-19T13:32:02.332+00:00",
+      "valid_time_and_mid": true,
+      "cost_unknown_preserved": true
+    }
+  },
+  "scorecard": {
+    "status": 200,
+    "version": "forward-scorecard-v2-coverage",
+    "coverage_status": "AVAILABLE",
+    "as_of": "2026-10-19T13:34:55.266+00:00"
+  },
+  "outcomes_unique_to_core_receipt": 3,
+  "browser_visual_tested": false,
+  "profitability_proven": false,
+  "final_short_window": {
+    "at": "2026-10-19 13:38:16.322585+00",
+    "core_prices": 182,
+    "matched_outcomes": 30,
+    "latest_auditor": {
+      "status": "SUCCESS",
+      "stored": 63,
+      "started_at": "2026-10-19T13:37:02.18+00:00"
+    }
+  },
+  "outcome_horizon_groups": [
+    {
+      "horizon_seconds": 300,
+      "outcomes": 8,
+      "decisions": 8
+    },
+    {
+      "horizon_seconds": 900,
+      "outcomes": 16,
+      "decisions": 16
+    },
+    {
+      "horizon_seconds": 3600,
+      "outcomes": 6,
+      "decisions": 6
+    }
+  ],
+  "permanent_ci": {
+    "sha": "491042e2abc892e88b501f3759de62d68cd05a8f",
+    "run": 39261631575,
+    "all_four_jobs": "success",
+    "baseline_node_tests": 126,
+    "product_node_tests": 27,
+    "postgres_job_tests": 62,
+    "new_postgres_tests": 12
+  }
+}

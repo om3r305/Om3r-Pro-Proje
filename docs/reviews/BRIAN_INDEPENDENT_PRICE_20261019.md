@@ -15,3 +15,38 @@ Local: 15 actual-code Node tests passed for parsing/transport, guards and indepe
 Rollback order: restore prior Realtime orchestrator to stop new scheduled captures; retain valid append-only CORE receipts. Do not undo schema by dropping columns containing evidence or rewrite history. Existing REALTIME bridge rows remain compatible with nullable new columns.
 
 Open after this package: primary/full-text independent claim verification, event-specific counter-evidence, priced-in analysis, actionable horizons and prospective strategy/psychology calibration. No claim of all bugs removed or profit guaranteed.
+
+## Production release and verified results
+
+- PR: https://github.com/om3r305/Om3r-Pro-Proje/pull/143.
+- Tested feature candidate: b75a1ce20d61dfa7c1e232f7dc515edc90570e6c.
+- Merge: bb798056c0c553bf33c729d6e22315a5a6046226; Git tree exactly matched the tested candidate.
+- Source-metadata commit a8e5d9897a66c6262c56cd1bc242d60100c7bd3f aligns the migration filename with actual applied history version 20261019133025; its four main CI jobs passed. Application source/SQL behavior did not change.
+- CORE brian-outcome-price-eye v1 ACTIVE; REALTIME brian-realtime-orchestrator v16 ACTIVE (runtime label v13-independent-outcome-prices). Retrieved deployed files matched exact tested source, including shared auth/operator/lease helpers.
+- Required feature CI: https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39260467655 (all 4 jobs) and https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39260467641 (both ALPHA jobs). Node 23 files / 141 passing tests, including 15 new actual-code tests. PostgreSQL job 62 passing tests, including 12 new migration/RPC cases.
+- Metadata alignment CI: https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39260926201, all four jobs passed.
+- Product outcome/price Node regressions are now explicitly included in every main CI run (491042e2abc892e88b501f3759de62d68cd05a8f). This does not modify the other conversation's engineering runner baseline or timer.
+
+### Live evidence
+
+At 2026-10-19 13:35:55.193753+00, four native scheduled runs (13:32, 13:33, 13:34, 13:35 UTC) had each succeeded with one provider request, all 26 watched assets available and 26 stored records per run. Total 104 valid CORE samples across 26 assets. Every sample preserved unknown cost as null, request/receipt/capture ordering and exact numeric midpoint. These are a short operational observation, not an uptime or full-coverage guarantee.
+
+An existing auditor run at 13:33:44–13:33:49 UTC completed SUCCESS, 51 observed / 65 stored receipts. Three 60-minute outcomes (KORUBUSDT, MUBUSDT, TIAUSDT) resolved at the new CORE quote time 13:32:02.332 UTC and exact midpoint. No ALPHA reference or intrabar point matched that same asset/time/price, confirming the independent audit path supplied those terminal observations. This is measurement completion, not profit or causal strategy improvement.
+
+The manual SQL HTTP auditor probe itself timed out waiting for its response; the independently persisted successful collector run and exact outcome rows were subsequently verified, without retrying or rewriting the failed client result. An earlier manual probe with the distinct CORE cron credential was denied by the new internal-only endpoint; native scheduler requests use the existing proper internal authentication and succeeded. No credentials were exposed and no auth check was relaxed.
+
+Authenticated scorecard request returned HTTP200, forward-scorecard-v2-coverage, coverage AVAILABLE, as of 13:34:55 UTC. It reads the new CORE samples through the unchanged audit-table path. No frontend change or Vercel redeployment was needed for this backend release. Browser visual/user-key full-flow testing remains uncompleted.
+
+Permissions verified live: anon cannot persist, authenticated cannot read the watch RPC, service_role can persist, RLS enabled. Supabase security advisors were checked before and after: the table's existing RLS-with-no-user-policies notice is unchanged and intentional for service-only data; user grants were not added. The append-only trigger remains.
+
+The fixed 15:00–16:00 Berlin decision window and +120s terminal tolerance were not changed after results arrived. Capture began at Berlin 15:32 during that window; report this intervention when comparing coverage. No historical ticks were fabricated.
+
+Rollback: restore the saved REALTIME orchestrator v15 bundle (runtime v12-operator-controlled) to remove this producer from the existing minute data flow. Keep already-valid append-only evidence and schema; do not erase history. No new engineering schedule or paid service was created.
+
+Remaining: verify the complete fixed cohort after Berlin 17:02, longer-run per-asset gaps/provider continuity and storage capacity; implement primary/full-text independent verification, counter-evidence, priced-in/horizon assessment and prospective strategy/psychology calibration. Positive after-cost advantage is not established.
+
+### Final short-window check
+
+At 13:38:16 UTC, 182 CORE price receipts had been stored (seven successive minute batches of 26 assets). The existing native 13:37 auditor completed SUCCESS with 63 stored receipts. Thirty unique decision/horizon outcomes matched the new CORE terminal prices: 8 at 5m, 16 at 15m and 6 at 60m. Counts across horizons may include the same decision; these are not 30 independent trades and say nothing about portfolio profit.
+
+Permanent product CI https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39261631575 passed all four jobs on 491042e2abc892e88b501f3759de62d68cd05a8f. It ran the unchanged 126-test baseline plus the 27 explicit product regressions. Twelve new PostgreSQL cases continue to run in the 62-test PostgreSQL job. No test gate was relaxed.
