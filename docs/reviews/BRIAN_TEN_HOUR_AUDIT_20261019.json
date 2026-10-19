@@ -1,0 +1,583 @@
+{
+  "as_of": "2026-10-19T14:56:44Z",
+  "window_start": "2026-10-19T04:56:44Z",
+  "timezone": "Europe/Berlin",
+  "scope": "READ_ONLY_AUDIT_NO_EXECUTION_OR_TIMER_CHANGE",
+  "data": {
+    "health": [
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-outcome-price-eye-v1",
+        "runs": 85,
+        "last_run": "2026-10-19 14:57:03.681+00",
+        "success": 85,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 2134
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-alpha-decision-compiler-v2",
+        "runs": 300,
+        "last_run": "2026-10-19 14:57:03.468447+00",
+        "success": 300,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 1440
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-evolution-treasury-v1",
+        "runs": 120,
+        "last_run": "2026-10-19 14:57:00.56+00",
+        "success": 120,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 120
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-world-discovery-eye-v1",
+        "runs": 40,
+        "last_run": "2026-10-19 14:56:05.94+00",
+        "success": 40,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 2350
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-breaking-scout-v1",
+        "runs": 299,
+        "last_run": "2026-10-19 14:56:04.843+00",
+        "success": 299,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 2733
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-evolution-ocean-worker-v1",
+        "runs": 40,
+        "last_run": "2026-10-19 14:56:00.881+00",
+        "success": 40,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 12
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-core-intel-ingest-v1",
+        "runs": 300,
+        "last_run": "2026-10-19 14:55:04.216+00",
+        "success": 300,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 55
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-source-observer-v2",
+        "runs": 80,
+        "last_run": "2026-10-19 14:54:06.869+00",
+        "success": 79,
+        "degraded": 1,
+        "failed": 0,
+        "stored": 4057
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-open-world-research-v1",
+        "runs": 20,
+        "last_run": "2026-10-19 14:54:01.103+00",
+        "success": 20,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 154
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-evolution-researcher-v1",
+        "runs": 20,
+        "last_run": "2026-10-19 14:54:00.803+00",
+        "success": 20,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 304
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-world-evidence-research-v1",
+        "runs": 9,
+        "last_run": "2026-10-19 14:53:02.27+00",
+        "success": 0,
+        "degraded": 1,
+        "failed": 8,
+        "stored": 2
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-evolution-orchestrator-v1",
+        "runs": 30,
+        "last_run": "2026-10-19 14:53:00.61+00",
+        "success": 30,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 1194
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-world-brain-v1",
+        "runs": 59,
+        "last_run": "2026-10-19 14:52:06.475+00",
+        "success": 59,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 13005
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-official-primary-eye-v2",
+        "runs": 59,
+        "last_run": "2026-10-19 14:50:05.317+00",
+        "success": 58,
+        "degraded": 1,
+        "failed": 0,
+        "stored": 2103
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-missed-opportunity-auditor-v2",
+        "runs": 60,
+        "last_run": "2026-10-19 14:47:00.95+00",
+        "success": 60,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 4938
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-source-registry-v2",
+        "runs": 20,
+        "last_run": "2026-10-19 14:30:06.302+00",
+        "success": 12,
+        "degraded": 8,
+        "failed": 0,
+        "stored": 320
+      },
+      {
+        "checked_at": "2026-10-19 14:57:04.977321+00",
+        "collector_id": "brian-evolution-sandbox-v1",
+        "runs": 20,
+        "last_run": "2026-10-19 14:29:00.651+00",
+        "success": 20,
+        "degraded": 0,
+        "failed": 0,
+        "stored": 0
+      }
+    ],
+    "failures": [
+      {
+        "started_at": "2026-10-19 14:53:02.27+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:48:01.173+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:43:01.832+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:38:01.112+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:33:01.028+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:28:03.913+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:23:01.124+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:18:04.711+00",
+        "status": "FAILED",
+        "error_class": "RESEARCH_FAILED",
+        "error_message": "RESEARCH_INPUTS_UNAVAILABLE",
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "counts_unavailable": true
+        }
+      },
+      {
+        "started_at": "2026-10-19 14:13:01.399+00",
+        "status": "DEGRADED",
+        "error_class": null,
+        "error_message": null,
+        "metadata": {
+          "version": "brian.world-evidence-review.v1",
+          "failed_document_reads": 1,
+          "external_claims_independently_verified": 0,
+          "market_reaction_is_not_priced_in_probability": true
+        }
+      }
+    ],
+    "fixedCounts": [
+      {
+        "action": "OPEN_LONG",
+        "n": 128
+      },
+      {
+        "action": "VETO",
+        "n": 13
+      },
+      {
+        "action": "OPEN_SHORT",
+        "n": 157
+      },
+      {
+        "action": "WAIT",
+        "n": 1142
+      }
+    ],
+    "fixedActions": [
+      {
+        "actions": 0,
+        "deployed_usd": "0"
+      }
+    ],
+    "coreBalance": [
+      {
+        "first_snapshot": {
+          "observed_at": "2026-10-19T04:57:00.842+00:00",
+          "equity_usd": 4943.521744958152,
+          "cash_usd": 4943.521744958152,
+          "deployment_usd": 0
+        },
+        "last_snapshot": {
+          "observed_at": "2026-10-19T14:52:01.002+00:00",
+          "equity_usd": 4943.521744958152,
+          "cash_usd": 4943.521744958152,
+          "deployment_usd": 0
+        }
+      }
+    ],
+    "pricesOverview": [
+      {
+        "assets": 62,
+        "quotes": 6846,
+        "first_price": "2026-10-19 04:57:05.161+00",
+        "last_price": "2026-10-19 14:56:06.457+00"
+      }
+    ],
+    "stockCoverage": [],
+    "lastMulti": [
+      {
+        "last_multiasset_decision": "2026-10-11 21:25:41.455+00",
+        "total": 97551
+      }
+    ],
+    "stocksTenHour": [
+      {
+        "asset_id": "equity:AMZN",
+        "first_price_time": "2026-10-19 08:00:43+00",
+        "last_price_time": "2026-10-19 14:50:51+00",
+        "first_price": "252.8",
+        "last_price": "260.8450012207031",
+        "observed_change_pct": "3.182",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:TSLA",
+        "first_price_time": "2026-10-19 08:00:43+00",
+        "last_price_time": "2026-10-19 14:50:52+00",
+        "first_price": "356.9",
+        "last_price": "365.7900085449219",
+        "observed_change_pct": "2.491",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:META",
+        "first_price_time": "2026-10-19 08:00:23+00",
+        "last_price_time": "2026-10-19 14:50:51+00",
+        "first_price": "716.5",
+        "last_price": "701.2799072265625",
+        "observed_change_pct": "-2.124",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:JPM",
+        "first_price_time": "2026-10-19 08:00:00+00",
+        "last_price_time": "2026-10-19 14:50:50+00",
+        "first_price": "340.85",
+        "last_price": "337.760009765625",
+        "observed_change_pct": "-0.907",
+        "captures": 34
+      },
+      {
+        "asset_id": "equity:MSFT",
+        "first_price_time": "2026-10-19 08:00:34+00",
+        "last_price_time": "2026-10-19 14:50:51+00",
+        "first_price": "531.58",
+        "last_price": "535.1649780273438",
+        "observed_change_pct": "0.674",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:GOOGL",
+        "first_price_time": "2026-10-19 08:00:40+00",
+        "last_price_time": "2026-10-19 14:50:50+00",
+        "first_price": "342.8",
+        "last_price": "344.9901123046875",
+        "observed_change_pct": "0.639",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:CVX",
+        "first_price_time": "2026-10-19 08:00:05+00",
+        "last_price_time": "2026-10-19 14:50:38+00",
+        "first_price": "224.19",
+        "last_price": "223.7100067138672",
+        "observed_change_pct": "-0.214",
+        "captures": 34
+      },
+      {
+        "asset_id": "equity:AAPL",
+        "first_price_time": "2026-10-19 08:00:20+00",
+        "last_price_time": "2026-10-19 14:50:51+00",
+        "first_price": "343.2562",
+        "last_price": "343.8800048828125",
+        "observed_change_pct": "0.182",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:NVDA",
+        "first_price_time": "2026-10-19 08:00:39+00",
+        "last_price_time": "2026-10-19 14:50:50+00",
+        "first_price": "217.34",
+        "last_price": "217.46949768066406",
+        "observed_change_pct": "0.060",
+        "captures": 42
+      },
+      {
+        "asset_id": "equity:XOM",
+        "first_price_time": "2026-10-19 08:00:19+00",
+        "last_price_time": "2026-10-19 14:50:52+00",
+        "first_price": "177.56",
+        "last_price": "177.63499450683594",
+        "observed_change_pct": "0.042",
+        "captures": 31
+      }
+    ],
+    "waitReasons": [
+      {
+        "observed_at": "2026-10-19 06:08:07.924+00",
+        "asset_id": "crypto:AVAUSDT",
+        "action": "WAIT",
+        "reason": "consensus below preregistered gate: support=1, score=0.004993",
+        "veto_reason": null,
+        "evidence_score": 0.00499250282193048,
+        "independent_group_count": 2,
+        "net_edge_bps": null,
+        "estimated_round_trip_cost_bps": null,
+        "requested_virtual_notional_usd": "0"
+      },
+      {
+        "observed_at": "2026-10-19 12:01:06.54+00",
+        "asset_id": "crypto:GTCUSDT",
+        "action": "WAIT",
+        "reason": "consensus below preregistered gate: support=2, score=0.019236",
+        "veto_reason": null,
+        "evidence_score": 0.0192361069654362,
+        "independent_group_count": 3,
+        "net_edge_bps": null,
+        "estimated_round_trip_cost_bps": null,
+        "requested_virtual_notional_usd": "0"
+      },
+      {
+        "observed_at": "2026-10-19 12:04:09.989+00",
+        "asset_id": "crypto:GTCUSDT",
+        "action": "WAIT",
+        "reason": "consensus below preregistered gate: support=2, score=0.019236",
+        "veto_reason": null,
+        "evidence_score": 0.0192361069654362,
+        "independent_group_count": 3,
+        "net_edge_bps": null,
+        "estimated_round_trip_cost_bps": null,
+        "requested_virtual_notional_usd": "0"
+      },
+      {
+        "observed_at": "2026-10-19 13:24:07.647+00",
+        "asset_id": "crypto:SOXLBUSDT",
+        "action": "WAIT",
+        "reason": "consensus below preregistered gate: support=2, score=0.080065",
+        "veto_reason": null,
+        "evidence_score": 0.0800645257283522,
+        "independent_group_count": 3,
+        "net_edge_bps": null,
+        "estimated_round_trip_cost_bps": null,
+        "requested_virtual_notional_usd": "0"
+      }
+    ],
+    "examples": [
+      {
+        "asset_id": "crypto:GTCUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 12:04:09.989+00",
+        "resolved_at": "2026-10-19 13:04:11.747+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.104324511330219,
+        "hindsight_net_return": 0.101286628610967,
+        "mfe": 0.104324511330219,
+        "mae": 0,
+        "classification": "WAIT_MISSED_LONG",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 30.3788 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:GTCUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 12:01:06.54+00",
+        "resolved_at": "2026-10-19 13:02:08.252+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.103778642455685,
+        "hindsight_net_return": 0.100913964548206,
+        "mfe": 0.103778642455685,
+        "mae": -0.000259403372243616,
+        "classification": "WAIT_MISSED_LONG",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 28.6468 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:AVAUSDT",
+        "horizon": "900s",
+        "observed_at": "2026-10-19 06:08:07.924+00",
+        "resolved_at": "2026-10-19 06:24:09.274+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.0574623987659082,
+        "hindsight_net_return": 0.054176886489266,
+        "mfe": 0,
+        "mae": -0.0574623987659082,
+        "classification": "WAIT_MISSED_SHORT",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 32.8551 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:SOXLBUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 13:24:07.647+00",
+        "resolved_at": "2026-10-19 14:25:02.726+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.0534493474207582,
+        "hindsight_net_return": 0.0513537314146388,
+        "mfe": 0,
+        "mae": -0.0534493474207582,
+        "classification": "WAIT_MISSED_SHORT",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 20.9562 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:SOXLBUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 13:21:00.331+00",
+        "resolved_at": "2026-10-19 14:21:04.673+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.052316676239709,
+        "hindsight_net_return": 0.0501252153934521,
+        "mfe": 0.00119663028910577,
+        "mae": -0.052316676239709,
+        "classification": "WAIT_MISSED_SHORT",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 21.9146 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:GTCUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 06:34:08.829+00",
+        "resolved_at": "2026-10-19 07:35:41.515+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.0472171723068198,
+        "hindsight_net_return": 0.0442498123655286,
+        "mfe": 0,
+        "mae": -0.0472171723068198,
+        "classification": "WAIT_MISSED_SHORT",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 29.6736 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:AVAUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 06:20:54.741+00",
+        "resolved_at": "2026-10-19 07:22:05.466+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.040370976541189,
+        "hindsight_net_return": 0.0372798690671028,
+        "mfe": 0.040370976541189,
+        "mae": 0,
+        "classification": "WAIT_MISSED_LONG",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 30.9111 bps; this receipt audits the decision and does not retune thresholds"
+      },
+      {
+        "asset_id": "crypto:SNDKBUSDT",
+        "horizon": "3600s",
+        "observed_at": "2026-10-19 12:51:07.956+00",
+        "resolved_at": "2026-10-19 13:52:06.531+00",
+        "brian_action": "WAIT",
+        "hindsight_gross_return": 0.034542848827142,
+        "hindsight_net_return": 0.0325354804720167,
+        "mfe": 0.034542848827142,
+        "mae": -0.000563679167081221,
+        "classification": "WAIT_MISSED_LONG",
+        "explanation": "WAIT: ex-post in-horizon excursion from the immutable decision-time reference compared with contemporaneous round-trip cost 20.0737 bps; this receipt audits the decision and does not retune thresholds"
+      }
+    ],
+    "researchInput": {
+      "error": {
+        "name": "HttpException",
+        "message": "Failed to run sql query: ERROR:  57014: canceling statement due to statement timeout\nCONTEXT:  SQL function \"brian_world_research_inputs_v1\" statement 1\n"
+      }
+    }
+  }
+}
