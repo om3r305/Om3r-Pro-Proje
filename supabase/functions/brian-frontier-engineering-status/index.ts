@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { isAfterQueueReset, parseQueueResetAt } from "../_shared/engineering_queue_reset.ts";
 
 const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -147,6 +148,9 @@ Deno.serve(async(req:Request)=>{
     for(const row of reviewPhaseQ.data??[])reviewedHypothesisIds.add(String(row.hypothesis_id));
 
     const controlMeta:any=control.metadata??{};
+    // Operator reset preserves immutable request history while excluding it from new work.
+    const queueResetAt=parseQueueResetAt(controlMeta.engineering_queue_reset_at);
+    const archivedUnclaimed=requests.filter(r=>!claimedIds.has(String(r.request_id))&&!isAfterQueueReset(r.created_at,queueResetAt)).length;
     const trustFloor=Math.max(0,Math.min(1,num(controlMeta.world_source_trust_floor,0.72)));
     const worldEnabled=controlMeta.world_to_engineering_enabled===true;
 
@@ -169,6 +173,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     const eligible=requests.filter(r=>{
+      if(!isAfterQueueReset(r.created_at,queueResetAt))return false;
       if(
         claimedIds.has(String(r.request_id)) ||
         r.required_human_review!==true ||
@@ -198,6 +203,8 @@ Deno.serve(async(req:Request)=>{
       waiting_gpt_approval:approvals.length,
       completed_runs:runs.filter(r=>r.phase==="COMPLETE"&&r.status==="COMPLETE").length,
       eligible_queue:eligible.length,
+      archived_unclaimed_requests:archivedUnclaimed,
+      queue_reset_at:queueResetAt===null?null:new Date(queueResetAt).toISOString(),
       source_library_total:sourceLibrary.length,
       world_engineering_queue:worldRequests.length,
       autonomous_claims_24h:autonomousClaims24h,

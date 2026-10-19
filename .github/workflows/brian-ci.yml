@@ -110,6 +110,9 @@ jobs:
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
           supabase/functions/brian-world-status/index.ts
+          supabase/functions/brian-frontier-engineering-status/index.ts
+          supabase/functions/_shared/engineering_queue_reset.ts
+          supabase/functions/_shared/engineering_queue_reset.test.ts
           supabase/functions/_shared/world_dossier.ts
           supabase/functions/_shared/world_dossier.test.ts
           supabase/functions/brian-control-center/logic.ts
@@ -154,6 +157,8 @@ jobs:
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
           supabase/functions/brian-world-status/index.ts
+          supabase/functions/_shared/engineering_queue_reset.ts
+          supabase/functions/_shared/engineering_queue_reset.test.ts
           supabase/functions/_shared/world_dossier.ts
           supabase/functions/_shared/world_dossier.test.ts
           supabase/functions/brian-control-center/logic.ts
