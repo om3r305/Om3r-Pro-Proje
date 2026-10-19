@@ -1,5 +1,6 @@
 import postgres from 'npm:postgres@3.4.5';
 import {summarize, alphaSummary, type Row} from './model.ts';
+import { COHORT, OUTCOME_COVERAGE_SQL } from './coverage.ts';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store',
   'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-brian-dashboard-key,x-brian-cron-key','access-control-allow-methods':'POST,OPTIONS'};
@@ -19,15 +20,17 @@ Deno.serve(async(req:Request)=>{
     const hash=await digest(key);
     if(!auth||![auth.dashboard_key_sha256,auth.cron_key_sha256].some(v=>v&&equal(hash,String(v))))return response({error:'UNAUTHORIZED_DASHBOARD'},401);
     if(cache&&Date.now()-cacheAt<60000)return response({...cache,cache_age_seconds:(Date.now()-cacheAt)/1000});
-    const payload=await sql.begin(async(tx:any)=>{
+    const payload=await sql.begin(async(tx)=>{
       await tx`set local statement_timeout='8s'`;
       await tx`set transaction isolation level repeatable read, read only`;
+      const [snapshotClock] = await tx`select transaction_timestamp() as at`;
+      const coverageAsOf = new Date(snapshotClock.at).toISOString();
       const protocols=await tx`select * from public.brian_shadow_protocols order by engine_id limit 3`;
       const reports=[];
       for(const p of protocols){
         const points=await tx`select * from public.brian_shadow_observations where protocol_id=${p.protocol_id} order by captured_at limit 2201`;
         const cutoff=points.at(-1)?.source_at;
-        let trades:any[]=[];
+        let trades:Row[]=[];
         if(cutoff&&p.engine_id==='treasury'){
           trades=await tx`select a.action_id id,a.observed_at,a.asset_id symbol,a.reason,a.source_decision_id,
             a.metadata->>'treasury_version' policy_version,a.shadow_only,a.live_execution,
@@ -65,7 +68,16 @@ Deno.serve(async(req:Request)=>{
       // BTC/ETH trend paper portfolio (trend-ensemble-v1), newest 120 days.
       const trendShadow=await tx`select day::text as day,days_live,nav,return_since_start,btc_hold_return,half_half_return,drawdown,target_weights,rebalanced
         from public.brian_trend_shadow_performance where policy_version='trend-ensemble-v1' order by day desc limit 120`;
-      return {version:'forward-scorecard-v1',generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,trend_shadow:trendShadow.reverse(),shadow_only:true,live_execution:false};
+      let outcomeCoverage: Row;
+      try {
+        outcomeCoverage = await tx.savepoint(async (snapshot) => {
+          const [result] = await snapshot.unsafe(OUTCOME_COVERAGE_SQL, [coverageAsOf, COHORT.starts_at, COHORT.ends_at]);
+          return { ...result.coverage, status: 'AVAILABLE', protocol: COHORT, automatic_promotion: false };
+        });
+      } catch {
+        outcomeCoverage = { status: 'UNAVAILABLE', rows: null, protocol: COHORT, automatic_promotion: false };
+      }
+      return {version:'forward-scorecard-v2-coverage',outcome_coverage:outcomeCoverage,generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,trend_shadow:trendShadow.reverse(),shadow_only:true,live_execution:false};
     });
     cache=payload;cacheAt=Date.now();return response(payload);
   }catch(error){console.error('shadow-scorecard',error instanceof Error?error.message:'QUERY_FAILED');return response({error:'SCORECARD_UNAVAILABLE',shadow_only:true,live_execution:false},503)}

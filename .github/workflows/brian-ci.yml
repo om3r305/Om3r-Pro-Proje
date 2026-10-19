@@ -109,6 +109,7 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-shadow-scorecard/coverage.ts
           supabase/functions/brian-world-status/index.ts
           supabase/functions/brian-frontier-engineering-status/index.ts
           supabase/functions/_shared/engineering_queue_reset.ts
@@ -123,6 +124,8 @@ jobs:
           workers/brian-l2-capture/storage.ts
           workers/brian-l2-capture/worker.ts
           workers/brian-l2-capture/main.ts
+      - name: Type-check shadow scorecard with outcome coverage
+        run: deno check supabase/functions/brian-shadow-scorecard/index.ts
       - name: Run behavioral Deno tests
         run: >-
           deno test --allow-read
@@ -156,6 +159,7 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-shadow-scorecard/coverage.ts
           supabase/functions/brian-world-status/index.ts
           supabase/functions/_shared/engineering_queue_reset.ts
           supabase/functions/_shared/engineering_queue_reset.test.ts
@@ -205,4 +209,5 @@ jobs:
           tests/test_brian2026_emergent_mover_postgres.py
           tests/test_brian2026_control_center_postgres.py
           tests/test_brian2026_l2_capture_postgres.py
+          tests/test_brian_outcome_coverage_postgres.py
           -v
