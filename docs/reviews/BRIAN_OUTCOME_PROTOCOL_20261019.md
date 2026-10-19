@@ -26,7 +26,7 @@ Coverage SELECT runs within the existing authenticated shadow-scorecard repeatab
 
 The main dashboard renders the new coverage module before existing scorecard content. DIP pages do not render the product coverage panel. Existing scorecard/dip calculations and policies are unchanged.
 
-Local Node verification: 8 new UI/data-consistency tests and 9 unchanged scorecard tests passed. This environment has no pytest/PostgreSQL runtime; real PostgreSQL query tests are added to existing hosted PostgreSQL CI and must pass before release. They execute the actual production SELECT against isolated fixture tables, including all three price paths, missing categories, time/mode filtering, invalid receipts/costs, fixed boundaries and capacity truncation.
+Local Node verification: 24 tests passed: 8 new UI/data-consistency tests, 4 actual-handler contracts, 9 unchanged scorecard tests and 3 unchanged page-scope contracts. Authentication was exercised with a test-only key and simulated read-only SQL transport. This environment has no pytest/PostgreSQL runtime; real PostgreSQL query tests are added to existing hosted PostgreSQL CI and must pass before release. They execute the actual production SELECT against isolated fixture tables, including all three price paths, missing categories, time/mode filtering, invalid receipts/costs, fixed boundaries and capacity truncation.
 
 Live read-only query baseline at 2026-10-19 12:05:17 UTC:
 

@@ -88,7 +88,7 @@ def test_not_mature_open_window_entry_and_invalid_receipt(db):
         assert r['mature'] == sum(r[k] for k in ['resolved', 'missing_entry', 'invalid_outcome', 'awaiting_auditor', 'window_open', 'missing_terminal'])
 
 
-@pytest.mark.parametrize('cost,missing', [('20', 0), ('null', 1), ('"bad"', 1), ('-1', 1), ('"NaN"', 1)])
+@pytest.mark.parametrize('cost,missing', [('20', 0), ('null', 1), ('"bad"', 1), ('-1', 1), ('"NaN"', 1), ('"1e999"', 1)])
 def test_unknown_or_invalid_cost_is_never_zero(db, cost, missing):
     decision(db, 'resolved')
     db("insert into public.brian_alpha_decision_outcomes(outcome_id,decision_id,horizon_seconds,resolved_at,metadata) values('r','resolved',300,'2026-10-19T14:25:00Z',%s::jsonb)", ('{"estimated_round_trip_cost_bps":' + cost + '}',))

@@ -32,7 +32,8 @@ rolling_seed as materialized (
  h.seconds,cfg.at, o.outcome_id,o.resolved_at,o.reference_price,o.resolved_price,o.direction_adjusted_return,
  case when length(o.metadata->>'estimated_round_trip_cost_bps')<=80
  and (o.metadata->>'estimated_round_trip_cost_bps') ~ '^[0-9]+([.][0-9]+)?([eE][+-]?[0-9]{1,3})?$'
- then (o.metadata->>'estimated_round_trip_cost_bps')::numeric else null end outcome_cost,
+ then case when (o.metadata->>'estimated_round_trip_cost_bps')::numeric<='1.7976931348623157e308'::numeric
+   then (o.metadata->>'estimated_round_trip_cost_bps')::numeric else null end else null end outcome_cost,
  case when d.observed_at+make_interval(secs=>h.seconds)>cfg.at then false else (
  exists(select 1 from public.brian_alpha_decisions p where p.asset_id=d.asset_id
  and p.observed_reference_price>0 and p.observed_reference_price::text not in ('NaN','Infinity','-Infinity')
