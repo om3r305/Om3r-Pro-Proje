@@ -69,6 +69,10 @@ Deno.serve(async (req: Request) => {
       if (persisted.error) throw Error('PREDICTION_PERSIST_FAILED');
       const r = persisted.data as Record<string, any>;
       if (r?.status === 'OPERATOR_STOPPED') return out({ status: 'MODULE_DISABLED', ...SAFE });
+      // At the storage cap nothing new was stored, so the watermark must not move either.
+      if (r?.status === 'STORAGE_CAP_REACHED') {
+        return out({ status: 'STORAGE_CAP_REACHED', storage_bytes: r.storage_bytes, cap_bytes: r.cap_bytes, summary: batch.summary, ...SAFE });
+      }
       if (r?.status !== 'SUCCESS' || r.markets?.received !== batch.markets.length || r.snapshots?.received !== batch.snapshots.length ||
           r.trades?.received !== batch.trades.length) throw Error('PREDICTION_RECEIPT_MISMATCH');
 

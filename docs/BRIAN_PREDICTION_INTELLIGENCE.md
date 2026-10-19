@@ -64,6 +64,22 @@ RLS açık; anon/authenticated erişemez; service_role yalnızca gerekli izinler
 - Zamanlayıcı (cron) eklenmedi, fonksiyon yayımlanmadı, migrasyon canlı veritabanına uygulanmadı. Bunlar kullanıcı onayıyla ayrı adım.
 - Veriler henüz hiçbir karara bağlanmadı.
 
+## Faz 1c — sınırlı depolama
+
+Mevcut soğuk arşiv (`brian-cold-archive`) 3 Ekim'den beri çalışmıyor (cron pasif). Bu yüzden iki ayrı sınır var:
+
+1. **Sert sınır:** `brian_prediction_control.max_storage_mb` (varsayılan **256 MB**, 1–2048). Kaydedici her çağrıda modülün kendi tablolarını ölçer. Sınırda yeni piyasa/anlık görüntü/işlem **saklanmaz**, `STORAGE_CAP_REACHED` döner. Sağlık satırları yine yazılır, neden görünür kalır. Yer açmak için **hiçbir şey silinmez**. Fonksiyon bu durumda watermark'ı ilerletmez. Bir paket sınırı en fazla bir paket kadar aşabilir.
+2. **Arşiv politikaları:** `brian_archive_policies` kayıtları eklendi. Mevcut "arşivle, doğrula, 24 saat bekle, sil" yolu, operatör arşivi çalıştırdığında bu tablolara da uygulanır:
+
+| Tablo | Sıcak süre | Silme |
+|---|---|---|
+| `brian_prediction_market_snapshots` | 90 gün | doğrulanmış arşivden sonra |
+| `brian_prediction_wallet_trades` | 30 gün | doğrulanmış arşivden sonra |
+| `brian_prediction_source_health` | 14 gün | doğrulanmış arşivden sonra |
+| `brian_prediction_markets` | 365 gün | **asla** (anlık görüntüler referans veriyor) |
+
+Bu migrasyon hiçbir şey silmez ve hiçbir zamanlayıcıyı açmaz.
+
 ## Sıradaki tek adım
 
-Faz 1c: saklama süresi/boyut sınırı, sonra (onayla) migrasyonun uygulanması, fonksiyonun yayımlanması ve düşük sıklıklı zamanlayıcı — ilk aşamada yalnızca piyasa anlık görüntüleri, cüzdan takibi kapalı.
+Faz 1d: düşük sıklıklı zamanlayıcı (önerilen: 15 dakikada bir) ve modülün açılması. İlk aşamada yalnızca piyasa anlık görüntüleri açılır, cüzdan takibi kapalı kalır.
