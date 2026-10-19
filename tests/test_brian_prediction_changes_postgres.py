@@ -21,7 +21,8 @@ MIGRATIONS = ROOT / "supabase" / "migrations"
 ORDER = [
     MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql",
     MIGRATIONS / "20261019200517_brian_prediction_retention.sql",
-    MIGRATIONS / "20261019230000_brian_prediction_probability_changes.sql",
+    MIGRATIONS / "20261019202909_brian_prediction_probability_changes.sql",
+    MIGRATIONS / "20261019204000_brian_prediction_probability_changes_elapsed.sql",
 ]
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")
@@ -186,3 +187,26 @@ def test_functions_are_service_role_only(cur):
     cur.execute("select public.brian_prediction_probability_changes_v1()")
     assert "markets" in cur.fetchone()[0]
     cur.execute("reset role")
+
+
+def test_point_and_relative_change_are_separate_and_elapsed_time_is_real(cur):
+    key = _market(cur)
+    _snap(cur, key, "2031-01-01T10:20:00Z", 0.40)   # baseline actually received 1h40m before latest
+    _snap(cur, key, "2031-01-01T12:00:00Z", 0.50)
+    out, rows = _changes(cur)
+    m = rows[key]
+    assert float(m["change_1h"]) == pytest.approx(0.10), "+10 percentage points"
+    assert float(m["relative_change_1h"]) == pytest.approx(0.25), "+25% relative"
+    assert m["elapsed_1h_seconds"] == 6000, "real gap between observations, not the nominal 1h"
+    assert m["baseline_1h_at"].startswith("2031-01-01T10:20:00")
+    assert "probability_points" in out["change_unit"]
+
+
+def test_relative_change_is_null_when_baseline_is_zero(cur):
+    key = _market(cur)
+    _snap(cur, key, "2031-01-01T10:00:00Z", 0.0)
+    _snap(cur, key, "2031-01-01T11:59:00Z", 0.02)
+    _, rows = _changes(cur)
+    m = rows[key]
+    assert float(m["change_1h"]) == pytest.approx(0.02)
+    assert m["relative_change_1h"] is None

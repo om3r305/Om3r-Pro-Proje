@@ -106,3 +106,14 @@ drop table if exists public.brian_prediction_control;
 | İlk gerçek tur | 20:19:22 UTC'de cron komutuyla aynı SQL elle çalıştırıldı (istek 186518) → HTTP 200 `SUCCESS`: 6 etiket, 688 piyasa görüldü, 60 tutuldu, 0 reddedildi; 60 piyasa + 60 anlık görüntü + 6 sağlık satırı saklandı, 0 işlem. Modül depolaması 311.296 bayt |
 | Geri dönüş | `select cron.unschedule('brian-prediction-eye-15m')` + `module_enabled=false`. Toplanan kanıt append-only olduğu için kalır |
 | İlk zamanlanmış tur | 20:20:00 UTC cron jobid 103 `succeeded` → HTTP 200 `SUCCESS`, 6 sağlık satırı; yeni piyasa/anlık görüntü **0**. Sebep: elle tetiklenen turdan 38 saniye sonra çalıştı ve Gamma yanıtı CDN'de önbellekli (`Cache-Control: max-age=300`), yani `updatedAt` aynı kaldı. Aynı gözlem yinelenmedi; bu idempotentliğin beklenen sonucu. 15 dakikalık aralıkta yeni anlık görüntüler beklenir, sonraki turlarda doğrulanacak |
+
+## Yayın kaydı — Faz 2a (19 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-2a-oncesi` → `1c5dabf`; bundle verify: okay + `core-state.json` |
+| Merge | PR #156 → `4e6e21a` (CI üçü de yeşil) |
+| Migrasyon | CORE sürüm `20261019202909` (`brian_prediction_probability_changes`); dosya adı hizalandı |
+| Canlı kontrol (20:29 UTC) | Sağlık özeti: 6 kaynak, hepsi OK, ortalama gecikme 58–98 ms; tur kapsamı gözlenen 2 / beklenen 1 (fazlalık, 20:19'daki elle tetiklenen turdan); depolama 311.296 / 268.435.456 bayt. Değişim fonksiyonu: 60 piyasanın hepsi `INSUFFICIENT_HISTORY` (veri 1 saatten genç; beklenen sonuç, 0 değişim değil) |
+| 20:35 zamanlanmış tur | `succeeded`; 60 yeni anlık görüntü (yeni `source_updated_at` 20:34:46.224Z), 2 yeni piyasa ilk 60'a girdi. Toplam 120 anlık görüntü; 58 piyasada ≥2 gözlem |
+| Bilinen sınır | Tur sayımı dakika bazında; elle tetiklenen turlar da sayılır |
