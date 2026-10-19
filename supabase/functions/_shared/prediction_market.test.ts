@@ -383,3 +383,22 @@ Deno.test({
     assert(seen > 0, "live markets normalize");
   },
 });
+
+Deno.test("taker fee follows the official C x feeRate x p x (1-p) shape, 5-decimal rounding, makers free", async () => {
+  const { polymarketTakerFeeUsdc } = await import("./prediction_market.ts");
+  eq(polymarketTakerFeeUsdc(100, 0.5, 0.07), 1.75, "crypto rate at p=0.5");
+  eq(polymarketTakerFeeUsdc(100, 0.95, 0.07), 0.3325, "near p=1 the fee shrinks (a proportional model would say 6.65)");
+  eq(polymarketTakerFeeUsdc(100, 0.5, 0), 0, "fee-free category");
+  eq(polymarketTakerFeeUsdc(100, 0.5, 0.07, "MAKER"), 0, "makers are never charged");
+  eq(polymarketTakerFeeUsdc(1, 0.9999, 0.04), 0, "below the 0.00001 minimum is not charged");
+  eq(polymarketTakerFeeUsdc(2, 0.123, 0.05), 0.01079, "rounded to 5 decimals (0.0107871)");
+  for (const bad of [() => polymarketTakerFeeUsdc(-1, 0.5, 0.07), () => polymarketTakerFeeUsdc(1, 1.2, 0.07), () => polymarketTakerFeeUsdc(1, 0.5, 1)]) {
+    let threw = false;
+    try {
+      bad();
+    } catch {
+      threw = true;
+    }
+    assert(threw, "invalid fee inputs are refused, not defaulted");
+  }
+});

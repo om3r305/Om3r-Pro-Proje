@@ -210,3 +210,41 @@ def test_relative_change_is_null_when_baseline_is_zero(cur):
     m = rows[key]
     assert float(m["change_1h"]) == pytest.approx(0.02)
     assert m["relative_change_1h"] is None
+
+
+def _visible(cur, keys, as_of):
+    cur.execute("select public.brian_prediction_probability_changes_v1(%s::timestamptz, 300)", (as_of,))
+    out = cur.fetchone()[0]
+    return {m["market_key"]: m for m in out["markets"] if m["market_key"] in keys}
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_t_cut_invariance_future_rows_never_change_the_past(cur, seed):
+    """T-cut property (method from crollila/pm-calibration tests/test_no_lookahead.py, re-implemented):
+    compute the as-of-T view, then add only rows received AFTER T, and require the as-of-T view to be
+    identical for every market and every field. If any field secretly used later data, this fails."""
+    import random
+    rng = random.Random(seed)
+    keys = [_market(cur) for _ in range(4)]
+    base = 1_924_000_000  # 2030-12-21, isolated from other tests' timestamps
+    def at(minute):
+        import datetime as dt
+        return dt.datetime.fromtimestamp(base + minute * 60, dt.timezone.utc).isoformat()
+    for key in keys:
+        for minute in sorted(rng.sample(range(0, 600), 12)):
+            _snap(cur, key, at(minute), round(rng.random(), 4))
+    for cut_minute in (180, 360, 540):
+        as_of = at(cut_minute)
+        before = _visible(cur, set(keys), as_of)
+        for key in keys:
+            for minute in sorted(rng.sample(range(cut_minute + 1, cut_minute + 400), 5)):
+                if not _exists(cur, key, at(minute)):
+                    _snap(cur, key, at(minute), round(rng.random(), 4))
+        after = _visible(cur, set(keys), as_of)
+        assert before == after, f"as-of view changed after adding future rows (seed={seed}, cut={cut_minute})"
+        assert before, "the cut must see some markets"
+
+
+def _exists(cur, key, received_at):
+    cur.execute("select 1 from public.brian_prediction_market_snapshots where snapshot_id = %s", (f"{key}|{received_at}",))
+    return cur.fetchone() is not None
