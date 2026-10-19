@@ -1,0 +1,36 @@
+name: Brian Prediction Intelligence CI
+
+on:
+  pull_request:
+    branches:
+      - brian-2026
+    paths:
+      - 'supabase/functions/_shared/prediction_*.ts'
+      - 'docs/BRIAN_PREDICTION_INTELLIGENCE.md'
+      - '.github/workflows/brian-prediction-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prediction-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+
+      - name: Type-check Prediction Intelligence modules
+        run: deno check supabase/functions/_shared/prediction_*.ts
+
+      - name: Run offline behavioral tests (no network, live smoke test stays skipped)
+        run: deno test supabase/functions/_shared/prediction_*.test.ts
