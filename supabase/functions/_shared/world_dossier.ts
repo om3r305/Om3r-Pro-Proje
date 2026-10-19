@@ -106,4 +106,3 @@ export function buildWorldDossiers(mechanisms: MechanismInput[], sources: Source
     };
   });
 }
-

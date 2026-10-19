@@ -71,3 +71,36 @@ test('legacy API and missing scores do not imply verified dossiers or zero confi
  assert.equal(ctx.num(null),'—');assert.equal(ctx.num(0),'0.00');
  assert.equal(ctx.sourceLink('https://x:y@example.org','bad'),'bad');
 });
+
+function endpoint(lookupFailure=false){
+ let handler;const reads=[];
+ const data={brian_dashboard_auth:{dashboard_key_sha256:require('node:crypto').createHash('sha256').update('test-only-dashboard-key').digest('hex')},
+  brian_world_causal_mechanisms:[m()],brian_world_scenario_snapshots:[],brian_intel_events:[s()]};
+ const db={from(table){reads.push(table);const q={select(){return q},eq(){return q},in(){return q},order(){return q},limit(n){if(table==='brian_intel_events')assert.equal(n,400);return q},abortSignal(){return q},single(){return q},then(resolve,reject){return Promise.resolve({data:data[table]??[],error:table==='brian_intel_events'&&lookupFailure?{message:'test query failure'}:null}).then(resolve,reject)}};return q}};
+ const ctx={Request,Response,TextEncoder,AbortSignal,crypto:require('node:crypto').webcrypto,
+  createClient(){return db},buildWorldDossiers,selectDossierEventIds,
+  Deno:{env:{get(){return'test-only'}},serve(fn){handler=fn}}};
+ const status=fs.readFileSync(path.join(__dirname,'../supabase/functions/brian-world-status/index.ts'),'utf8');
+ vm.runInNewContext(stripTypeScriptTypes(status,{mode:'strip'}).replace(/^import .*;\s*$/gm,''),ctx);
+ return{handler,reads};
+}
+test('actual status handler joins source evidence and real UI renders its dossier response',async()=>{
+ const {handler,reads}=endpoint();const response=await handler(new Request('https://example.invalid',{method:'POST',headers:{'x-brian-dashboard-key':'test-only-dashboard-key'}}));
+ assert.equal(response.status,200);const body=await response.json();assert.equal(body.status,'ONLINE');assert.equal(body.dossiers.length,1);
+ assert.equal(body.dossiers[0].coverage.available,1);assert.equal(body.semantics.confidence_kind,'HEURISTIC_UNCALIBRATED');
+ assert.ok(reads.includes('brian_intel_events'));const {ctx,get}=ui();ctx.render(body);assert.match(get('dossierList').innerHTML,/an unverified claim/);
+});
+test('actual status handler keeps wrong and missing dashboard keys closed before evidence lookup',async()=>{
+ for(const headers of [{},{'x-brian-dashboard-key':'incorrect-test-value'}]){
+  const {handler,reads}=endpoint();const response=await handler(new Request('https://example.invalid',{method:'POST',headers}));
+  assert.equal(response.status,401);assert.ok(!reads.includes('brian_intel_events'));
+ }
+});
+test('actual status handler reports source-query degradation and never ready dossiers',async()=>{
+ const {handler}=endpoint(true);const response=await handler(new Request('https://example.invalid',{method:'POST',headers:{'x-brian-dashboard-key':'test-only-dashboard-key'}}));
+ const body=await response.json();assert.equal(body.status,'DEGRADED');assert.equal(body.dossiers[0].coverage.lookup_state,'QUERY_FAILED');assert.equal(body.dossiers[0].trade_ready,false);
+});
+test('status endpoint rejects unsupported methods before auth or source queries',async()=>{
+ const {handler,reads}=endpoint();const response=await handler(new Request('https://example.invalid'));
+ assert.equal(response.status,405);assert.equal(reads.length,0);
+});

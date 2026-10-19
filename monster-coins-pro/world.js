@@ -58,4 +58,3 @@ async function refresh(){try{const data=await api();showLock(false);render(data)
 $('worldUnlock')?.addEventListener('click',()=>{const v=($('worldKey')?.value||'').trim();if(!v)return;localStorage.setItem(KEY_STORAGE,v);refresh();});
 $('worldKey')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('worldUnlock')?.click();});
 if(!key())showLock(true);else refresh();setInterval(()=>{if(key())refresh();},15000);
-
