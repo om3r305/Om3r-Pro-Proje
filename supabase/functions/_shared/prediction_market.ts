@@ -573,3 +573,22 @@ export function verifyProfileIdentity(
     evidence: ["gamma public-search exact name match", "data-api activity wallet match", "data-api activity name match"],
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Polymarket taker fee, per the official fee page (docs.polymarket.com/trading/fees, checked
+// 2026-10-19): fee = C x feeRate x p x (1 - p), rounded to 5 decimals; makers pay no fee; fees
+// below 0.00001 USDC are not charged. feeRate is a per-market parameter (category-dependent,
+// e.g. crypto 0.07, geopolitics 0), so it is an explicit input -- never a hardcoded default.
+// Note the p x (1 - p) shape: a proportional "rate x C x p" model (used by some public
+// simulators) overstates the fee by a factor 1 / (1 - p) -- 2x at p = 0.5, 20x at p = 0.95.
+// For research/simulation only; nothing in this module trades.
+// ---------------------------------------------------------------------------------------------
+export function polymarketTakerFeeUsdc(shares: number, price: number, feeRate: number, role: "TAKER" | "MAKER" = "TAKER"): number {
+  if (!Number.isFinite(shares) || shares < 0) throw new Error("shares must be a non-negative number");
+  if (!Number.isFinite(price) || price < 0 || price > 1) throw new Error("price must be in [0,1]");
+  if (!Number.isFinite(feeRate) || feeRate < 0 || feeRate >= 1) throw new Error("feeRate must be in [0,1)");
+  if (role === "MAKER") return 0;
+  const raw = shares * feeRate * price * (1 - price);
+  const rounded = Math.round(raw * 1e5) / 1e5;
+  return rounded < 0.00001 ? 0 : rounded;
+}
