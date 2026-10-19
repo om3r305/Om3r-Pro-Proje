@@ -109,6 +109,9 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-world-status/index.ts
+          supabase/functions/_shared/world_dossier.ts
+          supabase/functions/_shared/world_dossier.test.ts
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
@@ -150,6 +153,9 @@ jobs:
           supabase/functions/brian-derivatives-eye/index.ts
           supabase/functions/brian-fx-eye/index.ts
           supabase/functions/brian-news-eye/index.ts
+          supabase/functions/brian-world-status/index.ts
+          supabase/functions/_shared/world_dossier.ts
+          supabase/functions/_shared/world_dossier.test.ts
           supabase/functions/brian-control-center/logic.ts
           supabase/functions/brian-control-center/index.ts
           supabase/functions/brian-control-center/logic.test.ts
