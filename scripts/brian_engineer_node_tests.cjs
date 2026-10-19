@@ -19,6 +19,7 @@ const baseline = [
   'tests/engineer-provider-mode.test.cjs',
   'tests/engineer-evaluator-boundary.test.cjs',
   'tests/engineer-checkpoint.test.cjs',
+  'tests/cron-auth-contract.test.cjs', 'tests/world-dossier.test.cjs',
 ];
 
 function selectTests(changed, required = baseline) {

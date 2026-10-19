@@ -10,7 +10,6 @@ const db = createClient(URL, SERVICE, { auth: { persistSession: false, autoRefre
 const COLLECTOR_ID = "brian-world-brain-v1";
 const LEASE_SECONDS = 300;
 const LOOKBACK_MS = 12 * 60 * 60 * 1000;
-const EVENT_OVERLAP_MS = 15 * 60 * 1000;
 const MAX_INCREMENTAL_EVENTS = 200;
 const WRITE_CHUNK = 10;
 const CLASSIFICATION_GUARD_VERSION = "world-brain-classifier-guard.v1";

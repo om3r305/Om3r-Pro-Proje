@@ -3,7 +3,6 @@ import {
   type TreasuryAction,
   type TreasuryCyclePlan,
   type TreasuryOpportunity,
-  type TreasuryPosition,
   type TreasuryState,
 } from "./evolution_treasury.ts";
 import {

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { buildWorldDossiers, selectDossierEventIds, type MechanismInput, type SourceInput } from "../_shared/world_dossier.ts";
 
 const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -89,17 +90,37 @@ Deno.serve(async (req: Request) => {
   const uniqueEntities = new Map<string, unknown>();
   for (const row of entityRows) if (!uniqueEntities.has(String(row.entity_id))) uniqueEntities.set(String(row.entity_id), row);
   const mechanisms = mechanismsQ.data ?? [];
-  const latestMechanismByNarrative = new Map<string, unknown>();
+  const latestMechanismByNarrative = new Map<string, MechanismInput>();
   for (const row of mechanisms) if (!latestMechanismByNarrative.has(String(row.narrative_id))) latestMechanismByNarrative.set(String(row.narrative_id), row);
+  const dossierMechanisms = [...latestMechanismByNarrative.values()];
+  const sourceIds = selectDossierEventIds(dossierMechanisms);
+  let sourceRows: SourceInput[] = [];
+  let sourceLookupState = "AVAILABLE";
+  if (sourceIds.length) {
+    try {
+      const sourceQuery = await db.from("brian_intel_events")
+        .select("event_id,source_id,claim,provenance_uri,trust_class,published_at,first_observed_at,created_at")
+        .in("event_id", sourceIds).limit(400).abortSignal(AbortSignal.timeout(5000));
+      if (sourceQuery.error) sourceLookupState = "QUERY_FAILED";
+      else sourceRows = sourceQuery.data ?? [];
+    } catch {
+      sourceLookupState = "QUERY_FAILED";
+    }
+  }
+  const responseTime = new Date().toISOString();
+  const dossiers = buildWorldDossiers(dossierMechanisms, sourceRows, scenariosQ.data ?? [], responseTime, sourceLookupState);
   const runs = discoveryQ.data ?? [];
   const latestDiscovery = runs.find((row) => row.collector_id === "brian-world-discovery-eye-v1") ?? null;
   const latestBrain = runs.find((row) => row.collector_id === "brian-world-brain-v1") ?? null;
 
   return out({
-    status: errors.length ? "DEGRADED" : "ONLINE",
-    observed_at: new Date().toISOString(),
+    status: sourceLookupState === "AVAILABLE" ? "ONLINE" : "DEGRADED",
+    observed_at: responseTime,
     summary: {
       narratives: (narrativesQ.data ?? []).length,
+      research_dossiers: dossiers.length,
+      trade_ready_dossiers: 0,
+      source_lookup_status: sourceLookupState,
       upcoming_events: (futureQ.data ?? []).length,
       unique_entities: uniqueEntities.size,
       recent_relations: (relationsQ.data ?? []).length,
@@ -109,6 +130,7 @@ Deno.serve(async (req: Request) => {
       discovery_status: latestDiscovery?.status ?? "NO_DATA",
       world_brain_status: latestBrain?.status ?? "NO_DATA",
     },
+    dossiers,
     narratives: narrativesQ.data ?? [],
     upcoming_events: futureQ.data ?? [],
     entities: [...uniqueEntities.values()].slice(0, 80),
@@ -120,6 +142,10 @@ Deno.serve(async (req: Request) => {
     collectors: { discovery: latestDiscovery, world_brain: latestBrain },
     semantics: {
       discovery_is_truth: false,
+      confidence_kind: "HEURISTIC_UNCALIBRATED",
+      calibrated_probability_available: false,
+      source_labels_are_independent_verification: false,
+      dossier_source_links_are_narrative_associations: true,
       mechanisms_are_research_hypotheses: true,
       scenarios_are_conditional: true,
       direct_alpha_influence: false,
