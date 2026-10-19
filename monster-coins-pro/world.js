@@ -42,6 +42,7 @@ function dossierCard(d){
 
 function render(data){
   const s=data.summary||{};
+  if($('evidenceReviewList'))$('evidenceReviewList').innerHTML=globalThis.BrianWorldEvidence?.render(data.evidence_reviews,data.evidence_review_status)||'İnceleme görünümü yüklenemedi.';
   $('worldSync').textContent=`Son durum ${dt(data.observed_at)}`;
   $('worldState').textContent=`◉ ${data.status||'—'} · Discovery ${s.discovery_status||'—'} · Brain ${s.world_brain_status||'—'}`;
   $('kNarratives').textContent=String(s.narratives??0);$('kEntities').textContent=String(s.unique_entities??0);$('kFuture').textContent=String(s.upcoming_events??0);$('kScenarios').textContent=String(s.scenario_branches??0);
@@ -58,3 +59,4 @@ async function refresh(){try{const data=await api();showLock(false);render(data)
 $('worldUnlock')?.addEventListener('click',()=>{const v=($('worldKey')?.value||'').trim();if(!v)return;localStorage.setItem(KEY_STORAGE,v);refresh();});
 $('worldKey')?.addEventListener('keydown',e=>{if(e.key==='Enter')$('worldUnlock')?.click();});
 if(!key())showLock(true);else refresh();setInterval(()=>{if(key())refresh();},15000);
+

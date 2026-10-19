@@ -1,6 +1,7 @@
 import postgres from 'npm:postgres@3.4.5';
 import {summarize, alphaSummary, type Row} from './model.ts';
 import { COHORT, OUTCOME_COVERAGE_SQL } from './coverage.ts';
+import { EDGE_PROTOCOL, NET_VALIDATION_SQL, assessAdvantage } from './advantage.ts';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store',
   'access-control-allow-origin':'*','access-control-allow-headers':'content-type,x-brian-dashboard-key,x-brian-cron-key','access-control-allow-methods':'POST,OPTIONS'};
@@ -77,9 +78,19 @@ Deno.serve(async(req:Request)=>{
       } catch {
         outcomeCoverage = { status: 'UNAVAILABLE', rows: null, protocol: COHORT, automatic_promotion: false };
       }
-      return {version:'forward-scorecard-v2-coverage',outcome_coverage:outcomeCoverage,generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,trend_shadow:trendShadow.reverse(),shadow_only:true,live_execution:false};
+      let edgeValidation: Row;
+      try {
+        edgeValidation = await tx.savepoint(async (snapshot) => {
+          const [result] = await snapshot.unsafe(NET_VALIDATION_SQL, [coverageAsOf, EDGE_PROTOCOL.starts_at, EDGE_PROTOCOL.ends_at]);
+          return assessAdvantage(result.validation);
+        });
+      } catch {
+        edgeValidation = { status: 'UNAVAILABLE', rows: null, protocol: EDGE_PROTOCOL, proof_status: 'NOT_PROVEN', automatic_promotion: false };
+      }
+      return {version:'forward-scorecard-v3-evidence',edge_validation:edgeValidation,outcome_coverage:outcomeCoverage,generated_at:new Date().toISOString(),reports,alpha:alphaSummary(decisions),net_scoreboard:netScoreboard,trend_shadow:trendShadow.reverse(),shadow_only:true,live_execution:false};
     });
     cache=payload;cacheAt=Date.now();return response(payload);
   }catch(error){console.error('shadow-scorecard',error instanceof Error?error.message:'QUERY_FAILED');return response({error:'SCORECARD_UNAVAILABLE',shadow_only:true,live_execution:false},503)}
   finally{await sql.end({timeout:1}).catch(()=>{})}
 });
+

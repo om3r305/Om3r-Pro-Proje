@@ -26,6 +26,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Install pinned official document parser
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix supabase/functions/brian-world-research
       - name: Run required Brian Node regressions and changed tests
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -46,6 +48,8 @@ jobs:
           tests/outcome-coverage-handler.test.cjs
           tests/independent-price.test.cjs
           tests/independent-price-handler.test.cjs
+          tests/world-evidence.test.cjs
+          tests/world-evidence-handler.test.cjs
 
   verify:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/brian-2026'
@@ -121,6 +125,10 @@ jobs:
           supabase/functions/brian-outcome-price-eye/logic.ts
           supabase/functions/brian-realtime-orchestrator/index.ts
           supabase/functions/brian-shadow-scorecard/coverage.ts
+          supabase/functions/brian-shadow-scorecard/advantage.ts
+          supabase/functions/brian-world-research/logic.ts
+          supabase/functions/brian-world-research/reader.ts
+          supabase/functions/brian-world-research/index.ts
           supabase/functions/brian-world-status/index.ts
           supabase/functions/brian-frontier-engineering-status/index.ts
           supabase/functions/_shared/engineering_queue_reset.ts
@@ -174,6 +182,10 @@ jobs:
           supabase/functions/brian-outcome-price-eye/logic.ts
           supabase/functions/brian-realtime-orchestrator/index.ts
           supabase/functions/brian-shadow-scorecard/coverage.ts
+          supabase/functions/brian-shadow-scorecard/advantage.ts
+          supabase/functions/brian-world-research/logic.ts
+          supabase/functions/brian-world-research/reader.ts
+          supabase/functions/brian-world-research/index.ts
           supabase/functions/brian-world-status/index.ts
           supabase/functions/_shared/engineering_queue_reset.ts
           supabase/functions/_shared/engineering_queue_reset.test.ts
@@ -225,4 +237,6 @@ jobs:
           tests/test_brian2026_l2_capture_postgres.py
           tests/test_brian_outcome_coverage_postgres.py
           tests/test_brian_independent_price_postgres.py
+          tests/test_brian_world_evidence_postgres.py
           -v
+
