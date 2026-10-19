@@ -8,7 +8,7 @@ const ID = 'brian-outcome-price-eye-v1';
 const out = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 async function hash(value: string) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(b => b.toString(16).padStart(2, '0')).join(''); }
 async function enabled() {
-  const q = await db.from('brian_evolution_runtime_config').select('config_value').eq('config_key', 'brian_system_enabled').single().abortSignal(AbortSignal.timeout(4000));
+  const q = await db.from('brian_evolution_runtime_config').select('config_value').eq('config_key', 'brian_system_enabled').abortSignal(AbortSignal.timeout(4000)).single();
   if (q.error) throw Error('OPERATOR_CONTROL_UNAVAILABLE');
   return q.data?.config_value === 'true';
 }
@@ -32,7 +32,7 @@ Deno.serve(async (req: Request) => {
     if (!await enabled()) return out({ status: 'OPERATOR_STOPPED', shadow_only: true, live_execution: false });
     const lease = await withCollectorLease(db, ID, 45, async () => {
       const last = await db.from('brian_collector_runs').select('started_at,metadata').eq('collector_id', ID)
-        .in('status', ['SUCCESS', 'DEGRADED', 'FAILED']).order('started_at', { ascending: false }).limit(1).maybeSingle().abortSignal(AbortSignal.timeout(4000));
+        .in('status', ['SUCCESS', 'DEGRADED', 'FAILED']).order('started_at', { ascending: false }).limit(1).abortSignal(AbortSignal.timeout(4000)).maybeSingle();
       if (last.error) throw Error('PRICE_CADENCE_UNAVAILABLE');
       const cooldown = Date.parse(String(last.data?.metadata?.next_allowed_at ?? ''));
       if (Number.isFinite(cooldown) && cooldown > Date.now()) return out({ status: 'SKIPPED_PROVIDER_COOLDOWN', shadow_only: true, live_execution: false });
