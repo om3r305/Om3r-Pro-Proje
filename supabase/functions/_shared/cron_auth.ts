@@ -66,7 +66,9 @@ export async function requireCronAuth(
 
   let result: { data: { cron_key_sha256?: unknown } | null; error: { message?: string } | null };
   try {
-    const authQuery = supabase.from("brian_dashboard_auth")
+    const authQuery: PromiseLike<typeof result> & {
+      abortSignal?: (signal: AbortSignal) => PromiseLike<typeof result>;
+    } = supabase.from("brian_dashboard_auth")
     .select("cron_key_sha256")
     .eq("auth_id", authId)
     .single();
