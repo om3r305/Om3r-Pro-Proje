@@ -1,7 +1,7 @@
 import { readOperatorState } from "../_shared/operator_state.ts";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v13-independent-outcome-prices";
+const VERSION = "brian.realtime-orchestrator.v14-world-evidence-research";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -13,6 +13,7 @@ const ENDPOINTS = {
   bigMove: BASE + "/brian-realtime-big-move-hunter",
   intrabar: BASE + "/brian-intrabar-eye",
   outcomePrice: "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-outcome-price-eye",
+  worldResearch: "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-world-research",
   alpha: BASE + "/brian-alpha-decision-compiler",
   catalyst: BASE + "/brian-realtime-catalyst-reaction",
   crowd: BASE + "/brian-realtime-crowd-behavior",
@@ -122,6 +123,7 @@ Deno.serve(async(req:Request)=>{
   const eyePromise=call("official_eye",ENDPOINTS.eye,key,50000);
   const marketPromise=marketLane(key,minute);
   // Price observation must not wait for radar, signals, kline or market-lane success.
+  const worldResearchPromise=minute%5===3 ? call("world_evidence_research",ENDPOINTS.worldResearch,key,50000) : Promise.resolve(null);
   const outcomePricePromise=call("outcome_price",ENDPOINTS.outcomePrice,key,20000);
 
   // Cross-project pressure is intentionally serialized:
@@ -136,11 +138,12 @@ Deno.serve(async(req:Request)=>{
     : Promise.resolve(null);
   const heartbeatPromise=call("frontier_heartbeat_refresh",ENDPOINTS.heartbeatRefresh,key,8000);
 
-  const [eye,intelSync,market,scout,heartbeat,outcomePrice]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise,outcomePricePromise]);
+  const [eye,intelSync,market,scout,heartbeat,outcomePrice,worldResearch]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise,outcomePricePromise,worldResearchPromise]);
   const catalyst=await call("catalyst_reaction",ENDPOINTS.catalyst,key,50000);
   const results=[
     eye,
     outcomePrice,
+    ...(worldResearch?[worldResearch]:[]),
     ...(intelSync?[intelSync]:[]),
     ...market,
     ...(scout?[scout]:[]),

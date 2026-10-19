@@ -107,6 +107,15 @@ Deno.serve(async (req: Request) => {
       sourceLookupState = "QUERY_FAILED";
     }
   }
+  let evidenceReviews: unknown[] = [];
+  let reviewStatus = "AVAILABLE";
+  try {
+    const q = await db.from("brian_world_evidence_reviews")
+      .select("review_id,event_id,assessed_at,captured_at,status,document_uri,content_sha256,review")
+      .order("captured_at", { ascending: false }).limit(12).abortSignal(AbortSignal.timeout(5000));
+    if (q.error) reviewStatus = "QUERY_FAILED";
+    else evidenceReviews = q.data ?? [];
+  } catch { reviewStatus = "QUERY_FAILED"; }
   const responseTime = new Date().toISOString();
   const dossiers = buildWorldDossiers(dossierMechanisms, sourceRows, scenariosQ.data ?? [], responseTime, sourceLookupState);
   const runs = discoveryQ.data ?? [];
@@ -114,11 +123,13 @@ Deno.serve(async (req: Request) => {
   const latestBrain = runs.find((row) => row.collector_id === "brian-world-brain-v1") ?? null;
 
   return out({
-    status: sourceLookupState === "AVAILABLE" ? "ONLINE" : "DEGRADED",
+    status: sourceLookupState === "AVAILABLE" && reviewStatus === "AVAILABLE" ? "ONLINE" : "DEGRADED",
     observed_at: responseTime,
     summary: {
       narratives: (narrativesQ.data ?? []).length,
       research_dossiers: dossiers.length,
+      primary_review_status: reviewStatus,
+      recent_evidence_reviews: evidenceReviews.length,
       trade_ready_dossiers: 0,
       source_lookup_status: sourceLookupState,
       upcoming_events: (futureQ.data ?? []).length,
@@ -130,6 +141,8 @@ Deno.serve(async (req: Request) => {
       discovery_status: latestDiscovery?.status ?? "NO_DATA",
       world_brain_status: latestBrain?.status ?? "NO_DATA",
     },
+    evidence_reviews: evidenceReviews,
+    evidence_review_status: reviewStatus,
     dossiers,
     narratives: narrativesQ.data ?? [],
     upcoming_events: futureQ.data ?? [],
