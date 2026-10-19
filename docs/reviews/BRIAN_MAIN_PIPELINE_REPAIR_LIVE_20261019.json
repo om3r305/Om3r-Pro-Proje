@@ -1,0 +1,734 @@
+{
+  "resumed_release": {
+    "candidate_sha": "b72f8ab2aaedc932ddbfca80a4148c8db8967f07",
+    "merge_sha": "ed3f6e0eed4ce0107eb5cb1c37ede42994178aa6",
+    "treasury_version": 16,
+    "gate_source_exact_readback": true,
+    "checks": [
+      {
+        "name": "verify-edge-functions",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011850/job/118143902917"
+      },
+      {
+        "name": "verify-node-regressions",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011850/job/118143902905"
+      },
+      {
+        "name": "verify",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011850/job/118143902858"
+      },
+      {
+        "name": "verify-collector-lease",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011850/job/118143902451"
+      },
+      {
+        "name": "evolution-contracts",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011741/job/118143902379"
+      },
+      {
+        "name": "alpha-deno",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011777/job/118143902311"
+      },
+      {
+        "name": "evolution-postgres",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011741/job/118143902211"
+      },
+      {
+        "name": "alpha-postgres",
+        "conclusion": "success",
+        "url": "https://github.com/om3r305/Om3r-Pro-Proje/actions/runs/39277011777/job/118143901941"
+      }
+    ],
+    "continued_runs": [
+      {
+        "collector_id": "brian-evolution-treasury-v1",
+        "status": "SUCCESS",
+        "runs": 37,
+        "records": 435,
+        "latest": "2026-10-19 18:22:00.548+00"
+      },
+      {
+        "collector_id": "brian-multiasset-opportunity-engine-v1",
+        "status": "SUCCESS",
+        "runs": 19,
+        "records": 608,
+        "latest": "2026-10-19 18:23:00.466+00"
+      },
+      {
+        "collector_id": "brian-world-evidence-research-v1",
+        "status": "DEGRADED",
+        "runs": 37,
+        "records": 69,
+        "latest": "2026-10-19 18:23:01.699+00"
+      }
+    ],
+    "first_post_deploy_snapshots": [
+      {
+        "observed_at": "2026-10-19 18:23:31.244+00",
+        "action_count": 4,
+        "cash_usd": "4899.126680089402",
+        "equity_usd": "4939.149318499474",
+        "deployment_usd": "40",
+        "positions": [
+          {
+            "assetId": "commodity:SILVER",
+            "openedAt": "2026-10-19T18:22:00.948Z",
+            "direction": 1,
+            "capitalUsd": 10,
+            "entryPrice": 57.42499923706055,
+            "positionId": "treasury-multiasset-shadow:ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "highWaterPnlBps": 22.63841007268841,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          },
+          {
+            "assetId": "commodity:NATGAS",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": 1,
+            "capitalUsd": 20,
+            "entryPrice": 3.0789999961853027,
+            "positionId": "treasury-multiasset-shadow:5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 0
+          },
+          {
+            "assetId": "etf:USO",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": -1,
+            "capitalUsd": 10,
+            "entryPrice": 161.4550018310547,
+            "positionId": "treasury-multiasset-shadow:9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 12,
+            "sourceDecisionId": "9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 0
+          }
+        ],
+        "gate_version": "brian.treasury-promotion-gate.v6-multiasset-continuity"
+      }
+    ],
+    "second_authenticated_canary": [
+      {
+        "status": 200,
+        "actions": [],
+        "positions": [
+          {
+            "assetId": "commodity:SILVER",
+            "openedAt": "2026-10-19T18:22:00.948Z",
+            "direction": 1,
+            "capitalUsd": 10,
+            "entryPrice": 57.42499923706055,
+            "positionId": "treasury-multiasset-shadow:ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "highWaterPnlBps": 22.63841007268841,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          },
+          {
+            "assetId": "commodity:NATGAS",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": 1,
+            "capitalUsd": 20,
+            "entryPrice": 3.0789999961853027,
+            "positionId": "treasury-multiasset-shadow:5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          },
+          {
+            "assetId": "etf:USO",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": -1,
+            "capitalUsd": 10,
+            "entryPrice": 161.4550018310547,
+            "positionId": "treasury-multiasset-shadow:9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 12,
+            "sourceDecisionId": "9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          }
+        ],
+        "observed_at": "2026-10-19T18:24:34.387Z",
+        "shadow_only": "true",
+        "live_execution": "false",
+        "http_reset_curlopt": true
+      }
+    ],
+    "edge_validation": {
+      "rows": [
+        {
+          "issues": [
+            "INSUFFICIENT_DIRECTIONAL_SAMPLE",
+            "INSUFFICIENT_DAY_BLOCKS",
+            "DIRECTIONAL_COVERAGE_INCOMPLETE",
+            "ROLLING_DIAGNOSTIC_NOT_PROSPECTIVE_PROOF",
+            "FIXED_PROTOCOL_NOT_FINISHED",
+            "MODELED_COSTS_NOT_EXECUTED_TRADES",
+            "INDEPENDENT_REPLICATION_REQUIRED"
+          ],
+          "sample": "diagnostic",
+          "measured": 11,
+          "selected": 64,
+          "day_blocks": [
+            {
+              "n": 11,
+              "sample": "diagnostic",
+              "day_bucket": "2026-10-19",
+              "mean_net_bps": -8.32668580720282
+            }
+          ],
+          "not_mature": 0,
+          "unresolved": 3,
+          "directional": 14,
+          "mean_net_bps": -8.32668580720282,
+          "missing_cost": 0,
+          "proof_status": "NOT_PROVEN",
+          "late_decision": 0,
+          "missing_entry": 0,
+          "cash_decisions": 50,
+          "interpretation": "NON_POSITIVE_NET_MEASURED",
+          "unknown_policy": 0,
+          "invalid_outcome": 0,
+          "compiler_versions": 1
+        },
+        {
+          "issues": [
+            "INSUFFICIENT_DIRECTIONAL_SAMPLE",
+            "INSUFFICIENT_DAY_BLOCKS",
+            "FIXED_PROTOCOL_NOT_FINISHED",
+            "MODELED_COSTS_NOT_EXECUTED_TRADES",
+            "INDEPENDENT_REPLICATION_REQUIRED"
+          ],
+          "sample": "prospective",
+          "measured": 2,
+          "selected": 16,
+          "day_blocks": [
+            {
+              "n": 2,
+              "sample": "prospective",
+              "day_bucket": "2026-10-19",
+              "mean_net_bps": -65.6590185940803
+            }
+          ],
+          "not_mature": 0,
+          "unresolved": 0,
+          "directional": 2,
+          "mean_net_bps": -65.6590185940803,
+          "missing_cost": 0,
+          "proof_status": "NOT_PROVEN",
+          "late_decision": 0,
+          "missing_entry": 0,
+          "cash_decisions": 14,
+          "interpretation": "NON_POSITIVE_NET_MEASURED",
+          "unknown_policy": 0,
+          "invalid_outcome": 0,
+          "compiler_versions": 1
+        }
+      ],
+      "as_of": "2026-10-19T18:25:03.819+00:00",
+      "status": "AVAILABLE",
+      "protocol": {
+        "id": "alpha-net-probe-20261019-v1",
+        "ends_at": "2026-11-18T16:00:00Z",
+        "final_at": "2026-11-18T16:17:00Z",
+        "benchmark": "Cash = 0 basis points; modeled decision returns, not portfolio P&L",
+        "selection": "First shadow decision per asset in the first 60 seconds of each fixed 18-minute slot; all actions retained",
+        "starts_at": "2026-10-19T16:00:00Z",
+        "proof_status": "NOT_PROVEN",
+        "slot_seconds": 1080,
+        "horizon_seconds": 900,
+        "minimum_day_blocks": 20,
+        "modeled_costs_only": true,
+        "automatic_promotion": false,
+        "entry_window_seconds": 60,
+        "terminal_tolerance_seconds": 120,
+        "minimum_directional_samples": 100
+      },
+      "truncated": false,
+      "proof_status": "NOT_PROVEN",
+      "automatic_promotion": false
+    },
+    "native_scheduled_verification": [
+      {
+        "observed_at": "2026-10-19 18:27:00.66+00",
+        "action_count": 0,
+        "cash_usd": "4899.126680089402",
+        "equity_usd": "4939.149318499474",
+        "deployment_usd": "40",
+        "positions": [
+          {
+            "assetId": "commodity:SILVER",
+            "openedAt": "2026-10-19T18:22:00.948Z",
+            "direction": 1,
+            "capitalUsd": 10,
+            "entryPrice": 57.42499923706055,
+            "positionId": "treasury-multiasset-shadow:ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "highWaterPnlBps": 22.63841007268841,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "ccf14478ab43b866f17806baa33b72a1cef54b93011d49f0fafafcf66567515b",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          },
+          {
+            "assetId": "commodity:NATGAS",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": 1,
+            "capitalUsd": 20,
+            "entryPrice": 3.0789999961853027,
+            "positionId": "treasury-multiasset-shadow:5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 14,
+            "sourceDecisionId": "5032d31c402c5d9263423435644dff02e3efee88ccaec4f94f38afb18cbe3f12",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          },
+          {
+            "assetId": "etf:USO",
+            "openedAt": "2026-10-19T18:23:31.244Z",
+            "direction": -1,
+            "capitalUsd": 10,
+            "entryPrice": 161.4550018310547,
+            "positionId": "treasury-multiasset-shadow:9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "highWaterPnlBps": 0,
+            "roundTripCostBps": 12,
+            "sourceDecisionId": "9ebaaa7a3165ac41446de6ec782d749205868de30d45651eb48cff6c0684abb2",
+            "entryExpectedNetEdgeBps": 0,
+            "latestExpectedNetEdgeBps": 3
+          }
+        ],
+        "gate_version": "brian.treasury-promotion-gate.v6-multiasset-continuity"
+      }
+    ],
+    "checked_at": "2026-10-19T18:27:05Z"
+  },
+  "checked_at": "2026-10-19T15:14:40.427Z",
+  "candidate_sha": "43f67c4874a4d2a7ca4c904bb0459f29abf5d31a",
+  "merge_sha": "1da0a89733310847cb587f4825b41551884be9b7",
+  "metadata_sha": "782862aaab1c3d0191e9c31ceb370694fdd8859e",
+  "ci": {
+    "main": 39275285801,
+    "alpha": 39275285754,
+    "evolution": 39275285764,
+    "metadata_main": 39275810854,
+    "node_required_passes": 127,
+    "node_product_passes": 56,
+    "postgres_passes": 74
+  },
+  "deployed": {
+    "world_research": 2,
+    "multiasset_engine": 6
+  },
+  "shadow_only": true,
+  "live_execution": false,
+  "canary": [
+    {
+      "status": 200,
+      "response": {
+        "marks": 32,
+        "events": 300,
+        "status": "SUCCESS",
+        "results": [
+          {
+            "action": "WAIT",
+            "asset_id": "commodity:BRENT",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.6556228069945881
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "commodity:GOLD",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.6327963381895653
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "commodity:NATGAS",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.7497915799134041
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "commodity:SILVER",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.7049177618880218
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "commodity:WTI",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.7655620126376209
+          },
+          {
+            "action": "OPEN_SHORT",
+            "asset_id": "equity:AAPL",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.7342492155588537
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "equity:AMZN",
+            "veto_reason": "CROWD_EXTREME_CHASE",
+            "session_state": "REGULAR",
+            "evidence_score": 1
+          },
+          {
+            "action": "OPEN_SHORT",
+            "asset_id": "equity:CVX",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.8016150876999576
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "equity:GOOGL",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.7090422756420288
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "equity:JPM",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.6297491783155027
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "equity:META",
+            "veto_reason": "CROWD_EXTREME_CHASE",
+            "session_state": "REGULAR",
+            "evidence_score": 1
+          },
+          {
+            "action": "OPEN_LONG",
+            "asset_id": "equity:MSFT",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.766942083985678
+          },
+          {
+            "action": "OPEN_LONG",
+            "asset_id": "equity:NVDA",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 1
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "equity:TSLA",
+            "veto_reason": "CROWD_EXTREME_CHASE",
+            "session_state": "REGULAR",
+            "evidence_score": 1
+          },
+          {
+            "action": "OPEN_SHORT",
+            "asset_id": "equity:XOM",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.8032726545599216
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:EWG",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5116155104184756
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:GLD",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5030041439201088
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:IWM",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.6062333763146492
+          },
+          {
+            "action": "OPEN_LONG",
+            "asset_id": "etf:QQQ",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.7885025705256098
+          },
+          {
+            "action": "OPEN_LONG",
+            "asset_id": "etf:SMH",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.9184930096068646
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:SPY",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.6192384291729655
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:TLT",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.7021499608975978
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:USO",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5848649454695896
+          },
+          {
+            "action": "OPEN_SHORT",
+            "asset_id": "etf:XLE",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.9688576326889264
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "etf:XLF",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5494995061976867
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "fx:EURUSD",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5008327108281113
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "fx:GBPUSD",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.5863607174928006
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "fx:USDCHF",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.6142273345040508
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "fx:USDJPY",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.533926569826866
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "index:DAX",
+            "veto_reason": "MARKET_CLOSED_OR_STALE",
+            "session_state": "STALE_OR_CLOSED",
+            "evidence_score": 0.5533504087432516
+          },
+          {
+            "action": "OPEN_LONG",
+            "asset_id": "index:NASDAQ100",
+            "veto_reason": null,
+            "session_state": "REGULAR",
+            "evidence_score": 0.9119302807811878
+          },
+          {
+            "action": "WAIT",
+            "asset_id": "index:SP500",
+            "veto_reason": "REACTION_NOT_CONFIRMED",
+            "session_state": "REGULAR",
+            "evidence_score": 0.6769876557503142
+          }
+        ],
+        "version": "brian.multiasset-opportunity-engine.v5-operator-controlled",
+        "decisions": 32,
+        "actionable": 9,
+        "shadow_only": true,
+        "live_execution": false
+      },
+      "http_reset_curlopt": true
+    }
+  ],
+  "native_runs": [
+    {
+      "collector_id": "brian-world-evidence-research-v1",
+      "status": "DEGRADED",
+      "started_at": "2026-10-19 15:13:02.422+00",
+      "finished_at": "2026-10-19 15:13:04.364+00",
+      "stored_records": 2,
+      "error_message": null
+    },
+    {
+      "collector_id": "brian-multiasset-opportunity-engine-v1",
+      "status": "SUCCESS",
+      "started_at": "2026-10-19 15:13:00.58+00",
+      "finished_at": "2026-10-19 15:13:03.092+00",
+      "stored_records": 32,
+      "error_message": null
+    },
+    {
+      "collector_id": "brian-multiasset-opportunity-engine-v1",
+      "status": "SUCCESS",
+      "started_at": "2026-10-19 15:10:06.065+00",
+      "finished_at": "2026-10-19 15:10:07.918+00",
+      "stored_records": 32,
+      "error_message": null
+    }
+  ],
+  "trace": [
+    {
+      "kind": "OPEN",
+      "asset_id": "equity:CVX",
+      "capital_usd": "10",
+      "cost_usd": "0.009",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_SHORT",
+      "decision_at": "2026-10-19 15:10:07.434+00",
+      "provider_time": "2026-10-19 15:01:01+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "equity:MSFT",
+      "capital_usd": "10",
+      "cost_usd": "0.009",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_LONG",
+      "decision_at": "2026-10-19 15:10:07.435+00",
+      "provider_time": "2026-10-19 15:01:06+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "equity:NVDA",
+      "capital_usd": "20",
+      "cost_usd": "0.018",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_LONG",
+      "decision_at": "2026-10-19 15:10:07.435+00",
+      "provider_time": "2026-10-19 15:01:05+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "equity:XOM",
+      "capital_usd": "10",
+      "cost_usd": "0.009",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_SHORT",
+      "decision_at": "2026-10-19 15:10:07.435+00",
+      "provider_time": "2026-10-19 15:01:05+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "etf:QQQ",
+      "capital_usd": "10",
+      "cost_usd": "0.006",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_LONG",
+      "decision_at": "2026-10-19 15:10:07.436+00",
+      "provider_time": "2026-10-19 15:01:06+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "etf:SMH",
+      "capital_usd": "20",
+      "cost_usd": "0.012",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_LONG",
+      "decision_at": "2026-10-19 15:10:07.436+00",
+      "provider_time": "2026-10-19 15:01:04+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "etf:XLE",
+      "capital_usd": "20",
+      "cost_usd": "0.012",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_SHORT",
+      "decision_at": "2026-10-19 15:10:07.436+00",
+      "provider_time": "2026-10-19 15:01:03+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    },
+    {
+      "kind": "OPEN",
+      "asset_id": "index:NASDAQ100",
+      "capital_usd": "20",
+      "cost_usd": "0.01",
+      "observed_at": "2026-10-19 15:11:28.208+00",
+      "action": "OPEN_LONG",
+      "decision_at": "2026-10-19 15:10:07.436+00",
+      "provider_time": "2026-10-19 15:01:06+00",
+      "veto_reason": null,
+      "shadow_only": true,
+      "live_execution": false
+    }
+  ],
+  "document_rows": [
+    {
+      "status": "FAILED",
+      "source": "official:sec:edgar_current",
+      "error": "OFFICIAL_HTTP_403",
+      "body_received": "false",
+      "scan_limit": "2000",
+      "scan_partial": "true",
+      "captured_at": "2026-10-19 15:13:04.352236+00"
+    },
+    {
+      "status": "READ",
+      "source": "official:bundesbank:general",
+      "error": null,
+      "body_received": "true",
+      "scan_limit": "2000",
+      "scan_partial": "true",
+      "captured_at": "2026-10-19 15:13:03.976239+00"
+    }
+  ]
+}
