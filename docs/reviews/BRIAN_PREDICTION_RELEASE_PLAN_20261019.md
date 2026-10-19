@@ -69,3 +69,16 @@ drop table if exists public.brian_prediction_control;
 
 - **Risk düşük:** Değişiklik yalnızca ekleme yapıyor ve modül kapalı geliyor. CORE disk yükü açılana kadar sıfır. Açıldıktan sonra 15 dakikada bir 60 piyasa çekilirse günde yaklaşık 5.800 satır (birkaç MB) eder.
 - **Ek maliyet yok:** Yeni ücretli servis yok. Polymarket uç noktaları ücretsiz ve herkese açık.
+
+## Yayın kaydı — 19 Ekim 2026 (uygulandı)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-oncesi` → `6af5466` push edildi; `C:\Brian\brian-backups\2026-10-19-prediction-oncesi\` içinde `brian-2026.bundle` (verify: okay) + `core-state.json` |
+| Merge | PR #150 → `brian-2026`, merge commit `6e10481` (CI: Prediction, Brian 2026, ALPHA v2 yeşil, `a1b03ed`) |
+| Migrasyon | CORE `qbcjuxhvhwagvqbjyemo`, sürüm `20261019195019` (`brian_prediction_intelligence`); dosya adı bu sürüme hizalandı |
+| Son kontroller | 6 tabloda RLS açık; anon/authenticated SELECT yok; service_role kanıt tablolarında UPDATE/DELETE yok; 4 append-only trigger; 2 RPC `SECURITY DEFINER` + sabit `search_path`, yalnızca service_role EXECUTE; kontrol satırı hepsi kapalı; `brian_reject_mutation` md5 değişmedi (`47210aae…`) |
+| Advisor (security) | Yeni tablolar için yalnızca INFO "RLS enabled no policy" (diğer 116 tabloyla aynı, kasıtlı). Yeni WARN yok; mevcut 2 WARN önceden var olan fonksiyonlara ait |
+| Fonksiyon | `brian-prediction-eye` v1 ACTIVE, `verify_jwt=false`, ezbr `739d3d7f…` |
+| Duman testi | Anahtarsız POST → 401, yanlış anahtar → 401, GET → 405. Anahtarlı çağrı yapılmadı (internal key kullanılmadı) |
+| Durum | `module_enabled=false`, cron işi yok, prediction tablolarında 0 satır, lease olayı yok |
