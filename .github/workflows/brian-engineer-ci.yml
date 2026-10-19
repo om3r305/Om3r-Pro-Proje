@@ -54,8 +54,8 @@ jobs:
             echo 'Broken Bash JSON default reintroduced.'
             exit 1
           fi
-          grep -Fq 'first non-empty output line must be exactly UNDERSTAND at column 1' scripts/brian_engineer_prompt.py
-          grep -Fq 'first non-empty output line must be exactly CODE at column 1' scripts/brian_engineer_prompt.py
+          grep -Fq 'workflow independently verifies that analysis is non-empty and read-only' scripts/brian_engineer_prompt.py
+          grep -Fq 'workflow validates the real diff and evidence independently' scripts/brian_engineer_prompt.py
 
       - name: Run engineering guard behavioral tests
         run: deno test supabase/functions/_shared/evolution_engineer_guard.test.ts
