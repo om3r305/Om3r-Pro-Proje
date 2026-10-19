@@ -592,3 +592,71 @@ export function polymarketTakerFeeUsdc(shares: number, price: number, feeRate: n
   const rounded = Math.round(raw * 1e5) / 1e5;
   return rounded < 0.00001 ? 0 : rounded;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Resolution (Gamma /markets/{id}). A market counts as RESOLVED only when the source says so in
+// every way at once: closed=true, umaResolutionStatus="resolved", and the final prices are exactly
+// one "1" and the rest "0". Anything else (still open, disputed, proposed, 50/50 split, malformed)
+// is NOT a resolution and is never coerced into one.
+// ---------------------------------------------------------------------------------------------
+export interface PredictionResolution {
+  contractVersion: typeof PREDICTION_CONTRACT_VERSION;
+  evidenceClass: "OBSERVED_VERIFIED";
+  marketId: string;
+  winningLabel: string;
+  // 1/0 when the market is a Yes/No market; null when it is not (then it is excluded from
+  // binary calibration rather than guessed).
+  yesOutcome: 0 | 1 | null;
+  finalPrices: { label: string; price: number }[];
+  umaResolutionStatus: string;
+  closedTime: string | null;
+  receivedAt: string;
+}
+
+export function gammaMarketByIdUrl(marketId: string): string {
+  if (!/^[0-9]{1,20}$/.test(marketId)) throw new Error(`invalid market id: ${marketId}`);
+  return `https://gamma-api.polymarket.com/markets/${marketId}`;
+}
+
+export function normalizeGammaResolution(raw: unknown, receivedAt: string): NormalizeResult<PredictionResolution> {
+  if (typeof raw !== "object" || raw === null) return { ok: false, reason: "market is not an object" };
+  const m = raw as Record<string, unknown>;
+  const marketId = m.id === undefined || m.id === null ? "" : String(m.id);
+  if (marketId === "") return { ok: false, reason: "market has no id" };
+  if (m.closed !== true) return { ok: false, reason: "NOT_CLOSED" };
+  const uma = typeof m.umaResolutionStatus === "string" ? m.umaResolutionStatus : "";
+  if (uma !== "resolved") return { ok: false, reason: `UMA_STATUS_${uma || "MISSING"}` };
+  const labels = parseStringArray(m.outcomes);
+  const prices = parseStringArray(m.outcomePrices);
+  if (labels === null || prices === null || labels.length === 0 || labels.length !== prices.length) {
+    return { ok: false, reason: "outcomes/outcomePrices missing or mismatched" };
+  }
+  const numeric = prices.map((p) => (p === "" ? NaN : Number(p)));
+  const winners = numeric.filter((p) => p === 1).length;
+  const losers = numeric.filter((p) => p === 0).length;
+  if (winners !== 1 || losers !== labels.length - 1) {
+    return { ok: false, reason: "final prices are not exactly one 1 and the rest 0" };
+  }
+  const winIndex = numeric.indexOf(1);
+  const yesIndex = labels.indexOf("Yes");
+  const isYesNo = labels.length === 2 && yesIndex >= 0 && labels.includes("No");
+  const closedTime = typeof m.closedTime === "string" && m.closedTime !== ""
+    ? (Number.isFinite(Date.parse(m.closedTime.replace(" ", "T").replace(/\+00$/, "Z")))
+      ? new Date(Date.parse(m.closedTime.replace(" ", "T").replace(/\+00$/, "Z"))).toISOString()
+      : null)
+    : null;
+  return {
+    ok: true,
+    value: {
+      contractVersion: PREDICTION_CONTRACT_VERSION,
+      evidenceClass: "OBSERVED_VERIFIED",
+      marketId,
+      winningLabel: labels[winIndex],
+      yesOutcome: isYesNo ? (winIndex === yesIndex ? 1 : 0) : null,
+      finalPrices: labels.map((label, i) => ({ label, price: numeric[i] })),
+      umaResolutionStatus: uma,
+      closedTime,
+      receivedAt,
+    },
+  };
+}

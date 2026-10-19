@@ -98,6 +98,14 @@ Bu migrasyon hiçbir şey silmez ve hiçbir zamanlayıcıyı açmaz.
   - Çıktı `trade_signal: false` taşır; bu bir işlem sinyali değildir.
 - `brian_prediction_health_summary_v1(as_of, window)`: Kaynak başına durum dağılımı, son gözlem ve gecikme bilgisi verir. Ayrıca beklenen ve gözlenen tur sayısını (15 dakikalık plana göre, toplamanın başladığı andan itibaren), anlık görüntü tazeliğini ve depolama/sınır durumunu raporlar.
 
+## Faz 2c — sonuçlar ve olay kümeli kalibrasyon (hazır, CORE'a henüz uygulanmadı)
+
+- **Sonuç yakalama:** Bitiş tarihi geçmiş (1 saat ödemesiz süre) ve sonucu kaydedilmemiş piyasalar her turda en fazla 10 tane, `/markets/{id}` ile sorgulanır. Bir piyasa yalnızca şu üç koşulun hepsi sağlanınca "sonuçlanmış" sayılır: `closed=true`, `umaResolutionStatus='resolved'` ve fiyatların tam bir "1", geri kalanların "0" olması. Önerilmiş, itirazlı, 50/50 ya da 0,9995 gibi durumlar sonuç sayılmaz, bir sonraki turda yeniden sorulur.
+- **Tablo:** `brian_prediction_resolutions` append-only'dir; aynı kural bir CHECK kısıtıyla veritabanında da uygulanır.
+- **Kalibrasyon girdisi** `brian_prediction_calibration_inputs_v1(as_of, lead)`: Her Yes/No piyasası için tahmin, `end_date − lead` anında **veya öncesinde alınmış** son anlık görüntüdür (varsayılan 24 saat). Daha geç bir fiyat geriye taşınmaz; erken anlık görüntüsü olmayan piyasa `excluded` olarak sayılır. `as_of`'tan sonra gözlenen sonuçlar görünmez. Küme anahtarı `event_id` (yoksa `market_key`).
+- **Kalibrasyon** (`_shared/prediction_calibration.ts`, saf): Brier, log loss, taban oran Brier'i, güvenilirlik kutuları ve **olay kümeli** percentile bootstrap. Bağımsız olay sayısı 20'nin altındaysa durum `INSUFFICIENT_DATA` olur ve aralık verilmez. Çıktı `tradeSignal: false` taşır.
+- **Geriye dönük kuru çalıştırma (19 Ekim, kanıt değil):** fed/fomc/cpi/economy/inflation etiketlerinde 113 kapalı olay ve 371 sonuçlanmış Yes/No piyasası incelendi. Bitişten 24 saat önce CLOB fiyat geçmişi bulunan 297 piyasa (93 olay) üzerinde Brier **0,0765**, %95 olay kümeli aralık **[0,056; 0,097]**, taban oran Brier'i 0,184. Kutu örnekleri küçük (6–19); sapma çıkarımı yapılmadı. Bu deney, piyasaların geçmiş fiyatını kullandığı için Brian'ın kendi `received_at` kaydı değildir. İleriye dönük ölçüm, izlenen piyasalar sonuçlandıkça başlar; ilki 29 Ekim 2026.
+
 ## Sıradaki tek adım
 
-Faz 2b: ekonomik olay eşleştirmesi. Polymarket piyasalarını Brian'ın mevcut World/intel olaylarıyla zaman ve konu üzerinden eşleştirip "haber öncesi ve sonrası olasılık" karşılaştırması yapılacak. Panel (Faz 4) bu fonksiyonları okuyacak.
+Faz 2c'nin CORE'a uygulanması (migrasyon + eye v4), ardından Faz 2b: Polymarket piyasalarını Brian'ın World/intel olaylarıyla eşleştirme.

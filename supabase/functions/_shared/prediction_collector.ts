@@ -13,6 +13,8 @@ import {
   dataActivityUrl,
   fetchPredictionJson,
   flattenGammaEvents,
+  gammaMarketByIdUrl,
+  normalizeGammaResolution,
   gammaEventsKeysetUrl,
   partitionWalletActivity,
   PREDICTION_CONTRACT_VERSION,
@@ -483,4 +485,69 @@ async function collectActivity(
     });
   }
   return { trades: tradeRows, watermark, truncated, seen: rows.length, requests };
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Phase 2c: resolution capture. For markets the database says have passed their end date without
+// a recorded resolution, look each one up once (bounded) and keep only genuine resolutions.
+// Not-yet-resolved markets produce no row; they are simply asked again on a later cycle.
+// ---------------------------------------------------------------------------------------------
+export const MAX_RESOLUTION_LOOKUPS = 10;
+
+export interface ResolutionRow {
+  resolution_id: string;
+  market_key: string;
+  winning_label: string;
+  yes_outcome: 0 | 1 | null;
+  final_prices: { label: string; price: number }[];
+  uma_resolution_status: string;
+  closed_time: string | null;
+  received_at: string;
+  model_version: string;
+}
+
+export async function collectResolutions(
+  marketIds: string[],
+  options: PredictionFetchOptions = {},
+): Promise<{ rows: ResolutionRow[]; health: HealthRow[]; pending: { marketId: string; reason: string }[]; requests: number }> {
+  const now = options.now ?? (() => Date.now());
+  const ids = [...new Set(marketIds.filter((id) => /^[0-9]{1,20}$/.test(id)))].slice(0, MAX_RESOLUTION_LOOKUPS);
+  const rows: ResolutionRow[] = [];
+  const pending: { marketId: string; reason: string }[] = [];
+  const health: HealthRow[] = [];
+  for (const id of ids) {
+    const started = now();
+    const result = await fetchPredictionJson(gammaMarketByIdUrl(id), options);
+    if (result.status !== "OK") {
+      health.push(healthFrom("polymarket-gamma-resolution", result, started, 0, { metadata: { market_id: id } }));
+      pending.push({ marketId: id, reason: `FETCH_${result.status}` });
+      continue;
+    }
+    const r = normalizeGammaResolution(result.body, result.receivedAt);
+    health.push(healthFrom("polymarket-gamma-resolution", result, started, r.ok ? 1 : 0, {
+      metadata: { market_id: id, resolved: r.ok, reason: r.ok ? null : r.reason },
+    }));
+    if (!r.ok) {
+      pending.push({ marketId: id, reason: r.reason });
+      continue;
+    }
+    rows.push({
+      resolution_id: `polymarket:${r.value.marketId}|resolved`,
+      market_key: `polymarket:${r.value.marketId}`,
+      winning_label: r.value.winningLabel,
+      yes_outcome: r.value.yesOutcome,
+      final_prices: r.value.finalPrices,
+      uma_resolution_status: r.value.umaResolutionStatus,
+      closed_time: r.value.closedTime,
+      received_at: r.value.receivedAt,
+      model_version: PREDICTION_CONTRACT_VERSION,
+    });
+  }
+  return {
+    rows,
+    health: health.map((h, i) => ({ ...h, health_id: `${h.source}|${h.observed_at}|r${i}` })),
+    pending,
+    requests: ids.length,
+  };
 }

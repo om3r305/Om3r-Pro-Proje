@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.116.0';
 import { withCollectorLease } from '../_shared/collector_lease.ts';
 import { requireRealtimeInternal } from '../_shared/realtime_internal_auth.ts';
 import { requireCronAuth } from '../_shared/cron_auth.ts';
-import { collectPredictionCycle, DEFAULT_COLLECTOR_CONFIG, PREDICTION_COLLECTOR_VERSION } from '../_shared/prediction_collector.ts';
+import { collectPredictionCycle, collectResolutions, DEFAULT_COLLECTOR_CONFIG, PREDICTION_COLLECTOR_VERSION } from '../_shared/prediction_collector.ts';
 
 // Prediction Intelligence eye: one bounded, read-only, shadow-only collection cycle per call.
 // It never places orders and never touches a decision. It does nothing unless BOTH the global
@@ -97,10 +97,29 @@ Deno.serve(async (req: Request) => {
         if (mark.error) throw Error('PREDICTION_WATERMARK_FAILED');
       }
 
+      // Phase 2c: look up at most 10 markets that are past their end date without a recorded
+      // resolution. A failure here is reported but never undoes the snapshot batch above.
+      let resolution: Record<string, unknown> = { status: 'NO_CANDIDATES' };
+      const due = await db.rpc('brian_prediction_resolution_candidates_v1', { p_limit: 10 }).abortSignal(AbortSignal.timeout(4000));
+      if (due.error) {
+        resolution = { status: 'CANDIDATES_UNAVAILABLE' };
+      } else if (Array.isArray(due.data) && due.data.length > 0) {
+        const found = await collectResolutions(due.data.map((d: { market_id: string }) => String(d.market_id)));
+        const rec = await db.rpc('brian_record_prediction_resolutions_v1', { p_rows: found.rows }).abortSignal(AbortSignal.timeout(4000));
+        const hrec = await db.rpc('brian_record_prediction_batch_v1', { p_markets: [], p_snapshots: [], p_trades: [], p_health: found.health })
+          .abortSignal(AbortSignal.timeout(4000));
+        resolution = {
+          status: rec.error ? 'RECORD_FAILED' : (rec.data as Record<string, unknown>)?.status ?? 'UNKNOWN',
+          looked_up: found.requests, resolved: found.rows.length, stored: rec.error ? 0 : (rec.data as Record<string, any>)?.stored ?? 0,
+          pending: found.pending.length, health_recorded: !hrec.error,
+        };
+      }
+
       const degraded = batch.health.some((h) => h.status !== 'OK');
       return out({
         status: degraded ? 'DEGRADED' : 'SUCCESS', version: PREDICTION_COLLECTOR_VERSION, summary: batch.summary,
         stored: { markets: r.markets.stored, snapshots: r.snapshots.stored, trades: r.trades.stored, health: r.health.stored },
+        resolution,
         ...SAFE,
       });
     });

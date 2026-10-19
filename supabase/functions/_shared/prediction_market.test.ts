@@ -402,3 +402,40 @@ Deno.test("taker fee follows the official C x feeRate x p x (1-p) shape, 5-decim
     assert(threw, "invalid fee inputs are refused, not defaulted");
   }
 });
+
+Deno.test("resolution is accepted only when closed, UMA-resolved and prices are exactly one 1", async () => {
+  const { normalizeGammaResolution, gammaMarketByIdUrl } = await import("./prediction_market.ts");
+  const resolved = {
+    id: "507414", closed: true, umaResolutionStatus: "resolved", outcomes: '["Yes", "No"]', outcomePrices: '["1", "0"]',
+    closedTime: "2024-09-18 21:17:18+00",
+  };
+  const r = normalizeGammaResolution(resolved, RECEIVED);
+  assert(r.ok, "resolved market normalizes");
+  eq(r.value.yesOutcome, 1, "Yes won");
+  eq(r.value.winningLabel, "Yes", "winning label");
+  eq(r.value.closedTime, "2024-09-18T21:17:18.000Z", "closedTime parsed from Gamma's space/+00 format");
+  const no = normalizeGammaResolution({ ...resolved, outcomePrices: '["0", "1"]' }, RECEIVED);
+  assert(no.ok && no.value.yesOutcome === 0, "No won");
+  const cases: [string, Record<string, unknown>][] = [
+    ["still open", { closed: false }],
+    ["proposed, not final", { umaResolutionStatus: "proposed" }],
+    ["disputed", { umaResolutionStatus: "disputed" }],
+    ["missing status", { umaResolutionStatus: undefined }],
+    ["50/50 split", { outcomePrices: '["0.5", "0.5"]' }],
+    ["near-final price is not final", { outcomePrices: '["0.9995", "0.0005"]' }],
+    ["two winners", { outcomePrices: '["1", "1"]' }],
+    ["length mismatch", { outcomePrices: '["1"]' }],
+    ["empty price", { outcomePrices: '["1", ""]' }],
+  ];
+  for (const [label, patch] of cases) assert(!normalizeGammaResolution({ ...resolved, ...patch }, RECEIVED).ok, label);
+  const multi = normalizeGammaResolution({ ...resolved, outcomes: '["Trump", "Harris", "Other"]', outcomePrices: '["1", "0", "0"]' }, RECEIVED);
+  assert(multi.ok && multi.value.yesOutcome === null, "non Yes/No market is kept but excluded from binary calibration");
+  eq(gammaMarketByIdUrl("2589810"), "https://gamma-api.polymarket.com/markets/2589810", "by-id url");
+  let threw = false;
+  try {
+    gammaMarketByIdUrl("1/../x");
+  } catch {
+    threw = true;
+  }
+  assert(threw, "market id injection refused");
+});
