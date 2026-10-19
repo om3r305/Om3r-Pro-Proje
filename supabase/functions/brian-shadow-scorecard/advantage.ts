@@ -34,7 +34,7 @@ measured as(
  or direction_adjusted_return is null or direction_adjusted_return::text in('NaN','Infinity','-Infinity') then 'INVALID_OUTCOME'
  when cost is null then 'MISSING_COST' else 'COST_KNOWN' end status from measured
 ), daily as(
- select sample,(observed_at at time zone 'UTC')::date day,count(*)::int n,
+ select sample,(observed_at at time zone 'UTC')::date as day_bucket,count(*)::int n,
  avg(direction_adjusted_return*10000-cost) mean_net_bps
  from tagged where status='COST_KNOWN' group by sample,(observed_at at time zone 'UTC')::date
 ), grouped as(
@@ -48,7 +48,7 @@ measured as(
  count(*) filter(where t.status='COST_KNOWN')::int measured,
  avg(direction_adjusted_return*10000-cost) filter(where t.status='COST_KNOWN') mean_net_bps,
  count(distinct t.compiler_version)::int compiler_versions,
- coalesce((select jsonb_agg(to_jsonb(z) order by z.day) from daily z where z.sample=s.sample),'[]'::jsonb) day_blocks
+ coalesce((select jsonb_agg(to_jsonb(z) order by z.day_bucket) from daily z where z.sample=s.sample),'[]'::jsonb) day_blocks
  from scopes s left join tagged t on t.sample=s.sample group by s.sample
 )
 select jsonb_build_object('as_of',(select at from cfg),'truncated',(select count(*)>20000 from seed),'rows',(select jsonb_agg(to_jsonb(g) order by sample) from grouped g)) validation`;

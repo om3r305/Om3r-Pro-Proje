@@ -1,7 +1,10 @@
 import { parseHTML } from 'npm:linkedom@0.18.12';
 import { officialUri } from './logic.ts';
+type ParsedNode={textContent:string|null;remove():void;getAttribute(name:string):string|null};
+type ParsedDocument={querySelector(selector:string):ParsedNode|null;querySelectorAll(selector:string):Iterable<ParsedNode>;body:ParsedNode|null;documentElement:ParsedNode|null};
 export function documentText(html:string, uri:string) {
-  const {document}=parseHTML(html);
+  // Linkedom's Window declaration relies on browser DOM globals absent in Deno.
+  const {document}=parseHTML(html) as unknown as {document:ParsedDocument};
   for(const n of document.querySelectorAll('script,style,noscript,iframe,nav,header,footer,form,svg,template'))n.remove();
   const title=(document.querySelector('h1')?.textContent||document.querySelector('title')?.textContent||'').trim();
   const content=document.querySelector('article')||document.querySelector('main')||document.querySelector('[role="main"]')||document.body;
