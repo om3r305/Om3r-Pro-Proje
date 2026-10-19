@@ -1,0 +1,254 @@
+{
+  "as_of": "2026-10-19T08:59:32.958272+00:00",
+  "sample_policy": "latest_bounded_nonrandom",
+  "frames": {
+    "sampled": 300,
+    "with_uri": 300,
+    "distinct_events": 300,
+    "with_publication_time": 298
+  },
+  "frame_sources": [
+    {
+      "rows": 4,
+      "sources": 3,
+      "source_trust_class": "INDEPENDENT_PROFESSIONAL"
+    },
+    {
+      "rows": 4,
+      "sources": 2,
+      "source_trust_class": "OFFICIAL_PRIMARY"
+    },
+    {
+      "rows": 292,
+      "sources": 203,
+      "source_trust_class": "UNVERIFIED_DISCOVERY"
+    }
+  ],
+  "mechanisms": {
+    "sampled": 100,
+    "without_refs": 0,
+    "distinct_causes": 5,
+    "counter_evidence_required": 100
+  },
+  "linked_mechanism_evidence": [
+    {
+      "mechanism_id": "mechanism|narrative:ai_compute|2026-10-19t08:42:07-618z",
+      "narrative_id": "narrative:AI_COMPUTE",
+      "confidence": 0.97,
+      "refs": 85,
+      "linked_events": 85,
+      "primary_refs": 0,
+      "professional_refs": 1,
+      "discovery_refs": 84
+    },
+    {
+      "mechanism_id": "mechanism|narrative:ai_compute|2026-10-19t08:52:05-160z",
+      "narrative_id": "narrative:AI_COMPUTE",
+      "confidence": 0.97,
+      "refs": 87,
+      "linked_events": 87,
+      "primary_refs": 0,
+      "professional_refs": 1,
+      "discovery_refs": 86
+    },
+    {
+      "mechanism_id": "mechanism|narrative:energy_supply|2026-10-19t08:42:07-618z",
+      "narrative_id": "narrative:ENERGY_SUPPLY",
+      "confidence": 0.97,
+      "refs": 176,
+      "linked_events": 176,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 176
+    },
+    {
+      "mechanism_id": "mechanism|narrative:energy_supply|2026-10-19t08:52:05-160z",
+      "narrative_id": "narrative:ENERGY_SUPPLY",
+      "confidence": 0.97,
+      "refs": 174,
+      "linked_events": 174,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 174
+    },
+    {
+      "mechanism_id": "mechanism|narrative:geopolitics|2026-10-19t08:42:07-618z",
+      "narrative_id": "narrative:GEOPOLITICS",
+      "confidence": 0.97,
+      "refs": 187,
+      "linked_events": 187,
+      "primary_refs": 0,
+      "professional_refs": 1,
+      "discovery_refs": 186
+    },
+    {
+      "mechanism_id": "mechanism|narrative:geopolitics|2026-10-19t08:52:05-160z",
+      "narrative_id": "narrative:GEOPOLITICS",
+      "confidence": 0.97,
+      "refs": 183,
+      "linked_events": 183,
+      "primary_refs": 0,
+      "professional_refs": 1,
+      "discovery_refs": 182
+    },
+    {
+      "mechanism_id": "mechanism|narrative:monetary_policy|2026-10-19t08:42:07-618z",
+      "narrative_id": "narrative:MONETARY_POLICY",
+      "confidence": 0.97,
+      "refs": 23,
+      "linked_events": 23,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 23
+    },
+    {
+      "mechanism_id": "mechanism|narrative:monetary_policy|2026-10-19t08:52:05-160z",
+      "narrative_id": "narrative:MONETARY_POLICY",
+      "confidence": 0.97,
+      "refs": 23,
+      "linked_events": 23,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 23
+    },
+    {
+      "mechanism_id": "mechanism|narrative:product_launch|2026-10-19t08:42:07-618z",
+      "narrative_id": "narrative:PRODUCT_LAUNCH",
+      "confidence": 0.97,
+      "refs": 29,
+      "linked_events": 29,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 29
+    },
+    {
+      "mechanism_id": "mechanism|narrative:product_launch|2026-10-19t08:52:05-160z",
+      "narrative_id": "narrative:PRODUCT_LAUNCH",
+      "confidence": 0.97,
+      "refs": 28,
+      "linked_events": 28,
+      "primary_refs": 0,
+      "professional_refs": 0,
+      "discovery_refs": 28
+    }
+  ],
+  "verification": {
+    "episode": {
+      "kind": "SOURCE_CONFIDENCE_GAP",
+      "episode_id": "b468c51a0b3e09643076bda9e24613f7d31d57c9317046779b4baa6bb1520865",
+      "observed_at": "2026-10-19T09:01:09.387268+00:00",
+      "shadow_only": true,
+      "live_execution": false
+    },
+    "missions": [
+      {
+        "state": "QUEUED",
+        "attempts": 0,
+        "question": "Design a reproducible way to distinguish syndicated financial-news copies from independent corroboration, and to require primary-source receipts for an event dossier. Current diagnostic source mix is not proof that the claims are false.",
+        "mission_id": "78ba55847266aa02498455d22aba987edac12924d9d5d078a45d1a07b693d9bc",
+        "queue_position": 3,
+        "next_research_at": "2026-10-19T09:01:09.408062+00:00"
+      },
+      {
+        "state": "QUEUED",
+        "attempts": 0,
+        "question": "Investigate calibration of economic-mechanism confidence. The current rule score reaches 0.97 through event count and breadth; determine how to label it as a heuristic until prospectively calibrated, without inventing a replacement probability.",
+        "mission_id": "8d4f59007c3d9f59254f1bac3b1294aded01462772caa4fc4f19bf4fde55545b",
+        "queue_position": 4,
+        "next_research_at": "2026-10-19T09:01:09.419611+00:00"
+      },
+      {
+        "state": "QUEUED",
+        "attempts": 0,
+        "question": "Investigate event-dossier evidence for a proposed economic mechanism: primary claim, transmission, event-time horizon, priced-in evidence, opposing evidence and invalidators with source receipts. Existing generic assumptions are not event-specific verification.",
+        "mission_id": "b68d3bb42d34dabc596ed1086ffb7bd55b85167220fbc7de19b2373157ae1c01",
+        "queue_position": 5,
+        "next_research_at": "2026-10-19T09:01:09.419662+00:00"
+      }
+    ]
+  },
+  "research_missions": [
+    {
+      "mission_id": "78ba55847266aa02498455d22aba987edac12924d9d5d078a45d1a07b693d9bc",
+      "hypothesis_id": null,
+      "question": "Design a reproducible way to distinguish syndicated financial-news copies from independent corroboration, and to require primary-source receipts for an event dossier. Current diagnostic source mix is not proof that the claims are false.",
+      "search_query": "financial news provenance source independence syndication primary source verification",
+      "priority": 1,
+      "evidence_refs": [
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:52:05-160z"
+      ],
+      "success_criteria": [
+        "Source independence grouped by underlying publisher or original claim, not URL count",
+        "Explicit PRIMARY_UNAVAILABLE state when no accessible primary source is found",
+        "Retain source URI, capture time and content hash; external leads remain unverified",
+        "Distinguish a required counter-evidence check from counter-evidence actually obtained",
+        "No direct ALPHA influence, live execution, evaluator change or calibrated-probability claim"
+      ]
+    },
+    {
+      "mission_id": "8d4f59007c3d9f59254f1bac3b1294aded01462772caa4fc4f19bf4fde55545b",
+      "hypothesis_id": null,
+      "question": "Investigate calibration of economic-mechanism confidence. The current rule score reaches 0.97 through event count and breadth; determine how to label it as a heuristic until prospectively calibrated, without inventing a replacement probability.",
+      "search_query": "financial event prediction probability calibration proper scoring rules temporal validation",
+      "priority": 1,
+      "evidence_refs": [
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:52:05-160z"
+      ],
+      "success_criteria": [
+        "Separate heuristic evidence strength, source reliability and calibrated predictive probability",
+        "A preregistered later-time calibration assessment with missing outcomes reported",
+        "No arbitrary confidence cap presented as a measured probability",
+        "Retain source URI, capture time and content hash; external leads remain unverified",
+        "Distinguish a required counter-evidence check from counter-evidence actually obtained",
+        "No direct ALPHA influence, live execution, evaluator change or calibrated-probability claim"
+      ]
+    },
+    {
+      "mission_id": "b68d3bb42d34dabc596ed1086ffb7bd55b85167220fbc7de19b2373157ae1c01",
+      "hypothesis_id": null,
+      "question": "Investigate event-dossier evidence for a proposed economic mechanism: primary claim, transmission, event-time horizon, priced-in evidence, opposing evidence and invalidators with source receipts. Existing generic assumptions are not event-specific verification.",
+      "search_query": "financial event study identification confounding priced in information counter evidence",
+      "priority": 0.99,
+      "evidence_refs": [
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:ai_compute|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:energy_supply|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:geopolitics|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:monetary_policy|2026-10-19t08:52:05-160z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:42:07-618z",
+        "world_mechanism:mechanism|narrative:product_launch|2026-10-19t08:52:05-160z"
+      ],
+      "success_criteria": [
+        "Keep observation, causal hypothesis and counter-evidence receipts separate",
+        "Distinguish event occurrence from announcement time and Brian capture time",
+        "Document instrument mapping and actionable horizon or explicit UNRESOLVED status",
+        "Retain source URI, capture time and content hash; external leads remain unverified",
+        "Distinguish a required counter-evidence check from counter-evidence actually obtained",
+        "No direct ALPHA influence, live execution, evaluator change or calibrated-probability claim"
+      ]
+    }
+  ],
+  "runtime_code_changed": false,
+  "score_recalibrated": false
+}

@@ -48,3 +48,7 @@ Yazılımcı her seferinde bir küçük kabul edilebilir davranış değişikli�
 ## Kuyruk gerçekliği
 
 08:38 UTC salt-okunur incelemede 211 codegen isteği, 36 benzersiz hipotez ve 107 geçmiş BLOCKED mühendislik run'ı bulundu. Bunlar aynı ölçü değildir. Eski parent SHA'ları, tekrarlar, araştırma önerileri ve artık giderilmiş veri sorunları güncel kanıtla ayrıştırılmadan tek tek 'canlı yazılım hatası' sayılmamalı. Geçmiş silinerek veya başarısız run'a COMPLETE yazılarak sıfırlama yapılmadı.
+
+## 19 Ekim 11:01 Berlin — kaynak ve güven puanı denetimi
+
+[Kaynak kalitesi denetimi ve yazılımcı kabul ölçütleri](BRIAN_SOURCE_CONFIDENCE_AUDIT_20261019.md): son 300 çerçevenin 292'si discovery sınıfında; incelenen son 10 mekanizma puanı 0.97 ve kalibre edilmiş olasılık değil. Bir öğrenme gözlemi ve üç araştırma görevi gerçekten kaydedildi; henüz araştırma sonucu veya puan düzeltmesi teslim edilmiş değildir.
