@@ -5,17 +5,17 @@ import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.direct-wire-eye.v2-bounded-fallback";
+const VERSION="brian.direct-wire-eye.v3-yahoo-benchmark-rss";
 const COLLECTOR_ID="brian-direct-wire-eye-v1";
 const MAX_AGE_MS=100*60*1000;
 const MAX_ITEMS=60;
 
 type Json=Record<string,unknown>;
-type FeedSpec={id:string;url:string;fallbackUrls?:string[];fallbackPublisher?:string;theme:string;publisher:string;mode:"MARKETS"|"GEOPOLITICS"};
+type FeedSpec={id:string;url:string;fallbackUrls?:string[];fallbackPublisher?:string;coverageScope?:string;theme:string;publisher:string;mode:"MARKETS"|"GEOPOLITICS"};
 type Article={title:string;description:string;url:string;publishedAt:string|null;publisher:string;feedId:string;theme:string};
 
 const FEEDS:FeedSpec[]=[
-  {id:"wire:yahoo-finance",url:"https://finance.yahoo.com/news/rssindex",fallbackUrls:["https://news.yahoo.com/rss/topstories"],fallbackPublisher:"Yahoo News",theme:"markets_macro",publisher:"Yahoo Finance",mode:"MARKETS"},
+  {id:"wire:yahoo-finance",url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC%2C%5EIXIC&region=US&lang=en-US",coverageScope:"SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO",theme:"markets_macro",publisher:"Yahoo Finance",mode:"MARKETS"},
   {id:"wire:bloomberg-markets",url:"https://feeds.bloomberg.com/markets/news.rss",theme:"markets_macro",publisher:"Bloomberg",mode:"MARKETS"},
   {id:"wire:cnbc-us",url:"https://www.cnbc.com/id/100003114/device/rss/rss.html",theme:"markets_macro",publisher:"CNBC",mode:"MARKETS"},
   {id:"wire:aljazeera",url:"https://www.aljazeera.com/xml/rss/all.xml",theme:"geopolitics",publisher:"Al Jazeera",mode:"GEOPOLITICS"},
@@ -155,7 +155,7 @@ Deno.serve(async(req:Request)=>{
       const rel=fresh.filter(a=>relevant(a,spec));
       const selected=rel.filter(a=>spec.id!=="wire:yahoo-finance"||highSignal(a));
       candidates.push(...selected);
-      providerStats[spec.id]={status:"SUCCESS",observed:s.value.items.length,fresh:fresh.length,relevant:selected.length,feed_url:s.value.url,fallback_used:s.value.fallbackUsed,primary_errors:s.value.primaryErrors};
+      providerStats[spec.id]={status:"SUCCESS",coverage_scope:spec.coverageScope??"REGISTERED_FEED",observed:s.value.items.length,fresh:fresh.length,relevant:selected.length,feed_url:s.value.url,fallback_used:s.value.fallbackUsed,primary_errors:s.value.primaryErrors};
     });
 
     const unique=new Map<string,Article>();
@@ -183,7 +183,7 @@ Deno.serve(async(req:Request)=>{
         content_fingerprint:fingerprint,corroboration_key:await sha(`${a.theme}|${norm(a.title)}`),
         provenance_uri:a.url,pit_verified:true,raw_capture_id:null,
         metadata:{
-          direct_wire:true,feed_id:a.feedId,publisher:a.publisher,world_theme:a.theme,
+          direct_wire:true,feed_id:a.feedId,publisher:a.publisher,world_theme:a.theme,coverage_scope:spec.coverageScope??"REGISTERED_FEED",
           discovery_only:true,requires_truth_engine:true,directional_vote:false,direct_alpha_influence:false,
           macro_watch:macro,geopolitical_watch:geopolitical,source_latency_seconds:latency,
           summary_hint:a.description.slice(0,700),runtime_version:VERSION

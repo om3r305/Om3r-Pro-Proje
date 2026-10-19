@@ -19,3 +19,12 @@ test('fallback articles retain the actual publisher instead of the failed primar
  const r=await run({...spec,publisher:'Yahoo Finance',fallbackPublisher:'Yahoo News'});
  assert.equal(r.items[0].publisher,'Yahoo News');
 });
+
+test('Yahoo benchmark RSS uses its honest limited scope without relabeling Yahoo News',()=>{
+ const config=stripTypeScriptTypes(source.slice(source.indexOf('const FEEDS:'),source.indexOf('const MARKET_RE=')));
+ const feeds=vm.runInNewContext(config+';FEEDS');const yahoo=feeds.find(f=>f.id==='wire:yahoo-finance');
+ assert.equal(new URL(yahoo.url).hostname,'feeds.finance.yahoo.com');
+ assert.equal(new URL(yahoo.url).searchParams.get('s'),'^GSPC,^IXIC');
+ assert.equal(yahoo.publisher,'Yahoo Finance');assert.equal(yahoo.fallbackPublisher,undefined);
+ assert.equal(yahoo.coverageScope,'SP500_NASDAQ_BENCHMARK_NEWS_NOT_ALL_YAHOO');
+});
