@@ -185,9 +185,11 @@ def test_storage_function_grants(cur):
 def test_archive_policies_registered_conservatively(cur):
     cur.execute(
         "select table_name, time_column, pk_column, hot_retention_days, archive_enabled, purge_enabled "
-        "from public.brian_archive_policies where table_name like 'brian_prediction%' order by table_name"
+        "from public.brian_archive_policies where table_name like 'brian_prediction%'"
     )
-    rows = cur.fetchall()
+    # Sorted in Python: ORDER BY on text follows the database collation, which differs between a
+    # C-locale cluster and the en_US CI image.
+    rows = sorted(cur.fetchall())
     assert rows == [
         ("brian_prediction_market_snapshots", "received_at", "snapshot_id", 90, True, True),
         ("brian_prediction_markets", "first_seen_at", "market_key", 365, True, False),
