@@ -88,6 +88,16 @@ Bu migrasyon hiçbir şey silmez ve hiçbir zamanlayıcıyı açmaz.
 - **Durdurma:** `module_enabled=false`, global `brian_system_enabled=false` ya da `select cron.unschedule('brian-prediction-eye-15m')`.
 - Faz 1c'deki 256 MB sınırı her yazmada uygulanır.
 
+## Faz 2a — anlık-zaman olasılık değişimi ve veri sağlığı
+
+İki salt-okuma fonksiyonu (yalnızca service_role):
+
+- `brian_prediction_probability_changes_v1(as_of, limit, stale_after)`: Her piyasa için "Yes" olasılığı ve 1, 6, 24 saatlik değişim. **Yalnızca `received_at <= as_of` olan anlık görüntüler kullanılır**, yani Brian'ın o anda gerçekten bildiği veri. Gelecek bilgisi sızamaz.
+  - O kadar eski bir gözlem yoksa değişim `NULL` olur ve durum `INSUFFICIENT_HISTORY` olarak işaretlenir; 0 sayılmaz.
+  - Son gözlemi 45 dakikadan eski olan piyasa `STALE` işaretlenir. Olasılık yoksa durum `NO_PROBABILITY` olur.
+  - Çıktı `trade_signal: false` taşır; bu bir işlem sinyali değildir.
+- `brian_prediction_health_summary_v1(as_of, window)`: Kaynak başına durum dağılımı, son gözlem ve gecikme bilgisi verir. Ayrıca beklenen ve gözlenen tur sayısını (15 dakikalık plana göre, toplamanın başladığı andan itibaren), anlık görüntü tazeliğini ve depolama/sınır durumunu raporlar.
+
 ## Sıradaki tek adım
 
-Faz 2a: olasılık değişimi ölçümü (gelecek bilgisi kullanmadan, yalnızca saklanan anlık görüntülerden) ve veri sağlığı özeti. Cüzdan takibi ayrı bir kararla açılır.
+Faz 2b: ekonomik olay eşleştirmesi. Polymarket piyasalarını Brian'ın mevcut World/intel olaylarıyla zaman ve konu üzerinden eşleştirip "haber öncesi ve sonrası olasılık" karşılaştırması yapılacak. Panel (Faz 4) bu fonksiyonları okuyacak.
