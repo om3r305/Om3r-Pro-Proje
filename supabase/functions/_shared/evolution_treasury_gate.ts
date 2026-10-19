@@ -18,7 +18,7 @@ import {
   type MultiassetShadowOpportunity,
 } from "./evolution_treasury_multiasset_shadow.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v5-multiasset-shadow";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v6-multiasset-continuity";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
@@ -102,7 +102,7 @@ function closedGateInvalidations(
   reason: string,
 ): TreasuryOpportunity[] {
   const latest = latestMarkByAsset(opportunities, observedAt);
-  return state.positions.filter((position) => !isCanonicalAlphaShadowPosition(position)).map((position) => {
+  return state.positions.filter((position) => !isCanonicalAlphaShadowPosition(position) && !isMultiassetShadowPosition(position)).map((position) => {
     const mark = latest.get(position.assetId);
     return {
       assetId: position.assetId,
@@ -270,7 +270,9 @@ function applyMultiassetShadowOpens(
       ((time(b.observedAt) ?? 0) - (time(a.observedAt) ?? 0))
     );
   let opens = 0;
+  const exitedAssets = new Set(plan.actions.filter((action) => action.kind === "EXIT").map((action) => action.assetId));
   for (const row of candidates) {
+    if (exitedAssets.has(row.assetId)) continue;
     if (plan.state.positions.length >= MAX_SHADOW_POSITIONS) break;
     if (plan.state.positions.some((position) => position.assetId === row.assetId)) continue;
     const requested = row.requestedCapitalUsd;

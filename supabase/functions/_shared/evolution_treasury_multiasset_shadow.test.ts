@@ -125,3 +125,32 @@ Deno.test("closed or stale market revokes an existing multiasset SHADOW position
   if (closed.state.positions.length !== 0) throw new Error(JSON.stringify(closed.state.positions));
   if (closed.actions[0]?.kind !== "EXIT" || closed.actions[0]?.reason !== "MULTIASSET_SESSION_CLOSED_OR_STALE") throw new Error(JSON.stringify(closed.actions));
 });
+
+Deno.test("closed EXPECTED_EDGE gate must not churn a separately authorized fresh multiasset shadow position", () => {
+  const initial = initialTreasuryState("2026-09-21T14:09:00Z", 5000);
+  const run = (state: typeof initial, at: string, price: number) => {
+    const rows = buildMultiassetShadowOpportunities([decision({observedAt: at, providerTime: at, referencePrice: price})], state.positions, at);
+    return planPromotionGatedTreasuryCycle({state,opportunities:[],multiassetShadowOpportunities:rows,observedAt:at,promotionGate:closedGate,positionIdFor:()=>"unused"});
+  };
+  const opened = run(initial,"2026-09-21T14:10:00Z",7650);
+  const first = opened.state.positions[0];
+  let state = opened.state;
+  for (let minute = 11; minute <= 15; minute++) {
+    const held = run(state,`2026-09-21T14:${minute}:00Z`,7650);
+    if (held.actions.length !== 0) throw new Error("unchanged signal must HOLD, not pay another entry/exit: " + JSON.stringify(held.actions));
+    if (held.state.cumulativeCostsUsd !== opened.state.cumulativeCostsUsd) throw new Error("hold charged fees");
+    if (held.state.positions[0]?.positionId !== first.positionId) throw new Error("position lineage replaced");
+    state = held.state;
+  }
+});
+
+Deno.test("multiasset risk exit must not immediately reopen the same asset in the same cycle", () => {
+  const initial = initialTreasuryState("2026-09-21T14:09:00Z",5000);
+  const cycle = (state: typeof initial,at:string,price:number) => planPromotionGatedTreasuryCycle({
+    state,opportunities:[],multiassetShadowOpportunities:buildMultiassetShadowOpportunities([decision({observedAt:at,providerTime:at,referencePrice:price})],state.positions,at),observedAt:at,promotionGate:closedGate,positionIdFor:()=>"unused"
+  });
+  const opened=cycle(initial,"2026-09-21T14:10:00Z",7650);
+  const stopped=cycle(opened.state,"2026-09-21T14:11:00Z",7000);
+  if(!stopped.actions.some(a=>a.kind==="EXIT"&&a.reason==="RISK_STOP"))throw new Error(JSON.stringify(stopped.actions));
+  if(stopped.actions.some(a=>a.kind==="OPEN")||stopped.state.positions.length)throw new Error("stopped asset was reopened: "+JSON.stringify(stopped.actions));
+});
