@@ -51,4 +51,3 @@ test('cooling access-denied sources stay degraded without fetching or inventing 
  assert.equal(receipt.status,'DEGRADED');assert.deepEqual(JSON.parse(JSON.stringify(receipt.metadata.source_access)),h.state.sourceAccess);
  assert.equal(receipt.metadata.external_claims_independently_verified,0);
 });
-
