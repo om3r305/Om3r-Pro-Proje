@@ -64,9 +64,11 @@ export async function requireCronAuth(
     if (constantTimeEqual(suppliedHash, DEFAULT_CRON_KEY_SHA256_FALLBACK)) return;
   }
 
-  let result: any;
+  let result: { data: { cron_key_sha256?: unknown } | null; error: { message?: string } | null };
   try {
-    const authQuery: any = supabase.from("brian_dashboard_auth")
+    const authQuery: PromiseLike<typeof result> & {
+      abortSignal?: (signal: AbortSignal) => PromiseLike<typeof result>;
+    } = supabase.from("brian_dashboard_auth")
     .select("cron_key_sha256")
     .eq("auth_id", authId)
     .single();
@@ -74,7 +76,7 @@ export async function requireCronAuth(
     ? await authQuery.abortSignal(AbortSignal.timeout(4_000))
     : await Promise.race([
         Promise.resolve(authQuery),
-        new Promise<any>((_, reject) => setTimeout(() => reject(new Error("CRON_AUTH_LOOKUP_TIMEOUT")), 4_000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("CRON_AUTH_LOOKUP_TIMEOUT")), 4_000)),
       ]);
   } catch (error) {
     if (authId === DEFAULT_AUTH_ID && isTransientAuthLookupFailure(String(error))) {

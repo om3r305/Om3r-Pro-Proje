@@ -6,11 +6,14 @@
  const fields={COMPILE:'compile_passed',TEST:'tests_passed',REPLAY:'replay_passed',STRESS:'stress_passed',REVIEW:'review_passed',PREVIEW:'preview_passed',MEASURE:'measurement_passed'};
  function providerExplanation(payload){
   if(!payload?.provider_exhausted)return null;
-  const attempts=arr(payload.provider_state?.attempts),parts=[];
+  const attempts=arr(payload.provider_state?.attempts).filter(a=>a&&a.exit_code!==0),parts=[];
+  const stage=String(payload.failure_stage||attempts.at(-1)?.phase||'').toUpperCase();
+  const stageText={UNDERSTAND:'inceleme aşamasında',ANALYSIS:'inceleme aşamasında',PLAN:'plan aşamasında',CODE:'kod üretiminde'}[stage]||'ilgili aşamada';
   if(attempts.some(a=>a.error_class==='QUOTA_EXHAUSTED'))parts.push('AI sağlayıcısının kullanım kotası dolmuş');
-  if(attempts.some(a=>a.exit_code===124||a.exit_code===137))parts.push('yedek model yanıt süresini aşmış');
+  if(attempts.some(a=>a.error_class==='TIMEOUT'||a.exit_code===124))parts.push(`AI sağlayıcısı ${stageText} yanıt süresini aşmış`);
+  if(attempts.some(a=>a.exit_code===137&&a.error_class!=='TIMEOUT'))parts.push('sağlayıcı işlemi sonlandırılmış; nedeni bu kayıttan doğrulanamıyor');
   if(!parts.length)parts.push('yapılandırılmış AI sağlayıcılarından yanıt alınamamış');
-  return parts.join('; ')+'. Bu denemede kod üretimi tamamlanmadı; görev yeniden deneme bekliyor.';
+  return parts.join('; ')+`. Bu denemede ${stage==='CODE'?'kod üretimi':'ilgili aşama'} tamamlanmadı; görev yeniden deneme bekliyor.`;
  }
  function project(data,selected=null,error=null,now=Date.now()){
   const e=data||{},all=[e.current_run,...arr(e.approval_runs),...arr(e.recent_runs)].filter(Boolean),runs=[...new Map(all.map(r=>[r.run_id,r])).values()];
