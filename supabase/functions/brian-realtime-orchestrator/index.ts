@@ -1,7 +1,7 @@
 import { readOperatorState } from "../_shared/operator_state.ts";
 import { requireRealtimeInternal } from "../_shared/realtime_internal_auth.ts";
 
-const VERSION = "brian.realtime-orchestrator.v12-operator-controlled";
+const VERSION = "brian.realtime-orchestrator.v13-independent-outcome-prices";
 const BASE = "https://dliediwlldojkfjzlznm.supabase.co/functions/v1";
 const ENDPOINTS = {
   eye: BASE + "/brian-realtime-official-eye",
@@ -12,6 +12,7 @@ const ENDPOINTS = {
   macro: BASE + "/brian-realtime-official-macro-eye",
   bigMove: BASE + "/brian-realtime-big-move-hunter",
   intrabar: BASE + "/brian-intrabar-eye",
+  outcomePrice: "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-outcome-price-eye",
   alpha: BASE + "/brian-alpha-decision-compiler",
   catalyst: BASE + "/brian-realtime-catalyst-reaction",
   crowd: BASE + "/brian-realtime-crowd-behavior",
@@ -120,6 +121,8 @@ Deno.serve(async(req:Request)=>{
 
   const eyePromise=call("official_eye",ENDPOINTS.eye,key,50000);
   const marketPromise=marketLane(key,minute);
+  // Price observation must not wait for radar, signals, kline or market-lane success.
+  const outcomePricePromise=call("outcome_price",ENDPOINTS.outcomePrice,key,20000);
 
   // Cross-project pressure is intentionally serialized:
   // odd minutes drain the durable intel queue, even minutes run the breaking scout.
@@ -133,10 +136,11 @@ Deno.serve(async(req:Request)=>{
     : Promise.resolve(null);
   const heartbeatPromise=call("frontier_heartbeat_refresh",ENDPOINTS.heartbeatRefresh,key,8000);
 
-  const [eye,intelSync,market,scout,heartbeat]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise]);
+  const [eye,intelSync,market,scout,heartbeat,outcomePrice]=await Promise.all([eyePromise,intelSyncPromise,marketPromise,scoutPromise,heartbeatPromise,outcomePricePromise]);
   const catalyst=await call("catalyst_reaction",ENDPOINTS.catalyst,key,50000);
   const results=[
     eye,
+    outcomePrice,
     ...(intelSync?[intelSync]:[]),
     ...market,
     ...(scout?[scout]:[]),
@@ -144,7 +148,7 @@ Deno.serve(async(req:Request)=>{
     catalyst
   ];
 
-  const failed=results.filter((r:any)=>r.ok===false);
+  const failed=results.filter(r=>r.ok===false);
   return out({
     status:failed.length?"DEGRADED":"SUCCESS",
     version:VERSION,
