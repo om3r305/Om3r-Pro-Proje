@@ -1,5 +1,7 @@
 # BRIAN Singularity — cinematic preview 03
 
+Follow-up: the measured dark-theme and physical-fullscreen acceptance results are recorded in [BRIAN_DARKNET_ACCEPTANCE_20261020.md](BRIAN_DARKNET_ACCEPTANCE_20261020.md). The earlier failed measurements below are retained as historical evidence.
+
 Isolated local preview, 20 October 2026. Theme reference: https://www.instagram.com/reel/DchOQ3aIgy6/ . The reference was inspected in the browser; its video, music and images were not downloaded or embedded. All scene art is generated procedurally by the new renderer.
 
 Open the interface at http://127.0.0.1:8800/cinematic-preview/v3.html or the resolution studio at http://127.0.0.1:8800/cinematic-preview/singularity.html . The existing local HTTP server serves these files. The v1/v2 prototypes and production files are unchanged. There has been no publication, remote push, backend modification, experiment start or execution request.
