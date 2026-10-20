@@ -1,0 +1,8 @@
+{
+  "source": "EnumDisplaySettingsW current settings + nvidia-smi",
+  "width": 5120,
+  "height": 1440,
+  "refresh_hz": 240,
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "device_vram_mib": 24564
+}

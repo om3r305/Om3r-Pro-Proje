@@ -1,0 +1,645 @@
+{
+  "scope": "Whole system/device; shared with other applications. Not attributable solely to preview.",
+  "samples": [
+    {
+      "at": "2026-10-20T18:55:56.625217+00:00",
+      "system_cpu_pct": 3.1865042174320513,
+      "device_gpu_pct": 33.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2719.0,
+      "device_power_w": 34.9
+    },
+    {
+      "at": "2026-10-20T18:55:57.674838+00:00",
+      "system_cpu_pct": 3.5371399696816574,
+      "device_gpu_pct": 30.0,
+      "device_memory_controller_pct": 26.0,
+      "device_vram_mib": 2710.0,
+      "device_power_w": 33.65
+    },
+    {
+      "at": "2026-10-20T18:55:58.721416+00:00",
+      "system_cpu_pct": 3.54175776125929,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2715.0,
+      "device_power_w": 34.17
+    },
+    {
+      "at": "2026-10-20T18:55:59.775658+00:00",
+      "system_cpu_pct": 2.7272727272727226,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2715.0,
+      "device_power_w": 34.09
+    },
+    {
+      "at": "2026-10-20T18:56:00.818597+00:00",
+      "system_cpu_pct": 1.950585175552666,
+      "device_gpu_pct": 29.0,
+      "device_memory_controller_pct": 23.0,
+      "device_vram_mib": 2710.0,
+      "device_power_w": 33.55
+    },
+    {
+      "at": "2026-10-20T18:56:01.864585+00:00",
+      "system_cpu_pct": 2.8545119705340682,
+      "device_gpu_pct": 29.0,
+      "device_memory_controller_pct": 24.0,
+      "device_vram_mib": 2694.0,
+      "device_power_w": 33.23
+    },
+    {
+      "at": "2026-10-20T18:56:02.906840+00:00",
+      "system_cpu_pct": 4.342857142857149,
+      "device_gpu_pct": 36.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2699.0,
+      "device_power_w": 33.35
+    },
+    {
+      "at": "2026-10-20T18:56:03.949821+00:00",
+      "system_cpu_pct": 2.58114978490418,
+      "device_gpu_pct": 32.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2695.0,
+      "device_power_w": 33.83
+    },
+    {
+      "at": "2026-10-20T18:56:04.991608+00:00",
+      "system_cpu_pct": 2.399232245681382,
+      "device_gpu_pct": 34.0,
+      "device_memory_controller_pct": 26.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 34.14
+    },
+    {
+      "at": "2026-10-20T18:56:06.035608+00:00",
+      "system_cpu_pct": 5.348955680081513,
+      "device_gpu_pct": 40.0,
+      "device_memory_controller_pct": 29.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 34.02
+    },
+    {
+      "at": "2026-10-20T18:56:07.076856+00:00",
+      "system_cpu_pct": 3.049049933716308,
+      "device_gpu_pct": 33.0,
+      "device_memory_controller_pct": 25.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 33.82
+    },
+    {
+      "at": "2026-10-20T18:56:08.118948+00:00",
+      "system_cpu_pct": 2.5627883136852936,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 34.19
+    },
+    {
+      "at": "2026-10-20T18:56:09.166259+00:00",
+      "system_cpu_pct": 3.0682529743268683,
+      "device_gpu_pct": 38.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 33.63
+    },
+    {
+      "at": "2026-10-20T18:56:10.208937+00:00",
+      "system_cpu_pct": 2.7986348122866933,
+      "device_gpu_pct": 29.0,
+      "device_memory_controller_pct": 22.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 33.46
+    },
+    {
+      "at": "2026-10-20T18:56:11.251650+00:00",
+      "system_cpu_pct": 3.874092009685226,
+      "device_gpu_pct": 30.0,
+      "device_memory_controller_pct": 25.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 34.06
+    },
+    {
+      "at": "2026-10-20T18:56:12.294612+00:00",
+      "system_cpu_pct": 3.5543766578249314,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 26.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 33.53
+    },
+    {
+      "at": "2026-10-20T18:56:13.342671+00:00",
+      "system_cpu_pct": 2.5815217391304324,
+      "device_gpu_pct": 38.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 34.08
+    },
+    {
+      "at": "2026-10-20T18:56:14.388843+00:00",
+      "system_cpu_pct": 1.9090909090909047,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 26.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 34.12
+    },
+    {
+      "at": "2026-10-20T18:56:15.442491+00:00",
+      "system_cpu_pct": 2.8380634390651083,
+      "device_gpu_pct": 31.0,
+      "device_memory_controller_pct": 27.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 34.03
+    },
+    {
+      "at": "2026-10-20T18:56:16.496373+00:00",
+      "system_cpu_pct": 3.234358430540829,
+      "device_gpu_pct": 31.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 34.57
+    },
+    {
+      "at": "2026-10-20T18:56:17.541795+00:00",
+      "system_cpu_pct": 3.524046434494199,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 16.0,
+      "device_vram_mib": 2750.0,
+      "device_power_w": 34.17
+    },
+    {
+      "at": "2026-10-20T18:56:18.582944+00:00",
+      "system_cpu_pct": 5.1597051597051635,
+      "device_gpu_pct": 18.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2724.0,
+      "device_power_w": 33.13
+    },
+    {
+      "at": "2026-10-20T18:56:19.625825+00:00",
+      "system_cpu_pct": 2.9228371005455944,
+      "device_gpu_pct": 5.0,
+      "device_memory_controller_pct": 1.0,
+      "device_vram_mib": 2698.0,
+      "device_power_w": 70.08
+    },
+    {
+      "at": "2026-10-20T18:56:20.670558+00:00",
+      "system_cpu_pct": 2.341137123745818,
+      "device_gpu_pct": 5.0,
+      "device_memory_controller_pct": 1.0,
+      "device_vram_mib": 2692.0,
+      "device_power_w": 75.1
+    },
+    {
+      "at": "2026-10-20T18:56:21.711727+00:00",
+      "system_cpu_pct": 2.682821289485071,
+      "device_gpu_pct": 19.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2691.0,
+      "device_power_w": 64.75
+    },
+    {
+      "at": "2026-10-20T18:56:22.767600+00:00",
+      "system_cpu_pct": 3.733200597312092,
+      "device_gpu_pct": 22.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 36.08
+    },
+    {
+      "at": "2026-10-20T18:56:23.808789+00:00",
+      "system_cpu_pct": 2.8426395939086246,
+      "device_gpu_pct": 18.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2683.0,
+      "device_power_w": 34.38
+    },
+    {
+      "at": "2026-10-20T18:56:24.852749+00:00",
+      "system_cpu_pct": 2.318548387096775,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 33.0,
+      "device_vram_mib": 2682.0,
+      "device_power_w": 33.87
+    },
+    {
+      "at": "2026-10-20T18:56:25.894822+00:00",
+      "system_cpu_pct": 5.14435695538058,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 26.0,
+      "device_vram_mib": 2677.0,
+      "device_power_w": 33.85
+    },
+    {
+      "at": "2026-10-20T18:56:26.941714+00:00",
+      "system_cpu_pct": 4.241552839683682,
+      "device_gpu_pct": 20.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2748.0,
+      "device_power_w": 34.32
+    },
+    {
+      "at": "2026-10-20T18:56:27.983835+00:00",
+      "system_cpu_pct": 3.0229156509020028,
+      "device_gpu_pct": 19.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2742.0,
+      "device_power_w": 33.57
+    },
+    {
+      "at": "2026-10-20T18:56:29.039930+00:00",
+      "system_cpu_pct": 3.0368763557483747,
+      "device_gpu_pct": 41.0,
+      "device_memory_controller_pct": 34.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 34.67
+    },
+    {
+      "at": "2026-10-20T18:56:30.087808+00:00",
+      "system_cpu_pct": 3.100775193798455,
+      "device_gpu_pct": 23.0,
+      "device_memory_controller_pct": 16.0,
+      "device_vram_mib": 2739.0,
+      "device_power_w": 34.71
+    },
+    {
+      "at": "2026-10-20T18:56:31.135000+00:00",
+      "system_cpu_pct": 1.8881118881118875,
+      "device_gpu_pct": 22.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.83
+    },
+    {
+      "at": "2026-10-20T18:56:32.174593+00:00",
+      "system_cpu_pct": 3.3990147783251268,
+      "device_gpu_pct": 39.0,
+      "device_memory_controller_pct": 29.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.43
+    },
+    {
+      "at": "2026-10-20T18:56:33.219204+00:00",
+      "system_cpu_pct": 3.2928064842958515,
+      "device_gpu_pct": 20.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 35.39
+    },
+    {
+      "at": "2026-10-20T18:56:34.262911+00:00",
+      "system_cpu_pct": 3.662819869543399,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 33.99
+    },
+    {
+      "at": "2026-10-20T18:56:35.305859+00:00",
+      "system_cpu_pct": 2.1839563208735813,
+      "device_gpu_pct": 19.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.7
+    },
+    {
+      "at": "2026-10-20T18:56:36.349994+00:00",
+      "system_cpu_pct": 2.4861878453038666,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 31.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.54
+    },
+    {
+      "at": "2026-10-20T18:56:37.403706+00:00",
+      "system_cpu_pct": 4.206602768903089,
+      "device_gpu_pct": 38.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 35.09
+    },
+    {
+      "at": "2026-10-20T18:56:38.447208+00:00",
+      "system_cpu_pct": 2.031872509960164,
+      "device_gpu_pct": 22.0,
+      "device_memory_controller_pct": 16.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 36.05
+    },
+    {
+      "at": "2026-10-20T18:56:39.489001+00:00",
+      "system_cpu_pct": 3.316749585406298,
+      "device_gpu_pct": 19.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.48
+    },
+    {
+      "at": "2026-10-20T18:56:40.536680+00:00",
+      "system_cpu_pct": 4.11650485436893,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.97
+    },
+    {
+      "at": "2026-10-20T18:56:41.579848+00:00",
+      "system_cpu_pct": 4.4270833333333375,
+      "device_gpu_pct": 45.0,
+      "device_memory_controller_pct": 36.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.47
+    },
+    {
+      "at": "2026-10-20T18:56:42.623287+00:00",
+      "system_cpu_pct": 3.8196286472148566,
+      "device_gpu_pct": 36.0,
+      "device_memory_controller_pct": 33.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.64
+    },
+    {
+      "at": "2026-10-20T18:56:43.663710+00:00",
+      "system_cpu_pct": 2.244582043343657,
+      "device_gpu_pct": 30.0,
+      "device_memory_controller_pct": 22.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.19
+    },
+    {
+      "at": "2026-10-20T18:56:44.705980+00:00",
+      "system_cpu_pct": 4.588528678304238,
+      "device_gpu_pct": 38.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.26
+    },
+    {
+      "at": "2026-10-20T18:56:45.749544+00:00",
+      "system_cpu_pct": 3.258547008547008,
+      "device_gpu_pct": 42.0,
+      "device_memory_controller_pct": 33.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 35.31
+    },
+    {
+      "at": "2026-10-20T18:56:46.789266+00:00",
+      "system_cpu_pct": 2.2471910112359605,
+      "device_gpu_pct": 23.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 36.08
+    },
+    {
+      "at": "2026-10-20T18:56:47.843616+00:00",
+      "system_cpu_pct": 3.8536585365853693,
+      "device_gpu_pct": 34.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.19
+    },
+    {
+      "at": "2026-10-20T18:56:48.889674+00:00",
+      "system_cpu_pct": 3.0422757803239775,
+      "device_gpu_pct": 39.0,
+      "device_memory_controller_pct": 29.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 36.03
+    },
+    {
+      "at": "2026-10-20T18:56:49.936678+00:00",
+      "system_cpu_pct": 2.876984126984128,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2732.0,
+      "device_power_w": 36.1
+    },
+    {
+      "at": "2026-10-20T18:56:50.979662+00:00",
+      "system_cpu_pct": 3.1638418079096065,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.35
+    },
+    {
+      "at": "2026-10-20T18:56:52.040984+00:00",
+      "system_cpu_pct": 2.134831460674158,
+      "device_gpu_pct": 18.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.13
+    },
+    {
+      "at": "2026-10-20T18:56:53.086892+00:00",
+      "system_cpu_pct": 6.020066889632103,
+      "device_gpu_pct": 47.0,
+      "device_memory_controller_pct": 35.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.99
+    },
+    {
+      "at": "2026-10-20T18:56:54.130687+00:00",
+      "system_cpu_pct": 7.117278424350937,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2739.0,
+      "device_power_w": 35.04
+    },
+    {
+      "at": "2026-10-20T18:56:55.177688+00:00",
+      "system_cpu_pct": 8.274565115185705,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.97
+    },
+    {
+      "at": "2026-10-20T18:56:56.222562+00:00",
+      "system_cpu_pct": 5.607917059377943,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.61
+    },
+    {
+      "at": "2026-10-20T18:56:57.266631+00:00",
+      "system_cpu_pct": 3.873239436619713,
+      "device_gpu_pct": 41.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 35.29
+    },
+    {
+      "at": "2026-10-20T18:56:58.307014+00:00",
+      "system_cpu_pct": 2.1230502599653422,
+      "device_gpu_pct": 18.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.55
+    },
+    {
+      "at": "2026-10-20T18:56:59.361834+00:00",
+      "system_cpu_pct": 2.4316109422492405,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 28.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.26
+    },
+    {
+      "at": "2026-10-20T18:57:00.405871+00:00",
+      "system_cpu_pct": 2.7534965034964998,
+      "device_gpu_pct": 31.0,
+      "device_memory_controller_pct": 25.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.82
+    },
+    {
+      "at": "2026-10-20T18:57:01.449662+00:00",
+      "system_cpu_pct": 2.6013006503251668,
+      "device_gpu_pct": 18.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 34.89
+    },
+    {
+      "at": "2026-10-20T18:57:02.492167+00:00",
+      "system_cpu_pct": 2.5536261491317713,
+      "device_gpu_pct": 22.0,
+      "device_memory_controller_pct": 16.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.91
+    },
+    {
+      "at": "2026-10-20T18:57:03.535927+00:00",
+      "system_cpu_pct": 3.7922077922077913,
+      "device_gpu_pct": 25.0,
+      "device_memory_controller_pct": 19.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.72
+    },
+    {
+      "at": "2026-10-20T18:57:04.577670+00:00",
+      "system_cpu_pct": 3.144889554473984,
+      "device_gpu_pct": 34.0,
+      "device_memory_controller_pct": 29.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.73
+    },
+    {
+      "at": "2026-10-20T18:57:05.621875+00:00",
+      "system_cpu_pct": 2.8627838104639647,
+      "device_gpu_pct": 43.0,
+      "device_memory_controller_pct": 35.0,
+      "device_vram_mib": 2737.0,
+      "device_power_w": 34.82
+    },
+    {
+      "at": "2026-10-20T18:57:06.668717+00:00",
+      "system_cpu_pct": 2.4986709197235557,
+      "device_gpu_pct": 22.0,
+      "device_memory_controller_pct": 17.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 35.2
+    },
+    {
+      "at": "2026-10-20T18:57:07.711398+00:00",
+      "system_cpu_pct": 2.8656716417910455,
+      "device_gpu_pct": 16.0,
+      "device_memory_controller_pct": 11.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 33.52
+    },
+    {
+      "at": "2026-10-20T18:57:08.754901+00:00",
+      "system_cpu_pct": 3.440974060349389,
+      "device_gpu_pct": 39.0,
+      "device_memory_controller_pct": 31.0,
+      "device_vram_mib": 2738.0,
+      "device_power_w": 34.14
+    },
+    {
+      "at": "2026-10-20T18:57:09.810721+00:00",
+      "system_cpu_pct": 3.86859072766349,
+      "device_gpu_pct": 35.0,
+      "device_memory_controller_pct": 32.0,
+      "device_vram_mib": 2765.0,
+      "device_power_w": 34.87
+    },
+    {
+      "at": "2026-10-20T18:57:10.856018+00:00",
+      "system_cpu_pct": 3.8839494618624237,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 14.0,
+      "device_vram_mib": 2735.0,
+      "device_power_w": 34.68
+    },
+    {
+      "at": "2026-10-20T18:57:11.898746+00:00",
+      "system_cpu_pct": 3.0064070970921675,
+      "device_gpu_pct": 33.0,
+      "device_memory_controller_pct": 24.0,
+      "device_vram_mib": 2731.0,
+      "device_power_w": 34.12
+    },
+    {
+      "at": "2026-10-20T18:57:12.938978+00:00",
+      "system_cpu_pct": 3.8834951456310662,
+      "device_gpu_pct": 43.0,
+      "device_memory_controller_pct": 33.0,
+      "device_vram_mib": 2722.0,
+      "device_power_w": 34.79
+    },
+    {
+      "at": "2026-10-20T18:57:13.981555+00:00",
+      "system_cpu_pct": 2.8041610131162353,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 30.0,
+      "device_vram_mib": 2722.0,
+      "device_power_w": 35.6
+    },
+    {
+      "at": "2026-10-20T18:57:15.024717+00:00",
+      "system_cpu_pct": 2.4058102587380836,
+      "device_gpu_pct": 23.0,
+      "device_memory_controller_pct": 13.0,
+      "device_vram_mib": 2729.0,
+      "device_power_w": 35.17
+    },
+    {
+      "at": "2026-10-20T18:57:16.067996+00:00",
+      "system_cpu_pct": 3.2034169781099853,
+      "device_gpu_pct": 21.0,
+      "device_memory_controller_pct": 15.0,
+      "device_vram_mib": 2703.0,
+      "device_power_w": 34.16
+    },
+    {
+      "at": "2026-10-20T18:57:17.112754+00:00",
+      "system_cpu_pct": 3.637090327737813,
+      "device_gpu_pct": 39.0,
+      "device_memory_controller_pct": 31.0,
+      "device_vram_mib": 2696.0,
+      "device_power_w": 34.68
+    },
+    {
+      "at": "2026-10-20T18:57:18.155878+00:00",
+      "system_cpu_pct": 2.460202604920403,
+      "device_gpu_pct": 37.0,
+      "device_memory_controller_pct": 31.0,
+      "device_vram_mib": 2702.0,
+      "device_power_w": 34.39
+    },
+    {
+      "at": "2026-10-20T18:57:19.197932+00:00",
+      "system_cpu_pct": 3.117729176361095,
+      "device_gpu_pct": 6.0,
+      "device_memory_controller_pct": 1.0,
+      "device_vram_mib": 2687.0,
+      "device_power_w": 50.63
+    }
+  ]
+}

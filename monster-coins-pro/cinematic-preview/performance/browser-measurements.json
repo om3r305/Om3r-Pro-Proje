@@ -1,0 +1,2434 @@
+[
+  {
+    "at": "2026-10-20T18:57:29.834Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+    "layout": {
+      "viewportWidth": 5120,
+      "viewportHeight": 1440,
+      "cssWidth": 2994,
+      "cssHeight": 1112,
+      "dpr": 1.25,
+      "buffer": {
+        "width": 3742,
+        "height": 1390,
+        "ratio": 1.25,
+        "estimatedBufferBytes": 41611040
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webgl2": true,
+    "gpuTimerSupported": true,
+    "quality": 1,
+    "nodes": 7,
+    "edges": 6,
+    "drawCalls": 12,
+    "triangles": 5100,
+    "jsHeapBytes": 12912924,
+    "cpuJsMeanMs": 0.21610526316162001,
+    "gpuDrawMeanMs": 0.030847999999999997,
+    "frameP95Ms": 16.899999999999636,
+    "renderedFps": 60.15856531320502,
+    "notes": [
+      "CPU is timed JavaScript work only, not process/system utilization.",
+      "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+      "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+    ],
+    "durationMs": 15791.59999999986,
+    "samples": [
+      {
+        "at": "2026-10-20T18:57:14.616Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 18936855,
+        "cpuJsMeanMs": 0.2371428571508399,
+        "gpuDrawMeanMs": 0.028672,
+        "frameP95Ms": 16.800000000000182,
+        "renderedFps": 60.116798351082025,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:15.630Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 19444395,
+        "cpuJsMeanMs": 0.23020833333672877,
+        "gpuDrawMeanMs": 0.027136,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.11647567161373,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:16.644Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 19961747,
+        "cpuJsMeanMs": 0.22356687897555294,
+        "gpuDrawMeanMs": 0.024234666666666668,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.12100788848892,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:17.658Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 20480519,
+        "cpuJsMeanMs": 0.22568807339321378,
+        "gpuDrawMeanMs": 0.027904,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.12300394384841,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:18.673Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12546432,
+        "cpuJsMeanMs": 0.23010752688155353,
+        "gpuDrawMeanMs": 0.023961600000000003,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.122831591423335,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:19.688Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13098928,
+        "cpuJsMeanMs": 0.2285294117666233,
+        "gpuDrawMeanMs": 0.021162666666666666,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.123784261715294,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:20.702Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12669108,
+        "cpuJsMeanMs": 0.2271820448926578,
+        "gpuDrawMeanMs": 0.019163428571428574,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.12264419689041,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:21.717Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13153360,
+        "cpuJsMeanMs": 0.22554112554656833,
+        "gpuDrawMeanMs": 0.019712,
+        "frameP95Ms": 16.80000000000109,
+        "renderedFps": 60.12337003201374,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:22.731Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12857560,
+        "cpuJsMeanMs": 0.22447418738521607,
+        "gpuDrawMeanMs": 0.020821333333333334,
+        "frameP95Ms": 16.80000000000109,
+        "renderedFps": 60.12185308656167,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:23.746Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13354304,
+        "cpuJsMeanMs": 0.22294520548535257,
+        "gpuDrawMeanMs": 0.0210944,
+        "frameP95Ms": 16.80000000000109,
+        "renderedFps": 60.12189095700873,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:24.761Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13009396,
+        "cpuJsMeanMs": 0.22217054264078478,
+        "gpuDrawMeanMs": 0.023272727272727275,
+        "frameP95Ms": 16.80000000000109,
+        "renderedFps": 60.12304250559284,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:25.775Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12554840,
+        "cpuJsMeanMs": 0.2216713881052809,
+        "gpuDrawMeanMs": 0.026624,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.122971062626675,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:26.790Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13046272,
+        "cpuJsMeanMs": 0.22033898305479374,
+        "gpuDrawMeanMs": 0.026624,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.12291098360143,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:27.804Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12723700,
+        "cpuJsMeanMs": 0.2190821256079702,
+        "gpuDrawMeanMs": 0.02757485714285714,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.1224231950566,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:28.819Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13236004,
+        "cpuJsMeanMs": 0.21709786277186835,
+        "gpuDrawMeanMs": 0.028740266666666663,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.12281556024455,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:29.834Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2994,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 3742,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 41611040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12912924,
+        "cpuJsMeanMs": 0.21610526316162001,
+        "gpuDrawMeanMs": 0.030847999999999997,
+        "frameP95Ms": 16.899999999999636,
+        "renderedFps": 60.122016049413965,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      }
+    ],
+    "frameCount": 950,
+    "gpuSamples": 16
+  },
+  {
+    "at": "2026-10-20T18:58:11.432Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+    "layout": {
+      "viewportWidth": 3840,
+      "viewportHeight": 1080,
+      "cssWidth": 2226,
+      "cssHeight": 752,
+      "dpr": 1.25,
+      "buffer": {
+        "width": 2782,
+        "height": 940,
+        "ratio": 1.25,
+        "estimatedBufferBytes": 20920640
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webgl2": true,
+    "gpuTimerSupported": true,
+    "quality": 1,
+    "nodes": 7,
+    "edges": 6,
+    "drawCalls": 12,
+    "triangles": 5100,
+    "jsHeapBytes": 12925491,
+    "cpuJsMeanMs": 0.2107960741566809,
+    "gpuDrawMeanMs": 0.03884800000000001,
+    "frameP95Ms": 16.900000000001455,
+    "renderedFps": 60.12720477345748,
+    "notes": [
+      "CPU is timed JavaScript work only, not process/system utilization.",
+      "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+      "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+    ],
+    "durationMs": 15251,
+    "samples": [
+      {
+        "at": "2026-10-20T18:57:56.213Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12575290,
+        "cpuJsMeanMs": 0.30000000004656613,
+        "gpuDrawMeanMs": null,
+        "frameP95Ms": 16.69999999999709,
+        "renderedFps": 60.06006006006793,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:57.228Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13026890,
+        "cpuJsMeanMs": 0.20793650796016058,
+        "gpuDrawMeanMs": 0.037888,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.114503816793885,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:58.243Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12678878,
+        "cpuJsMeanMs": 0.2120967742051899,
+        "gpuDrawMeanMs": 0.046591999999999995,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12412723041113,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:57:59.257Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13107758,
+        "cpuJsMeanMs": 0.2135135135248404,
+        "gpuDrawMeanMs": 0.03993599999999999,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.11958923696873,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:00.271Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12746106,
+        "cpuJsMeanMs": 0.21382113821933244,
+        "gpuDrawMeanMs": 0.036351999999999995,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12317919640241,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:01.286Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13184458,
+        "cpuJsMeanMs": 0.21205211727097267,
+        "gpuDrawMeanMs": 0.03563519999999999,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12063293122355,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:02.300Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12817278,
+        "cpuJsMeanMs": 0.21277173913435748,
+        "gpuDrawMeanMs": 0.035328,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12285975689456,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:03.315Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12615431,
+        "cpuJsMeanMs": 0.21002331002732622,
+        "gpuDrawMeanMs": 0.03247542857142857,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12276816996943,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:04.329Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13025839,
+        "cpuJsMeanMs": 0.21122448980019484,
+        "gpuDrawMeanMs": 0.030976,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12269938650307,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:05.344Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13429279,
+        "cpuJsMeanMs": 0.21034482759153114,
+        "gpuDrawMeanMs": 0.03197155555555556,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12133379888271,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:06.359Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13014259,
+        "cpuJsMeanMs": 0.21029411765230893,
+        "gpuDrawMeanMs": 0.032256,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.123193602577835,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:07.373Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13434095,
+        "cpuJsMeanMs": 0.20921248143066945,
+        "gpuDrawMeanMs": 0.034536727272727274,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.1231049608262,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:08.388Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13075791,
+        "cpuJsMeanMs": 0.2094005449628711,
+        "gpuDrawMeanMs": 0.03421866666666667,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12303105264453,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:09.403Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13511691,
+        "cpuJsMeanMs": 0.2089308176134016,
+        "gpuDrawMeanMs": 0.03331938461538462,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12296848648935,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:10.417Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13151783,
+        "cpuJsMeanMs": 0.20992990654308966,
+        "gpuDrawMeanMs": 0.03181226666666667,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.122914837576815,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:58:11.432Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2226,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2782,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 20920640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12925491,
+        "cpuJsMeanMs": 0.2107960741566809,
+        "gpuDrawMeanMs": 0.03884800000000001,
+        "frameP95Ms": 16.900000000001455,
+        "renderedFps": 60.12207994859793,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      }
+    ],
+    "frameCount": 917,
+    "gpuSamples": 16
+  },
+  {
+    "at": "2026-10-20T19:00:08.085Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+    "layout": {
+      "viewportWidth": 3440,
+      "viewportHeight": 1440,
+      "cssWidth": 1986,
+      "cssHeight": 1112,
+      "dpr": 1.25,
+      "buffer": {
+        "width": 2482,
+        "height": 1390,
+        "ratio": 1.25,
+        "estimatedBufferBytes": 27599840
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webgl2": true,
+    "gpuTimerSupported": true,
+    "quality": 1,
+    "nodes": 7,
+    "edges": 6,
+    "drawCalls": 12,
+    "triangles": 5100,
+    "jsHeapBytes": 12716318,
+    "cpuJsMeanMs": 0.25085106383057987,
+    "gpuDrawMeanMs": 0.0454656,
+    "frameP95Ms": 16.89999999999418,
+    "renderedFps": 60.171552938164126,
+    "notes": [
+      "CPU is timed JavaScript work only, not process/system utilization.",
+      "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+      "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+    ],
+    "durationMs": 15622,
+    "samples": [
+      {
+        "at": "2026-10-20T18:59:52.866Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13022917,
+        "cpuJsMeanMs": 0.271999999973923,
+        "gpuDrawMeanMs": null,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.11060351046008,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:53.880Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13436549,
+        "cpuJsMeanMs": 0.2569767441763001,
+        "gpuDrawMeanMs": 0.027648,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.1188395665851,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:54.895Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13082397,
+        "cpuJsMeanMs": 0.25918367346685356,
+        "gpuDrawMeanMs": 0.027136,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12024048096178,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:55.910Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13508373,
+        "cpuJsMeanMs": 0.2586538461507119,
+        "gpuDrawMeanMs": 0.044031999999999995,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12603341619944,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:56.924Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12561022,
+        "cpuJsMeanMs": 0.2605947955289932,
+        "gpuDrawMeanMs": 0.038144,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.121136267125735,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:57.938Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12944522,
+        "cpuJsMeanMs": 0.2551515151422019,
+        "gpuDrawMeanMs": 0.041164799999999994,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.123526518119235,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:58.953Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13335238,
+        "cpuJsMeanMs": 0.2534526854174693,
+        "gpuDrawMeanMs": 0.03720533333333333,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.124246524787964,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T18:59:59.968Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12914874,
+        "cpuJsMeanMs": 0.2519911504412416,
+        "gpuDrawMeanMs": 0.034816,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12237297153498,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:00.982Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13317970,
+        "cpuJsMeanMs": 0.25068226120512765,
+        "gpuDrawMeanMs": 0.033535999999999996,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12235426481959,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:01.997Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12941838,
+        "cpuJsMeanMs": 0.2510452961641646,
+        "gpuDrawMeanMs": 0.03310933333333333,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12233953410435,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:03.011Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13356470,
+        "cpuJsMeanMs": 0.2513385826743787,
+        "gpuDrawMeanMs": 0.0316416,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.124035411636605,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:04.027Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12490758,
+        "cpuJsMeanMs": 0.2502873563221067,
+        "gpuDrawMeanMs": 0.03090618181818182,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.1238759167595,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:05.041Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12943210,
+        "cpuJsMeanMs": 0.24980184940567124,
+        "gpuDrawMeanMs": 0.047786666666666665,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12278709226507,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:06.055Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12574446,
+        "cpuJsMeanMs": 0.24914425427907017,
+        "gpuDrawMeanMs": 0.04560738461538461,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12274447833597,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:07.071Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 13041422,
+        "cpuJsMeanMs": 0.25005688282117605,
+        "gpuDrawMeanMs": 0.047030857142857145,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.123530256704925,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:08.084Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1986,
+          "cssHeight": 1112,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 2482,
+            "height": 1390,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 27599840
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12716318,
+        "cpuJsMeanMs": 0.25085106383057987,
+        "gpuDrawMeanMs": 0.0454656,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12306039169532,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      }
+    ],
+    "frameCount": 940,
+    "gpuSamples": 15
+  },
+  {
+    "at": "2026-10-20T19:00:48.669Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+    "layout": {
+      "viewportWidth": 1920,
+      "viewportHeight": 1080,
+      "cssWidth": 1145,
+      "cssHeight": 752,
+      "dpr": 1.25,
+      "buffer": {
+        "width": 1431,
+        "height": 940,
+        "ratio": 1.25,
+        "estimatedBufferBytes": 10761120
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "webgl2": true,
+    "gpuTimerSupported": true,
+    "quality": 1,
+    "nodes": 7,
+    "edges": 6,
+    "drawCalls": 12,
+    "triangles": 5100,
+    "jsHeapBytes": 12300715,
+    "cpuJsMeanMs": 0.25337016575028143,
+    "gpuDrawMeanMs": 0.0180224,
+    "frameP95Ms": 16.89999999999418,
+    "renderedFps": 60.15327453156735,
+    "notes": [
+      "CPU is timed JavaScript work only, not process/system utilization.",
+      "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+      "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+    ],
+    "durationMs": 15044.900000000373,
+    "samples": [
+      {
+        "at": "2026-10-20T19:00:34.463Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12386436,
+        "cpuJsMeanMs": 0.2509803921440799,
+        "gpuDrawMeanMs": 0.009216,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.14150943396226,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:35.479Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12805708,
+        "cpuJsMeanMs": 0.2553571428455013,
+        "gpuDrawMeanMs": 0.011264,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.130999677869454,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:36.493Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12456556,
+        "cpuJsMeanMs": 0.25895953756310264,
+        "gpuDrawMeanMs": 0.012288,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12999200583909,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:37.507Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12896280,
+        "cpuJsMeanMs": 0.25598290595862794,
+        "gpuDrawMeanMs": 0.021504000000000002,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12796464270096,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:38.522Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12515980,
+        "cpuJsMeanMs": 0.2569491525338489,
+        "gpuDrawMeanMs": 0.019456,
+        "frameP95Ms": 16.800000000017462,
+        "renderedFps": 60.126775778081026,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:39.536Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12894356,
+        "cpuJsMeanMs": 0.2584269662882107,
+        "gpuDrawMeanMs": 0.018944,
+        "frameP95Ms": 16.800000000017462,
+        "renderedFps": 60.12599435896575,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:40.551Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12492004,
+        "cpuJsMeanMs": 0.26067146282013265,
+        "gpuDrawMeanMs": 0.017993142857142857,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.123707772827444,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:41.567Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12425167,
+        "cpuJsMeanMs": 0.25753138074553944,
+        "gpuDrawMeanMs": 0.018176,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12427360317971,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:42.580Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12841423,
+        "cpuJsMeanMs": 0.2552875695674091,
+        "gpuDrawMeanMs": 0.018659555555555554,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.124711367920774,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:43.596Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12452639,
+        "cpuJsMeanMs": 0.2548333333285215,
+        "gpuDrawMeanMs": 0.019353600000000002,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.124457627288386,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:44.610Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12870391,
+        "cpuJsMeanMs": 0.2532526475022323,
+        "gpuDrawMeanMs": 0.018990545454545458,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12425072085432,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:45.625Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12506843,
+        "cpuJsMeanMs": 0.25429362880641343,
+        "gpuDrawMeanMs": 0.019200000000000002,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12407877753258,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:46.639Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12944075,
+        "cpuJsMeanMs": 0.2535121328236671,
+        "gpuDrawMeanMs": 0.018747076923076925,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12439530062198,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:47.653Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12572099,
+        "cpuJsMeanMs": 0.2541469194329348,
+        "gpuDrawMeanMs": 0.018358857142857146,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12380945596495,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      },
+      {
+        "at": "2026-10-20T19:00:48.669Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T18:57:06.369094+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1145,
+          "cssHeight": 752,
+          "dpr": 1.25,
+          "buffer": {
+            "width": 1431,
+            "height": 940,
+            "ratio": 1.25,
+            "estimatedBufferBytes": 10761120
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "webgl2": true,
+        "gpuTimerSupported": true,
+        "quality": 1,
+        "nodes": 7,
+        "edges": 6,
+        "drawCalls": 12,
+        "triangles": 5100,
+        "jsHeapBytes": 12300715,
+        "cpuJsMeanMs": 0.25337016575028143,
+        "gpuDrawMeanMs": 0.0180224,
+        "frameP95Ms": 16.89999999999418,
+        "renderedFps": 60.12370202560398,
+        "notes": [
+          "CPU is timed JavaScript work only, not process/system utilization.",
+          "GPU timer measures draw workload only; device utilization/VRAM requires separate host sampling.",
+          "Background particles, ring/core motion and layout are decorative. No synthetic events or prices."
+        ]
+      }
+    ],
+    "frameCount": 905,
+    "gpuSamples": 15
+  }
+]
