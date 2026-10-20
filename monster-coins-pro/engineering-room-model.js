@@ -19,7 +19,7 @@
   const e=data||{},all=[e.current_run,...arr(e.approval_runs),...arr(e.recent_runs)].filter(Boolean),runs=[...new Map(all.map(r=>[r.run_id,r])).values()];
   const run=runs.find(r=>r.run_id===selected)||e.current_run||arr(e.approval_runs)[0]||runs[0]||null;
   const events=arr(run?.recent_events).slice().sort((a,b)=>(time(b.observed_at)||0)-(time(a.observed_at)||0));
-  const stamp=time(e.observed_at),updated=time(run?.updated_at),reportFresh=!error&&stamp!==null&&now>=stamp&&now-stamp<300000;
+  const stamp=time(e.observed_at),updated=time(run?.updated_at),reportFresh=!error&&e.stale!==true&&e.status!=='STALE'&&stamp!==null&&now>=stamp&&now-stamp<300000;
   const recent=updated!==null&&updated<=now&&now-updated<900000;
   const historical=!!run&&run.run_id!==e.current_run?.run_id&&!arr(e.approval_runs).some(r=>r.run_id===run.run_id);
   const blocked=!!run&&['BLOCKED','FAILED','ROLLED_BACK'].includes(run.status);

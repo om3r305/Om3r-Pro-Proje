@@ -60,7 +60,7 @@ function refreshEngineerConsole(){
   if(!key()||document.hidden)return Promise.resolve();
   if(engineerRefreshInFlight)return engineerRefreshInFlight;
   engineerRefreshInFlight=(async()=>{
-    try{ENGINEER.data=await post(ENGINEERING_STATUS_ENDPOINT,{});ENGINEER.error=null;ENGINEER.lastSync=new Date();}
+    try{ENGINEER.data=await post(ENGINEERING_STATUS_ENDPOINT,{});ENGINEER.error=ENGINEER.data?.stale===true||ENGINEER.data?.status==='STALE'?'Son iyi mühendislik raporu gösteriliyor; güncel veri alınamadı.':null;ENGINEER.lastSync=new Date();}
     catch(error){ENGINEER.error=String(error?.message||error);}
     finally{engineerRefreshInFlight=null;renderEngineerConsole();}
   })();
@@ -73,7 +73,8 @@ function renderEngineerConsole(){
   if(sub)sub.textContent='Dünya Gözü → güven doğrulama → hipotez → SHADOW kod → replay/stress → bağımsız review → PR → Ömer onayı.';
   if(!e){if(ENGINEER.error){badge.textContent='ENGINEER HATASI';badge.className='badge bad';}return;}
   const s=e.summary||{},c=e.control||{},w=e.world_engineering||{},budget=w.budget||{},active=e.current_run||null,approval=e.approval_run||null,recent=v4Array(e.recent_runs),focus=approval||active||recent[0]||null;
-  if(approval){badge.textContent='ÖMER ONAYI BEKLİYOR';badge.className='badge warn';}
+  if(ENGINEER.error||e.stale===true||e.status==='STALE'){badge.textContent='SON KAYIT · GÜNCEL DEĞİL';badge.className='badge warn';}
+  else if(approval){badge.textContent='ÖMER ONAYI BEKLİYOR';badge.className='badge warn';}
   else if(active){badge.textContent='BRIAN KODLUYOR';badge.className='badge ok';}
   else if(c.autonomous_claim_enabled===true){badge.textContent=`OTONOM · ${Number(budget.remaining_24h??0)} HAK`;badge.className=Number(budget.remaining_24h??0)>0?'badge ok':'badge warn';}
   else{badge.textContent='KONTROLLÜ · CLAIM KAPALI';badge.className='badge info';}
@@ -101,4 +102,4 @@ setInterval(()=>{
   const rect=panel?.getBoundingClientRect();
   const visible=rect&&rect.height>0&&rect.bottom>0&&rect.top<innerHeight;
   if(room?.classList.contains('show')||visible)refreshEngineerConsole();
-},30000);
+},60000);

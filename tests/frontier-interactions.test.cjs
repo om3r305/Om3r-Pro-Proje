@@ -60,5 +60,6 @@ test('overlapping engineering refreshes share one request and a failed request c
  vm.runInContext(refresh,ctx);
  const first=ctx.refreshEngineerConsole(),second=ctx.refreshEngineerConsole();assert.equal(calls,1);assert.equal(first,second);
  reject(new Error('timeout'));await first;assert.equal(ENGINEER.error,'timeout');
- const retry=ctx.refreshEngineerConsole();assert.equal(calls,2);resolve({status:'OK'});await retry;assert.equal(ENGINEER.error,null);assert.equal(ENGINEER.data.status,'OK');
+ const stale=ctx.refreshEngineerConsole();assert.equal(calls,2);resolve({status:'STALE',stale:true});await stale;assert.match(ENGINEER.error,/Son iyi/);
+ const retry=ctx.refreshEngineerConsole();assert.equal(calls,3);resolve({status:'OK'});await retry;assert.equal(ENGINEER.error,null);assert.equal(ENGINEER.data.status,'OK');
 });
