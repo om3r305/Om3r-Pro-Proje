@@ -187,11 +187,11 @@
  .brian-terminal .prediction-research{grid-column:3;grid-row:1;height:590px;max-height:590px;overflow:auto;scrollbar-width:thin;scrollbar-color:#0b536f #02101a}
  .brian-terminal #opsRooms>.ops-room-grid{grid-column:1;grid-row:2;margin:0}
  .brian-terminal #brianOperations .ops-decisions{grid-column:2;grid-row:2;margin:0}
- .brian-terminal #opsOverview{grid-column:3;grid-row:2}
+ .brian-terminal #brianOperations>#opsOverview{grid-column:3;grid-row:2}
  .brian-terminal #opsBelief{grid-column:1;grid-row:3;margin:0}
  .brian-terminal .terminal-report{grid-column:2/4;grid-row:3}
- .brian-terminal #opsRoomDetails{grid-column:1/-1;grid-row:4;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
- .brian-terminal #opsControl{grid-column:1/-1;grid-row:6}
+ .brian-terminal #brianOperations #opsRoomDetails{grid-column:1/-1;grid-row:4;display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+ .brian-terminal #brianOperations>#opsControl{grid-column:1/-1;grid-row:6}
  .brian-terminal #brianOperations .ops-footer{grid-column:1/-1;grid-row:7}
  .brian-terminal .shell>#marketRadarPanel{grid-column:1/-1;grid-row:5;max-height:none}
  .brian-terminal #marketRadarList{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0 18px}
@@ -218,7 +218,7 @@
 }
 @media(min-width:3400px){
  .brian-terminal .shell{grid-template-columns:minmax(500px,1fr) minmax(800px,1.55fr) minmax(500px,1fr) minmax(450px,.9fr)}
- .brian-terminal #opsOverview{grid-column:4;grid-row:1}
+ .brian-terminal #brianOperations>#opsOverview{grid-column:4;grid-row:1}
  .brian-terminal .shell>#marketRadarPanel{grid-column:3/5;grid-row:2;max-height:390px}
  .brian-terminal #marketRadarList{grid-template-columns:repeat(2,minmax(0,1fr))}
  .brian-terminal .terminal-report{grid-column:2/5}
