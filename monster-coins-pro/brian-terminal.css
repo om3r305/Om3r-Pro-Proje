@@ -18,7 +18,8 @@
 .brian-terminal .world-switch a{border-radius:4px;min-height:32px;padding:6px 12px;font-size:11px}
 .brian-terminal .world-switch a.active{background:#003d53;color:#55edff;box-shadow:none}
 .brian-terminal .ticker{height:30px;min-height:30px;background:#02111d;border-block:1px solid #0e2b3d;font-size:10px;opacity:.9}
-.brian-terminal .ticker-track{padding:6px 0}
+.brian-terminal .ticker-track{padding:0}
+.brian-terminal .ticker-item{height:28px;font-size:10px}
 .brian-terminal #workspaceNav{padding:7px 20px;gap:5px;border-block:0;background:#020e19;scrollbar-width:none;position:sticky;top:0;z-index:35;min-height:58px;overflow-y:hidden}
 .brian-terminal #workspaceNav a,.brian-terminal #workspaceNav button{display:flex;gap:8px;background:transparent;border:1px solid transparent;color:#b4c7d7;border-radius:5px;font-size:12px;font-weight:500;padding:9px 13px;min-height:40px}
 .brian-terminal #workspaceNav a[aria-current]{background:linear-gradient(#05364c,#032032);border-color:#087aab;color:#17dcff;box-shadow:inset 0 0 14px #007ca825}
@@ -78,8 +79,8 @@
 .brian-terminal #command .nc-mode{font-size:9px;margin-top:6px;color:#86aac6}
 .brian-terminal #command .nc-motion{font-size:10px;padding:7px 9px;border:1px solid #15506c;border-radius:4px;background:#032033;min-height:32px}
 .brian-terminal #command .nc-stage{height:380px;background-image:radial-gradient(#0d90be40 .7px,transparent .8px),linear-gradient(#05618b13 1px,transparent 1px),linear-gradient(90deg,#05618b13 1px,transparent 1px);background-size:21px 21px,42px 42px,42px 42px;background-position:center}
-.brian-terminal #command .nc-core{width:76%;max-width:520px;top:50%;z-index:1}
-.terminal-globe{display:block;width:100%;height:auto;filter:drop-shadow(0 0 14px #0075bd30)}
+.brian-terminal #command .nc-core{width:76%;max-width:520px;height:100%;top:50%;z-index:1}
+.terminal-globe{display:block;width:100%;height:100%;filter:drop-shadow(0 0 14px #0075bd30)}
 .tg-grid{fill:none;stroke:#1b87b5;stroke-width:.55;opacity:.52}
 .tg-land{fill:#0d4164;stroke:#50b4d5;stroke-width:.9;stroke-linejoin:round;opacity:.9}
 .brian-terminal #command .nc-ring,.brian-terminal #command .nc-floor{display:none}

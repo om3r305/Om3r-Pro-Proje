@@ -5,7 +5,7 @@
   if (!$('workspaceNav') || $('terminalMarkets')) return;
   document.body.classList.add('brian-terminal');
   const css = document.createElement('link');
-  css.rel = 'stylesheet'; css.href = '/brian-terminal.css?v=20261020-terminal1';
+  css.rel = 'stylesheet'; css.href = '/brian-terminal.css?v=20261020-terminal2';
   document.head.appendChild(css);
   const E = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const icons = {
