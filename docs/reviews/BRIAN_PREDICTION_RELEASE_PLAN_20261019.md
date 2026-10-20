@@ -204,3 +204,11 @@ drop table if exists public.brian_prediction_control;
 | Defter | `arxiv:2602.19520`: 2 iddia, 9 varsayım (ledger sha256 `b13f3646…`). Sonuç: `run-1-truncated` = `REVIEW_REQUIRED` |
 | Fonksiyon | `brian-prediction-status` v2 (ezbr `c50e072f…`): ek `research` bölümü. GET 405, anahtarsız 401, OPTIONS 204 |
 | Geri dönüş | Durum ucunun v1 kaynağını yeniden yayınla. Tablolar append-only; silinmez, gerekirse fonksiyonların EXECUTE'u kapatılır |
+
+## Yayın kaydı — fiyat canlılık kuralı + deney koşucusu (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Fiyat ucu | PR #181 → `42dddc5`. REALTIME `brian-realtime-market-marks-public` v3 → v4 (ezbr `baf7c09d…`). Yedek: `C:\Brian\brian-backups\2026-10-20-marks-live-age-oncesi\`. Canlı doğrulama: gümüş/altın 1.680 sn → `live:false`; BTC 139 sn → `live:false` (önceden hepsi `true`) |
+| Koşucu | CORE `20261020213549`: jobid 44 (koşucu) ve 45 (kurul) `active=true`. Elle tetikleme 21:35 UTC: SUCCESS, 1,1 sn, 1 deney ölçüldü, 2 sonuç yazıldı. Canlı kod zaten `PAGINATED_LABELS_DECISION_TIME_COST_V2` yamasını içeriyor; kod değişmedi |
+| Geri dönüş | `cron.alter_job(44, active := false)`, `cron.alter_job(45, active := false)`; fiyat ucu için yedekteki v3 kaynağını yeniden yayınla |
