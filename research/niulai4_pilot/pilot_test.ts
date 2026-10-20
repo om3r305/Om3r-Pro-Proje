@@ -114,83 +114,176 @@ function obs(id: string, outcome: "Up" | "Down", seenOffsetSec: number, lagSec =
 }
 const book = (upAsk: number, dnAsk: number) => ({ Up: [{ price: upAsk, size: 1000 }], Down: [{ price: dnAsk, size: 1000 }] });
 function caps(o: Observation, upAsk = 0.6, dnAsk = 0.42, spotDir: "Up" | "Down" | null = "Down", mids = { Up: 0.59, Down: 0.41 }): Capture[] {
-  return captureTimes(o.firstSeenMs).map((c) => ({ obsId: o.obsId, delaySeconds: c.delaySeconds, capturedMs: c.atMs, asks: book(upAsk, dnAsk), mids, spotDirection: spotDir }));
+  return captureTimes(o.firstSeenMs).map((c) => ({
+    obsId: o.obsId, delaySeconds: c.delaySeconds, scheduledMs: c.atMs, capturedMs: c.atMs + 50, socketSilenceMs: 20,
+    asks: book(upAsk, dnAsk), mids, spotDirection: spotDir,
+  }));
 }
+const pick = (r: ReturnType<typeof evaluate>, s: string, d: number, id?: string) =>
+  r.entries.find((e) => e.strategy === s && e.delaySeconds === d && (id === undefined || e.obsId === id))!;
 
-Deno.test("evaluation: follow vs baselines, fee per level, late and unfillable, settlement", () => {
+Deno.test("evaluation: follow vs baselines, order latency, fee per level, settlement", () => {
   const o = obs("o1", "Up", 240); // seen 60 s before end
   const r = evaluate([o], caps(o), [{ slug, feeRate: 0.07, winner: "Up" }]);
-  const get = (s: string, d: number) => r.entries.find((e) => e.strategy === s && e.delaySeconds === d)!;
-  const f5 = get("FOLLOW", 5);
+  const f5 = pick(r, "FOLLOW", 5);
   eq([f5.status, f5.outcome], ["SETTLED", "Up"], "follow buys NIULAI4's outcome");
   near(f5.cost, 6, "10 x 0.60");
   near(f5.fee, 10 * 0.07 * 0.6 * 0.4, "C x rate x p(1-p)");
   near(f5.net, 10 - 6 - 0.168, "payoff - cost - fee");
-  eq(get("B0_FAVORITE", 5).outcome, "Up", "favorite = higher mid");
-  eq([get("B1_SPOT_DIRECTION", 5).outcome, get("B1_SPOT_DIRECTION", 5).net! < 0], ["Down", true], "spot baseline lost");
-  eq(get("FOLLOW", 60).status, "LATE", "60 s after first-seen is past the window end");
-  const thin = evaluate([o], caps(o, 0.6, 0.42).map((c) => ({ ...c, asks: { Up: [{ price: 0.6, size: 3 }], Down: [{ price: 0.42, size: 3 }] } })), [{ slug, feeRate: 0.07, winner: "Up" }]);
-  assert(thin.entries.filter((e) => e.delaySeconds === 5).every((e) => e.status === "UNFILLABLE" || e.status === "NO_DECISION"), "thin book -> UNFILLABLE");
-  near(r.latencySeconds.p50, 26, "latency from first-seen minus public timestamp");
+  eq(pick(r, "B0_FAVORITE", 5).outcome, "Up", "favorite = higher mid");
+  eq([pick(r, "B1_SPOT_DIRECTION", 5).outcome, pick(r, "B1_SPOT_DIRECTION", 5).net! < 0], ["Down", true], "spot baseline lost");
+  // d = 60: decision exactly at the window end, plus 300 ms order latency -> cannot arrive in time.
+  eq(pick(r, "FOLLOW", 60).status, "LATE_WINDOW_CLOSED", "late");
+  eq(captureTimes(1000).map((c) => c.atMs), [1300, 2300, 6300, 16300, 31300, 61300], "capture = first_seen + d + 300 ms order latency");
 });
 
-Deno.test("evaluation never assumes: no capture, unsynced book, missing fee, unresolved", () => {
+Deno.test("multi-level fill: cost is the walked levels, fee per level, slippage reported but not subtracted twice", () => {
+  const o = obs("ml", "Up", 100);
+  const asks = { Up: [{ price: 0.5, size: 4 }, { price: 0.51, size: 6 }], Down: [{ price: 0.5, size: 1000 }] };
+  const c = caps(o).map((x) => ({ ...x, asks }));
+  const f = pick(evaluate([o], c, [{ slug, feeRate: 0.07, winner: "Up" }]), "FOLLOW", 5);
+  const cost = 4 * 0.5 + 6 * 0.51;
+  const fee = Math.round((4 * 0.07 * 0.5 * 0.5 + 6 * 0.07 * 0.51 * 0.49) * 1e5) / 1e5;
+  near(f.cost, cost, "sum of walked levels");
+  near(f.fee, fee, "fee per walked level");
+  near(f.slippage, cost / 10 - 0.5, "slippage = avg - best ask (reported)");
+  near(f.net, 10 - cost - fee, "net subtracts cost and fee only; slippage is already inside cost");
+});
+
+Deno.test("realizability rejections: late/early/mismatched capture, socket silence, unsynced book", () => {
+  const o = obs("rz", "Up", 100);
+  const w = [{ slug, feeRate: 0.07, winner: "Up" as const }];
+  const status = (f: (c: Capture) => Partial<Capture>) => pick(evaluate([o], caps(o).map((c) => ({ ...c, ...f(c) })), w), "FOLLOW", 5).status;
+  eq(status((c) => ({ capturedMs: c.scheduledMs + RULES.maxCaptureLagMs + 1 })), "CAPTURE_TIME_INVALID", "a snapshot taken too late is not a past fill");
+  eq(status((c) => ({ capturedMs: c.scheduledMs - 1 })), "CAPTURE_TIME_INVALID", "a snapshot from before the order arrives is not used");
+  eq(status((c) => ({ scheduledMs: c.scheduledMs + 1000 })), "CAPTURE_TIME_INVALID", "capture must match the schedule derived from first_seen");
+  eq(status(() => ({ socketSilenceMs: RULES.maxSocketSilenceMs + 1 })), "STALE_BOOK", "silent socket -> stale book");
+  eq(status(() => ({ socketSilenceMs: null })), "STALE_BOOK", "unknown socket age -> stale book");
+  eq(status(() => ({ asks: null, mids: null })), "BOOK_UNSYNCED", "no full snapshot since (re)connect");
+  eq(status((c) => ({ capturedMs: c.scheduledMs + RULES.maxCaptureLagMs })), "SETTLED", "exactly at the lag limit is accepted");
+});
+
+Deno.test("evaluation never assumes: no capture, missing fee, unresolved, no decision", () => {
   const o = obs("o2", "Down", 100);
   const none = evaluate([o], [], [{ slug, feeRate: 0.07, winner: "Down" }]);
   assert(none.entries.filter((e) => e.delaySeconds < 60).every((e) => e.status === "NO_CAPTURE"), "no capture recorded");
-  const unsynced = evaluate([o], caps(o).map((c) => ({ ...c, asks: null, mids: null })), [{ slug, feeRate: 0.07, winner: "Down" }]);
-  assert(unsynced.entries.every((e) => e.status === "BOOK_UNSYNCED" || e.status === "LATE"), "book not synced");
   const nofee = evaluate([o], caps(o), [{ slug, feeRate: null, winner: "Down" }]);
-  assert(nofee.entries.filter((e) => e.strategy === "FOLLOW").every((e) => e.status === "NO_FEE_RATE"), "fee rate never assumed");
+  assert(nofee.entries.filter((e) => e.strategy === "FOLLOW" && e.delaySeconds < 60).every((e) => e.status === "NO_FEE_RATE"), "fee rate never assumed");
   const unres = evaluate([o], caps(o), [{ slug, feeRate: 0.07, winner: null }]);
-  const f = unres.entries.find((e) => e.strategy === "FOLLOW" && e.delaySeconds === 0)!;
-  eq([f.status, f.net], ["UNRESOLVED", undefined], "unresolved window has no return");
+  eq([pick(unres, "FOLLOW", 0).status, pick(unres, "FOLLOW", 0).net], ["UNRESOLVED", undefined], "unresolved window has no return");
   const nodir = evaluate([o], caps(o, 0.6, 0.42, null, { Up: 0.5, Down: 0.5 }), [{ slug, feeRate: 0.07, winner: "Down" }]);
-  assert(["B0_FAVORITE", "B1_SPOT_DIRECTION"].every((s) => nodir.entries.filter((e) => e.strategy === s).every((e) => e.status === "NO_DECISION")), "tie / unknown spot -> no decision");
+  assert(["B0_FAVORITE", "B1_SPOT_DIRECTION"].every((s) => nodir.entries.filter((e) => e.strategy === s && e.delaySeconds < 60).every((e) => e.status === "NO_DECISION")), "tie / unknown spot -> no decision");
 });
 
-Deno.test("capital is reserved until the window settles and released after it", () => {
-  // 100 USDC bankroll; each entry costs 10 x 0.95 + fee ~ 9.53. Ten fit, the eleventh does not.
+Deno.test("capital: own bankroll per (strategy, delay), reserved until settlement, released after it", () => {
   const many = Array.from({ length: 11 }, (_, i) => obs(`m${i}`, "Up", 200 + i));
   const c = many.flatMap((o) => caps(o, 0.95, 0.06, "Up", { Up: 0.94, Down: 0.06 }));
   const r = evaluate(many, c, [{ slug, feeRate: 0.07, winner: "Up" }]);
   const f0 = r.entries.filter((e) => e.strategy === "FOLLOW" && e.delaySeconds === 0);
-  eq(f0.filter((e) => e.status === "SETTLED").length, 10, "ten entries fit the bankroll");
-  eq(f0.filter((e) => e.status === "REJECTED_CAPITAL").length, 1, "the eleventh is rejected");
-  // A later window: capital from the first (settled at its end) is free again.
+  eq(f0.filter((e) => e.status === "SETTLED").length, 10, "ten entries fit the 100 USDC bankroll");
+  eq(f0.filter((e) => e.status === "REJECTED_CAPITAL").length, 1, "the eleventh shares the same capital and is rejected");
+  eq(r.entries.filter((e) => e.strategy === "FOLLOW" && e.delaySeconds === 1 && e.status === "SETTLED").length, 10, "another delay has its own bankroll");
   const nextStart = START + 300;
   const later = obs("later", "Up", 10, 26, nextStart);
   const r2 = evaluate([...many, later], [...c, ...caps(later, 0.95, 0.06, "Up", { Up: 0.94, Down: 0.06 })], [{ slug, feeRate: 0.07, winner: "Up" }, { slug: `btc-updown-5m-${nextStart}`, feeRate: 0.07, winner: "Up" }]);
-  eq(r2.entries.find((e) => e.obsId === "later" && e.strategy === "FOLLOW" && e.delaySeconds === 0)!.status, "SETTLED", "released capital is reusable");
+  eq(pick(r2, "FOLLOW", 0, "later").status, "SETTLED", "released capital is reusable in a later window");
 });
 
-Deno.test("random baseline is deterministic and independent of other rows' presence", () => {
+Deno.test("no future leakage: a later-seen trade (e.g. the other side of the window) never changes an earlier decision", () => {
+  const w = [{ slug, feeRate: 0.07, winner: "Up" as const }];
+  const first = obs("first", "Up", 120);
+  const before = evaluate([first], caps(first), w).entries;
+  // Later the same wallet is seen buying the OTHER side of the same window (a two-sided window).
+  const second = obs("second", "Down", 150);
+  const after = evaluate([first, second], [...caps(first), ...caps(second)], w).entries;
+  eq(after.filter((e) => e.obsId === "first"), before, "every field of the earlier decisions is unchanged");
+  eq(evaluate([second, first], [...caps(second), ...caps(first)], w).entries.filter((e) => e.obsId === "first"), before, "input order is irrelevant");
+});
+
+Deno.test("random baseline is order-independent and deterministic", async () => {
+  const { coinFor } = await import("./evaluate.ts");
+  eq(coinFor("x", 5), coinFor("x", 5), "deterministic");
+  const draws = Array.from({ length: 200 }, (_, i) => coinFor(`id${i}`, 5));
+  const ups = draws.filter((x) => x === "Up").length;
+  assert(ups > 70 && ups < 130, `roughly balanced (${ups}/200)`);
   const o = obs("r1", "Up", 100);
-  const a = evaluate([o], caps(o), [{ slug, feeRate: 0.07, winner: "Up" }]).entries.filter((e) => e.strategy === "B2_RANDOM").map((e) => e.outcome);
-  const b = evaluate([o], caps(o), [{ slug, feeRate: 0.07, winner: "Up" }]).entries.filter((e) => e.strategy === "B2_RANDOM").map((e) => e.outcome);
-  eq(a, b, "same seed, same draws");
+  const extra = obs("r0", "Down", 50); // seen EARLIER; must not shift r1's coin
+  const alone = pick(evaluate([o], caps(o), [{ slug, feeRate: 0.07, winner: "Up" }]), "B2_RANDOM", 5, "r1").outcome;
+  const withEarlier = pick(evaluate([extra, o], [...caps(extra), ...caps(o)], [{ slug, feeRate: 0.07, winner: "Up" }]), "B2_RANDOM", 5, "r1").outcome;
+  eq(withEarlier, alone, "coin depends only on (obsId, delay)");
 });
 
-Deno.test("summary: primary pairs only rows settled under BOTH strategies; edge needs >=1000 windows and >=14 days", () => {
-  const os = Array.from({ length: 30 }, (_, i) => obs(`s${i}`, i % 2 ? "Up" : "Down", 150, 26, START + 300 * i));
-  const ws: WindowInfo[] = os.map((o, i) => ({ slug: o.windowSlug, feeRate: 0.07, winner: i % 3 ? "Up" : "Down" }));
-  const cs = os.flatMap((o) => caps(o));
-  const s = summarize(os, evaluate(os, cs, ws), RULES_VERSION);
-  eq(s.primary.pairedObservations, 30, "paired rows");
-  eq(s.edge.verdict, "INSUFFICIENT_DATA", "30 windows is far from enough");
-  assert(s.edge.reason.includes(">= 1000"), "reason states the bar");
-  eq(s.feasibility.verdict, "INSUFFICIENT_DATA", "fewer than 100 attempts is not a feasibility verdict");
-  assert(s.tradeSignal === false, "never a trade signal");
-  eq(s.windows, 30, "independent windows counted");
+// Summary tests build entries directly so the verdict logic is exercised with exact returns.
+function syntheticEntries(nWindows: number, daysSpan: number, follow: (i: number) => number, base: (i: number) => number) {
+  const observations: Observation[] = [];
+  const entries: ReturnType<typeof evaluate>["entries"] = [];
+  for (let i = 0; i < nWindows; i++) {
+    const s = START + Math.floor((i * daysSpan) / nWindows) * 86400 + (i % 3) * 300;
+    const o = obs(`w${i}`, "Up", 100, 26, s);
+    observations.push(o);
+    const day = new Date(s * 1000).toISOString().slice(0, 10);
+    for (const [strategy, f] of [["FOLLOW", follow], ["B1_SPOT_DIRECTION", base]] as const) {
+      entries.push({ obsId: o.obsId, window: o.windowSlug, day, strategy, delaySeconds: 5, status: "SETTLED", outcome: "Up", cost: 5, fee: 0.1, slippage: 0, payoff: 0, net: 0, returnOnCost: f(i) });
+    }
+  }
+  return { observations, entries };
+}
+const jitter = (i: number) => (((i * 7919) % 13) - 6) / 1000; // deterministic +-0.6%
+
+Deno.test("follower -2% vs baseline -5%: +3% superiority but NOT an edge (absolute net must be > 0)", () => {
+  const { observations, entries } = syntheticEntries(60, 20, (i) => -0.02 + jitter(i), (i) => -0.05 + jitter(i + 3));
+  const s = summarize(observations, { entries }, RULES_VERSION, { finalAnalysis: true, frozenRequiredWindows: 40 });
+  eq(s.baselineSuperiority.verdict, "SUPPORTED", "follower beats the baseline");
+  eq(s.absoluteNet.verdict, "NOT_SUPPORTED", "but its own net return is negative");
+  eq([s.edge.verdict, s.edge.reason], ["NOT_SUPPORTED", "follower's own net return is negative"], "no edge");
+  const good = syntheticEntries(60, 20, (i) => 0.04 + jitter(i), (i) => -0.01 + jitter(i + 3));
+  const g = summarize(good.observations, { entries: good.entries }, RULES_VERSION, { finalAnalysis: true, frozenRequiredWindows: 40 });
+  eq([g.absoluteNet.verdict, g.baselineSuperiority.verdict, g.edge.verdict], ["SUPPORTED", "SUPPORTED", "SUPPORTED"], "both conditions -> edge");
 });
 
-Deno.test("feasibility verdicts follow the pre-registered thresholds", () => {
+Deno.test("no verdict before the pre-registered final analysis, without a frozen sample size, or below it", () => {
+  const { observations, entries } = syntheticEntries(60, 20, (i) => 0.04 + jitter(i), (i) => -0.01 + jitter(i));
+  const interim = summarize(observations, { entries }, RULES_VERSION, { finalAnalysis: false, frozenRequiredWindows: 40 });
+  eq([interim.edge.verdict, interim.absoluteNet.verdict], ["INTERIM_NO_VERDICT", "INTERIM_NO_VERDICT"], "interim reports are descriptive only");
+  const unfrozen = summarize(observations, { entries }, RULES_VERSION, { finalAnalysis: true, frozenRequiredWindows: null });
+  eq(unfrozen.edge.verdict, "INSUFFICIENT_DATA", "sample size must be frozen in advance");
+  const short = summarize(observations, { entries }, RULES_VERSION, { finalAnalysis: true, frozenRequiredWindows: 61 });
+  eq(short.edge.verdict, "INSUFFICIENT_DATA", "below the frozen requirement");
+  const fewDays = syntheticEntries(60, 5, (i) => 0.04 + jitter(i), (i) => -0.01 + jitter(i));
+  eq(summarize(fewDays.observations, { entries: fewDays.entries }, RULES_VERSION, { finalAnalysis: true, frozenRequiredWindows: 40 }).edge.verdict, "INSUFFICIENT_DATA", "fewer than 14 days");
+  eq(interim.h2WalletIndependentTiming.status, "NOT_TESTED", "H2 is explicitly not tested");
+  eq(interim.byStrategyDelay["FOLLOW@0s"].label, "OPTIMISTIC_UPPER_BOUND", "d = 0 is labelled optimistic");
+});
+
+Deno.test("power: required windows from per-window SD and the minimum meaningful effect", async () => {
+  const { requiredWindows } = await import("./evaluate.ts");
+  eq(requiredWindows(1, 0.03), Math.ceil(((1.959964 + 0.841621) / 0.03) ** 2), "sd 1, effect 3%");
+  eq(requiredWindows(1, 0.03), 8721, "about 8.7k independent windows");
+  eq(requiredWindows(null), null, "unknown sd -> no requirement invented");
+  const { observations, entries } = syntheticEntries(60, 20, (i) => 0.04 + jitter(i), (i) => -0.01 + jitter(i));
+  const s = summarize(observations, { entries }, RULES_VERSION, { finalAnalysis: false, frozenRequiredWindows: null });
+  assert(s.power.suggestedRequiredWindows !== null && s.power.perWindowSdDiff !== null, "pilot suggests a requirement from its own variance");
+});
+
+Deno.test("feasibility verdicts: PASS >= 30%, FAIL < 10%, 10-30% is INCONCLUSIVE_REDESIGN, < 100 attempts INSUFFICIENT_DATA", () => {
   const os = Array.from({ length: 120 }, (_, i) => obs(`f${i}`, "Up", 100, 26, START + 300 * i));
   const ws: WindowInfo[] = os.map((o) => ({ slug: o.windowSlug, feeRate: 0.07, winner: "Up" }));
-  const fillable = summarize(os, evaluate(os, os.flatMap((o) => caps(o)), ws), RULES_VERSION);
-  eq(fillable.feasibility.verdict, "PASS", "all fillable at d=5");
-  const thinCaps = os.flatMap((o) => caps(o).map((c) => ({ ...c, asks: { Up: [{ price: 0.6, size: 1 }], Down: [{ price: 0.42, size: 1 }] } })));
-  eq(summarize(os, evaluate(os, thinCaps, ws), RULES_VERSION).feasibility.verdict, "FAIL", "nothing fillable");
+  const opts = { finalAnalysis: false, frozenRequiredWindows: null };
+  eq(summarize(os, evaluate(os, os.flatMap((o) => caps(o)), ws), RULES_VERSION, opts).feasibility.verdict, "PASS", "all fillable");
+  const thin = (o: Observation) => caps(o).map((c) => ({ ...c, asks: { Up: [{ price: 0.6, size: 1 }], Down: [{ price: 0.42, size: 1 }] } }));
+  eq(summarize(os, evaluate(os, os.flatMap(thin), ws), RULES_VERSION, opts).feasibility.verdict, "FAIL", "nothing fillable");
+  const mixed = os.flatMap((o, i) => (i % 5 === 0 ? caps(o) : thin(o))); // 20% fillable
+  eq(summarize(os, evaluate(os, mixed, ws), RULES_VERSION, opts).feasibility.verdict, "INCONCLUSIVE_REDESIGN", "ambiguous band -> redesign");
+  const few = os.slice(0, 30);
+  eq(summarize(few, evaluate(few, few.flatMap((o) => caps(o)), ws), RULES_VERSION, opts).feasibility.verdict, "INSUFFICIENT_DATA", "too few attempts");
+});
+
+Deno.test("latency reporting separates measured, missed and late", () => {
+  const seenAfter = obs("gone", "Up", 310); // seen after the window closed
+  const fine = obs("ok", "Up", 100, 30);
+  const s = summarize([seenAfter, fine], evaluate([seenAfter, fine], [...caps(fine)], [{ slug, feeRate: 0.07, winner: "Up" }]), RULES_VERSION, { finalAnalysis: false, frozenRequiredWindows: null });
+  eq([s.latency.measured, s.latency.seenAfterWindowClosed, s.latency.lateForPrimaryDelay], [2, 1, 1], "missed and late are counted separately");
+  near(s.latency.secondsMax, 30, "max latency");
 });
 
 // ---------------------------------------------------------------- stats
@@ -288,7 +381,6 @@ Deno.test("watcher: first poll only primes, later trades become observations onc
   eq(second.ignoredOtherMarkets, 2, "ETH and SELL ignored");
   const third = await w.tick();
   eq(third.newObservations.length, 0, "never emitted twice");
-  eq(captureTimes(1000).map((c) => c.atMs), [1000, 2000, 6000, 16000, 31000, 61000], "capture schedule");
 });
 
 Deno.test("w32tm offsets: median of samples across servers, spread-based uncertainty, needs >= 3 samples", async () => {

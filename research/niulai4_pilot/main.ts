@@ -2,7 +2,8 @@
 //   --selftest            preflight only (clock skew, disk, identity, rules fingerprint); records nothing
 //   --start --out <dir>   run the pilot; REFUSES unless <dir>/APPROVED_RULES_FINGERPRINT equals the
 //                         current rules fingerprint (written only after the operator approves)
-//   --report --out <dir>  offline evaluation of recorded files -> <dir>/summary.json
+//   --report --out <dir> [--final --required-windows N]
+//                         offline evaluation -> <dir>/summary.json; interim (no verdict) unless --final
 //
 // deno run --allow-net --allow-read --allow-write --allow-run=powershell,w32tm research/niulai4_pilot/main.ts --selftest
 
@@ -61,7 +62,7 @@ async function preflight(outDir: string) {
   return { fp, skew, result };
 }
 
-async function report(outDir: string) {
+async function report(outDir: string, finalAnalysis: boolean, frozenRequiredWindows: number | null) {
   const files = [...Deno.readDirSync(outDir)].map((e) => e.name);
   const load = async (kind: string) => (await Promise.all(files.filter((f) => f.endsWith(`.${kind}.jsonl`)).map((f) => readJsonl(`${outDir}/${f}`)))).flat();
   const observations = (await load("observation")) as unknown as Observation[];
@@ -70,7 +71,7 @@ async function report(outDir: string) {
   const resolutions = await load("resolution");
   const winner = new Map(resolutions.map((r) => [String(r.slug), r.winner === "Up" || r.winner === "Down" ? (r.winner as Outcome) : null]));
   const windows: WindowInfo[] = windowsRaw.map((w) => ({ slug: String(w.slug), feeRate: typeof w.feeRate === "number" ? w.feeRate : null, winner: winner.get(String(w.slug)) ?? null }));
-  const summary = summarize(observations, evaluate(observations, captures, windows), RULES_VERSION);
+  const summary = summarize(observations, evaluate(observations, captures, windows), RULES_VERSION, { finalAnalysis, frozenRequiredWindows });
   await Deno.writeTextFile(`${outDir}/summary.json`, JSON.stringify(summary, null, 2));
   return summary;
 }
@@ -83,7 +84,11 @@ if (import.meta.main) {
     const p = await preflight(outDir);
     console.log(JSON.stringify({ mode: "selftest", rulesVersion: RULES_VERSION, rulesFingerprint: p.fp, ...p.result }, null, 2));
   } else if (args.includes("--report")) {
-    console.log(JSON.stringify(await report(outDir), null, 2));
+    // Interim (descriptive) by default. A verdict needs BOTH --final and a --required-windows value
+    // frozen from the pilot before the test period started.
+    const reqIdx = args.indexOf("--required-windows");
+    const req = reqIdx >= 0 ? Number(args[reqIdx + 1]) : NaN;
+    console.log(JSON.stringify(await report(outDir, args.includes("--final"), Number.isFinite(req) && req > 0 ? req : null), null, 2));
   } else if (args.includes("--start")) {
     const p = await preflight(outDir);
     if (!p.result.ok) {

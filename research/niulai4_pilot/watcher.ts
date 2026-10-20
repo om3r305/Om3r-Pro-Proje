@@ -3,7 +3,7 @@
 // Up/Down trades become observations; everything else is counted and ignored.
 
 import { fetchPredictionJson, normalizeWalletActivityRow, type PredictionFetchOptions } from "../../supabase/functions/_shared/prediction_market.ts";
-import type { Observation, Outcome } from "./evaluate.ts";
+import { type Observation, type Outcome, scheduledCaptureMs } from "./evaluate.ts";
 import { RULES } from "./rules.ts";
 import { windowFromSlug } from "./windows.ts";
 
@@ -66,6 +66,8 @@ export class ActivityWatcher {
   }
 }
 
+// Capture instants: decision at first_seen + d, book read when the order would arrive
+// (+ orderLatencyMs). Scheduled from first_seen only -- never from later information.
 export function captureTimes(firstSeenMs: number): { delaySeconds: number; atMs: number }[] {
-  return RULES.delaysSeconds.map((d) => ({ delaySeconds: d, atMs: firstSeenMs + d * 1000 }));
+  return RULES.delaysSeconds.map((d) => ({ delaySeconds: d, atMs: scheduledCaptureMs(firstSeenMs, d) }));
 }

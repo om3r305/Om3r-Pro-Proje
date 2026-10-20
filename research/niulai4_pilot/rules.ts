@@ -5,7 +5,7 @@
 // is LOCAL, READ-ONLY and SHADOW-ONLY: it never places orders, never uses a key, never writes to
 // CORE, and does not touch brian_prediction_control.wallet_tracking_enabled.
 
-export const RULES_VERSION = "niulai4-pilot.v1";
+export const RULES_VERSION = "niulai4-pilot.v2";
 
 export const RULES = Object.freeze({
   wallet: "0x44832d0d2ec11187c1e77d786feb15f6a50254c6",
@@ -25,6 +25,20 @@ export const RULES = Object.freeze({
   feeRateFallback: null as number | null, // fee must come from the market's feeSchedule, never assumed
   bankrollUsdc: 100,
   primary: Object.freeze({ delaySeconds: 5, baseline: "B1_SPOT_DIRECTION" as const }),
+  // Realizability (pre-registered assumptions and rejection rules, see plan section 4):
+  // the order is assumed to reach the venue orderLatencyMs after the decision, so the fill is
+  // evaluated on the book captured at decision + orderLatencyMs. d = 0 is an optimistic bound.
+  orderLatencyMs: 300,
+  maxCaptureLagMs: 500, // a capture taken later than scheduled + this is rejected (no future book)
+  maxSocketSilenceMs: 2000, // no market-socket message for longer than this at capture -> STALE_BOOK
+  wsPingIntervalMs: 10_000, // the market websocket requires a text PING every 10 s
+  // Statistics (pre-registered): one primary comparison, one final analysis at a fixed horizon,
+  // power target and the minimum economically meaningful effect on net return on cost.
+  minEffectReturnOnCost: 0.03,
+  power: 0.8,
+  alpha: 0.05,
+  minTestDays: 14,
+  feasibility: Object.freeze({ passAtLeast: 0.3, failBelow: 0.1, minAttempts: 100 }),
   randomSeed: 20261020,
   diskCapBytes: 500 * 1024 * 1024,
   maxClockSkewMs: 50,

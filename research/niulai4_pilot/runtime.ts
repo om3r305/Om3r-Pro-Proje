@@ -6,7 +6,7 @@ import { applyMessage, type BookState, bestAsk, bestBid, topLevels } from "./boo
 import type { Capture, Observation, Outcome } from "./evaluate.ts";
 import { reconnectDelayMs, StopGuard } from "./guards.ts";
 import { Recorder } from "./recorder.ts";
-import { assertPilotHost, RULES } from "./rules.ts";
+import { assertPilotHost, RULES, RULES_VERSION } from "./rules.ts";
 import { SpotSeries, spotDirection } from "./spot.ts";
 import { ActivityWatcher, captureTimes } from "./watcher.ts";
 import { activeAndNext, inSamplingTail, type WindowRef, windowMatchesMarket, withinActiveHours } from "./windows.ts";
@@ -51,7 +51,7 @@ async function loadMarket(w: WindowRef): Promise<MarketMeta | null> {
 
 export async function runPilot(opts: { outDir: string; rulesFingerprint: string; clockOffsetMs: number; guard: StopGuard }) {
   const clock = () => Date.now() + opts.clockOffsetMs;
-  const rec = new Recorder({ dir: opts.outDir, capBytes: RULES.diskCapBytes, rulesVersion: "niulai4-pilot.v1", rulesFingerprint: opts.rulesFingerprint, now: clock });
+  const rec = new Recorder({ dir: opts.outDir, capBytes: RULES.diskCapBytes, rulesVersion: RULES_VERSION, rulesFingerprint: opts.rulesFingerprint, now: clock });
   const guard = opts.guard;
   const books: BookState = new Map();
   const spot = new SpotSeries();
@@ -60,6 +60,8 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
   const resolutionsDue = new Map<string, { marketId: string; dueMs: number }>();
   const stats = { wsMessages: 0, wsReconnects: 0, spotReconnects: 0, coinbaseErrors: 0, unsyncedDeltas: 0, polls: 0, pollErrors: 0, observations: 0, captures: 0, tailSamples: 0 };
   const wsRef: { current: WebSocket | null } = { current: null };
+  let lastSocketMsgMs: number | null = null;
+  let lastPingMs = 0;
   let wsAttempt = 0;
   let subscribed = "";
   let lastIdentityMs = clock();
@@ -70,7 +72,9 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
 
   const connectBook = (assetIds: string[]) => {
     try { wsRef.current?.close(); } catch { /* ignore */ }
+    // A (re)connect always starts from scratch: no book is used until a fresh full snapshot.
     books.clear();
+    lastSocketMsgMs = null;
     subscribed = assetIds.join(",");
     const url = assertPilotHost("wss://ws-subscriptions-clob.polymarket.com/ws/market").toString();
     const s = new WebSocket(url);
@@ -81,6 +85,8 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
     };
     s.onmessage = (ev) => {
       stats.wsMessages++;
+      lastSocketMsgMs = clock();
+      if (String(ev.data) === "PONG") return;
       try {
         const r = applyMessage(books, JSON.parse(String(ev.data)), new Set(assetIds));
         stats.unsyncedDeltas += r.unsyncedDeltas;
@@ -200,14 +206,21 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
       }
     }
 
+    // The market websocket requires a text PING every 10 s.
+    if (now - lastPingMs >= RULES.wsPingIntervalMs && wsRef.current?.readyState === WebSocket.OPEN) {
+      lastPingMs = now;
+      try { wsRef.current.send("PING"); } catch { /* close handler reconnects */ }
+    }
+
     // Due captures (also outside active hours, so a late-hour observation is still completed).
     for (let i = pendingCaptures.length - 1; i >= 0; i--) {
       const p = pendingCaptures[i];
       if (p.atMs > now) continue;
       pendingCaptures.splice(i, 1);
       const snap = snapshotFor(markets.get(p.obs.windowSlug));
-      const cap: Capture & { lateMs: number } = {
-        obsId: p.obs.obsId, delaySeconds: p.delaySeconds, capturedMs: now, lateMs: now - p.atMs,
+      const cap: Capture = {
+        obsId: p.obs.obsId, delaySeconds: p.delaySeconds, scheduledMs: p.atMs, capturedMs: now,
+        socketSilenceMs: lastSocketMsgMs === null ? null : now - lastSocketMsgMs,
         asks: snap?.asks ?? null, mids: snap?.mids ?? null,
         spotDirection: spotDirection(spot, now, p.obs.windowStartSec * 1000),
       };
@@ -237,7 +250,7 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
       lastHealth = now;
       await write("health", { event: "HEALTH", stats: { ...stats }, bytes: rec.bytesWritten, spotFresh: spot.at(now) !== null });
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 100));
   }
   try { wsRef.current?.close(); } catch { /* ignore */ }
   try { spotRef.current?.close(); } catch { /* ignore */ }
