@@ -117,6 +117,28 @@ Pilot özetinin (`latest_report.summary`) yorumu:
 - `h2WalletIndependentTiming: "NOT_TESTED"` ve `tradeSignal: false` her zaman bulunur.
 - d = 0 satırları `OPTIMISTIC_UPPER_BOUND` etiketlidir; arayüz bu etiketi göstermelidir.
 
+## 4b. `research` — Research Lab defteri (v1'e eklendi, geriye uyumlu)
+
+Kaynak: `brian_research_status_v1`. Okunamazsa diğer bölümler gibi `UNAVAILABLE` + `reason` döner.
+
+| `status` | Anlamı |
+|---|---|
+| `NO_DATA` | Henüz kayıtlı makale/iddia yok |
+| `OK` | En az bir iddia kayıtlı (sonuçlar aşağıda, tek tek) |
+
+Alanlar:
+- `papers[]`: `{paper_id, title, authors, url, license, code_url, code_commit, data_cutoff, missing_info, ledger_path, ledger_sha256, assumptions[]}`. `assumptions[]` öğeleri `{assumption_id, claim_id, leverage, detail, chosen, rationale}`.
+- `claims[]`: `{claim_id, paper_id, tier, statement, metric, repro_risk, reported, status, status_reason, result_at, experiment_id, code_commit, run_url, evidence_class, metrics, runs}`.
+  - `status`: `NOT_STARTED | RUNNING | INSUFFICIENT_DATA | PASS | FAIL | UNVERIFIED | REVIEW_REQUIRED`. Hiç test edilmemiş iddia `NOT_STARTED` görünür.
+  - `runs`: bu iddia için kaç test yapıldığı. Önceki sonuçlar (başarısızlar dahil) silinmez; burada her zaman **en son** sonuç gösterilir.
+  - `evidence_class`: `OUT_OF_SAMPLE_ADAPTED_REPLICATION` (yöntem uyarlanarak yeni veride), `OUT_OF_SAMPLE_REPLICATION`, `IN_SAMPLE_REPRODUCTION`, `DEMO`. Arayüz bunu etiket olarak göstermelidir. `DEMO` hiçbir zaman gerçek sonuç gibi sunulamaz.
+- `counts`: duruma göre iddia sayısı.
+- `trade_signal: false`. Araştırma sonucu bir işlem sinyali değildir.
+
+Arayüz kuralları:
+- `PASS` yeşil, `FAIL` kırmızı, `UNVERIFIED` ve `INSUFFICIENT_DATA` gri, `REVIEW_REQUIRED` sarı. Hiçbiri "kârlı" diye etiketlenemez.
+- Varsayımlar (`leverage: high`) sonuçla birlikte görünür olmalı. Uyarlanmış bir test, makalenin birebir tekrarı gibi sunulamaz.
+
 ## 5. Yazma yolu (yalnızca pilot için; arayüz kullanmaz)
 
 `brian-niulai4-pilot-ingest` (20 Ekim 08:12 UTC'den beri CORE'da v1 ACTIVE; anahtar kullanıcı onayıyla kuruldu, karması CORE'da. Pilot başlatılmadığı için durum `NOT_STARTED`):

@@ -1,0 +1,47 @@
+{
+  "experiment_id": "pm-political-slope-oos-v1",
+  "claim_id": "arxiv:2602.19520#C-01",
+  "started_at": "2026-10-20T19:05:47.587096+00:00",
+  "finished_at": "2026-10-20T19:42:50.670977+00:00",
+  "code_commit": "c56aff8",
+  "window": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-10-01T00:00:00Z",
+    "paper_cutoff": "2025-12-31T23:59:59Z"
+  },
+  "horizon_hours": 30.0,
+  "markets_seen": 400000,
+  "listing_complete": false,
+  "listing_pages": 4000,
+  "markets_used": 5593,
+  "events_used": 973,
+  "yes_rate": 0.2324333988914715,
+  "excluded": {
+    "NOT_CLEAN_BINARY_RESOLUTION": 211,
+    "NOT_POLITICS": 392829,
+    "NO_PRICE_AT_HORIZON": 1220,
+    "REFERENCE_TIME_OUT_OF_WINDOW": 147
+  },
+  "http_requests": 10813,
+  "slope": 1.2059224279154797,
+  "intercept": 0.315658266708257,
+  "bootstrap": {
+    "resamples": 2000,
+    "failed": 0,
+    "lower": 1.1156715902570469,
+    "upper": 1.3096275347688036,
+    "level": 0.95
+  },
+  "status": "REVIEW_REQUIRED",
+  "status_reason": "market listing truncated after 4000 pages; sample may be biased",
+  "paper_reference": {
+    "value": 1.45,
+    "what": "Politics mean slope over reliable bins, trade-level, locked snapshot",
+    "source": "namanhzz/prediction-market-calibration@143ca87 DATA_SNAPSHOT_NOTE.md",
+    "comparable": false
+  },
+  "dataset_sha256": "b8e3bfb11c948a28290adde41d0a5879c6b52b0289a0477009dde892026d729e",
+  "evidence_class": "OUT_OF_SAMPLE_ADAPTED_REPLICATION",
+  "shadow_only": true,
+  "trade_signal": false
+}
