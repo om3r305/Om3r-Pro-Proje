@@ -41,7 +41,7 @@ jobs:
       - name: Validate ledger files
         run: python -c "import json,glob;[json.load(open(p,encoding='utf-8')) for p in glob.glob('research/research_lab/ledger/*.json')];print('ledgers ok')"
       - name: Offline unit tests (no network, stdlib only)
-        working-directory: research/research_lab/experiments/pm_political_slope
+        working-directory: research/research_lab/studies/pm_political_slope
         run: python -m unittest -v test_experiment
 
   run-experiment:
@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Run experiment (public read-only HTTP, stdlib only)
-        working-directory: research/research_lab/experiments/${{ inputs.experiment }}
+        working-directory: research/research_lab/studies/${{ inputs.experiment }}
         env:
           RESEARCH_CODE_COMMIT: ${{ github.sha }}
         run: python run.py --out "$RUNNER_TEMP/out"

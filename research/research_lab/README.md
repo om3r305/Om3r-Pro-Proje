@@ -9,7 +9,7 @@ Plan ve gerekçe: [`docs/reviews/BRIAN_VISUAL_RESEARCH_LAB_PHASE0_20261020.md`](
 1. **Defter** (`ledger/<paper>.json`, şema `brian.research-ledger.v1`): makale künyesi, tek tek iddialar, varsayımlar ve ön kayıt (karar kuralı).
    - Defter, veri çekilmeden **önce** commit'lenir; git zaman damgası ön kaydın kanıtıdır.
    - Sonradan yapılan değişiklik yalnızca kuralı **sıkılaştırabilir** ve `amendments` altına yazılır.
-2. **Deney** (`experiments/<id>/`): yalnızca Python standart kütüphanesi; dış paket ve tedarik zinciri riski yok.
+2. **Deney** (`studies/<id>/`): yalnızca Python standart kütüphanesi; dış paket ve tedarik zinciri riski yok.
    - Yalnızca izin listesindeki kamuya açık hostlara, anahtarsız ve salt okuma ile bağlanır.
    - Her deneyin çevrimdışı testi vardır (`test_experiment.py`).
 3. **İzole çalıştırma:** `.github/workflows/brian-research-lab.yml`.
@@ -44,7 +44,7 @@ Plan ve gerekçe: [`docs/reviews/BRIAN_VISUAL_RESEARCH_LAB_PHASE0_20261020.md`](
 Yerel çalıştırma:
 
 ```
-cd research/research_lab/experiments/pm_political_slope
+cd research/research_lab/studies/pm_political_slope
 python -m unittest test_experiment
 python run.py --out ./out
 ```

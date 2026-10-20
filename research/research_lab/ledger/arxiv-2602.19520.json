@@ -162,6 +162,14 @@
         "at_commit_after": "b614813",
         "before_full_run": true,
         "change": "Added REVIEW_REQUIRED for a truncated market listing (stricter, not looser)."
+      },
+      {
+        "change": "Disclosure: experiment code sat under an 'experiments/' path ignored by the repository .gitignore, so it was NOT included in commits b614813/c56aff8; only this ledger (incl. the decision rule) was. Code moved to studies/ and committed after the full run had started; the SHA-256 of the exact files used by the run is recorded here.",
+        "code_sha256": {
+          "run.py": "1303b95fa387a887fde50ccadfd9752f4777e829cc6842a82ead6b2494794b01",
+          "stats.py": "dba3ccacce0f6fea6cc3ec86c7a72749b06062ffc7dee750c71a2ed080bea53c",
+          "classify.py": "17137ee2c078acfad7751f6ed6a352cbf57ecbd25c81517f111b08f7525192fa"
+        }
       }
     ]
   }
