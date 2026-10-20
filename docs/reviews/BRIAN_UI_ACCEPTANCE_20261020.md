@@ -12,6 +12,7 @@ Existing product extended in place. Backend/research belongs to Claude; frontend
 - Unlocking immediately refreshes an initially locked scorecard; timeout errors offer a readable retry. No test data is substituted for live reports.
 - Engineering refreshes coalesce in-flight requests; periodic expensive requests occur only for a visible panel/open room. Public position-mark requests have a 10-second deadline.
 - News items with an HTTP(S) provenance URL expose a source link. Missing URLs remain missing; script schemes and credential-bearing URLs are rejected.
+- Frontier CI exposed three pre-existing explicit-any lint errors in the news endpoint. Query rows now have explicit `Frame`/`ScoutFrame` types; this is type-only and does not change the emitted JavaScript, queries, or permissions. Deno check and lint pass.
 - Prediction/NIULAI4 read-only cards consume `brian-prediction-status.v1` from Claude's documented contract. Sections show independent server statuses, null values remain unknown, stale last-success data is labelled, HTTP 401 clears prior data, unsafe/incompatible response contracts fail closed. INTERIM reports never receive an advantage verdict. There is no ingest/start/key-management UI. Polling is at most once per 60 seconds while visible, except explicit refresh/unlock.
 
 ## Verification
