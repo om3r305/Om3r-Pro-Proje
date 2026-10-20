@@ -22,5 +22,16 @@
   const n=k=>num(snapshot?.[k]),equity=n('equity_usd'),start=n('starting_equity_usd'),realized=n('realized_pnl_usd');
   return {snapshot,rows,history:array(data?.history).filter(h=>validTime(h.observed_at)&&Date.parse(h.observed_at)>=since&&Date.parse(h.observed_at)<=cutoff&&num(h.equity_usd)!==null),daily:[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date)),assets:[...assets.values()].sort((a,b)=>a.net-b.net),unknown,costUnknown:rows.filter(r=>r.cost===null).length,cost:sum(rows,'cost'),knownRealized:sum(known,'realized'),grossProfit:rows.reduce((s,r)=>s+Math.max(0,r.gross??0),0),grossLoss:rows.reduce((s,r)=>s+Math.min(0,r.gross??0),0),equity,start,realized,total:equity!==null&&start!==null?equity-start:null,unrealized:equity!==null&&start!==null&&realized!==null?equity-start-realized:null,cash:n('cash_usd'),positions:array(snapshot?.positions)};
  }
- const api={project,num};if(typeof module!=='undefined')module.exports=api;else root.TreasuryAccountingModel=api;
+ function coverageNotes(coverage={}){
+  const actionLimit=num(coverage.action_limit),historyLimit=num(coverage.history_limit);
+  return {
+   actions:coverage.actions_truncated?`Hareket listesi ${actionLimit>0?'son '+actionLimit+' kayıtla sınırlı':'sınırlı kapsamda'}; tüm geçmiş değildir.`:'',
+   history:coverage.history_truncated?`Grafik ${historyLimit>0?'son '+historyLimit+' kasa kaydıyla sınırlıdır':'sınırlı kapsamı gösterir'}. `:''
+  };
+ }
+ function snapshotFresh(data,now=Date.now()){
+  const stamp=Date.parse(data?.snapshot?.observed_at||'');
+  return data?.stale!==true&&data?.status!=='STALE'&&Number.isFinite(stamp)&&stamp<=now&&now-stamp<=300000;
+ }
+ const api={project,num,coverageNotes,snapshotFresh};if(typeof module!=='undefined')module.exports=api;else root.TreasuryAccountingModel=api;
 })(typeof window!=='undefined'?window:globalThis);
