@@ -2,7 +2,7 @@
 
 Adapts the user's black/cyan desktop and phone reference to the existing BRIAN application. This is a presentation change over the current records and room handlers.
 
-- Three desktop columns: filtered news, global module network, research. Compact room shortcuts, decisions, treasury and system evidence below. Ultrawide breakpoints use the monitor width; touch screens have a separate stacked layout and four functional bottom destinations.
+- Three desktop columns: filtered news, global module network, research. Compact room shortcuts, decisions, treasury and system evidence below. Ultrawide adds a fourth column for treasury/system evidence; touch screens have a separate stacked layout and four functional bottom destinations. The browser caps a requested 5120-pixel test at 4096, so exact 5120 screenshot verification is not claimed.
 - Native SVG brain mark, globe and icons; no image-generation runtime, added package or external font dependency. The globe is explicitly decorative geography, not geolocated news or an inference of money flow. Module states and arrival effects still come from the original evidence model.
 - Radar strip uses the existing control-center payload. Values are 24-hour percentage changes, not invented index prices. Stale/future/missing sources cannot be labelled current. Missing/invalid percentages stay unknown. Links open the underlying radar panel.
 - Search filters the actual rendered news. Existing meeting, accounting, engineering, anatomy, system controls and all report details remain accessible. The performance destination opens its disclosure before scrolling.

@@ -216,7 +216,11 @@
  .brian-terminal #brianOperations .ops-room{min-height:126px;padding:20px}
 }
 @media(min-width:3400px){
- .brian-terminal .shell{grid-template-columns:minmax(550px,1fr) minmax(950px,1.6fr) minmax(600px,1fr)}
+ .brian-terminal .shell{grid-template-columns:minmax(500px,1fr) minmax(800px,1.55fr) minmax(500px,1fr) minmax(450px,.9fr)}
+ .brian-terminal #opsOverview{grid-column:4;grid-row:1}
+ .brian-terminal .shell>#marketRadarPanel{grid-column:3/5;grid-row:2;max-height:390px}
+ .brian-terminal #marketRadarList{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .brian-terminal .terminal-report{grid-column:2/5}
  .brian-terminal #command .nc-stage{height:640px}
  .brian-terminal #worldPanel,.brian-terminal .prediction-research{height:850px}
  .brian-terminal #workspaceNav a,.brian-terminal #workspaceNav button{font-size:15px;padding-inline:24px}
