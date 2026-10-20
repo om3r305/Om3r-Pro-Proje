@@ -13,7 +13,7 @@ Temel kural: **erişilemeyen ya da henüz kurulmamış veri açıkça öyle gös
 | Yetki | `x-brian-dashboard-key` başlığı. Diğer dashboard uçlarıyla aynı anahtar (`brian_dashboard_auth.control-v3`) |
 | Önbellek | Sunucuda 30 sn. Yanıttaki `cache_age_seconds` önbellek yaşını verir. Önerilen yoklama: 60 sn |
 | Yazma | **Yok.** Tek bir salt okunur, repeatable-read işlem |
-| Kaynak | `supabase/functions/brian-prediction-status/index.ts`, `_shared/prediction_status.ts`, migration `…_brian_niulai4_pilot_ingest.sql` |
+| Kaynak | `supabase/functions/brian-prediction-status/index.ts`, `_shared/prediction_status.ts`, migration `20261020074329_brian_niulai4_pilot_ingest.sql` |
 
 ### HTTP durumları
 
@@ -119,7 +119,7 @@ Pilot özetinin (`latest_report.summary`) yorumu:
 
 ## 5. Yazma yolu (yalnızca pilot için; arayüz kullanmaz)
 
-`brian-niulai4-pilot-ingest`:
+`brian-niulai4-pilot-ingest` (**20 Ekim itibarıyla CORE'da henüz yayınlanmadı**; anahtar kararıyla birlikte yayınlanacak. O zamana kadar pilot durumu `NOT_CONFIGURED` kalır):
 - `POST` ve `x-brian-pilot-key` başlığı. CORS yok, tarayıcıdan çağrılmaz.
 - Anahtar yalnızca SHA-256 hash olarak `brian_niulai4_pilot_auth` tablosunda durur. Migration **anahtar oluşturmaz**: satır `enabled=false, hash=null` gelir; bu durumda her istek `503 PILOT_INGEST_NOT_CONFIGURED` alır.
 - Kabul edilen türler: `START`, `HEARTBEAT` (≤ 1 / 30 sn), `REPORT` (≤ 1 / 5 dk; `FINAL` yalnızca bir kez), `STOP`.
