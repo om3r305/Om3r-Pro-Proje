@@ -9,6 +9,7 @@ on:
       - 'supabase/functions/brian-prediction-eye/**'
       - 'supabase/migrations/*brian_prediction_*.sql'
       - 'tests/test_brian_prediction_*postgres.py'
+      - 'research/niulai4_pilot/**'
       - 'docs/BRIAN_PREDICTION_INTELLIGENCE.md'
       - '.github/workflows/brian-prediction-ci.yml'
   workflow_dispatch:
@@ -37,6 +38,11 @@ jobs:
           deno check
           supabase/functions/_shared/prediction_*.ts
           supabase/functions/brian-prediction-eye/index.ts
+
+      - name: Type-check and test the local NIULAI4 pilot (no network)
+        run: |
+          deno check research/niulai4_pilot/*.ts
+          deno test --allow-read --allow-write research/niulai4_pilot/pilot_test.ts
 
       - name: Run offline behavioral tests (no network, live smoke test stays skipped)
         run: deno test supabase/functions/_shared/prediction_*.test.ts
