@@ -99,3 +99,6 @@ body.record-impact .command-bottom>.panel:before,body.record-impact .right-rail>
 body.reviewing-history .node-label.active .atom-title{outline:1px dashed #d1e2ff}
 @media(max-width:1400px){#eventReview{top:120px;bottom:25px;width:min(650px,calc(100vw - 35px))}.reason-field{grid-template-columns:160px 1fr}}
 @media(max-width:700px){#eventReview{top:80px;right:10px;width:calc(100vw - 20px);padding:16px}#reviewTimeline{grid-template-columns:1fr 1fr}.reason-field{grid-template-columns:1fr}.review-controls button{font-size:10px;padding:7px}.review-version{display:block}.review-version select{display:block;width:100%;min-width:0;margin-top:8px}}
+
+#connectedStatus{font:9px/1.4 Mono,monospace;max-width:330px;color:#b5c6dc!important}.classic-link{font:11px Mono,monospace;color:#d4e2f6!important;white-space:nowrap;padding:9px;border:1px solid #71829d66!important;border-radius:4px}
+@media(max-width:1400px){#connectedStatus{max-width:160px;font-size:7px}.classic-link{font-size:8px}}
