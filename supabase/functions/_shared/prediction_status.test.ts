@@ -17,11 +17,16 @@ Deno.test("status: missing or failed sections are UNAVAILABLE, never defaulted",
   assertEquals(p.prediction, { status: "UNAVAILABLE", reason: "PREDICTION_STATUS_MISSING" });
   assertEquals(p.calibration, { status: "UNAVAILABLE", reason: "CALIBRATION_INPUTS_MISSING" });
   assertEquals(p.niulai4_pilot, { status: "UNAVAILABLE", reason: "PILOT_STATUS_MISSING" });
+  assertEquals(p.research, { status: "UNAVAILABLE", reason: "RESEARCH_STATUS_MISSING" });
   assertEquals([p.shadow_only, p.live_execution, p.trade_signal], [true, false, false]);
   const e = buildPredictionStatus({ prediction: { status: "OK" }, calibrationInputs: { rows: [] }, pilot: { status: "RUNNING" } }, { pilot: "READ_FAILED:PostgresError" }, at);
   assertEquals(e.prediction.status, "OK");
   assertEquals(e.niulai4_pilot, { status: "UNAVAILABLE", reason: "READ_FAILED:PostgresError" });
   assertEquals(e.observed_at, "2026-10-20T08:00:00.000Z");
+  const r = buildPredictionStatus({ prediction: null, calibrationInputs: null, pilot: null, research: { status: "OK", claims: [] } }, { research: undefined }, at);
+  assertEquals(r.research.status, "OK");
+  const re = buildPredictionStatus({ prediction: null, calibrationInputs: null, pilot: null, research: { status: "OK" } }, { research: "READ_FAILED:PostgresError" }, at);
+  assertEquals(re.research, { status: "UNAVAILABLE", reason: "READ_FAILED:PostgresError" });
 });
 
 Deno.test("status: calibration below 20 events is INSUFFICIENT_DATA with no interval", () => {

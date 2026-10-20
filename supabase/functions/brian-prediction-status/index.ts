@@ -32,8 +32,8 @@ Deno.serve(async (req: Request) => {
     if (cache && Date.now() - cache.at < CACHE_MS) {
       return response({ ...(cache.body as object), cache_age_seconds: (Date.now() - cache.at) / 1000 });
     }
-    const parts: { prediction: unknown; calibrationInputs: unknown; pilot: unknown } = { prediction: null, calibrationInputs: null, pilot: null };
-    const errors: { prediction?: string; calibration?: string; pilot?: string } = {};
+    const parts: { prediction: unknown; calibrationInputs: unknown; pilot: unknown; research: unknown } = { prediction: null, calibrationInputs: null, pilot: null, research: null };
+    const errors: { prediction?: string; calibration?: string; pilot?: string; research?: string } = {};
     let observedAt = new Date();
     await sql.begin(async (tx) => {
       await tx`set local statement_timeout = '8s'`;
@@ -51,6 +51,7 @@ Deno.serve(async (req: Request) => {
       parts.prediction = await read("prediction", async () => (await tx`select public.brian_prediction_status_v1(transaction_timestamp()) as v`)[0].v);
       parts.calibrationInputs = await read("calibration", async () => (await tx`select public.brian_prediction_calibration_inputs_v1(transaction_timestamp(), interval '24 hours') as v`)[0].v);
       parts.pilot = await read("pilot", async () => (await tx`select public.brian_niulai4_pilot_status_v1(transaction_timestamp()) as v`)[0].v);
+      parts.research = await read("research", async () => (await tx`select public.brian_research_status_v1(transaction_timestamp()) as v`)[0].v);
     });
     const body = buildPredictionStatus(parts, errors, observedAt);
     cache = { body, at: Date.now() };

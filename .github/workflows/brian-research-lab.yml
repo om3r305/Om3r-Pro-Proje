@@ -1,0 +1,70 @@
+name: Brian Research Lab
+
+# Isolated, secret-free research runs. The experiment code only reads PUBLIC Polymarket data;
+# no repository or BRIAN secret is exposed to these jobs, and results come back as artifacts
+# that an operator reviews before anything is recorded in CORE. The repository is public, so
+# inputs and outputs are public too: never feed private BRIAN data into this workflow.
+
+on:
+  pull_request:
+    branches: [brian-2026]
+    paths:
+      - 'research/research_lab/**'
+      - '.github/workflows/brian-research-lab.yml'
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: 'Experiment to run'
+        required: true
+        default: 'pm_political_slope'
+        type: choice
+        options: [pm_political_slope]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-research-lab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate ledger files
+        run: python -c "import json,glob;[json.load(open(p,encoding='utf-8')) for p in glob.glob('research/research_lab/ledger/*.json')];print('ledgers ok')"
+      - name: Offline unit tests (no network, stdlib only)
+        working-directory: research/research_lab/experiments/pm_political_slope
+        run: python -m unittest -v test_experiment
+
+  run-experiment:
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-tests
+    runs-on: ubuntu-24.04
+    # Budget (research_lab/README.md): one run, no GPU, no large downloads, bounded wall time.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Run experiment (public read-only HTTP, stdlib only)
+        working-directory: research/research_lab/experiments/${{ inputs.experiment }}
+        env:
+          RESEARCH_CODE_COMMIT: ${{ github.sha }}
+        run: python run.py --out "$RUNNER_TEMP/out"
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-${{ inputs.experiment }}-${{ github.sha }}
+          path: ${{ runner.temp }}/out/
+          retention-days: 90

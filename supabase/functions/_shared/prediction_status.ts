@@ -22,6 +22,8 @@ export interface PredictionStatusPayload {
   prediction: Section<Json>;
   calibration: Section<Json>;
   niulai4_pilot: Section<Json>;
+  // Research Lab ledger (claims, latest test result per claim, assumptions). Additive in v1.
+  research: Section<Json>;
 }
 
 export function unavailable(reason: string): { status: "UNAVAILABLE"; reason: string } {
@@ -60,8 +62,8 @@ export function sectionFrom(value: unknown, missing: string): Section<Json> {
 }
 
 export function buildPredictionStatus(
-  parts: { prediction: unknown; calibrationInputs: unknown; pilot: unknown },
-  errors: { prediction?: string; calibration?: string; pilot?: string },
+  parts: { prediction: unknown; calibrationInputs: unknown; pilot: unknown; research?: unknown },
+  errors: { prediction?: string; calibration?: string; pilot?: string; research?: string },
   observedAt: Date,
 ): PredictionStatusPayload {
   return {
@@ -73,6 +75,7 @@ export function buildPredictionStatus(
     prediction: errors.prediction ? unavailable(errors.prediction) : sectionFrom(parts.prediction, "PREDICTION_STATUS_MISSING"),
     calibration: errors.calibration ? unavailable(errors.calibration) : calibrationSection(parts.calibrationInputs),
     niulai4_pilot: errors.pilot ? unavailable(errors.pilot) : sectionFrom(parts.pilot, "PILOT_STATUS_MISSING"),
+    research: errors.research ? unavailable(errors.research) : sectionFrom(parts.research, "RESEARCH_STATUS_MISSING"),
   };
 }
 
