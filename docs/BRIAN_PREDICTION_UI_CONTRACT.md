@@ -204,6 +204,22 @@ Heartbeat'te görülen ve arayüzün doğru göstermesi gereken iki gerçek duru
 - Aynı uca paralel istek atma; bir istek bitmeden yenisini başlatma.
 - Yoklama aralığını önbellek süresinden kısa tutma (≥ 45–60 sn).
 
+## 6c. `brian-realtime-market-marks-public` — canlılık kuralı (20 Ekim, v4)
+
+- `live` artık fiyatın **şu anki yaşından** hesaplanıyor: `age_seconds <= live_max_age_seconds` (120). Emtia ve endeks fiyatları için ayrıca `session_state == "REGULAR"` şartı var. Kayıtlı `data_latency_seconds` değeri yalnızca bilgi amaçlı; kararı etkilemiyor.
+- Yeni alanlar:
+  - Her fiyatta `age_seconds` (sayı ya da `null`).
+  - Yanıtın kökünde `live_max_age_seconds`.
+  - Zaman damgası okunamazsa ya da 30 sn'den fazla ileri tarihliyse `age_seconds: null, live: false`.
+- Beklenen görünüm:
+  - Emtia kaynağı yapısı gereği ~10 dk gecikmeli, bu yüzden pratikte hep `live: false` olur. Arayüz "gecikmeli (x dk)" göstermeli.
+  - Kripto tick akışı 2–3 dakikada bir güncellendiği için kripto da sık sık `live: false` görünebilir.
+- Arayüzün PR175'teki 2 dk kuralıyla aynı. İki taraf artık aynı kararı veriyor.
+
+## 6d. Evrim deney koşucusu (20 Ekim)
+
+Deney koşucusu (jobid 44, her saat :27) ve terfi kurulu (jobid 45, her saat :34) yeniden açıldı; 26 Eylül'den beri kapalıydı. `brian-evolution-lab-status` ve `brian-evolution-status` uçlarında yeni deney sonuçları görünmeye başlayacak. Terfi hâlâ **insan onayı** istiyor; otomatik terfi yok.
+
 ## 7. Zaman ve tazelik kuralları (tüm bölümler)
 
 - Tüm zamanlar ISO-8601 UTC. Arayüz yerel saate çevirebilir ama kaynağı UTC'dir.
