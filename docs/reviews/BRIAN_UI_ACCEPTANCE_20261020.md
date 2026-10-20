@@ -18,7 +18,7 @@ Existing product extended in place. Backend/research belongs to Claude; frontend
 
 ## Verification
 
-- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, reliability, and lab readiness suites pass (60 tests).
+- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, reliability, and lab readiness suites pass (61 tests, including the follow-up server-STALE contract).
 - Python: unified command, meeting, and dashboard mobile contracts pass (18 tests).
 - Local browser: meeting open/close and evidence/update/result tabs; accounting open/close and ledger/position tabs; engineering open/close and tests/history/sources tabs; anatomy open/close; new navigation and research auth-required state; mobile background overflow hidden while modal open and auto after close.
 - Local layout preview deliberately had no authentication and was labelled as a layout test. It was not used as proof of live data delivery, and its temporary HTML is not shipped.
@@ -28,3 +28,7 @@ Existing product extended in place. Backend/research belongs to Claude; frontend
 Authenticated production session at approximately 09:32–09:36 Berlin: heartbeat/news/treasury summary data were observed; meeting and engineering rooms opened. Scorecard returned `signal timed out`; accounting remained loading during the observation; engineering showed intermittent `BRIAN_API_DIRECT_TIMEOUT`, with historical BLOCKED work correctly labelled as history. The backend owner was informed. Edge-function ACTIVE status alone is not acceptance.
 
 No start/restart/stop, treasury amount mutation, or experiment-start button was clicked on production. Their contracts are tested separately. Full clean live-data acceptance remains dependent on backend responses and post-release verification; “all buttons and all data are working” must not be inferred from the UI regression results.
+
+## Follow-up for backend PR #167
+
+The engineering endpoint can now return HTTP 200 with `status: STALE` / `stale: true`. Both the console and room model treat that as last-known evidence, never live progress or animation, even if its timestamp is recent. Visible engineering polling is 60 seconds to match the 45-second shared backend cache.
