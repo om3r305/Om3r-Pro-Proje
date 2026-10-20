@@ -18,7 +18,7 @@ Existing product extended in place. Backend/research belongs to Claude; frontend
 
 ## Verification
 
-- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, reliability, and lab readiness suites pass (61 tests, including the follow-up server-STALE contract).
+- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, reliability, and lab readiness suites pass (63 tests, including the follow-up server-STALE and accounting-coverage contracts).
 - Python: unified command, meeting, and dashboard mobile contracts pass (18 tests).
 - Local browser: meeting open/close and evidence/update/result tabs; accounting open/close and ledger/position tabs; engineering open/close and tests/history/sources tabs; anatomy open/close; new navigation and research auth-required state; mobile background overflow hidden while modal open and auto after close.
 - Local layout preview deliberately had no authentication and was labelled as a layout test. It was not used as proof of live data delivery, and its temporary HTML is not shipped.
@@ -32,3 +32,7 @@ No start/restart/stop, treasury amount mutation, or experiment-start button was 
 ## Follow-up for backend PR #167
 
 The engineering endpoint can now return HTTP 200 with `status: STALE` / `stale: true`. Both the console and room model treat that as last-known evidence, never live progress or animation, even if its timestamp is recent. Visible engineering polling is 60 seconds to match the 45-second shared backend cache.
+
+## Live accounting follow-up
+
+After backend read-load changes, authenticated accounting delivered the real history and ledger. Its payload caps are 300 actions and 360 snapshots, not the old UI's hardcoded 1,000. Labels now use `coverage.action_limit` and `coverage.history_limit`. The server's stale flag overrides a recent snapshot timestamp; missing initial data does not claim zero transactions/positions. No ledger rows or capital were changed.
