@@ -176,3 +176,18 @@ drop table if exists public.brian_prediction_control;
 | Fonksiyon | `brian-niulai4-pilot-ingest` v1 ACTIVE (ezbr `ccdffe24…`); dosyalar repo ile birebir |
 | Doğrulama | Anahtarsız → 401, yanlış anahtar → 401, doğru anahtar + geçersiz `run_id` → 400 `BAD_RUN_ID`, doğru anahtar + shadow dışı → 400 `NOT_SHADOW_ONLY`. Tablolarda 0 satır; pilot durumu `NOT_CONFIGURED` → `NOT_STARTED` |
 | İptal | `update brian_niulai4_pilot_auth set enabled=false` (anahtar anında geçersiz). Döndürme: yeni anahtar üret, karmayı değiştir |
+
+## Yayın kaydı — hazine scorecard v2 dönemi (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Onay | Kullanıcı (Codex aracılığıyla): yeni 7 günlük ölçüm, mevcut sunucu altyapısında, ücretsiz sınırlar içinde; PC'ye bağımlı değil. NIULAI4 ve gerçek para kapsam dışı |
+| Neden | v1 (`forward-20260922-v1-treasury`, 22–29 Eylül) gözlemleri 26 Eylül 14:20 UTC'de kesildi: pg_cron `brian-shadow-scorecard-5m` (jobid 95) `active=false` idi ve kayıt defterinde yoktu. v1 olduğu gibi bırakıldı; boşluk doldurulmadı |
+| Yedek | Tag `backup/scorecard-v2-oncesi` → `7acd0c2`; `C:\Brian\brian-backups\2026-10-20-scorecard-v2-oncesi\` (bundle, scorecard v6 kaynağı, `core-state.json`) |
+| Merge | PR #172 → `05f5770` (8 CI kontrolünün hepsi yeşil) |
+| Fonksiyon | `brian-shadow-scorecard` v6 → v7 (ezbr `00e6d99c…`): her motor için en yeni protokol. Tek satırlık değişiklik |
+| Migrasyon | CORE sürüm `20261020082424`; dosya adı hizalandı. Protokol `forward-20261020-v2-treasury`: 2026-10-20 08:24:24 UTC → 2026-10-27 08:24:24 UTC; kurallar v1 ile aynı (doğrulandı) |
+| Zamanlayıcı | CORE pg_cron jobid 95 `brian-shadow-scorecard-5m`, `12,22,32,42,52 * * * *`, `active=true`. Var olan `brian_capture_shadow_observations()` çalışır (8 sn zaman aşımı, tek index okuması ~0,2 ms). ~6 satır/saat, 7 günde ~1.000 satır. Edge, harici host ya da ücretli kaynak yok |
+| İlk kayıt | 08:24:24 UTC; equity 4938,06, kaynak zamanı 08:22:01 (2,4 dk), politika `brian.treasury-shadow.v3`, açık pozisyon 3 |
+| Bilinen sınır | Dönem açık pozisyonla başladı → model kuralı `OPEN_POSITIONS_AT_START` → karar `INCOMPLETE` olarak kalır. Ölçüm betimleyici olarak sürer |
+| Geri dönüş | `cron.alter_job(95, active := false)`; scorecard v6 kaynağını yeniden yayınla. Protokol satırları append-only'dir, silinmez |

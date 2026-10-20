@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "supabase/functions/brian-shadow-scorecard/index.ts").read_text(encoding="utf-8")
-MIG = (ROOT / "supabase/migrations/20261020083000_brian_shadow_scorecard_treasury_v2.sql").read_text(encoding="utf-8")
+MIG = (ROOT / "supabase/migrations/20261020082424_brian_shadow_scorecard_treasury_v2.sql").read_text(encoding="utf-8")
 
 
 def test_scorecard_reads_newest_protocol_per_engine():
