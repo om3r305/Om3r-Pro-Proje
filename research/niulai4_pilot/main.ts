@@ -1,7 +1,10 @@
 // NIULAI4 pilot entry point. Three modes:
 //   --selftest            preflight only (clock skew, disk, identity, rules fingerprint); records nothing
-//   --start --out <dir>   run the pilot; REFUSES unless <dir>/APPROVED_RULES_FINGERPRINT equals the
-//                         current rules fingerprint (written only after the operator approves)
+//   --start --out <dir> [--core-sink-key-file <path>] [--host-label <name>]
+//                         run the pilot; REFUSES unless <dir>/APPROVED_RULES_FINGERPRINT equals the
+//                         current rules fingerprint (written only after the operator approves).
+//                         With a key file, health (60 s) and interim summaries (30 min) are also
+//                         pushed to CORE (sink.ts); without it the pilot is local-only.
 //   --report --out <dir> [--final --required-windows N]
 //                         offline evaluation -> <dir>/summary.json; interim (no verdict) unless --final
 //
@@ -12,6 +15,7 @@ import { evaluate, type Capture, type Observation, type Outcome, summarize, type
 import { readJsonl } from "./recorder.ts";
 import { RULES, RULES_VERSION, rulesFingerprint } from "./rules.ts";
 import { runPilot, verifyIdentityNow } from "./runtime.ts";
+import { CoreSink, newRunId, readSinkKey } from "./sink.ts";
 
 async function skewSamples(n = 5): Promise<SkewSample[]> {
   const out: SkewSample[] = [];
@@ -95,12 +99,33 @@ if (import.meta.main) {
       console.error(JSON.stringify({ mode: "start", refused: true, ...p.result }, null, 2));
       Deno.exit(2);
     }
-    const guard = new StopGuard(Date.now() + (p.skew?.offsetMs ?? 0));
+    const offsetMs = p.skew?.offsetMs ?? 0;
+    const clock = () => Date.now() + offsetMs;
+    const guard = new StopGuard(clock());
     const stop = () => guard.stop("OPERATOR");
     try { Deno.addSignalListener("SIGINT", stop); } catch { /* not available */ }
-    const res = await runPilot({ outDir, rulesFingerprint: p.fp, clockOffsetMs: p.skew?.offsetMs ?? 0, guard });
-    console.log(JSON.stringify({ mode: "start", stopped: res.reason, stats: res.stats }, null, 2));
+    const opt = (name: string) => (args.indexOf(name) >= 0 ? args[args.indexOf(name) + 1] ?? null : null);
+    const sinkKey = await readSinkKey(opt("--core-sink-key-file"));
+    const sink = sinkKey ? new CoreSink(sinkKey, newRunId(clock()), RULES_VERSION, p.fp, clock) : null;
+    let interim: number | undefined;
+    if (sink) {
+      console.error(JSON.stringify({ mode: "start", coreSink: "ON", runId: sink.runId, start: await sink.start(opt("--host-label")) }));
+      // Interim summaries carry INTERIM_NO_VERDICT; a verdict is only ever produced offline with --final.
+      interim = setInterval(() => {
+        report(outDir, false, null).then((s) => sink.report(s as unknown as Record<string, unknown>, "INTERIM")).catch(() => {});
+      }, 30 * 60_000);
+    }
+    const res = await runPilot({
+      outDir, rulesFingerprint: p.fp, clockOffsetMs: offsetMs, guard,
+      onHealth: sink ? (h) => { void sink.heartbeat(h); } : undefined,
+    });
+    if (interim !== undefined) clearInterval(interim);
+    if (sink) {
+      try { await sink.report((await report(outDir, false, null)) as unknown as Record<string, unknown>, "INTERIM"); } catch { /* best effort */ }
+      await sink.stop(String(res.reason ?? "UNKNOWN"));
+    }
+    console.log(JSON.stringify({ mode: "start", stopped: res.reason, stats: res.stats, coreSink: sink ? sink.stats : "OFF" }, null, 2));
   } else {
-    console.log(`usage: --selftest | --start --out <dir> | --report --out <dir>  (rules ${RULES_VERSION}, wallet ${RULES.wallet})`);
+    console.log(`usage: --selftest | --start --out <dir> [--core-sink-key-file <path>] | --report --out <dir>  (rules ${RULES_VERSION}, wallet ${RULES.wallet})`);
   }
 }
