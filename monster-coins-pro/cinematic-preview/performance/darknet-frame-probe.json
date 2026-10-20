@@ -1,0 +1,14 @@
+{
+  "durationMs": 15003.099999999627,
+  "rafCallbacks": 3606,
+  "rafFps": 240.35032759896885,
+  "meanGapMs": 4.161608876560333,
+  "maxGapMs": 12.5,
+  "visibility": "visible",
+  "focused": true,
+  "viewport": [
+    1280,
+    720
+  ],
+  "dpr": 1.25
+}

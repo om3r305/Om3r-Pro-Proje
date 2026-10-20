@@ -1,0 +1,4 @@
+const{test}=require('node:test'),a=require('node:assert/strict'),{createPacer}=require('../monster-coins-pro/cinematic-preview/render-pacing.js');
+test('60 FPS pacing works at 60, 100, 120, 144, 165 and 240 Hz without systematic extra skips',()=>{for(const hz of[60,100,120,144,165,240]){const p=createPacer(60);let count=0;for(let i=0;i<hz*10;i++)if(p.due(i*1000/hz))count++;a(Math.abs(count-600)<=1,'rate '+hz+' count '+count);}});
+test('a throttled 1 Hz callback cannot be counted as 60 rendered FPS',()=>{const p=createPacer();let count=0;for(let i=0;i<15;i++)if(p.due(i*1000))count++;a.equal(count,15);});
+test('resume resets deadlines and does not create a burst of catch-up renders',()=>{const p=createPacer();a(p.due(0));a(!p.due(4));p.reset();a(p.due(50000));a(!p.due(50001));a(!p.due(NaN));});

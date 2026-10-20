@@ -1,0 +1,597 @@
+{
+  "version": 3,
+  "at": "2026-10-20T20:06:05.607Z",
+  "source": "public-heartbeat",
+  "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+  "layout": {
+    "viewportWidth": 5120,
+    "viewportHeight": 1440,
+    "cssWidth": 2931,
+    "cssHeight": 730,
+    "dpr": 1.0000000149011612,
+    "buffer": {
+      "width": 2931,
+      "height": 730,
+      "ratio": 1.0000000149011612,
+      "estimatedBufferBytes": 17117040,
+      "estimatedPostBytes": 18182832
+    }
+  },
+  "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "quality": 1,
+  "nodes": 15,
+  "edges": 14,
+  "decorativePoints": 54000,
+  "drawCalls": 55,
+  "triangles": 32800,
+  "renderedFps": 1.1308229064809596,
+  "cpuJsMeanMs": 1.4882352941066903,
+  "gpuDrawMeanMs": 0.169472,
+  "frameP95Ms": 1002.2999999999993,
+  "notes": [
+    "Measured JavaScript work is not system CPU utilization.",
+    "GPU timer measures draw duration, not GPU utilization percentage.",
+    "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+    "Edges are source membership or explicit asset reference, not inferred causality."
+  ],
+  "durationMs": 15033.299999999814,
+  "frameCount": 17,
+  "gpuSamples": 2,
+  "samples": [
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:51.452Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 0.9978048293753753,
+      "cpuJsMeanMs": 0.900000000372529,
+      "gpuDrawMeanMs": null,
+      "frameP95Ms": 1002.1999999999989,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:52.455Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 0.9979044007584079,
+      "cpuJsMeanMs": 0.8999999999068677,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:53.581Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.596780889726312,
+      "cpuJsMeanMs": 1.2200000001117588,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.1999999999989,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:54.584Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.451589490492089,
+      "cpuJsMeanMs": 1.2333333333954215,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.1999999999989,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:55.587Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.363114131598933,
+      "cpuJsMeanMs": 1.3857142857408948,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.1999999999989,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:56.589Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.3034623217922607,
+      "cpuJsMeanMs": 1.4250000000465661,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:57.589Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.2605571662674906,
+      "cpuJsMeanMs": 1.3444444445065327,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:58.591Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.2282447154771114,
+      "cpuJsMeanMs": 1.2600000000558793,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:05:59.594Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.2030009405280082,
+      "cpuJsMeanMs": 1.2181818182156845,
+      "gpuDrawMeanMs": 0.1792,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:00.595Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1827437684187705,
+      "cpuJsMeanMs": 1.1666666666666667,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:01.598Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1661179932006351,
+      "cpuJsMeanMs": 1.1307692307835588,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2000000000007,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:02.600Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1522254411377406,
+      "cpuJsMeanMs": 1.0928571428438383,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2999999999993,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:03.602Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1404936056325177,
+      "cpuJsMeanMs": 1.0600000000248353,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2999999999993,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:04.612Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1303985361338957,
+      "cpuJsMeanMs": 1.53125,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2999999999993,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    },
+    {
+      "version": 3,
+      "at": "2026-10-20T20:06:05.607Z",
+      "source": "public-heartbeat",
+      "sourceAt": "2026-10-20T20:05:01.314595+00:00",
+      "layout": {
+        "viewportWidth": 5120,
+        "viewportHeight": 1440,
+        "cssWidth": 2931,
+        "cssHeight": 730,
+        "dpr": 1.0000000149011612,
+        "buffer": {
+          "width": 2931,
+          "height": 730,
+          "ratio": 1.0000000149011612,
+          "estimatedBufferBytes": 17117040,
+          "estimatedPostBytes": 18182832
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": 1,
+      "nodes": 15,
+      "edges": 14,
+      "decorativePoints": 54000,
+      "drawCalls": 55,
+      "triangles": 32800,
+      "renderedFps": 1.1216161829421971,
+      "cpuJsMeanMs": 1.4882352941066903,
+      "gpuDrawMeanMs": 0.169472,
+      "frameP95Ms": 1002.2999999999993,
+      "notes": [
+        "Measured JavaScript work is not system CPU utilization.",
+        "GPU timer measures draw duration, not GPU utilization percentage.",
+        "Black hole, accretion disk, jets and continuous particles are decorative. Only changed source records trigger event packets.",
+        "Edges are source membership or explicit asset reference, not inferred causality."
+      ]
+    }
+  ]
+}
