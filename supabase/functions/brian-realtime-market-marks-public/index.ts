@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
+import { LIVE_MAX_AGE_SECONDS, markFreshness } from "../_shared/market_mark_freshness.ts";
 
 const URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -61,7 +62,8 @@ Deno.serve(async(req:Request)=>{
       const id=String(row.asset_id??"");
       const price=Number(row.observed_mid_price);
       if(!latest.has(id)&&Number.isFinite(price)&&price>0){
-        latest.set(id,{asset_id:id,observed_at:String(row.observed_at),price,session_state:"CONTINUOUS",live:true,source:"brian_micro_book_ticks"});
+        const fresh=markFreshness(row.observed_at,Date.now());
+        latest.set(id,{asset_id:id,observed_at:String(row.observed_at),price,session_state:"CONTINUOUS",age_seconds:fresh.age_seconds,live:fresh.live,source:"brian_micro_book_ticks"});
       }
     }
   }
@@ -81,7 +83,8 @@ Deno.serve(async(req:Request)=>{
           asset_id:id,observed_at:String(row.provider_time),price,session_state:session,
           data_latency_seconds:Number.isFinite(latency)?latency:null,
           provider_quality:row.provider_quality,
-          live:session==="REGULAR"&&Number.isFinite(latency)&&latency<=15*60,
+          // data_latency_seconds is the delay measured when the row was written; liveness uses the age now.
+          ...markFreshness(row.provider_time,Date.now(),session==="REGULAR"),
           source:"brian_multiasset_market_latest"
         });
       }
@@ -95,6 +98,7 @@ Deno.serve(async(req:Request)=>{
     marks,
     count:marks.length,
     source:"brian-realtime",
+    live_max_age_seconds:LIVE_MAX_AGE_SECONDS,
     read_only:true,
     shadow_only:true,
     live_execution:false,

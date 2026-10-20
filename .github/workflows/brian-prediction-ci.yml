@@ -20,6 +20,8 @@ on:
       - 'supabase/migrations/*brian_research_ledger*.sql'
       - 'tests/test_brian_research_ledger_postgres.py'
       - 'research/research_lab/ledger/**'
+      - 'supabase/functions/_shared/market_mark_freshness*.ts'
+      - 'supabase/functions/brian-realtime-market-marks-public/**'
       - 'docs/BRIAN_PREDICTION_UI_CONTRACT.md'
       - 'supabase/migrations/*brian_prediction_*.sql'
       - 'tests/test_brian_prediction_*postgres.py'
@@ -54,6 +56,7 @@ jobs:
           supabase/functions/brian-prediction-eye/index.ts
           supabase/functions/brian-prediction-status/index.ts
           supabase/functions/brian-niulai4-pilot-ingest/index.ts
+          supabase/functions/brian-realtime-market-marks-public/index.ts
 
       - name: Type-check and test the local NIULAI4 pilot (no network)
         run: |
@@ -61,7 +64,7 @@ jobs:
           deno test --allow-read --allow-write research/niulai4_pilot/pilot_test.ts
 
       - name: Run offline behavioral tests (no network, live smoke test stays skipped)
-        run: deno test supabase/functions/_shared/prediction_*.test.ts
+        run: deno test supabase/functions/_shared/prediction_*.test.ts supabase/functions/_shared/market_mark_freshness.test.ts
 
   verify-prediction-storage:
     runs-on: ubuntu-24.04
