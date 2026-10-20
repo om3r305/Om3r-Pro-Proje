@@ -156,6 +156,32 @@ Heartbeat'te görülen ve arayüzün doğru göstermesi gereken iki gerçek duru
 - `control.core_dispatcher_active: false`, `realtime_scheduler_active: true`. CORE dispatcher kapalı; bu zamanlayıcı alanı ve bu PR'da dokunulmadı.
 - `managed_jobs_active: 15 / managed_jobs_total: 30`.
 
+## 6b. 20 Ekim yavaşlık olayı ve `brian-frontier-engineering-status` değişikliği
+
+**Ölçüm** (edge ve Postgres logları, 07:00–08:00 UTC):
+- `brian-frontier-engineering-status` 1 saatte 71 çağrı aldı; p50 34 sn, 26 çağrı 150 sn edge sınırında 5xx döndü.
+- `brian-treasury-accounting` ve `brian-frontier-autonomy-status` da 150 sn'de kesildi; `brian-shadow-scorecard` 33 sn sürdü.
+- 07:30'dan önce DB'de yavaş sorgu yok denecek kadar azdı. 07:30'dan sonra 5 dakikada 16–29 `statement timeout` görüldü.
+- Fonksiyon loglarında `write CONNECT_TIMEOUT` ve "Timed out acquiring connection from connection pool" var.
+- Vercel `/api/brian/*` proxy'si yalnızca ~60–150 ms ekliyor; neden proxy değil.
+
+**Kök neden:**
+- CORE küçük bir compute üzerinde: 5,8 GB veritabanı, `shared_buffers` 224 MB, `max_connections` 60. Disk ve CPU payı tükenince sayfa okuma ~14 ms'ye çıkıyor.
+- Mühendislik ucu açık her sekmeden dakikada bir çağrılıyordu; her çağrıda paralel 10 okuma yapıyordu ve bunların üçü tam tarama + sıralama gerektiriyordu (`DISTINCT ON` görünümleri ve index'siz `observed_at` sıralaması).
+- 07:30'da ikinci bir tarayıcı açılınca yük iki katına çıktı. Okumalar birikip bağlantı havuzunu doldurdu; diğer uçlar da bağlanamadı.
+
+**Backend düzeltmesi** (migration `…_brian_status_read_load.sql` ve uç kodu):
+- İki "latest" görünüm aynı sonucu veren index skip-scan biçimine çevrildi. Satırlar, sütunlar ve sıralama birebir aynı; testli.
+- `brian_evolution_hypothesis_snapshots(observed_at desc)` index'i eklendi.
+- Uç artık sonucu 45 sn paylaşıyor ve eşzamanlı istekler tek hesaplamayı bekliyor.
+- Yeni alan `cache_age_seconds` (sn). Yeniden hesaplama başarısız olursa son iyi sonuç en fazla 15 dk boyunca **`status: "STALE"`, `stale: true`, `stale_reason`** ile döner. Arayüz bunu "eski veri (x dk önce)" olarak göstermeli, "ONLINE" gibi göstermemeli.
+- Son iyi sonuç yoksa eskisi gibi 500 ve `status: "DEGRADED"` döner.
+
+**Arayüz için öneriler (Codex):**
+- Ağır durum uçlarını gizli sekmede yoklama (`document.visibilityState`).
+- Aynı uca paralel istek atma; bir istek bitmeden yenisini başlatma.
+- Yoklama aralığını önbellek süresinden kısa tutma (≥ 45–60 sn).
+
 ## 7. Zaman ve tazelik kuralları (tüm bölümler)
 
 - Tüm zamanlar ISO-8601 UTC. Arayüz yerel saate çevirebilir ama kaynağı UTC'dir.

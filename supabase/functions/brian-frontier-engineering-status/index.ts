@@ -60,13 +60,17 @@ function eventPayload(v:unknown){
   return v;
 }
 
-Deno.serve(async(req:Request)=>{
-  const origin=req.headers.get("origin");
-  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
-  if(req.method!=="POST")return out({error:"POST required"},405,origin);
-  try{await auth(req)}catch(error){return out({error:String(error)},401,origin)}
+// Shared response cache + single flight (20 Oct 2026 incident: every open tab polled this once a
+// minute with 10 parallel reads; under CPU/IO pressure the reads piled up to the 150 s edge limit).
+// Concurrent requests share one build; a fresh result is reused for CACHE_MS; if a rebuild fails,
+// the last good result is served for up to STALE_MAX_MS, explicitly marked status "STALE".
+const CACHE_MS=45_000;
+const STALE_MAX_MS=15*60_000;
+let lastGood:{body:Record<string,unknown>;at:number}|null=null;
+let inflight:Promise<Record<string,unknown>>|null=null;
 
-  try{
+async function build():Promise<Record<string,unknown>>{
+  {
     const since24h=new Date(Date.now()-24*3600_000).toISOString();
     const [controlQ,runsQ,budgetRunsQ,reviewPassQ,reviewPhaseQ,eventsQ,requestsQ,hypQ,sourcesQ,assessQ]=await Promise.all([
       db.from("brian_evolution_engineering_control")
@@ -231,7 +235,7 @@ Deno.serve(async(req:Request)=>{
       },
     };
 
-    return out({
+    return {
       status:"ONLINE",
       observed_at:new Date().toISOString(),
       control,
@@ -257,8 +261,27 @@ Deno.serve(async(req:Request)=>{
       shadow_only:true,
       live_execution:false,
       dip_isolated:true,
-    },200,origin);
+    };
+  }
+}
+
+Deno.serve(async(req:Request)=>{
+  const origin=req.headers.get("origin");
+  if(req.method==="OPTIONS")return new Response(null,{status:204,headers:cors(origin)});
+  if(req.method!=="POST")return out({error:"POST required"},405,origin);
+  try{await auth(req)}catch(error){return out({error:String(error)},401,origin)}
+
+  const age=()=>lastGood?Math.max(0,(Date.now()-lastGood.at)/1000):null;
+  if(lastGood&&Date.now()-lastGood.at<CACHE_MS)return out({...lastGood.body,cache_age_seconds:age()},200,origin);
+  try{
+    inflight??=build().finally(()=>{inflight=null});
+    const body=await inflight;
+    lastGood={body,at:Date.now()};
+    return out({...body,cache_age_seconds:0},200,origin);
   }catch(error){
+    if(lastGood&&Date.now()-lastGood.at<STALE_MAX_MS){
+      return out({...lastGood.body,status:"STALE",stale:true,stale_reason:String(error).slice(0,200),cache_age_seconds:age()},200,origin);
+    }
     return out({status:"DEGRADED",error:String(error),shadow_only:true,live_execution:false,dip_isolated:true},500,origin);
   }
 });
