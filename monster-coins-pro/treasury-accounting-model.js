@@ -33,5 +33,9 @@
   const stamp=Date.parse(data?.snapshot?.observed_at||'');
   return data?.stale!==true&&data?.status!=='STALE'&&Number.isFinite(stamp)&&stamp<=now&&now-stamp<=300000;
  }
- const api={project,num,coverageNotes,snapshotFresh};if(typeof module!=='undefined')module.exports=api;else root.TreasuryAccountingModel=api;
+ function markFresh(mark,now=Date.now()){
+  const stamp=Date.parse(mark?.observed_at||''),price=['number','string'].includes(typeof mark?.price)?num(mark.price):null;
+  return mark?.live===true&&mark?.stale!==true&&price!==null&&price>0&&Number.isFinite(stamp)&&stamp<=now&&now-stamp<=120000;
+ }
+ const api={project,num,coverageNotes,snapshotFresh,markFresh};if(typeof module!=='undefined')module.exports=api;else root.TreasuryAccountingModel=api;
 })(typeof window!=='undefined'?window:globalThis);

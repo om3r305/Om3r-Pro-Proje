@@ -14,6 +14,12 @@ test('a server-marked stale accounting response is not fresh even when its snaps
  a.equal(snapshotFresh({snapshot:{observed_at:new Date(now+1000).toISOString()}},now),false);
 });
 test('short loss uses signed return',()=>{const v=project({...data,actions:[{...open,direction:-1},{...exit,direction:-1}]});a(Math.abs(v.knownRealized+103)<1e-9)});
+test('REALTIME requires an explicit live quote, valid price and recent nonfuture source timestamp',()=>{
+ const {markFresh}=require('../monster-coins-pro/treasury-accounting-model.js');
+ const now=Date.now(),mark={live:true,price:57.46,observed_at:new Date(now-1000).toISOString()};
+ a.equal(markFresh(mark,now),true);
+ for(const patch of [{live:false},{live:undefined},{stale:true},{price:null},{price:true},{price:false},{price:0},{price:-1},{observed_at:null},{observed_at:'bad'},{observed_at:new Date(now+1).toISOString()},{observed_at:new Date(now-120001).toISOString()}])a.equal(markFresh({...mark,...patch},now),false);
+});
 test('missing or ambiguous opening stays unknown',()=>{for(const actions of [[exit],[exit,open,{...open,action_id:'o2'}]])a.equal(project({...data,actions}).rows[0].net,null)});
 test('period exit uses older matched entry but charges only exit-period ledger cost',()=>{const v=project({...data,actions:[exit],opening_actions:[{...open,observed_at:'2026-09-10T00:00:00Z'}]},1);a(Math.abs(v.knownRealized-98)<1e-9);a(Math.abs(v.rows[0].net-97)<1e-9);a.equal(v.cost,2)});
 test('missing data is not numeric zero',()=>{a.equal(num(null),null);a.equal(project({}).equity,null);a.equal(project({...data,actions:[{...exit,cost_usd:null},open]}).rows[0].realized,null)});
