@@ -119,7 +119,7 @@ Pilot özetinin (`latest_report.summary`) yorumu:
 
 ## 5. Yazma yolu (yalnızca pilot için; arayüz kullanmaz)
 
-`brian-niulai4-pilot-ingest` (**20 Ekim itibarıyla CORE'da henüz yayınlanmadı**; anahtar kararıyla birlikte yayınlanacak. O zamana kadar pilot durumu `NOT_CONFIGURED` kalır):
+`brian-niulai4-pilot-ingest` (20 Ekim 08:12 UTC'den beri CORE'da v1 ACTIVE; anahtar kullanıcı onayıyla kuruldu, karması CORE'da. Pilot başlatılmadığı için durum `NOT_STARTED`):
 - `POST` ve `x-brian-pilot-key` başlığı. CORS yok, tarayıcıdan çağrılmaz.
 - Anahtar yalnızca SHA-256 hash olarak `brian_niulai4_pilot_auth` tablosunda durur. Migration **anahtar oluşturmaz**: satır `enabled=false, hash=null` gelir; bu durumda her istek `503 PILOT_INGEST_NOT_CONFIGURED` alır.
 - Kabul edilen türler: `START`, `HEARTBEAT` (≤ 1 / 30 sn), `REPORT` (≤ 1 / 5 dk; `FINAL` yalnızca bir kez), `STOP`.
