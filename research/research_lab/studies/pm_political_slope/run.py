@@ -52,7 +52,7 @@ def parse_ts(value: str | None) -> float | None:
 
 
 class Http:
-    def __init__(self, min_interval_s: float = 0.12, max_requests: int = 20000):
+    def __init__(self, min_interval_s: float = 0.12, max_requests: int = 60000):
         self.min_interval_s = min_interval_s
         self.max_requests = max_requests
         self.count = 0
@@ -141,6 +141,18 @@ def fetch_closed_markets(http: Http, start: str, end: str, max_pages: int, state
             return
 
 
+def month_chunks(start: str, end: str) -> list[tuple[str, str]]:
+    """Split [start, end) into calendar-month windows so every listing can reach its last page."""
+    s, e = datetime.fromtimestamp(parse_ts(start), timezone.utc), datetime.fromtimestamp(parse_ts(end), timezone.utc)
+    out, cur = [], s
+    while cur < e:
+        nxt = datetime(cur.year + (cur.month == 12), cur.month % 12 + 1, 1, tzinfo=timezone.utc)
+        hi = min(nxt, e)
+        out.append((cur.strftime("%Y-%m-%dT%H:%M:%SZ"), hi.strftime("%Y-%m-%dT%H:%M:%SZ")))
+        cur = hi
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -148,7 +160,7 @@ def main() -> int:
     ap.add_argument("--end", default="2026-10-01T00:00:00Z")
     ap.add_argument("--horizon-hours", type=float, default=30.0)
     ap.add_argument("--max-pages", type=int, default=4000)
-    ap.add_argument("--max-markets", type=int, default=6000)
+    ap.add_argument("--max-markets", type=int, default=30000)
     ap.add_argument("--resamples", type=int, default=2000)
     args = ap.parse_args()
     if parse_ts(args.start) <= parse_ts(PAPER_CUTOFF):
@@ -163,8 +175,13 @@ def main() -> int:
 
     rows = []
     seen = 0
-    page_state: dict = {}
-    for m in fetch_closed_markets(http, args.start, args.end, args.max_pages, page_state):
+    chunk_states: list[dict] = []
+    def all_markets():
+        for lo, hi in month_chunks(args.start, args.end):
+            st: dict = {"window": [lo, hi]}
+            chunk_states.append(st)
+            yield from fetch_closed_markets(http, lo, hi, args.max_pages, st)
+    for m in all_markets():
         seen += 1
         if classify_polymarket_domain(m.get("question") or "") != "Politics":
             skip("NOT_POLITICS"); continue
@@ -199,9 +216,12 @@ def main() -> int:
     boot = cluster_bootstrap_slope(((r["event_id"], r["price_yes"], r["outcome_yes"]) for r in rows), resamples=args.resamples)
     n_events = len({r["event_id"] for r in rows})
     status, reason = decide(len(rows), n_events, boot["lower"], boot["upper"])
-    if not page_state.get("complete"):
+    incomplete = [c["window"][0][:7] for c in chunk_states if not c.get("complete")]
+    if incomplete:
         # A truncated market list is a biased sample: never report it as PASS/FAIL.
-        status, reason = "REVIEW_REQUIRED", f"market listing truncated after {page_state.get('pages')} pages; sample may be biased"
+        status, reason = "REVIEW_REQUIRED", f"market listing truncated in {incomplete}; sample may be biased"
+    elif excluded.get("MAX_MARKETS_REACHED"):
+        status, reason = "REVIEW_REQUIRED", "market cap reached; later markets were dropped and the sample may be biased"
 
     result = {
         "experiment_id": EXPERIMENT_ID,
@@ -212,8 +232,8 @@ def main() -> int:
         "window": {"start": args.start, "end": args.end, "paper_cutoff": PAPER_CUTOFF},
         "horizon_hours": args.horizon_hours,
         "markets_seen": seen,
-        "listing_complete": bool(page_state.get("complete")),
-        "listing_pages": page_state.get("pages"),
+        "listing_complete": not incomplete,
+        "listing_chunks": [{"window": c["window"], "pages": c.get("pages"), "complete": bool(c.get("complete"))} for c in chunk_states],
         "markets_used": len(rows),
         "events_used": n_events,
         "yes_rate": (sum(r["outcome_yes"] for r in rows) / len(rows)) if rows else None,

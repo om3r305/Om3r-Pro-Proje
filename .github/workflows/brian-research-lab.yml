@@ -49,7 +49,7 @@ jobs:
     needs: offline-tests
     runs-on: ubuntu-24.04
     # Budget (research_lab/README.md): one run, no GPU, no large downloads, bounded wall time.
-    timeout-minutes: 45
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
         with:

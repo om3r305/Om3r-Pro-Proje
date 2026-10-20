@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify import classify_polymarket_domain  # noqa: E402
-from run import ALLOWED_HOSTS, Http, binary_resolution, parse_ts, price_at_horizon, reference_time  # noqa: E402
+from run import ALLOWED_HOSTS, Http, binary_resolution, month_chunks, parse_ts, price_at_horizon, reference_time  # noqa: E402
 from stats import cluster_bootstrap_slope, decide, fit_slope, logit  # noqa: E402
 
 
@@ -98,6 +98,15 @@ class DataHandlingTests(unittest.TestCase):
         self.assertEqual(classify_polymarket_domain("Will the Lakers win the election of MVP?"), "Sports")  # Sports matched first
         self.assertEqual(classify_polymarket_domain("Will Bitcoin hit $150k?"), "Crypto")
         self.assertEqual(classify_polymarket_domain(""), "Other")
+
+    def test_month_chunks_cover_window_without_gaps(self):
+        ch = month_chunks("2026-01-01T00:00:00Z", "2026-10-01T00:00:00Z")
+        self.assertEqual(len(ch), 9)
+        self.assertEqual(ch[0], ("2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"))
+        self.assertEqual(ch[-1], ("2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"))
+        for (a, b), (c, d) in zip(ch, ch[1:]):
+            self.assertEqual(b, c)
+        self.assertEqual(month_chunks("2026-11-15T00:00:00Z", "2027-01-10T00:00:00Z")[-1], ("2027-01-01T00:00:00Z", "2027-01-10T00:00:00Z"))
 
     def test_http_host_allow_list(self):
         with self.assertRaises(ValueError):
