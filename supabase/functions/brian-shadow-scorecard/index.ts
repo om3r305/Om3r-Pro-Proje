@@ -26,7 +26,8 @@ Deno.serve(async(req:Request)=>{
       await tx`set transaction isolation level repeatable read, read only`;
       const [snapshotClock] = await tx`select transaction_timestamp() as at`;
       const coverageAsOf = new Date(snapshotClock.at).toISOString();
-      const protocols=await tx`select * from public.brian_shadow_protocols order by engine_id limit 3`;
+      // Newest protocol per engine: a later measurement period gets its own protocol_id; older ones stay intact.
+      const protocols=await tx`select distinct on (engine_id) * from public.brian_shadow_protocols order by engine_id, starts_at desc, protocol_id desc limit 3`;
       const reports=[];
       for(const p of protocols){
         const points=await tx`select * from public.brian_shadow_observations where protocol_id=${p.protocol_id} order by captured_at limit 2201`;
