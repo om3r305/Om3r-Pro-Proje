@@ -18,3 +18,7 @@ node_modules
 monster-coins-pro/cinematic-preview/performance
 monster-coins-pro/cinematic-preview/*.test.mjs
 monster-coins-pro/cinematic-preview/*.test.cjs
+
+# Unreleased local preview designs must not accompany mobile production fixes.
+monster-coins-pro/cinematic-preview/resonance*
+monster-coins-pro/cinematic-preview/mobile-preview.html
