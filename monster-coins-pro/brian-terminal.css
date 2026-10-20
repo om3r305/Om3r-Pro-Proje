@@ -219,7 +219,8 @@
 @media(min-width:3400px){
  .brian-terminal .shell{grid-template-columns:minmax(500px,1fr) minmax(800px,1.55fr) minmax(500px,1fr) minmax(450px,.9fr)}
  .brian-terminal #brianOperations>#opsOverview{grid-column:4;grid-row:1}
- .brian-terminal .shell>#marketRadarPanel{grid-column:3/5;grid-row:2;max-height:390px}
+ /* Legacy generic section rule contains three :not(#id) selectors. */
+ .brian-terminal .shell>#marketRadarPanel{grid-column:3/5!important;grid-row:2;max-height:390px}
  .brian-terminal #marketRadarList{grid-template-columns:repeat(2,minmax(0,1fr))}
  .brian-terminal .terminal-report{grid-column:2/5}
  .brian-terminal #command .nc-stage{height:640px}
