@@ -191,3 +191,16 @@ drop table if exists public.brian_prediction_control;
 | İlk kayıt | 08:24:24 UTC; equity 4938,06, kaynak zamanı 08:22:01 (2,4 dk), politika `brian.treasury-shadow.v3`, açık pozisyon 3 |
 | Bilinen sınır | Dönem açık pozisyonla başladı → model kuralı `OPEN_POSITIONS_AT_START` → karar `INCOMPLETE` olarak kalır. Ölçüm betimleyici olarak sürer |
 | Geri dönüş | `cron.alter_job(95, active := false)`; scorecard v6 kaynağını yeniden yayınla. Protokol satırları append-only'dir, silinmez |
+
+## Yayın kaydı — Research Lab defteri (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/research-ledger-oncesi` → `37047a6`; `C:\Brian\brian-backups\2026-10-20-research-ledger-oncesi\` (bundle, durum ucu v1 kaynağı, `core-state.json`) |
+| Merge | PR #178 → `cb607ff` (9 CI kontrolü yeşil) |
+| Migrasyon | CORE `20261020211802` (`brian_research_ledger`) ve `20261020211823` (`brian_research_ledger_writer_grants`); dosya adları hizalandı |
+| Bulgu ve düzeltme | Supabase varsayılan yetkileri yeni fonksiyonlarda `service_role`'a EXECUTE veriyor; iki yazma fonksiyonu açık kalmıştı. Hemen geri alındı. Test artık bu varsayılanı taklit ediyor; düzeltme olmadan başarısız olduğu doğrulandı |
+| Yetkiler (CORE'da doğrulandı) | Yazma fonksiyonları: anon/authenticated/service_role hayır. `brian_research_status_v1`: yalnızca service_role. Tablolar: anon SELECT yok |
+| Defter | `arxiv:2602.19520`: 2 iddia, 9 varsayım (ledger sha256 `b13f3646…`). Sonuç: `run-1-truncated` = `REVIEW_REQUIRED` |
+| Fonksiyon | `brian-prediction-status` v2 (ezbr `c50e072f…`): ek `research` bölümü. GET 405, anahtarsız 401, OPTIONS 204 |
+| Geri dönüş | Durum ucunun v1 kaynağını yeniden yayınla. Tablolar append-only; silinmez, gerekirse fonksiyonların EXECUTE'u kapatılır |
