@@ -11,13 +11,14 @@ Existing product extended in place. Backend/research belongs to Claude; frontend
 - Missing system status no longer renders “system running” or enables control buttons. Existing known on/off behavior is preserved.
 - Unlocking immediately refreshes an initially locked scorecard; timeout errors offer a readable retry. No test data is substituted for live reports.
 - Engineering refreshes coalesce in-flight requests; periodic expensive requests occur only for a visible panel/open room. Public position-mark requests have a 10-second deadline.
+- Lab readiness refreshes for every anatomy entry point and after unlock, rather than retaining an unauthorized startup error. Null percentages stay unknown and server-marked stale reports are visibly old.
 - News items with an HTTP(S) provenance URL expose a source link. Missing URLs remain missing; script schemes and credential-bearing URLs are rejected.
 - Frontier CI exposed three pre-existing explicit-any lint errors in the news endpoint. Query rows now have explicit `Frame`/`ScoutFrame` types; this is type-only and does not change the emitted JavaScript, queries, or permissions. Deno check and lint pass.
 - Prediction/NIULAI4 read-only cards consume `brian-prediction-status.v1` from Claude's documented contract. Sections show independent server statuses, null values remain unknown, stale last-success data is labelled, HTTP 401 clears prior data, unsafe/incompatible response contracts fail closed. INTERIM reports never receive an advantage verdict. There is no ingest/start/key-management UI. Polling is at most once per 60 seconds while visible, except explicit refresh/unlock.
 
 ## Verification
 
-- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, and reliability suites pass (58 tests).
+- Node: interaction regressions, prediction presentation model, scorecard page isolation/auth retry, neural command, council, accounting, engineering, reliability, and lab readiness suites pass (60 tests).
 - Python: unified command, meeting, and dashboard mobile contracts pass (18 tests).
 - Local browser: meeting open/close and evidence/update/result tabs; accounting open/close and ledger/position tabs; engineering open/close and tests/history/sources tabs; anatomy open/close; new navigation and research auth-required state; mobile background overflow hidden while modal open and auto after close.
 - Local layout preview deliberately had no authentication and was labelled as a layout test. It was not used as proof of live data delivery, and its temporary HTML is not shipped.
