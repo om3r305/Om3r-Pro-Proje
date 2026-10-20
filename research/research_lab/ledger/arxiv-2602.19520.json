@@ -1,0 +1,68 @@
+{
+  "schema": "brian.research-ledger.v1",
+  "paper": {
+    "paper_id": "arxiv:2602.19520",
+    "title": "Decomposing Crowd Wisdom: Domain-Specific Calibration Dynamics in Prediction Markets",
+    "authors": ["Nam Anh Le"],
+    "versions": {"v1": "2026-02-23", "v2": "2026-08-04"},
+    "url": "https://arxiv.org/abs/2602.19520",
+    "license": "CC-BY-4.0",
+    "code": {"url": "https://github.com/namanhzz/prediction-market-calibration", "commit": "143ca87", "license": "MIT"},
+    "markets": ["Polymarket", "Kalshi"],
+    "method": "Cell-level logistic recalibration logit P(y=1)=a+b*logit(p) on trades (domain x time-to-resolution x trade size), variance decomposition, market/event-clustered bootstrap, Bayesian measurement-error model",
+    "data_cutoff": "2025-12-31T23:59:59Z",
+    "missing_info": [
+      "Polymarket trade-level snapshot (2.17 GB parquet) is not deposited in the code repo; only its SHA-256",
+      "Exact Polymarket bin-level slopes are in supplementary/calibration_matrix_216.csv (not re-derived here)"
+    ],
+    "verified_by": "Claude, 2026-10-20: arXiv abstract page, repo README, DATA_SNAPSHOT_NOTE.md, src/config.py, src/calibration.py, src/classify.py"
+  },
+  "claims": [
+    {
+      "claim_id": "arxiv:2602.19520#C-01",
+      "tier": "central",
+      "statement": "Polymarket political markets are underconfident: the logistic recalibration slope exceeds 1 (prices compressed toward 50%).",
+      "metric": "logistic_recalibration_slope",
+      "dataset": "Polymarket unified snapshot, Politics domain, reliable time bins (0-1h and 1-3h excluded)",
+      "reported": {"value": 1.45, "unit": "slope", "uncertainty": null, "source": "repo DATA_SNAPSHOT_NOTE.md, 'Politics mean slope (reliable bins)', revised snapshot"},
+      "comparison": {"baseline": "perfect calibration", "direction": ">", "margin": 0.0, "reference_value": 1.0},
+      "repro_risk": "medium",
+      "depends_on": [],
+      "notes": "Reported value is a mean over trade-level cells; our market-level single-horizon estimate is not numerically comparable, only the direction (>1) is tested."
+    },
+    {
+      "claim_id": "arxiv:2602.19520#C-02",
+      "tier": "supporting",
+      "statement": "On Polymarket, the large-trade ('whale') effect on political calibration is not significant under market-clustered bootstrap.",
+      "metric": "scale_gap_delta",
+      "dataset": "Polymarket unified snapshot, Politics",
+      "reported": {"value": 0.21, "unit": "slope difference", "uncertainty": "[-0.31, 1.12] market-clustered", "source": "repo DATA_SNAPSHOT_NOTE.md, reconciliation table"},
+      "repro_risk": "blocked",
+      "depends_on": ["arxiv:2602.19520#C-01"],
+      "notes": "Needs trade-level data with sizes; not testable with the market-level design. Status stays NOT_STARTED."
+    }
+  ],
+  "assumptions": [
+    {"assumption_id": "A-01", "claim_id": "arxiv:2602.19520#C-01", "leverage": "high", "detail": "Unit of analysis", "chosen": "One YES price per market at a fixed horizon before the reference time, unweighted", "rationale": "Trade-level history (paper's unit) is a 36 GB dump; market-level prices are public via prices-history. Tests the direction of the claim, not its magnitude."},
+    {"assumption_id": "A-02", "claim_id": "arxiv:2602.19520#C-01", "leverage": "high", "detail": "Reference time", "chosen": "min(endDate, closedTime)", "rationale": "The outcome can become known between scheduled end and close; using the later time would leak the result into the price."},
+    {"assumption_id": "A-03", "claim_id": "arxiv:2602.19520#C-01", "leverage": "low", "detail": "Estimator", "chosen": "Newton-Raphson MLE with L2 on slope only, C=10, prices clipped to [0.01, 0.99]", "rationale": "Same objective and clipping as the paper's sklearn fit_logistic."},
+    {"assumption_id": "A-04", "claim_id": "arxiv:2602.19520#C-01", "leverage": "medium", "detail": "Domain classification", "chosen": "Paper's Polymarket regex, verbatim, first match (Sports > Politics > Crypto > Finance)", "rationale": "Keeps 'Politics' identical to the paper."},
+    {"assumption_id": "A-05", "claim_id": "arxiv:2602.19520#C-01", "leverage": "high", "detail": "Primary horizon (pre-registered)", "chosen": "30 hours before the reference time (paper bin 24-48h, a reliable bin)", "rationale": "Avoids the unreliable 0-1h/1-3h bins; secondary horizons are descriptive only."},
+    {"assumption_id": "A-06", "claim_id": "arxiv:2602.19520#C-01", "leverage": "low", "detail": "Side", "chosen": "YES token only, outcome 1 if YES resolved true", "rationale": "Logistic recalibration is symmetric; using both sides would double-count each market."},
+    {"assumption_id": "A-07", "claim_id": "arxiv:2602.19520#C-01", "leverage": "high", "detail": "Out-of-sample window", "chosen": "Reference time in (2025-12-31T23:59:59Z, 2026-10-01T00:00:00Z]", "rationale": "Strictly after the paper's data cut-off: the paper never saw these markets."},
+    {"assumption_id": "A-08", "claim_id": "arxiv:2602.19520#C-01", "leverage": "medium", "detail": "Resolution and staleness", "chosen": "Only umaResolutionStatus=resolved with outcomePrices exactly [1,0] or [0,1]; horizon price must be within 6h before the target", "rationale": "Disputed, voided or partial resolutions and stale prices are excluded and counted, never back-filled."},
+    {"assumption_id": "A-09", "claim_id": "arxiv:2602.19520#C-01", "leverage": "medium", "detail": "Clustering", "chosen": "Event-clustered percentile bootstrap, 2000 resamples, seed 20261020", "rationale": "Markets in one event are dependent (paper also reports event-clustered results)."}
+  ],
+  "preregistration": {
+    "experiment_id": "pm-political-slope-oos-v1",
+    "claim_id": "arxiv:2602.19520#C-01",
+    "registered_before_data": true,
+    "decision_rule": {
+      "INSUFFICIENT_DATA": "fewer than 100 markets or fewer than 30 events, or no valid interval",
+      "PASS": "event-clustered 95% interval lower bound > 1",
+      "FAIL": "event-clustered 95% interval upper bound < 1",
+      "UNVERIFIED": "interval includes 1"
+    },
+    "not_a_trade_signal": "A calibration finding is not an after-cost trading edge and is never promoted automatically."
+  }
+}
