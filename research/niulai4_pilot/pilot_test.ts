@@ -391,3 +391,67 @@ Deno.test("w32tm offsets: median of samples across servers, spread-based uncerta
   eq(parseW32tmOffsets(["09:00:00, -00.0150000s\n09:00:02, -00.0160000s\n09:00:04, -00.0140000s"]), { offsetMs: -15, uncertaintyMs: 2 }, "negative offsets");
   eq(parseW32tmOffsets(["error 0x800705B4", "09:00:00, +00.1s"]), null, "too few samples");
 });
+
+// ---------------------------------------------------------------------------------------------
+// CORE sink (optional; off without a key file)
+// ---------------------------------------------------------------------------------------------
+import { CoreSink, newRunId, readSinkKey } from "./sink.ts";
+
+function assertEquals(a: unknown, b: unknown) {
+  assert(JSON.stringify(a) === JSON.stringify(b), `expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+function assertThrows(f: () => unknown) {
+  let threw = false;
+  try { f(); } catch { threw = true; }
+  assert(threw, "expected throw");
+}
+async function assertRejects(f: () => Promise<unknown>) {
+  let threw = false;
+  try { await f(); } catch { threw = true; }
+  assert(threw, "expected rejection");
+}
+
+Deno.test("sink: payloads are shadow-only, key only in header, failures never throw", async () => {
+  const calls: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[] = [];
+  const replies = ["STORED", "RATE_LIMITED", "REJECTED", "THROW"];
+  const fake = (url: string, init: RequestInit) => {
+    const reply = replies[calls.length] ?? "STORED";
+    calls.push({ url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) });
+    if (reply === "THROW") return Promise.reject(new TypeError("offline"));
+    return Promise.resolve(new Response(JSON.stringify(reply === "REJECTED" ? { status: "REJECTED", reason: "FINGERPRINT_MISMATCH" } : { status: reply }), { status: 200 }));
+  };
+  const key = "s".repeat(40);
+  const sink = new CoreSink(key, "niulai4-test-run", "niulai4-pilot.v2", "f".repeat(64), () => Date.parse("2026-10-20T12:00:00Z"), fake);
+  assertEquals(await sink.start("pc"), "STORED");
+  assertEquals(await sink.heartbeat({ stats: { wsMessages: 1 } }), "RATE_LIMITED");
+  assertEquals(await sink.report({ tradeSignal: false }, "INTERIM"), "REJECTED");
+  assertEquals(await sink.stop("OPERATOR"), "NETWORK_ERROR");
+  assertEquals(sink.stats.sent, 4);
+  assertEquals([sink.stats.stored, sink.stats.rateLimited, sink.stats.rejected, sink.stats.failed], [1, 1, 1, 1]);
+  assertEquals(sink.stats.lastError, "TypeError");
+  for (const c of calls) {
+    assertEquals(c.url, "https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1/brian-niulai4-pilot-ingest");
+    assertEquals(c.headers["x-brian-pilot-key"], key);
+    assert(!JSON.stringify(c.body).includes(key), "key leaked into body");
+    assertEquals([c.body.shadow_only, c.body.trade_signal, c.body.run_id], [true, false, "niulai4-test-run"]);
+    assertEquals(c.body.observed_at, "2026-10-20T12:00:00.000Z");
+  }
+  assertEquals(calls.map((c) => c.body.kind), ["START", "HEARTBEAT", "REPORT", "STOP"]);
+  assertEquals([calls[1].body.seq, calls[2].body.seq], [0, 1]);
+  assertEquals(calls[2].body.report_kind, "INTERIM");
+});
+
+Deno.test("sink: refuses weak keys, foreign hosts; key file and run id rules", async () => {
+  assertThrows(() => new CoreSink("short", "niulai4-x-run", "v", "f".repeat(64), Date.now));
+  assertThrows(() => new CoreSink("s".repeat(40), "niulai4-x-run", "v", "f".repeat(64), Date.now, undefined, "https://evil.example.com/ingest"));
+  assertEquals(await readSinkKey(null), null);
+  const dir = await Deno.makeTempDir();
+  await Deno.writeTextFile(`${dir}/k`, "short\n");
+  await assertRejects(() => readSinkKey(`${dir}/k`));
+  await Deno.writeTextFile(`${dir}/k`, `${"a".repeat(48)}\n`);
+  assertEquals(await readSinkKey(`${dir}/k`), "a".repeat(48));
+  await Deno.remove(dir, { recursive: true });
+  const id = newRunId(Date.parse("2026-10-20T12:00:00Z"), () => 0.5);
+  assertEquals(id, "niulai4-20261020T120000-7fffff");
+  assert(/^[A-Za-z0-9_.:-]{8,80}$/.test(id), "run id format");
+});

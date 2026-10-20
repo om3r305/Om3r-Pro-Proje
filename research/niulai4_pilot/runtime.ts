@@ -49,7 +49,14 @@ async function loadMarket(w: WindowRef): Promise<MarketMeta | null> {
   };
 }
 
-export async function runPilot(opts: { outDir: string; rulesFingerprint: string; clockOffsetMs: number; guard: StopGuard }) {
+export async function runPilot(opts: {
+  outDir: string;
+  rulesFingerprint: string;
+  clockOffsetMs: number;
+  guard: StopGuard;
+  // Optional, fire-and-forget (the CORE sink). Never awaited, so it cannot slow or stop the loop.
+  onHealth?: (health: Record<string, unknown>) => void;
+}) {
   const clock = () => Date.now() + opts.clockOffsetMs;
   const rec = new Recorder({ dir: opts.outDir, capBytes: RULES.diskCapBytes, rulesVersion: RULES_VERSION, rulesFingerprint: opts.rulesFingerprint, now: clock });
   const guard = opts.guard;
@@ -249,6 +256,9 @@ export async function runPilot(opts: { outDir: string; rulesFingerprint: string;
     if (now - lastHealth >= 60_000) {
       lastHealth = now;
       await write("health", { event: "HEALTH", stats: { ...stats }, bytes: rec.bytesWritten, spotFresh: spot.at(now) !== null });
+      try {
+        opts.onHealth?.({ stats: { ...stats }, bytes: rec.bytesWritten, spotFresh: spot.at(now) !== null, lastSocketMsgAgeMs: lastSocketMsgMs === null ? null : now - lastSocketMsgMs, pendingCaptures: pendingCaptures.length });
+      } catch { /* the sink must never affect the pilot */ }
     }
     await new Promise((r) => setTimeout(r, 100));
   }
