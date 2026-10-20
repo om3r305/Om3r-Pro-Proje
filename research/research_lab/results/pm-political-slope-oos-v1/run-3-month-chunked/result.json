@@ -1,0 +1,120 @@
+{
+  "experiment_id": "pm-political-slope-oos-v1",
+  "claim_id": "arxiv:2602.19520#C-01",
+  "started_at": "2026-10-20T20:50:11.250728+00:00",
+  "finished_at": "2026-10-20T23:20:48.731064+00:00",
+  "code_commit": "fda82fa",
+  "window": {
+    "start": "2026-01-01T00:00:00Z",
+    "end": "2026-10-01T00:00:00Z",
+    "paper_cutoff": "2025-12-31T23:59:59Z"
+  },
+  "horizon_hours": 30.0,
+  "markets_seen": 2472231,
+  "listing_complete": false,
+  "listing_chunks": [
+    {
+      "window": [
+        "2026-01-01T00:00:00Z",
+        "2026-02-01T00:00:00Z"
+      ],
+      "pages": 1175,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-02-01T00:00:00Z",
+        "2026-03-01T00:00:00Z"
+      ],
+      "pages": 1123,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-03-01T00:00:00Z",
+        "2026-04-01T00:00:00Z"
+      ],
+      "pages": 2029,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-04-01T00:00:00Z",
+        "2026-05-01T00:00:00Z"
+      ],
+      "pages": 2531,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-05-01T00:00:00Z",
+        "2026-06-01T00:00:00Z"
+      ],
+      "pages": 2794,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-06-01T00:00:00Z",
+        "2026-07-01T00:00:00Z"
+      ],
+      "pages": 3073,
+      "complete": true
+    },
+    {
+      "window": [
+        "2026-07-01T00:00:00Z",
+        "2026-08-01T00:00:00Z"
+      ],
+      "pages": 4000,
+      "complete": false
+    },
+    {
+      "window": [
+        "2026-08-01T00:00:00Z",
+        "2026-09-01T00:00:00Z"
+      ],
+      "pages": 4000,
+      "complete": false
+    },
+    {
+      "window": [
+        "2026-09-01T00:00:00Z",
+        "2026-10-01T00:00:00Z"
+      ],
+      "pages": 4000,
+      "complete": false
+    }
+  ],
+  "markets_used": 14332,
+  "events_used": 2373,
+  "yes_rate": 0.2682109963717555,
+  "excluded": {
+    "NOT_CLEAN_BINARY_RESOLUTION": 2023,
+    "NOT_POLITICS": 2452462,
+    "NO_PRICE_AT_HORIZON": 3267,
+    "REFERENCE_TIME_OUT_OF_WINDOW": 147
+  },
+  "http_requests": 42326,
+  "slope": 1.1749230330676848,
+  "intercept": 0.19722565987210314,
+  "bootstrap": {
+    "resamples": 2000,
+    "failed": 0,
+    "lower": 1.123682570060966,
+    "upper": 1.2295264119725247,
+    "level": 0.95
+  },
+  "status": "REVIEW_REQUIRED",
+  "status_reason": "market listing truncated in ['2026-07', '2026-08', '2026-09']; sample may be biased",
+  "paper_reference": {
+    "value": 1.45,
+    "what": "Politics mean slope over reliable bins, trade-level, locked snapshot",
+    "source": "namanhzz/prediction-market-calibration@143ca87 DATA_SNAPSHOT_NOTE.md",
+    "comparable": false
+  },
+  "dataset_sha256": "8955f438439e664005a191355732f7fba32bac499fa2dfbc32721acc04eca009",
+  "evidence_class": "OUT_OF_SAMPLE_ADAPTED_REPLICATION",
+  "shadow_only": true,
+  "trade_signal": false
+}
