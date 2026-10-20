@@ -140,3 +140,16 @@ drop table if exists public.brian_prediction_control;
 | Fonksiyon | `brian-prediction-eye` v4 ACTIVE (ezbr `823b9319…`). Anahtarsız → 401, yanlış cron anahtarı → 401, GET → 405 |
 | Gece doğrulaması (20 Ekim 06:45 UTC) | Cron jobid 103: 42/42 `succeeded` (20:20–06:35). Görülebilen 24 yanıtın hepsi `SUCCESS` ve `resolution: NO_CANDIDATES` içeriyor (v4 canlı). 2.577 anlık görüntü, 2,39 MB / 256 MB. Değişim fonksiyonu: 61 FRESH, 16 STALE, 3 INSUFFICIENT_HISTORY; tur kapsamı 44/42 (fazlalık elle tetiklenen 2 turdan) |
 | Bilinen sınır | İlk 60'tan düşen piyasalar STALE oluyor. Bitişten 24 saat önce anlık görüntüsü yoksa kalibrasyonda `no_forecast_before_lead` olarak dışarıda kalırlar; sonuçları yine kaydedilir |
+
+## Yayın kaydı — UI durum ucu + NIULAI4 pilot sink (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/niulai4-ingest-oncesi` → `b1dd6f7`; bundle + `core-state.json` (`C:\Brian\brian-backups\2026-10-20-niulai4-ingest-oncesi\`) |
+| Merge | PR #164 → `4ad5e6e` (8 CI kontrolünün hepsi yeşil) |
+| Migrasyon | CORE sürüm `20261020074329` (`brian_niulai4_pilot_ingest`); dosya adı hizalandı. Yalnızca yeni tablolar ve fonksiyonlar; mevcut nesneler değişmedi |
+| Son kontroller | Auth satırı `enabled=false`, hash `NULL` → pilot durumu `NOT_CONFIGURED`. `anon` SELECT/EXECUTE yok. `wallet_tracking_enabled=false`. `brian_prediction_status_v1` = `OK` (6 kaynak OK, 2.757 anlık görüntü, 2,53 MB / 256 MB, 0 sonuç) |
+| Fonksiyon | `brian-prediction-status` v1 ACTIVE (ezbr `132d8a3f…`). GET → 405, anahtarsız/yanlış anahtar → 401, OPTIONS → 204. 200 yolu dashboard anahtarıyla dışarıdan **denenmedi** (anahtar kullanılmadı). SQL fonksiyonları CORE'da doğrudan çağrılarak doğrulandı; şekillendirme birim testli |
+| Yayınlanmadı | `brian-niulai4-pilot-ingest`: yayın aracı izin sınıflandırıcısınca reddedildi; yeniden denenmedi. Anahtar kararı verilene kadar gerekmiyor (çağrılırsa 404). Pilot sink açıkken bu uç yoksa sink `HTTP_404` sayar, ölçüm etkilenmez |
+| Gözlem | 07:33–07:43 UTC arası CORE'da birden fazla modülde pg_net zaman aşımı / DNS gecikmesi görüldü (migrasyondan önce başladı). 07:35 prediction turu kayıt üretmedi; son tur 07:20. Durum, 40 dk eşiği aşılırsa `STALE` olur |
+| Geri dönüş | Yeni nesneleri düşür: `drop function brian_prediction_status_v1, brian_niulai4_pilot_status_v1, brian_record_niulai4_pilot_v1; drop table brian_niulai4_pilot_reports, _heartbeats, _runs, _auth;` ve `brian-prediction-status` fonksiyonunu sil. Mevcut veriye etkisi yok |

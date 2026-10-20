@@ -28,6 +28,13 @@ deno run --allow-read --allow-write research/niulai4_pilot/main.ts --report --ou
 deno run --allow-read --allow-write research/niulai4_pilot/main.ts --report --out <dir> --final --required-windows 8721
 ```
 
+## CORE'a sonuç gönderme (isteğe bağlı, varsayılan KAPALI)
+
+`--start ... --core-sink-key-file <yol> [--host-label pc]` ile pilot kendi sağlık ve ara özetini CORE'a yollar. Arayüz bunları `brian-prediction-status` üzerinden okur (sözleşme: [`docs/BRIAN_PREDICTION_UI_CONTRACT.md`](../../docs/BRIAN_PREDICTION_UI_CONTRACT.md)).
+- Anahtar dosyası yoksa pilot yalnızca yerel çalışır.
+- Anahtar CORE'da yalnızca SHA-256 olarak durur ve ancak operatör onayıyla etkinleştirilir. Repo'ya ya da kayıt dosyalarına yazılmaz.
+- Sink'in hataları ve HTTP durumları ölçümü durdurmaz, StopGuard'a gitmez.
+
 ## Dosyalar
 
 | Dosya | İçerik |
@@ -42,6 +49,7 @@ deno run --allow-read --allow-write research/niulai4_pilot/main.ts --report --ou
 | `recorder.ts` | Yerel, byte tavanlı JSONL (her dosyada kural başlığı) |
 | `watcher.ts` | Kamuya açık aktiviteyi izler; ilk tur yalnızca mevcut durumu öğrenir |
 | `runtime.ts` | Çalışma döngüsü: websocket (10 sn'de PING), poll, örnekleme, yakalama (first_seen + d + 300 ms), çözüm, sağlık |
+| `sink.ts` | İsteğe bağlı CORE sink: sağlık (60 sn) ve ara özet (30 dk) → `brian-niulai4-pilot-ingest`. Anahtar dosyası verilmezse kapalı; tek sabit URL; hataları pilotu etkilemez |
 | `main.ts` | Komut satırı |
 
 ## Test durumu

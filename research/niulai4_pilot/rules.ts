@@ -2,8 +2,10 @@
 //
 // Source of truth: docs/reviews/BRIAN_NIULAI4_OBSERVATION_PLAN_20261020.md. Changing ANY value here
 // requires a new RULES_VERSION; results from different versions must never be pooled. The pilot
-// is LOCAL, READ-ONLY and SHADOW-ONLY: it never places orders, never uses a key, never writes to
-// CORE, and does not touch brian_prediction_control.wallet_tracking_enabled.
+// is LOCAL, READ-ONLY and SHADOW-ONLY: it never places orders, never uses a trading/wallet key, and
+// does not touch brian_prediction_control.wallet_tracking_enabled. Market data may come only from
+// PILOT_ALLOWED_HOSTS (CORE is deliberately NOT on it); the one optional CORE write path is the
+// pilot's own health/summary sink (sink.ts), locked to a single URL and off without a key file.
 
 export const RULES_VERSION = "niulai4-pilot.v2";
 
