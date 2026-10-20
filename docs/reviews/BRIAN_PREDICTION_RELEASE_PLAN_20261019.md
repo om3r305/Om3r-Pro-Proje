@@ -127,3 +127,16 @@ drop table if exists public.brian_prediction_control;
 | Migrasyon | CORE sürüm `20261019204328` (`brian_prediction_probability_changes_elapsed`); yeni md5 `66157adc…`; anon EXECUTE yok; dosya adı hizalandı |
 | Canlı kontrol | Yeni alanlar (`baseline_*_at`, `elapsed_*_seconds`, `relative_change_*`, `change_unit`) dönüyor; veri henüz 1 saatten genç olduğu için hepsi `NULL`/`INSUFFICIENT_HISTORY` |
 | Geri dönüş | 2a migrasyonundaki fonksiyon gövdesini yeniden uygula (`20261019202909_…`) |
+
+## Yayın kaydı — Faz 2c (19–20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Yedek | Tag `backup/brian-2026-10-19-prediction-2c-oncesi` → `6b7482c`; bundle verify: okay + `core-state.json` (eski `storage_bytes` md5 `8f2b2d2f…`, eye v3) |
+| Merge | PR #160 → `6b7482c` (CI üçü de yeşil) |
+| Migrasyon | CORE sürüm `20261019210906` (`brian_prediction_resolutions`); dosya adı hizalandı |
+| Son kontroller | Tabloda RLS açık; anon/authenticated SELECT yok; service_role UPDATE yok; append-only trigger var. 4 fonksiyon `SECURITY DEFINER` ve yalnızca service_role EXECUTE. Arşiv politikası: 3650 gün, silme yok. `brian_reject_mutation` md5 değişmedi. Advisor: yeni WARN yok, yalnızca beklenen INFO |
+| Kuru kontrol | Şu an aday 0; 29 Ekim 06:00 itibarıyla 5 aday (ilk bitişler 29 Ekim 03:59) |
+| Fonksiyon | `brian-prediction-eye` v4 ACTIVE (ezbr `823b9319…`). Anahtarsız → 401, yanlış cron anahtarı → 401, GET → 405 |
+| Gece doğrulaması (20 Ekim 06:45 UTC) | Cron jobid 103: 42/42 `succeeded` (20:20–06:35). Görülebilen 24 yanıtın hepsi `SUCCESS` ve `resolution: NO_CANDIDATES` içeriyor (v4 canlı). 2.577 anlık görüntü, 2,39 MB / 256 MB. Değişim fonksiyonu: 61 FRESH, 16 STALE, 3 INSUFFICIENT_HISTORY; tur kapsamı 44/42 (fazlalık elle tetiklenen 2 turdan) |
+| Bilinen sınır | İlk 60'tan düşen piyasalar STALE oluyor. Bitişten 24 saat önce anlık görüntüsü yoksa kalibrasyonda `no_forecast_before_lead` olarak dışarıda kalırlar; sonuçları yine kaydedilir |

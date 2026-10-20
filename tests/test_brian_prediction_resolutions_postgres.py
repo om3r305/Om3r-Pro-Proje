@@ -22,7 +22,7 @@ MIGRATIONS = ROOT / "supabase" / "migrations"
 ORDER = [
     MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql",
     MIGRATIONS / "20261019200517_brian_prediction_retention.sql",
-    MIGRATIONS / "20261020000000_brian_prediction_resolutions.sql",
+    MIGRATIONS / "20261019210906_brian_prediction_resolutions.sql",
 ]
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")
