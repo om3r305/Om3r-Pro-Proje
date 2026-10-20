@@ -165,3 +165,14 @@ drop table if exists public.brian_prediction_control;
 | Fonksiyon | `brian-frontier-engineering-status` v14 → v15 (ezbr `2b2723d9…`). v14'ün canlı kaynağı repo ile birebir aynıydı. 45 sn paylaşılan önbellek, single flight, açıkça işaretli `STALE` geri dönüşü |
 | Geri dönüş | `old_latest_views.sql` dosyasını yeniden uygula; v14 kaynağını (`engineering-status.index.ts`) yeniden yayınla; index'i düşür. Veri değişmedi |
 | Kalan risk | Kök kısıt compute boyutu. Ücretli yükseltme kullanıcı kararıdır, yapılmadı |
+
+## Yayın kaydı — NIULAI4 ingest anahtarı ve ucu (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Onay | Kullanıcı: "sen üret kur kankam canlıya alabilirsin de" (Seçenek A). Pilotu başlatma onayı ayrıdır ve verilmedi |
+| Anahtar | 48 karakter, `secrets.token_urlsafe`; yalnızca kullanıcının profilinde `~/.brian/niulai4-pilot-ingest.key`. Repoya, loga ya da sohbete yazılmadı |
+| CORE | `brian_niulai4_pilot_auth`: SHA-256 `a677ddb8…`, `enabled=true`, `configured_at` 08:11:08 UTC |
+| Fonksiyon | `brian-niulai4-pilot-ingest` v1 ACTIVE (ezbr `ccdffe24…`); dosyalar repo ile birebir |
+| Doğrulama | Anahtarsız → 401, yanlış anahtar → 401, doğru anahtar + geçersiz `run_id` → 400 `BAD_RUN_ID`, doğru anahtar + shadow dışı → 400 `NOT_SHADOW_ONLY`. Tablolarda 0 satır; pilot durumu `NOT_CONFIGURED` → `NOT_STARTED` |
+| İptal | `update brian_niulai4_pilot_auth set enabled=false` (anahtar anında geçersiz). Döndürme: yeni anahtar üret, karmayı değiştir |
