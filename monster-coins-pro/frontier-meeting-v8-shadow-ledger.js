@@ -106,7 +106,7 @@
     const key=(localStorage.getItem(DASHBOARD_KEY)||'').trim();
     if(!key){markUi(false,'OTURUM ANAHTARI BEKLİYOR');return}
     const record=snapshot();
-    if(!record) return;
+    if(!record){markUi(false,'YENİ OLAY BEKLENİYOR');return}
     const signature=JSON.stringify([record.event_key,record.status,record.alpha_action,record.alpha_asset,record.alpha_evidence,record.treasury_gate,record.treasury_reason,record.council_decision]);
     if(!force&&signature===lastSignature&&Date.now()-lastSentAt<60000) return;
     sending=true;

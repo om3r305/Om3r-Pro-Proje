@@ -8,7 +8,7 @@
   }
 
   function overlayOpen(){
-    return Boolean($('.unlock.show') || $('.modal.show') || anatomyOpen());
+    return Boolean($('.unlock.show') || $('.modal.show') || $('#treasuryAccountingRoom.show') || $('#brianEngineeringRoomV2.show') || anatomyOpen());
   }
 
   function setStyle(el,key,value){

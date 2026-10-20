@@ -45,9 +45,10 @@
  async function refresh(force=false){if(busy||document.hidden||(!force&&Date.now()-lastAttempt<60000))return;
   let key='';try{key=(localStorage.getItem('mcp-dashboard-key-v1')||'').trim()}catch{}
   if(!key){error='Test sonuçlarını görmek için dashboard kilidini aç.';render();return}
-  busy=true;lastAttempt=Date.now();render();
-  try{const res=await fetch('/api/brian/brian-shadow-scorecard',{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:'{}',cache:'no-store',signal:AbortSignal.timeout(20000)});const d=await res.json();if(!res.ok||!Array.isArray(d.reports)||d.shadow_only!==true)throw Error(res.status===401?'Dashboard anahtarı doğrulanamadı':'Test raporu şu an alınamıyor');data=d;error=''}catch(e){error=e?.message||'Bağlantı hatası'}finally{busy=false;render()}
+  busy=true;lastAttempt=Date.now();error='';render();
+  try{const res=await fetch('/api/brian/brian-shadow-scorecard',{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:'{}',cache:'no-store',signal:AbortSignal.timeout(20000)});const d=await res.json();if(!res.ok||!Array.isArray(d.reports)||d.shadow_only!==true)throw Error(res.status===401?'Dashboard anahtarı doğrulanamadı':'Test raporu şu an alınamıyor');data=d;error=''}catch(e){error=['TimeoutError','AbortError'].includes(e?.name)?'Rapor isteği zaman aşımına uğradı. Yenile ile tekrar deneyebilirsin.':e?.message||'Bağlantı hatası'}finally{busy=false;render()}
  }
  refresh();setInterval(()=>{if(panel.getBoundingClientRect().bottom>0&&panel.getBoundingClientRect().top<innerHeight)refresh()},15000);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
+ document.getElementById('unlockBtn')?.addEventListener('click',()=>refresh(true));
 })();

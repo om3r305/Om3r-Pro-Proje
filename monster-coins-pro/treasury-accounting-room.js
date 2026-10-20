@@ -31,7 +31,7 @@
   if(!assetIds.length){S.marks=new Map();S.marksError=null;S.marksAt=Date.now();render();return}
   S.marksBusy=true;
   try{
-   const r=await fetch(MARKS_EP,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({asset_ids:assetIds}),cache:'no-store'});
+   const r=await fetch(MARKS_EP,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({asset_ids:assetIds}),cache:'no-store',signal:AbortSignal.timeout(10000)});
    const d=await r.json().catch(()=>({}));
    if(!r.ok||d?.status!=='SUCCESS')throw Error(d?.error||`HTTP ${r.status}`);
    S.marks=new Map((Array.isArray(d?.marks)?d.marks:[]).map(m=>[String(m.asset_id||''),m]));

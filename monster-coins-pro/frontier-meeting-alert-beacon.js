@@ -41,12 +41,15 @@
   }
 
   function sync(){
-    const tile=document.querySelector('[data-ops-room="meeting"]');
-    if(!tile)return;
+    const tiles=document.querySelectorAll('[data-ops-room="meeting"]');
+    if(!tiles.length)return;
     const urgency=activeUrgency();
+    for(const tile of tiles){
     tile.classList.toggle('meeting-alert-red',urgency==='red');
     tile.classList.toggle('meeting-alert-orange',urgency==='orange');
     tile.dataset.meetingAlert=urgency||'calm';
+    tile.setAttribute('aria-description',urgency==='red'?'Kritik toplantı olayı var':urgency==='orange'?'Yüksek öncelikli toplantı olayı var':'Taze kritik veya yüksek öncelikli toplantı olayı yok');
+    }
   }
   const observer=new MutationObserver(sync);
   observer.observe(document.body,{childList:true,subtree:true});
