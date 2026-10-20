@@ -51,6 +51,18 @@ def parse_ts(value: str | None) -> float | None:
     return d.timestamp()
 
 
+class FetchFailed(RuntimeError):
+    """A single request failed after retries (network/5xx); the caller decides what that means."""
+
+
+MAX_FETCH_FAILURE_RATE = 0.02  # above this share of failed price fetches the sample is REVIEW_REQUIRED
+
+
+def fetch_failures_too_high(failed: int, used: int) -> bool:
+    attempted = failed + used
+    return attempted > 0 and failed > MAX_FETCH_FAILURE_RATE * attempted
+
+
 class Http:
     def __init__(self, min_interval_s: float = 0.12, max_requests: int = 60000):
         self.min_interval_s = min_interval_s
@@ -81,9 +93,9 @@ class Http:
                     time.sleep(2 ** attempt)
                     continue
                 raise
-            except (urllib.error.URLError, TimeoutError):
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
                 time.sleep(2 ** attempt)
-        raise RuntimeError(f"giving up on {url}")
+        raise FetchFailed(f"giving up on {url}")
 
 
 def binary_resolution(m: dict) -> int | None:
@@ -180,7 +192,11 @@ def main() -> int:
         for lo, hi in month_chunks(args.start, args.end):
             st: dict = {"window": [lo, hi]}
             chunk_states.append(st)
-            yield from fetch_closed_markets(http, lo, hi, args.max_pages, st)
+            try:
+                yield from fetch_closed_markets(http, lo, hi, args.max_pages, st)
+            except FetchFailed:
+                st["complete"] = False  # this month is incomplete -> REVIEW_REQUIRED
+                st["fetch_failed"] = True
     for m in all_markets():
         seen += 1
         if classify_polymarket_domain(m.get("question") or "") != "Politics":
@@ -202,8 +218,11 @@ def main() -> int:
         if len(rows) >= args.max_markets:
             skip("MAX_MARKETS_REACHED"); continue
         target = ref - args.horizon_hours * 3600
-        hist = http.get("https://clob.polymarket.com/prices-history?" + urllib.parse.urlencode({
-            "market": yes_token, "startTs": int(target - STALE_WINDOW_HOURS * 3600), "endTs": int(target), "fidelity": 60}))
+        try:
+            hist = http.get("https://clob.polymarket.com/prices-history?" + urllib.parse.urlencode({
+                "market": yes_token, "startTs": int(target - STALE_WINDOW_HOURS * 3600), "endTs": int(target), "fidelity": 60}))
+        except FetchFailed:
+            skip("HISTORY_FETCH_FAILED"); continue
         p = price_at_horizon(hist.get("history") or [], target)
         if p is None:
             skip("NO_PRICE_AT_HORIZON"); continue
@@ -220,6 +239,8 @@ def main() -> int:
     if incomplete:
         # A truncated market list is a biased sample: never report it as PASS/FAIL.
         status, reason = "REVIEW_REQUIRED", f"market listing truncated in {incomplete}; sample may be biased"
+    elif fetch_failures_too_high(excluded.get("HISTORY_FETCH_FAILED", 0), len(rows)):
+        status, reason = "REVIEW_REQUIRED", f"{excluded['HISTORY_FETCH_FAILED']} price fetches failed (> {MAX_FETCH_FAILURE_RATE:.0%}); missing data may not be random"
     elif excluded.get("MAX_MARKETS_REACHED"):
         status, reason = "REVIEW_REQUIRED", "market cap reached; later markets were dropped and the sample may be biased"
 

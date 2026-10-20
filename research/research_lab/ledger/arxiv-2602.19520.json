@@ -154,7 +154,7 @@
       "PASS": "event-clustered 95% interval lower bound > 1",
       "FAIL": "event-clustered 95% interval upper bound < 1",
       "UNVERIFIED": "interval includes 1",
-      "REVIEW_REQUIRED": "market listing did not reach the last page in every month, or the market cap was reached (truncated or capped sample); never reported as PASS/FAIL"
+      "REVIEW_REQUIRED": "market listing did not reach the last page in every month, the market cap was reached, or more than 2% of horizon-price fetches failed; never reported as PASS/FAIL"
     },
     "not_a_trade_signal": "A calibration finding is not an after-cost trading edge and is never promoted automatically.",
     "amendments": [
@@ -173,6 +173,10 @@
       },
       {
         "change": "After run-1 (listing truncated at 4000 pages, months Jul-Sep under-represented; status REVIEW_REQUIRED, kept as-is): listing split into calendar months, each must reach its last page; reaching --max-markets is also REVIEW_REQUIRED. Decision thresholds unchanged.",
+        "stricter": true
+      },
+      {
+        "change": "After run-2 aborted on one network failure (no result produced): a failed price fetch excludes that market (counted as HISTORY_FETCH_FAILED); more than 2% failures, or a failed month listing, is REVIEW_REQUIRED. Decision thresholds unchanged.",
         "stricter": true
       }
     ]

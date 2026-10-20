@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from classify import classify_polymarket_domain  # noqa: E402
-from run import ALLOWED_HOSTS, Http, binary_resolution, month_chunks, parse_ts, price_at_horizon, reference_time  # noqa: E402
+from run import ALLOWED_HOSTS, Http, binary_resolution, fetch_failures_too_high, month_chunks, parse_ts, price_at_horizon, reference_time  # noqa: E402
 from stats import cluster_bootstrap_slope, decide, fit_slope, logit  # noqa: E402
 
 
@@ -107,6 +107,12 @@ class DataHandlingTests(unittest.TestCase):
         for (a, b), (c, d) in zip(ch, ch[1:]):
             self.assertEqual(b, c)
         self.assertEqual(month_chunks("2026-11-15T00:00:00Z", "2027-01-10T00:00:00Z")[-1], ("2027-01-01T00:00:00Z", "2027-01-10T00:00:00Z"))
+
+    def test_fetch_failure_rule(self):
+        self.assertFalse(fetch_failures_too_high(0, 0))
+        self.assertFalse(fetch_failures_too_high(2, 98))   # exactly 2% -> still acceptable
+        self.assertTrue(fetch_failures_too_high(3, 97))    # 3% -> REVIEW_REQUIRED
+        self.assertTrue(fetch_failures_too_high(1, 0))
 
     def test_http_host_allow_list(self):
         with self.assertRaises(ValueError):
