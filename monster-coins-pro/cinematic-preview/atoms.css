@@ -50,3 +50,16 @@
 
 @media(min-width:1800px){body[data-view=command] .left-rail,body[data-view=command] .right-rail{max-height:calc(100vh - 285px);overflow:auto;scrollbar-width:thin;scrollbar-color:#555c67 transparent}}
 @media(min-width:1800px){body[data-view=command] .decision-main strong{font-size:26px;letter-spacing:0;white-space:nowrap}}
+
+/* Bright local electron coronas; text stays neutral and legible. */
+.atom-orb{box-shadow:inset -7px -9px 17px #000b,inset 2px 2px 9px #fff5,0 0 12px var(--module-color),0 0 36px color-mix(in srgb,var(--module-color) 65%,transparent),0 0 68px color-mix(in srgb,var(--module-color) 28%,transparent)}
+.atom-orb svg{filter:drop-shadow(0 0 5px #fff7) drop-shadow(0 0 10px var(--module-color))}
+.electron-track i{width:9px;height:9px;top:-5px;box-shadow:0 0 5px #fff,0 0 15px var(--module-color),0 0 28px var(--module-color),0 0 44px var(--module-color);opacity:var(--electron-energy,1)}
+.electron-track.secondary i{width:7px;height:7px;top:-4px}
+#atmosphereBadge{position:absolute;right:30px;top:100px;z-index:5;display:flex;align-items:flex-start;gap:12px;padding:13px 17px;max-width:340px;background:#05070ad9;border-left:2px solid var(--atmosphere-color)!important;pointer-events:none;box-shadow:-12px 0 35px color-mix(in srgb,var(--atmosphere-color) 9%,transparent)}
+#atmosphereBadge>i{width:7px;height:7px;border-radius:50%;margin-top:4px;background:var(--atmosphere-color);box-shadow:0 0 12px var(--atmosphere-color)}
+#atmosphereBadge b{display:block;font:12px Mono,monospace;color:var(--atmosphere-color)!important;letter-spacing:.05em}
+#atmosphereBadge small{display:block;font:11px/1.5 Desk,sans-serif;color:#c6ced9!important;margin-top:7px}
+#atmosphereBadge span{display:block;font:8px Mono,monospace;color:#8e9aaa!important;margin-top:7px}
+.scene-shell{box-shadow:inset 0 0 80px #0007,0 0 40px color-mix(in srgb,var(--atmosphere-color,#e6f1ff) 8%,transparent)}
+@media(max-width:1000px){#atmosphereBadge{top:180px;right:15px;max-width:200px;padding:9px}#atmosphereBadge b{font-size:9px}#atmosphereBadge small{font-size:9px}}
