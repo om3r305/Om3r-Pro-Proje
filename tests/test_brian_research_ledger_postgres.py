@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
 ORDER = [
     MIGRATIONS / "20261019195019_brian_prediction_intelligence.sql",  # defines brian_reject_mutation()
-    MIGRATIONS / "20261020200000_brian_research_ledger.sql",
+    MIGRATIONS / "20261020211802_brian_research_ledger.sql",
+    MIGRATIONS / "20261020211823_brian_research_ledger_writer_grants.sql",
 ]
 LEDGER_PATH = "research/research_lab/ledger/arxiv-2602.19520.json"
 LEDGER_TEXT = (ROOT / LEDGER_PATH).read_text(encoding="utf-8")
@@ -48,9 +49,14 @@ def conn():
     c.autocommit = True
     with c.cursor() as cur:
         cur.execute(_BOOTSTRAP)
+        # Simulate Supabase: new functions get EXECUTE for service_role by default. The writer
+        # grants migration must remove it again (this is exactly what CORE showed on 2026-10-20).
+        cur.execute("alter default privileges in schema public grant execute on functions to service_role")
         for path in ORDER:
             cur.execute(path.read_text(encoding="utf-8"))
     yield c
+    with c.cursor() as cur:
+        cur.execute("alter default privileges in schema public revoke execute on functions from service_role")
     c.close()
 
 
@@ -148,6 +154,9 @@ def test_append_only_and_role_isolation(cur):
     with pytest.raises(psycopg2.errors.InsufficientPrivilege):
         cur.execute("select public.brian_record_research_result_v1('{}'::jsonb)")
     cur.execute("reset role")
+    cur.execute("select has_function_privilege('service_role', 'public.brian_record_research_ledger_v1(jsonb, text, text)', 'execute'), "
+                "has_function_privilege('service_role', 'public.brian_research_status_v1(timestamptz)', 'execute')")
+    assert cur.fetchone() == (False, True)
     # Even the owner path refuses edits through the append-only trigger for non-postgres roles.
     for role in ("anon", "authenticated"):
         cur.execute(f"set role {role}")
