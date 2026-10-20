@@ -173,6 +173,14 @@ function renderBehavior(){const n=(S.world?.narratives||[])[0],items=news(),b=mo
 function renderBelief(){const edges=S.alphaIntel?.expected_edges||S.alphaIntel?.edges||[],e=edges[0],h=S.alphaIntel?.horizon_challenger||{},r15=num(h.reference_900?.avg_expected_net_edge_bps),r60=num(h.challenger_3600?.avg_expected_net_edge_bps),hEl=$('beliefHorizon');if(hEl)hEl.textContent=r15==null&&r60==null?'—':`${r15==null?'—':r15.toFixed(1)} / ${r60==null?'—':r60.toFixed(1)} bps`;if(!e){$('beliefP').textContent='—';$('beliefQ').textContent='—';$('beliefX').textContent='—';return}const p=num(e.expected_gross_move_bps),q=num(e.estimated_round_trip_cost_bps),x=num(e.expected_net_edge_bps);$('beliefP').textContent=p==null?'—':`${p.toFixed(1)} bps`;$('beliefQ').textContent=q==null?'—':`${q.toFixed(1)} bps`;$('beliefX').textContent=x==null?'—':`${x.toFixed(1)} bps`}
 
 function renderControls(){
+  if(typeof sysControl().system_enabled!=='boolean'){
+    $('jobBadge').textContent='DURUM BEKLENİYOR';$('jobBadge').className='badge warn';$('jobCount').textContent='—';
+    $('amountNote').textContent='Kasa ve sistem durumu doğrulanmadan tutar uygulanmaz.';
+    $('controlFeedback').textContent='Sistem durumu henüz alınmadı; çalışıyor veya durdu olarak yorumlanamaz.';
+    for(const id of ['startSystem','restartSystem','stopSystem'])if($(id))$(id).disabled=true;
+    if($('startSystem')){$('startSystem').textContent='DURUM BEKLENİYOR';$('startSystem').classList.remove('running')}
+    $$('.amount-btn').forEach(b=>b.disabled=true);return;
+  }
   const c=sysControl(),active=Number(c.managed_jobs_active||0),total=Number(c.managed_jobs_total||0),enabled=c.system_enabled!==false;
   $('jobBadge').textContent=total?`${active}/${total} İŞ`:'KONTROL';$('jobBadge').className=`badge ${enabled&&active===total&&total>0?'ok':!enabled?'info':'warn'}`;$('jobCount').textContent=total?`${active}/${total}`:'—';
   const treasury=c.treasury||{},target=num(c.treasury_target_equity_usd)??num(treasury.starting_equity_usd)??10000;if(S.selectedAmount==null)S.selectedAmount=target;

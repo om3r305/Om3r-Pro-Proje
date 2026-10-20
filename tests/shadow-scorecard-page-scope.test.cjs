@@ -4,16 +4,17 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const script=fs.readFileSync('monster-coins-pro/shadow-scorecard.js','utf8');
 const report=engine_id=>({engine_id,verdict:'COLLECTING',rules:{minimum_closed_trades:100,minimum_days:7,review_drawdown_limit:.02},observations:[],issues:[],recent_trades:[]});
-async function page(pathname){
+async function page(pathname,options={}){
  const body={innerHTML:'',querySelectorAll:()=>[]};
  const button={};
  const panel={querySelector:s=>s==='#scContent'?body:button,getBoundingClientRect:()=>({top:0,bottom:100})};
  const payload={reports:['treasury','dip-multiasset-v1','dip-aggressive-arena-v1','unknown-experiment'].map(report),shadow_only:true,net_scoreboard:[{verdict:'EDGE',horizon_seconds:300,action:'OPEN_LONG'}],trend_shadow:[{nav:10000,target_weights:{},day:'2026-10-10'}],alpha:{compiler_versions:[],recent:[]}};
- const document={hidden:false,querySelector:s=>s==='main'?{prepend:()=>{}}:null,createElement:tag=>tag==='section'?panel:{},head:{appendChild:()=>{}},getElementById:()=>null,addEventListener:()=>{}};
- const ctx={document,location:{pathname},localStorage:{getItem:()=> 'test-key'},fetch:async()=>({ok:true,json:async()=>payload}),AbortSignal,setInterval:()=>{}};
+ let unlocked=!options.locked,unlock;
+ const document={hidden:false,querySelector:s=>s==='main'?{prepend:()=>{}}:null,createElement:tag=>tag==='section'?panel:{},head:{appendChild:()=>{}},getElementById:id=>id==='unlockBtn'?{addEventListener:(event,fn)=>{unlock=fn}}:null,addEventListener:()=>{}};
+ const ctx={document,location:{pathname},localStorage:{getItem:()=>unlocked?'test-key':''},fetch:options.fetch|| (async()=>({ok:true,json:async()=>payload})),AbortSignal,setInterval:()=>{}};
  vm.runInNewContext(script,ctx);
  await new Promise(resolve=>setImmediate(resolve));
- return {html:body.innerHTML,heading:panel.innerHTML};
+ return {html:body.innerHTML,text:body.textContent,heading:panel.innerHTML,async unlock(){unlocked=true;await unlock();await new Promise(resolve=>setImmediate(resolve));return {html:body.innerHTML,text:body.textContent}}};
 }
 test('main dashboard renders only Brian reports, excluding DIP and unknown engines',async()=>{
  const {html,heading}=await page('/frontier-v4.html');
@@ -33,4 +34,13 @@ test('root and other pages default to Brian results',async()=>{
  for(const path of ['/','/dip-other']){
   const {html}=await page(path);assert.match(html,/Brian · Hazine/);assert.doesNotMatch(html,/DIP ·/);
  }
+});
+test('opening the dashboard lock refreshes the initially locked report immediately',async()=>{
+ const result=await page('/frontier-v4',{locked:true});
+ assert.match(result.text,/kilidini aç/);
+ const refreshed=await result.unlock();assert.match(refreshed.html,/Brian · Hazine/);
+});
+test('a timed-out report gives a retry message instead of a raw browser exception',async()=>{
+ const result=await page('/frontier-v4',{fetch:async()=>{throw Object.assign(new Error('signal timed out'),{name:'TimeoutError'})}});
+ assert.match(result.text,/zaman aşımına/);assert.doesNotMatch(result.text,/signal timed out/);
 });

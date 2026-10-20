@@ -55,7 +55,17 @@ function engPassed(run,phase){
   return false;
 }
 function engCurrentIndex(run){if(!run)return -1;if(run.phase==='REPLAY'&&run.replay_passed===true&&run.stress_passed!==true)return ENGINEER_PHASES.findIndex(([p])=>p==='STRESS');return ENGINEER_PHASES.findIndex(([p])=>p===String(run.phase));}
-async function refreshEngineerConsole(){if(!key())return;try{ENGINEER.data=await post(ENGINEERING_STATUS_ENDPOINT,{});ENGINEER.error=null;ENGINEER.lastSync=new Date();}catch(error){ENGINEER.error=String(error?.message||error);}renderEngineerConsole();}
+let engineerRefreshInFlight=null;
+function refreshEngineerConsole(){
+  if(!key()||document.hidden)return Promise.resolve();
+  if(engineerRefreshInFlight)return engineerRefreshInFlight;
+  engineerRefreshInFlight=(async()=>{
+    try{ENGINEER.data=await post(ENGINEERING_STATUS_ENDPOINT,{});ENGINEER.error=null;ENGINEER.lastSync=new Date();}
+    catch(error){ENGINEER.error=String(error?.message||error);}
+    finally{engineerRefreshInFlight=null;renderEngineerConsole();}
+  })();
+  return engineerRefreshInFlight;
+}
 function renderEngineerConsole(){
   const e=ENGINEER.data,badge=$('autonomyBadge');if(!badge||!document.getElementById('developerBrian'))return;
   const title=document.querySelector('#developerBrian .section-title'),sub=document.querySelector('#developerBrian .section-sub');
@@ -83,4 +93,12 @@ function renderEngineerConsole(){
   const queue=v4Array(e.eligible_queue);blocks.push(`<div class="eng-status-note">SIRADAKİ UYGUN MÜHENDİSLİK İŞLERİ · ${queue.length}/${Number(s.eligible_queue||0)}</div>`);blocks.push(`<div class="eng-queue">${queue.slice(0,6).map((q,i)=>{const worldLinked=Number(q?.source_lineage?.direct_world_source_count||0)>0||typeof q?.hypothesis?.metadata?.world_source_id==='string';return `<div class="eng-queue-row"><span class="eng-priority">#${i+1}</span><div><b>${esc(v4Short(q.objective||q.hypothesis_id,105))}${worldLinked?'<span class="eng-world-tag">DÜNYA→KOD</span>':''}</b><div class="eng-id">${esc(String(q.request_id||'').slice(0,16))} · ${esc(v4Array(q.changed_paths).slice(0,2).join(' · '))}</div></div><span class="v4-tag">${Math.round(Number(q.metadata?.priority||0)*100)}%</span></div>`;}).join('')||'<div class="v4-muted">Uygun queue işi yok.</div>'}</div>`);stream.innerHTML=blocks.join('');
 }
 const previousRenderAutonomyV4=renderAutonomyV4;renderAutonomyV4=function(){previousRenderAutonomyV4();renderEngineerConsole();};
-setTimeout(refreshEngineerConsole,400);setInterval(refreshEngineerConsole,15000);
+setTimeout(refreshEngineerConsole,400);
+setInterval(()=>{
+  if(document.hidden)return;
+  const room=document.getElementById('brianEngineeringRoomV2');
+  const panel=document.getElementById('developerBrian');
+  const rect=panel?.getBoundingClientRect();
+  const visible=rect&&rect.height>0&&rect.bottom>0&&rect.top<innerHeight;
+  if(room?.classList.contains('show')||visible)refreshEngineerConsole();
+},30000);
