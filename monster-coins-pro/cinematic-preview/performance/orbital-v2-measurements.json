@@ -1,0 +1,2434 @@
+[
+  {
+    "version": 2,
+    "at": "2026-10-20T19:30:57.280Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+    "layout": {
+      "viewportWidth": 5120,
+      "viewportHeight": 1440,
+      "cssWidth": 2931,
+      "cssHeight": 730,
+      "dpr": 1.0000000149011612,
+      "buffer": {
+        "width": 2931,
+        "height": 730,
+        "ratio": 1.0000000149011612,
+        "estimatedBufferBytes": 17117040
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "quality": 1,
+    "nodes": 15,
+    "edges": 14,
+    "decorativePoints": 5827,
+    "drawCalls": 59,
+    "triangles": 12504,
+    "renderedFps": 60.103845722466325,
+    "cpuJsMeanMs": 0.5683863885807022,
+    "gpuDrawMeanMs": 0.39806293333333337,
+    "frameP95Ms": 16.700000000000728,
+    "notes": [
+      "Measured JavaScript work is not system CPU utilization.",
+      "GPU timer measures draw duration, not GPU utilization percentage.",
+      "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+      "Edges are source membership or explicit asset reference, not inferred causality."
+    ],
+    "durationMs": 15157.100000000093,
+    "frameCount": 911,
+    "gpuSamples": 15,
+    "samples": [
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:43.075Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.35645110902844,
+        "cpuJsMeanMs": 0.8508771929742867,
+        "gpuDrawMeanMs": 0.048128,
+        "frameP95Ms": 16.800000000000068,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:44.089Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.749860752443176,
+        "cpuJsMeanMs": 0.7211864406827017,
+        "gpuDrawMeanMs": 0.048128,
+        "frameP95Ms": 16.799999999999955,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:45.104Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.87623348386018,
+        "cpuJsMeanMs": 0.6703910614447096,
+        "gpuDrawMeanMs": 0.33928533333333327,
+        "frameP95Ms": 16.700000000000273,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:46.120Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.94005994005994,
+        "cpuJsMeanMs": 0.6449999999992239,
+        "gpuDrawMeanMs": 0.26854399999999995,
+        "frameP95Ms": 16.700000000000273,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:47.133Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.97688598413901,
+        "cpuJsMeanMs": 0.6269102990054881,
+        "gpuDrawMeanMs": 0.22507519999999995,
+        "frameP95Ms": 16.700000000000273,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:48.148Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.00132599615462,
+        "cpuJsMeanMs": 0.6113259668490278,
+        "gpuDrawMeanMs": 0.19677866666666663,
+        "frameP95Ms": 16.700000000000273,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:49.163Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.018729248843606,
+        "cpuJsMeanMs": 0.5999999999984588,
+        "gpuDrawMeanMs": 0.17685942857142853,
+        "frameP95Ms": 16.700000000000273,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:50.177Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.03175233181186,
+        "cpuJsMeanMs": 0.591735537187966,
+        "gpuDrawMeanMs": 0.29401599999999994,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:51.192Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.04186405199956,
+        "cpuJsMeanMs": 0.5845871559609104,
+        "gpuDrawMeanMs": 0.26692266666666664,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:52.206Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.04994252645765,
+        "cpuJsMeanMs": 0.5800330032987931,
+        "gpuDrawMeanMs": 0.24473599999999998,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:53.221Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.05654499288685,
+        "cpuJsMeanMs": 0.5787106446741704,
+        "gpuDrawMeanMs": 0.3206050909090909,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:54.235Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.06204210943171,
+        "cpuJsMeanMs": 0.5760989010942956,
+        "gpuDrawMeanMs": 0.40012800000000004,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:55.250Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.06669001324664,
+        "cpuJsMeanMs": 0.5732572877021797,
+        "gpuDrawMeanMs": 0.37352369230769233,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:56.265Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.071095908805,
+        "cpuJsMeanMs": 0.5708235294086969,
+        "gpuDrawMeanMs": 0.4222537142857143,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:30:57.279Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 5120,
+          "viewportHeight": 1440,
+          "cssWidth": 2931,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2931,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 17117040
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.074516139668305,
+        "cpuJsMeanMs": 0.5683863885807022,
+        "gpuDrawMeanMs": 0.39806293333333337,
+        "frameP95Ms": 16.700000000000728,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "at": "2026-10-20T19:31:29.734Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+    "layout": {
+      "viewportWidth": 3840,
+      "viewportHeight": 1080,
+      "cssWidth": 2001,
+      "cssHeight": 580,
+      "dpr": 1.0000000149011612,
+      "buffer": {
+        "width": 2001,
+        "height": 580,
+        "ratio": 1.0000000149011612,
+        "estimatedBufferBytes": 9284640
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "quality": 1,
+    "nodes": 15,
+    "edges": 14,
+    "decorativePoints": 5827,
+    "drawCalls": 59,
+    "triangles": 12504,
+    "renderedFps": 60.125029061507426,
+    "cpuJsMeanMs": 0.5858216970932904,
+    "gpuDrawMeanMs": 0.33416533333333326,
+    "frameP95Ms": 16.89999999999418,
+    "notes": [
+      "Measured JavaScript work is not system CPU utilization.",
+      "GPU timer measures draw duration, not GPU utilization percentage.",
+      "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+      "Edges are source membership or explicit asset reference, not inferred causality."
+    ],
+    "durationMs": 15484.399999999907,
+    "frameCount": 931,
+    "gpuSamples": 15,
+    "samples": [
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:14.515Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.17299736743186,
+        "cpuJsMeanMs": 0.5562500000232831,
+        "gpuDrawMeanMs": null,
+        "frameP95Ms": 16.799999999999272,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:15.529Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.11867582760795,
+        "cpuJsMeanMs": 0.5636363636412016,
+        "gpuDrawMeanMs": 0.047104,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:16.544Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12547926106665,
+        "cpuJsMeanMs": 0.5695652173919792,
+        "gpuDrawMeanMs": 0.064512,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:17.558Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.126295434631594,
+        "cpuJsMeanMs": 0.5733668341713223,
+        "gpuDrawMeanMs": 0.06075733333333333,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:18.573Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12533820502747,
+        "cpuJsMeanMs": 0.5753846153867646,
+        "gpuDrawMeanMs": 0.060416,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:19.588Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12474479761747,
+        "cpuJsMeanMs": 0.5806853582595135,
+        "gpuDrawMeanMs": 0.052224000000000007,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:20.602Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.1243409144566,
+        "cpuJsMeanMs": 0.5921465968566884,
+        "gpuDrawMeanMs": 0.046933333333333334,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:21.617Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12404826210286,
+        "cpuJsMeanMs": 0.5878103837469681,
+        "gpuDrawMeanMs": 0.29184,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:22.631Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.1238264520978,
+        "cpuJsMeanMs": 0.5859126984067853,
+        "gpuDrawMeanMs": 0.26496,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:23.646Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12237297153498,
+        "cpuJsMeanMs": 0.5853097345053622,
+        "gpuDrawMeanMs": 0.3009422222222222,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:24.660Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12408997483627,
+        "cpuJsMeanMs": 0.5830670926465501,
+        "gpuDrawMeanMs": 0.2761728,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:25.675Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12392354547363,
+        "cpuJsMeanMs": 0.5818049490487059,
+        "gpuDrawMeanMs": 0.2559069090909091,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:26.690Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.123784261715294,
+        "cpuJsMeanMs": 0.5816844919718862,
+        "gpuDrawMeanMs": 0.3080533333333333,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:27.704Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12366598293647,
+        "cpuJsMeanMs": 0.5828182941840269,
+        "gpuDrawMeanMs": 0.3825033846153846,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:28.719Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12356429074927,
+        "cpuJsMeanMs": 0.5836781609129033,
+        "gpuDrawMeanMs": 0.3565714285714285,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:29.734Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:30:05.995355+00:00",
+        "layout": {
+          "viewportWidth": 3840,
+          "viewportHeight": 1080,
+          "cssWidth": 2001,
+          "cssHeight": 580,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 2001,
+            "height": 580,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 9284640
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.123475924777864,
+        "cpuJsMeanMs": 0.5858216970932904,
+        "gpuDrawMeanMs": 0.33416533333333326,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "at": "2026-10-20T19:31:59.145Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+    "layout": {
+      "viewportWidth": 3440,
+      "viewportHeight": 1440,
+      "cssWidth": 1724,
+      "cssHeight": 730,
+      "dpr": 1.0000000149011612,
+      "buffer": {
+        "width": 1724,
+        "height": 730,
+        "ratio": 1.0000000149011612,
+        "estimatedBufferBytes": 10068160
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "quality": 1,
+    "nodes": 15,
+    "edges": 14,
+    "decorativePoints": 5827,
+    "drawCalls": 59,
+    "triangles": 12504,
+    "renderedFps": 60.168704534902076,
+    "cpuJsMeanMs": 0.5906752411556597,
+    "gpuDrawMeanMs": 0.5095679999999999,
+    "frameP95Ms": 16.89999999999418,
+    "notes": [
+      "Measured JavaScript work is not system CPU utilization.",
+      "GPU timer measures draw duration, not GPU utilization percentage.",
+      "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+      "Edges are source membership or explicit asset reference, not inferred causality."
+    ],
+    "durationMs": 15506.399999999907,
+    "frameCount": 933,
+    "gpuSamples": 16,
+    "samples": [
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:43.926Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.10016694490818,
+        "cpuJsMeanMs": 0.549999999994826,
+        "gpuDrawMeanMs": null,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:44.940Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.11261604017667,
+        "cpuJsMeanMs": 0.5556962025245722,
+        "gpuDrawMeanMs": 0.072704,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:45.955Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.11421701232338,
+        "cpuJsMeanMs": 0.5499999999966738,
+        "gpuDrawMeanMs": 0.07031466666666668,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:46.969Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.1220387652549,
+        "cpuJsMeanMs": 0.5527363184037901,
+        "gpuDrawMeanMs": 0.399104,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:47.985Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.123459623195764,
+        "cpuJsMeanMs": 0.548473282438127,
+        "gpuDrawMeanMs": 0.3252224,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:48.998Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.120986505351325,
+        "cpuJsMeanMs": 0.5442724458126484,
+        "gpuDrawMeanMs": 0.27886933333333336,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:50.013Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.121181756978864,
+        "cpuJsMeanMs": 0.5442708333296954,
+        "gpuDrawMeanMs": 0.24576,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:51.027Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.122135754431426,
+        "cpuJsMeanMs": 0.5451685393250055,
+        "gpuDrawMeanMs": 0.221056,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:52.042Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.122859756894485,
+        "cpuJsMeanMs": 0.5450592885325799,
+        "gpuDrawMeanMs": 0.2018417777777778,
+        "frameP95Ms": 16.900000000001455,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:53.057Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.122152945667374,
+        "cpuJsMeanMs": 0.5541446208083309,
+        "gpuDrawMeanMs": 0.183808,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:54.071Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12273462705713,
+        "cpuJsMeanMs": 0.5608280254742961,
+        "gpuDrawMeanMs": 0.2844858181818182,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:55.086Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.122688679656925,
+        "cpuJsMeanMs": 0.5804063860646007,
+        "gpuDrawMeanMs": 0.45824,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:56.101Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.122650206421106,
+        "cpuJsMeanMs": 0.582133333330974,
+        "gpuDrawMeanMs": 0.4246449230769231,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:57.115Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12261752081307,
+        "cpuJsMeanMs": 0.5875462392074057,
+        "gpuDrawMeanMs": 0.3960685714285714,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:58.129Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.123003943848396,
+        "cpuJsMeanMs": 0.5893348623825442,
+        "gpuDrawMeanMs": 0.4519253333333333,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:31:59.144Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 3440,
+          "viewportHeight": 1440,
+          "cssWidth": 1724,
+          "cssHeight": 730,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1724,
+            "height": 730,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 10068160
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.1229524042737,
+        "cpuJsMeanMs": 0.5906752411556597,
+        "gpuDrawMeanMs": 0.5095679999999999,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      }
+    ]
+  },
+  {
+    "version": 2,
+    "at": "2026-10-20T19:32:22.464Z",
+    "source": "public-heartbeat",
+    "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+    "layout": {
+      "viewportWidth": 1920,
+      "viewportHeight": 1080,
+      "cssWidth": 1283,
+      "cssHeight": 695,
+      "dpr": 1.0000000149011612,
+      "buffer": {
+        "width": 1283,
+        "height": 695,
+        "ratio": 1.0000000149011612,
+        "estimatedBufferBytes": 7133480
+      }
+    },
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "quality": 1,
+    "nodes": 15,
+    "edges": 14,
+    "decorativePoints": 5827,
+    "drawCalls": 59,
+    "triangles": 12504,
+    "renderedFps": 60.15942246954539,
+    "cpuJsMeanMs": 0.5605434782600597,
+    "gpuDrawMeanMs": 0.3454976,
+    "frameP95Ms": 16.80000000000291,
+    "notes": [
+      "Measured JavaScript work is not system CPU utilization.",
+      "GPU timer measures draw duration, not GPU utilization percentage.",
+      "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+      "Edges are source membership or explicit asset reference, not inferred causality."
+    ],
+    "durationMs": 15292.69999999972,
+    "frameCount": 920,
+    "gpuSamples": 15,
+    "samples": [
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:07.257Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.12024048096016,
+        "cpuJsMeanMs": 0.5499999999689559,
+        "gpuDrawMeanMs": null,
+        "frameP95Ms": 16.69999999999709,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:08.259Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.89110707803993,
+        "cpuJsMeanMs": 0.5727272727244506,
+        "gpuDrawMeanMs": 0.03072,
+        "frameP95Ms": 16.70000000001164,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:09.273Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 59.99622071050634,
+        "cpuJsMeanMs": 0.568503937005674,
+        "gpuDrawMeanMs": 0.344576,
+        "frameP95Ms": 16.80000000000291,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:10.288Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.037044133614195,
+        "cpuJsMeanMs": 0.5521276595685235,
+        "gpuDrawMeanMs": 0.24814933333333333,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:11.302Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.060784408316806,
+        "cpuJsMeanMs": 0.54658634538003,
+        "gpuDrawMeanMs": 0.198912,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:12.317Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.07402670387377,
+        "cpuJsMeanMs": 0.54129032257704,
+        "gpuDrawMeanMs": 0.1703936,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:13.332Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.07902578054141,
+        "cpuJsMeanMs": 0.5350404312668463,
+        "gpuDrawMeanMs": 0.15104,
+        "frameP95Ms": 16.90000000000873,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:14.347Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.087627790527854,
+        "cpuJsMeanMs": 0.5363425925941017,
+        "gpuDrawMeanMs": 0.13648457142857143,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:15.361Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.09190526687872,
+        "cpuJsMeanMs": 0.5354969574036511,
+        "gpuDrawMeanMs": 0.241664,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:16.375Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.09524119452844,
+        "cpuJsMeanMs": 0.5402527075825723,
+        "gpuDrawMeanMs": 0.3086791111111111,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:17.390Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.09850291208999,
+        "cpuJsMeanMs": 0.5430894308935518,
+        "gpuDrawMeanMs": 0.3974144,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:18.405Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.10010757563629,
+        "cpuJsMeanMs": 0.5483727810639866,
+        "gpuDrawMeanMs": 0.36352,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:19.419Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.101936799184514,
+        "cpuJsMeanMs": 0.5497964721835209,
+        "gpuDrawMeanMs": 0.33501866666666663,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:20.434Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.10393914287866,
+        "cpuJsMeanMs": 0.5523809523795519,
+        "gpuDrawMeanMs": 0.3954215384615385,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:21.449Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.10481608206157,
+        "cpuJsMeanMs": 0.5551804423742039,
+        "gpuDrawMeanMs": 0.3687131428571429,
+        "frameP95Ms": 16.89999999999418,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      },
+      {
+        "version": 2,
+        "at": "2026-10-20T19:32:22.463Z",
+        "source": "public-heartbeat",
+        "sourceAt": "2026-10-20T19:31:01.771766+00:00",
+        "layout": {
+          "viewportWidth": 1920,
+          "viewportHeight": 1080,
+          "cssWidth": 1283,
+          "cssHeight": 695,
+          "dpr": 1.0000000149011612,
+          "buffer": {
+            "width": 1283,
+            "height": 695,
+            "ratio": 1.0000000149011612,
+            "estimatedBufferBytes": 7133480
+          }
+        },
+        "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 (0x00002684) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "quality": 1,
+        "nodes": 15,
+        "edges": 14,
+        "decorativePoints": 5827,
+        "drawCalls": 59,
+        "triangles": 12504,
+        "renderedFps": 60.10596943742118,
+        "cpuJsMeanMs": 0.5605434782600597,
+        "gpuDrawMeanMs": 0.3454976,
+        "frameP95Ms": 16.80000000000291,
+        "notes": [
+          "Measured JavaScript work is not system CPU utilization.",
+          "GPU timer measures draw duration, not GPU utilization percentage.",
+          "Globe, orbits and geographic silhouettes are decorative. Nodes have no geographic claim.",
+          "Edges are source membership or explicit asset reference, not inferred causality."
+        ]
+      }
+    ]
+  }
+]
