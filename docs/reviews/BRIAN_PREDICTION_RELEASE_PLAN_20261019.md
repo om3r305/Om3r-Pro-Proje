@@ -153,3 +153,15 @@ drop table if exists public.brian_prediction_control;
 | Yayınlanmadı | `brian-niulai4-pilot-ingest`: yayın aracı izin sınıflandırıcısınca reddedildi; yeniden denenmedi. Anahtar kararı verilene kadar gerekmiyor (çağrılırsa 404). Pilot sink açıkken bu uç yoksa sink `HTTP_404` sayar, ölçüm etkilenmez |
 | Gözlem | 07:33–07:43 UTC arası CORE'da birden fazla modülde pg_net zaman aşımı / DNS gecikmesi görüldü (migrasyondan önce başladı). 07:35 prediction turu kayıt üretmedi; son tur 07:20. Durum, 40 dk eşiği aşılırsa `STALE` olur |
 | Geri dönüş | Yeni nesneleri düşür: `drop function brian_prediction_status_v1, brian_niulai4_pilot_status_v1, brian_record_niulai4_pilot_v1; drop table brian_niulai4_pilot_reports, _heartbeats, _runs, _auth;` ve `brian-prediction-status` fonksiyonunu sil. Mevcut veriye etkisi yok |
+
+## Yayın kaydı — durum okuma yükü düzeltmesi (20 Ekim 2026)
+
+| Adım | Sonuç |
+|---|---|
+| Olay | 07:30–08:05 UTC: `brian-frontier-engineering-status` p50 34 sn, 150 sn edge sınırında çok sayıda 5xx; muhasebe ve otonomi uçları da 150 sn'de kesildi. DB'de 5 dakikada 16–29 `statement timeout`; `CONNECT_TIMEOUT` ve bağlantı havuzu zaman aşımları. Sayfa okuma ~14 ms (I/O sınırı), önbellek isabetli sorgu bile 3,4 sn (CPU sınırı). DB 5,8 GB, `shared_buffers` 224 MB, `max_connections` 60 |
+| Yedek | Tag `backup/status-read-load-oncesi` → `db111c8`; `C:\Brian\brian-backups\2026-10-20-status-read-load-oncesi\` (bundle, eski görünüm SQL'i, eski fonksiyon kaynağı, `core-state.json`) |
+| Merge | PR #167 → `0dbac9e` (8 CI kontrolünün hepsi yeşil) |
+| Migrasyon | CORE sürüm `20261020080320` (`brian_status_read_load`); dosya adı hizalandı. İki görünüm skip-scan biçimine çevrildi (177 / 186 satır), `security_invoker` korundu, `anon` erişimi yok. `brian_evolution_hypothesis_snapshots_observed_idx` eklendi |
+| Fonksiyon | `brian-frontier-engineering-status` v14 → v15 (ezbr `2b2723d9…`). v14'ün canlı kaynağı repo ile birebir aynıydı. 45 sn paylaşılan önbellek, single flight, açıkça işaretli `STALE` geri dönüşü |
+| Geri dönüş | `old_latest_views.sql` dosyasını yeniden uygula; v14 kaynağını (`engineering-status.index.ts`) yeniden yayınla; index'i düşür. Veri değişmedi |
+| Kalan risk | Kök kısıt compute boyutu. Ücretli yükseltme kullanıcı kararıdır, yapılmadı |

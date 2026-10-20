@@ -1,6 +1,6 @@
 """Real-Postgres test: the skip-scan "latest" views return exactly what the DISTINCT ON views did.
 
-Both migrations (the original 202609151247 views and the 20261020090000 rewrite) are applied to an
+Both migrations (the original 202609151247 views and the 20261020080320 rewrite) are applied to an
 isolated schema with minimal base tables, filled with random rows that repeat source ids and
 timestamps. Columns, types, row sets and output order must match; the hypothesis index must exist.
 """
@@ -19,7 +19,7 @@ psycopg2 = pytest.importorskip("psycopg2", reason="psycopg2 is only installed in
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "supabase" / "migrations"
 OLD = MIGRATIONS / "202609151247_brian_world_source_latest_views_v1.sql"
-NEW = MIGRATIONS / "20261020090000_brian_status_read_load.sql"
+NEW = MIGRATIONS / "20261020080320_brian_status_read_load.sql"
 DATABASE_URL = os.environ.get("BRIAN_TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="BRIAN_TEST_DATABASE_URL not set")
 
