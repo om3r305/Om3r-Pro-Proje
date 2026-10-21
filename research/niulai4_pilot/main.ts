@@ -10,7 +10,7 @@
 //
 // deno run --allow-net --allow-read --allow-write --allow-run=powershell,w32tm research/niulai4_pilot/main.ts --selftest
 
-import { estimateSkew, evaluatePreflight, parseW32tmOffsets, type SkewSample, StopGuard } from "./guards.ts";
+import { estimateSkew, evaluatePreflight, parseChronyTracking, parseW32tmOffsets, type SkewSample, StopGuard } from "./guards.ts";
 import { evaluate, type Capture, type Observation, type Outcome, summarize, type WindowInfo } from "./evaluate.ts";
 import { readJsonl } from "./recorder.ts";
 import { RULES, RULES_VERSION, rulesFingerprint } from "./rules.ts";
@@ -42,11 +42,25 @@ async function ntpSkew(): Promise<{ offsetMs: number; uncertaintyMs: number } | 
       outs.push(new TextDecoder().decode((await p.output()).stdout));
     } catch { /* not on Windows or blocked */ }
   }
-  return parseW32tmOffsets(outs);
+  const w = parseW32tmOffsets(outs);
+  if (w) return w;
+  // Linux (cloud VM): chrony's own NTP estimate.
+  try {
+    const p = new Deno.Command("chronyc", { args: ["tracking"], stdout: "piped", stderr: "null" });
+    return parseChronyTracking(new TextDecoder().decode((await p.output()).stdout));
+  } catch {
+    return null;
+  }
 }
 
 async function freeDiskBytes(dir: string): Promise<number | null> {
   try {
+    if (Deno.build.os !== "windows") {
+      const p = new Deno.Command("df", { args: ["-Pk", dir], stdout: "piped", stderr: "null" });
+      const line = new TextDecoder().decode((await p.output()).stdout).trim().split("\n").at(-1) ?? "";
+      const kb = Number(line.split(/\s+/)[3]);
+      return Number.isFinite(kb) ? kb * 1024 : null;
+    }
     const drive = (dir.match(/^([A-Za-z]):/)?.[1] ?? "C").toUpperCase();
     const p = new Deno.Command("powershell", { args: ["-NoProfile", "-Command", `(Get-PSDrive -Name ${drive}).Free`], stdout: "piped", stderr: "null" });
     const { stdout } = await p.output();
@@ -104,6 +118,7 @@ if (import.meta.main) {
     const guard = new StopGuard(clock());
     const stop = () => guard.stop("OPERATOR");
     try { Deno.addSignalListener("SIGINT", stop); } catch { /* not available */ }
+    try { Deno.addSignalListener("SIGTERM", stop); } catch { /* Windows: SIGTERM not supported */ }
     const opt = (name: string) => (args.indexOf(name) >= 0 ? args[args.indexOf(name) + 1] ?? null : null);
     const sinkKey = await readSinkKey(opt("--core-sink-key-file"));
     const sink = sinkKey ? new CoreSink(sinkKey, newRunId(clock()), RULES_VERSION, p.fp, clock) : null;

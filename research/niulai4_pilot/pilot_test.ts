@@ -455,3 +455,19 @@ Deno.test("sink: refuses weak keys, foreign hosts; key file and run id rules", a
   assertEquals(id, "niulai4-20261020T120000-7fffff");
   assert(/^[A-Za-z0-9_.:-]{8,80}$/.test(id), "run id format");
 });
+
+Deno.test("chronyc tracking: sign follows slow/fast, uncertainty from rms+dispersion+delay/2, needs Leap Normal", async () => {
+  const { parseChronyTracking } = await import("./guards.ts");
+  const out = (dir: string, leap = "Normal") => [
+    "Reference ID    : A9FE A97B (169.254.169.123)",
+    `System time     : 0.002000000 seconds ${dir} of NTP time`,
+    "RMS offset      : 0.000300000 seconds",
+    "Root delay      : 0.004000000 seconds",
+    "Root dispersion : 0.000700000 seconds",
+    `Leap status     : ${leap}`,
+  ].join("\n");
+  eq(parseChronyTracking(out("slow")), { offsetMs: 2, uncertaintyMs: 4 }, "slow clock -> add");
+  eq(parseChronyTracking(out("fast")), { offsetMs: -2, uncertaintyMs: 4 }, "fast clock -> subtract");
+  eq(parseChronyTracking(out("slow", "Not synchronised")), null, "unsynchronised clock refused");
+  eq(parseChronyTracking(""), null, "no chrony output");
+});

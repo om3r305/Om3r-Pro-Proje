@@ -1,0 +1,41 @@
+[Unit]
+Description=BRIAN NIULAI4 shadow pilot (read-only market data; never trades)
+Wants=network-online.target chrony.service
+After=network-online.target chrony.service
+# Refuse to start without the operator-placed key and approval.
+ConditionPathExists=/etc/niulai4-pilot/ingest.key
+ConditionPathExists=/var/lib/niulai4-pilot/APPROVED_RULES_FINGERPRINT
+
+[Service]
+Type=simple
+User=niulai4
+Group=niulai4
+WorkingDirectory=/opt/niulai4-pilot
+Environment=DENO_DIR=/var/lib/niulai4-pilot/.deno
+Environment=DENO_NO_UPDATE_CHECK=1
+ExecStart=/usr/local/bin/deno run --cached-only --allow-net --allow-read --allow-write=/var/lib/niulai4-pilot --allow-run=chronyc,df research/niulai4_pilot/main.ts --start --out /var/lib/niulai4-pilot --core-sink-key-file /etc/niulai4-pilot/ingest.key --host-label eu-vm
+Restart=on-failure
+RestartSec=30
+# Exit 2 = preflight refused (approval/clock/disk/identity): do not loop, the operator must look.
+RestartPreventExitStatus=2
+# Graceful stop: the pilot closes its run on SIGTERM; give it time before SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+StandardOutput=append:/var/lib/niulai4-pilot/pilot.stdout.log
+StandardError=append:/var/lib/niulai4-pilot/pilot.stderr.log
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/niulai4-pilot
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target
