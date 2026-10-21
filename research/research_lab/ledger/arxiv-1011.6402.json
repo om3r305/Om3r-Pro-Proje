@@ -3,13 +3,22 @@
   "paper": {
     "paper_id": "arxiv:1011.6402",
     "title": "The Price Impact of Order Book Events",
-    "authors": ["Rama Cont", "Arseniy Kukanov", "Sasha Stoikov"],
-    "versions": {"v1": "2010-11", "v3": "2011-04"},
+    "authors": [
+      "Rama Cont",
+      "Arseniy Kukanov",
+      "Sasha Stoikov"
+    ],
+    "versions": {
+      "v1": "2010-11",
+      "v3": "2011-04"
+    },
     "published": "Journal of Financial Econometrics 12(1): 47-88, 2014",
     "url": "https://arxiv.org/abs/1011.6402",
     "license": "arXiv non-exclusive distribution license 1.0 (read and cite; no redistribution of the text)",
     "code": null,
-    "markets": ["NYSE TAQ, 50 U.S. stocks"],
+    "markets": [
+      "NYSE TAQ, 50 U.S. stocks"
+    ],
     "method": "OFI over 10-second intervals from best bid/ask price and size changes; OLS of mid-price change (ticks) on OFI per half-hour subsample; price impact coefficient vs average depth by log-log and linear fits",
     "data_cutoff": null,
     "definitions": {
@@ -33,8 +42,17 @@
       "statement": "Over 10-second intervals, mid-price changes are linear in contemporaneous order flow imbalance, with high explanatory power and a significant price impact coefficient in nearly all half-hour subsamples.",
       "metric": "median_half_hour_r2 and share_of_windows_beta_significant",
       "dataset": "NYSE TAQ, 50 stocks, 273 half-hour subsamples per stock",
-      "reported": {"value": 0.65, "unit": "average R^2", "uncertainty": null, "source": "Table 2 'Average' row: R^2 65%, {beta != 0} 97%; quadratic term raises R^2 only to 68%"},
-      "comparison": {"baseline": "no relation", "direction": ">", "margin": 0.0},
+      "reported": {
+        "value": 0.65,
+        "unit": "average R^2",
+        "uncertainty": null,
+        "source": "Table 2 'Average' row: R^2 65%, {beta != 0} 97%; quadratic term raises R^2 only to 68%"
+      },
+      "comparison": {
+        "baseline": "no relation",
+        "direction": ">",
+        "margin": 0.0
+      },
       "repro_risk": "medium",
       "depends_on": [],
       "notes": "Contemporaneous relation, not a forecast. Footnote: excluding price-changing events from OFI lowers R^2 to 35-60% (tautology check)."
@@ -45,20 +63,73 @@
       "statement": "The price impact coefficient is inversely related to market depth, beta_i = c / AD_i^lambda with lambda close to 1.",
       "metric": "lambda_hat",
       "dataset": "NYSE TAQ, 50 stocks, 273 estimates of beta_i per stock",
-      "reported": {"value": 0.98, "unit": "lambda", "uncertainty": "[0.88, 1.08] grand-mean interval, R^2 74%", "source": "Table 3 'Grand mean' row"},
-      "comparison": {"baseline": "no depth dependence", "direction": ">", "margin": 0.0},
+      "reported": {
+        "value": 0.98,
+        "unit": "lambda",
+        "uncertainty": "[0.88, 1.08] grand-mean interval, R^2 74%",
+        "source": "Table 3 'Grand mean' row"
+      },
+      "comparison": {
+        "baseline": "no depth dependence",
+        "direction": ">",
+        "margin": 0.0
+      },
       "repro_risk": "medium",
-      "depends_on": ["arxiv:1011.6402#C-01"],
+      "depends_on": [
+        "arxiv:1011.6402#C-01"
+      ],
       "notes": "Stylized model predicts lambda = 1."
     }
   ],
   "assumptions": [
-    {"assumption_id": "A-01", "claim_id": "arxiv:1011.6402#C-01", "leverage": "high", "detail": "Market and venue", "chosen": "Binance spot BTCUSDT and ETHUSDT, public bookTicker (best bid/ask price and size), 24/7", "rationale": "Free, key-less L1 data reachable from Germany; tests whether an equity result transfers to crypto (domain shift, labelled ADAPTED)."},
-    {"assumption_id": "A-02", "claim_id": "arxiv:1011.6402#C-01", "leverage": "high", "detail": "Event stream", "chosen": "Each bookTicker message is one event n; consecutive messages define e_n; the first message after a (re)connect only sets the state", "rationale": "bookTicker carries best bid/ask price and size, exactly the inputs of e_n; no e_n is computed across a gap."},
-    {"assumption_id": "A-03", "claim_id": "arxiv:1011.6402#C-01", "leverage": "medium", "detail": "Timestamps", "chosen": "NTP-corrected local receive time (bookTicker has no event time)", "rationale": "Network jitter blurs 10 s boundaries slightly; recorded, not corrected."},
-    {"assumption_id": "A-04", "claim_id": "arxiv:1011.6402#C-01", "leverage": "low", "detail": "Tick size", "chosen": "Delta_P in ticks with the symbol's exchangeInfo PRICE_FILTER tickSize at collection start", "rationale": "Same unit as the paper."},
-    {"assumption_id": "A-05", "claim_id": "arxiv:1011.6402#C-01", "leverage": "medium", "detail": "Windows", "chosen": "Delta t = 10 s; consecutive 30-minute UTC windows; a window with > 5% missing seconds is excluded and counted", "rationale": "Paper's grid; gaps are never back-filled."},
-    {"assumption_id": "A-06", "claim_id": "arxiv:1011.6402#C-02", "leverage": "medium", "detail": "Depth measure", "chosen": "AD_i = mean over events of (q^B_n + q^A_n) / 2 in the window", "rationale": "Paper's AD_i (the -1 in the paper's denominator is immaterial at thousands of events)."}
+    {
+      "assumption_id": "A-01",
+      "claim_id": "arxiv:1011.6402#C-01",
+      "leverage": "high",
+      "detail": "Market and venue",
+      "chosen": "Binance spot BTCUSDT and ETHUSDT, public bookTicker (best bid/ask price and size), 24/7",
+      "rationale": "Free, key-less L1 data reachable from Germany; tests whether an equity result transfers to crypto (domain shift, labelled ADAPTED)."
+    },
+    {
+      "assumption_id": "A-02",
+      "claim_id": "arxiv:1011.6402#C-01",
+      "leverage": "high",
+      "detail": "Event stream",
+      "chosen": "Each bookTicker message is one event n; consecutive messages define e_n; the first message after a (re)connect only sets the state",
+      "rationale": "bookTicker carries best bid/ask price and size, exactly the inputs of e_n; no e_n is computed across a gap."
+    },
+    {
+      "assumption_id": "A-03",
+      "claim_id": "arxiv:1011.6402#C-01",
+      "leverage": "medium",
+      "detail": "Timestamps",
+      "chosen": "NTP-corrected local receive time (bookTicker has no event time)",
+      "rationale": "Network jitter blurs 10 s boundaries slightly; recorded, not corrected."
+    },
+    {
+      "assumption_id": "A-04",
+      "claim_id": "arxiv:1011.6402#C-01",
+      "leverage": "low",
+      "detail": "Tick size",
+      "chosen": "Delta_P in ticks with the symbol's exchangeInfo PRICE_FILTER tickSize at collection start",
+      "rationale": "Same unit as the paper."
+    },
+    {
+      "assumption_id": "A-05",
+      "claim_id": "arxiv:1011.6402#C-01",
+      "leverage": "medium",
+      "detail": "Windows",
+      "chosen": "Delta t = 10 s; consecutive 30-minute UTC windows; a window with > 5% missing seconds is excluded and counted",
+      "rationale": "Paper's grid; gaps are never back-filled."
+    },
+    {
+      "assumption_id": "A-06",
+      "claim_id": "arxiv:1011.6402#C-02",
+      "leverage": "medium",
+      "detail": "Depth measure",
+      "chosen": "AD_i = mean over events of (q^B_n + q^A_n) / 2 in the window",
+      "rationale": "Paper's AD_i (the -1 in the paper's denominator is immaterial at thousands of events)."
+    }
   ],
   "brian_hypotheses": [
     {
@@ -73,12 +144,30 @@
     "experiment_id": "ofi-binance-v1",
     "registered_before_data": true,
     "decision_rule": {
-      "C-01": {"PASS": "median half-hour R^2 >= 0.50 AND beta > 0 significant (White SE, 95%) in >= 90% of valid windows, per symbol", "FAIL": "median R^2 < 0.20 OR significant positive beta in < 50% of valid windows", "UNVERIFIED": "otherwise"},
-      "C-02": {"PASS": "lambda_hat > 0 with day-clustered bootstrap 95% interval excluding 0", "FAIL": "interval upper bound <= 0", "UNVERIFIED": "otherwise"},
-      "brian:ofi-predictive-v1": {"PASS": "test-period mean net return per trade > 0 bps with day-clustered bootstrap 95% lower bound > 0", "FAIL": "upper bound < 0", "UNVERIFIED": "otherwise"},
+      "C-01": {
+        "PASS": "median half-hour R^2 >= 0.50 AND beta > 0 significant (White SE, 95%) in >= 90% of valid windows, per symbol",
+        "FAIL": "median R^2 < 0.20 OR significant positive beta in < 50% of valid windows",
+        "UNVERIFIED": "otherwise"
+      },
+      "C-02": {
+        "PASS": "lambda_hat > 0 with day-clustered bootstrap 95% interval excluding 0",
+        "FAIL": "interval upper bound <= 0",
+        "UNVERIFIED": "otherwise"
+      },
+      "brian:ofi-predictive-v1": {
+        "PASS": "test-period mean net return per trade > 0 bps with day-clustered bootstrap 95% lower bound > 0",
+        "FAIL": "upper bound < 0",
+        "UNVERIFIED": "otherwise"
+      },
       "INSUFFICIENT_DATA": "fewer than 200 valid half-hour windows per symbol (C-01/C-02) or fewer than 100 test-period trades (hypothesis)",
       "REVIEW_REQUIRED": "more than 5% of collection seconds missing overall, or any disk/clock guard tripped"
     },
-    "not_a_trade_signal": "Results are shadow research; nothing is traded or promoted automatically."
+    "not_a_trade_signal": "Results are shadow research; nothing is traded or promoted automatically.",
+    "amendments": [
+      {
+        "before_any_data": true,
+        "change": "Fixed analysis parameters: taker fee 10 bps per side (Binance spot VIP0 published rate; the public stream does not expose account fees), threshold quantiles {0.90, 0.95, 0.99} chosen on days 1-7 by gross mean, test days = day 8 onward. Analysis code: research/research_lab/studies/ofi_binance/analyze.py (stdlib, 10 offline tests)."
+      }
+    ]
   }
 }

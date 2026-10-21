@@ -51,6 +51,9 @@ jobs:
         run: |
           deno check research/research_lab/studies/ofi_binance/*.ts
           deno test --allow-read --allow-write research/research_lab/studies/ofi_binance/ofi_test.ts
+      - name: OFI analysis offline tests (stdlib)
+        working-directory: research/research_lab/studies/ofi_binance
+        run: python -m unittest -v test_analyze
 
   run-experiment:
     if: github.event_name == 'workflow_dispatch'
