@@ -77,7 +77,7 @@ Deno.test("withCollectorLease: both acquire responses lost still requires confir
       brian_release_collector_lease: { data: true, error: null },
     });
     let runs = 0;
-    const run = () => withCollectorLease(client, "sandbox", 180, async () => ++runs);
+    const run = () => withCollectorLease(client, "sandbox", 180, () => Promise.resolve(++runs));
     if (ownsLease) {
       assertEquals((await run()).value, 1);
       assertEquals(runs, 1);
@@ -96,7 +96,7 @@ Deno.test("withCollectorLease: failed ownership confirmation never executes work
     brian_renew_collector_lease: { data: null, error: new Error("confirmation unavailable") },
   });
   let runs = 0;
-  await assertRejects(() => withCollectorLease(client, "sandbox", 180, async () => ++runs), Error, "confirmation unavailable");
+  await assertRejects(() => withCollectorLease(client, "sandbox", 180, () => Promise.resolve(++runs)), Error, "confirmation unavailable");
   assertEquals(runs, 0);
 });
 
