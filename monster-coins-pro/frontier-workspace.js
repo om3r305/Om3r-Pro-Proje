@@ -92,6 +92,23 @@
     $('workspaceConnection').textContent = (state === 'ok' ? 'Durum bağlantısı güncel' : state === 'warn' ? 'Son kayıt gösteriliyor · bağlantıyı kontrol et' : 'Canlı durum henüz alınmadı') +
       (Number.isFinite(stamp) ? ' · ' + new Date(stamp).toLocaleString('tr-TR', { timeZone: 'Europe/Berlin' }) : '');
   }
+  // Optional deep link opens an existing room; never starts a run or a control action.
+  const requestedRoom = new URLSearchParams(location.search).get('room');
+  let roomOpened = false;
+  const sections = { research: 'predictionResearch', performance: 'shadowScorecard', news: 'opsFlow', system: 'opsControl' };
+  const announce = state => { if (parent !== window) parent.postMessage({ type: 'brian-room-status', room: requestedRoom, state }, location.origin); };
+  function openRequestedRoom() {
+    if (roomOpened || !requestedRoom) return;
+    if (typeof key !== 'function' || !key()) { announce('locked'); return; }
+    const actions = { meeting: () => $('openMeeting')?.click(), accounting: () => window.openTreasuryAccounting?.(), engineering: () => window.openBrianEngineeringRoom?.(), anatomy: () => window.openBrianAnatomy?.() };
+    const available = { meeting: !!$('openMeeting'), accounting: typeof window.openTreasuryAccounting === 'function', engineering: typeof window.openBrianEngineeringRoom === 'function', anatomy: typeof window.openBrianAnatomy === 'function' };
+    try {
+      if (actions[requestedRoom]) { if (!available[requestedRoom]) return; actions[requestedRoom](); }
+      else { const target = $(sections[requestedRoom]); if (!target) return; for (let n = target; n; n = n.parentElement) if (n.tagName === 'DETAILS') n.open = true; target.scrollIntoView({ block: 'start' }); target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
+      roomOpened = true; announce('ready');
+    } catch { announce('error'); }
+  }
+  openRequestedRoom(); setInterval(openRequestedRoom, 1000);
   update(); setInterval(update, 3000);
   document.addEventListener('visibilitychange', update);
 })();
