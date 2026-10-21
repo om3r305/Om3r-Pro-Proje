@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {stripTypeScriptTypes}=require('node:module'),{webcrypto}=require('node:crypto');
 function compile(p){return stripTypeScriptTypes(fs.readFileSync(p,'utf8')).replace(/^import[^\n]+\n/gm,'').replace(/export /g,'');}
 const dir='supabase/functions/brian-world-research/';
-const logic=vm.runInNewContext(compile(dir+'logic.ts')+';({officialUri,readOfficial,assessPrimaryText,searchCounterEvidence,reactionProbe})',{URL,AbortSignal,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,fetch});
+const logic=vm.runInNewContext(compile(dir+'logic.ts')+';({officialUri,readOfficial,userAgentFor,assessPrimaryText,searchCounterEvidence,reactionProbe})',{URL,AbortSignal,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,fetch});
 const {parseHTML}=require('../supabase/functions/brian-world-research/node_modules/linkedom');
 const {documentText}=vm.runInNewContext(compile(dir+'reader.ts')+';({documentText})',{URL,parseHTML,officialUri:logic.officialUri});
 test('official origin rejects credential, IP, local and cross-host URLs',()=>{
@@ -48,4 +48,17 @@ test('positive sample is not proof, missing coverage and mixed strategy prevent 
 test('net validator UI never turns a positive diagnostic into portfolio profit',()=>{
  const view=require('../monster-coins-pro/edge-validation.js');assert.match(view.render({status:'UNAVAILABLE'}),/doğrulanmış değil/);
  const html=view.render({status:'AVAILABLE',as_of:'2026-10-19T14:00:00Z',protocol:edge.EDGE_PROTOCOL,rows:[]});assert.match(html,/henüz başlamadı/);assert.match(html,/Eksik maliyet sıfır sayılmaz/);
+});
+test('operator contact User-Agent goes to sec.gov only and only when it looks like an email',async()=>{
+ const contact='operator@example.com';
+ assert.equal(logic.userAgentFor('sec.gov',contact),'BRIAN Research operator@example.com');
+ assert.equal(logic.userAgentFor('www.SEC.gov',contact),'BRIAN Research operator@example.com');
+ for(const d of ['consilium.europa.eu','federalreserve.gov','sec.gov.evil.org'])assert.doesNotMatch(logic.userAgentFor(d,contact),/@/);
+ assert.doesNotMatch(logic.userAgentFor('sec.gov',null),/@/);
+ assert.doesNotMatch(logic.userAgentFor('sec.gov','not an email'),/@/);
+ const html='<html><body><article>'+('Official text. '.repeat(20))+'</article></body></html>',seen=[];
+ const fetcher=async(_u,init)=>{seen.push(init.headers['user-agent']);return new Response(html,{headers:{'content-type':'text/html'}});};
+ await logic.readOfficial('https://www.sec.gov/a','sec.gov',fetcher,contact);
+ await logic.readOfficial('https://www.consilium.europa.eu/a','consilium.europa.eu',fetcher,contact);
+ assert.equal(seen[0],'BRIAN Research operator@example.com');assert.doesNotMatch(seen[1],/@/);
 });
