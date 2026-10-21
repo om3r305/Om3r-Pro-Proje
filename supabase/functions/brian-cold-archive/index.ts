@@ -27,6 +27,13 @@ const ALLOWED=new Set([
   "brian_world_event_frames",
   "brian_alpha_phase37_comparisons",
   "brian_alpha_reliability_shadow_features",
+  // Prediction intelligence (policies added 2026-10-19). Without these the priority loop reached
+  // an un-allowed policy and failed the whole run closed.
+  "brian_prediction_market_snapshots",
+  "brian_prediction_wallet_trades",
+  "brian_prediction_source_health",
+  "brian_prediction_markets",
+  "brian_prediction_resolutions",
 ]);
 
 function out(body:unknown,status=200){return new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store"}})}
