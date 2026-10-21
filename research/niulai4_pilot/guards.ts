@@ -132,3 +132,18 @@ export function parseW32tmOffsets(outputs: string[]): { offsetMs: number; uncert
   const median = sorted[Math.floor(sorted.length / 2)];
   return { offsetMs: Math.round(median), uncertaintyMs: Math.ceil((sorted.at(-1)! - sorted[0]) / 2 + 1) };
 }
+
+// Parse `chronyc tracking` (Linux). Correction to ADD to local time: +x when the system clock is
+// "slow of NTP time", -x when "fast". Uncertainty = |RMS offset| + root dispersion + root delay / 2,
+// plus 1 ms. Refuses (null) unless chrony reports "Leap status : Normal".
+export function parseChronyTracking(out: string): { offsetMs: number; uncertaintyMs: number } | null {
+  const sys = out.match(/System time\s*:\s*([0-9.]+) seconds (slow|fast) of NTP time/);
+  const rms = out.match(/RMS offset\s*:\s*([0-9.]+) seconds/);
+  const disp = out.match(/Root dispersion\s*:\s*([0-9.]+) seconds/);
+  const delay = out.match(/Root delay\s*:\s*([0-9.]+) seconds/);
+  if (!sys || !rms || !disp || !delay || !/Leap status\s*:\s*Normal/.test(out)) return null;
+  const off = Number(sys[1]) * 1000 * (sys[2] === "slow" ? 1 : -1);
+  const unc = Number(rms[1]) * 1000 + Number(disp[1]) * 1000 + (Number(delay[1]) * 1000) / 2 + 1;
+  if (![off, unc].every(Number.isFinite)) return null;
+  return { offsetMs: Math.round(off), uncertaintyMs: Math.ceil(unc) };
+}
