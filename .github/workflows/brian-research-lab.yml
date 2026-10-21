@@ -10,6 +10,7 @@ on:
     branches: [brian-2026]
     paths:
       - 'research/research_lab/**'
+      - 'research/niulai4_pilot/guards.ts'
       - '.github/workflows/brian-research-lab.yml'
   workflow_dispatch:
     inputs:
@@ -43,6 +44,16 @@ jobs:
       - name: Offline unit tests (no network, stdlib only)
         working-directory: research/research_lab/studies/pm_political_slope
         run: python -m unittest -v test_experiment
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: '2.1.4'
+      - name: OFI collector type-check and offline tests
+        run: |
+          deno check research/research_lab/studies/ofi_binance/*.ts
+          deno test --allow-read --allow-write research/research_lab/studies/ofi_binance/ofi_test.ts
+      - name: OFI analysis offline tests (stdlib)
+        working-directory: research/research_lab/studies/ofi_binance
+        run: python -m unittest -v test_analyze
 
   run-experiment:
     if: github.event_name == 'workflow_dispatch'
