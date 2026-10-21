@@ -22,13 +22,14 @@ Deno.serve(async(req:Request)=>{
    const input=await db.rpc('brian_world_research_inputs_v1').abortSignal(AbortSignal.timeout(5000));if(input.error)throw Error('RESEARCH_INPUTS_UNAVAILABLE');
    const events=(input.data?.events??[]) as Event[];if(events.length>2)throw Error('RESEARCH_INPUT_BOUND_EXCEEDED');
    const sourceAccess=input.data?.source_access??{status:'UNKNOWN',cooldown_sources:[]};
+   const contactQ=await db.rpc('brian_research_contact_v1').abortSignal(AbortSignal.timeout(4000));const contact=!contactQ.error&&typeof contactQ.data==='string'?contactQ.data:null;
    const cooldownSources=Array.isArray(sourceAccess.cooldown_sources)?sourceAccess.cooldown_sources:[];
    let stored=0,failed=0;
    for(const event of events){
     let status='FAILED',uri:string|null=null,hash:string|null=null,document:Record<string,unknown>={body_received:false,claim_verified_independently:false},error:string|null=null;
     try{
-     let fetched=await readOfficial(event.provenance_uri!,event.canonical_domain),parsed=documentText(fetched.text,fetched.uri),followError:string|null=null;
-     if(parsed.indexOnly&&parsed.primaryDocument){try{const next=await readOfficial(parsed.primaryDocument,event.canonical_domain);const nextParsed=documentText(next.text,next.uri);fetched=next;parsed=nextParsed;}catch(e){followError=e instanceof Error?e.message:'PRIMARY_DOCUMENT_UNAVAILABLE';}}
+     let fetched=await readOfficial(event.provenance_uri!,event.canonical_domain,undefined,contact),parsed=documentText(fetched.text,fetched.uri),followError:string|null=null;
+     if(parsed.indexOnly&&parsed.primaryDocument){try{const next=await readOfficial(parsed.primaryDocument,event.canonical_domain,undefined,contact);const nextParsed=documentText(next.text,next.uri);fetched=next;parsed=nextParsed;}catch(e){followError=e instanceof Error?e.message:'PRIMARY_DOCUMENT_UNAVAILABLE';}}
      uri=fetched.uri;hash=fetched.hash;document={...assessPrimaryText(event.claim,parsed.title,parsed.text,parsed.indexOnly),response_sha256:hash,response_bytes:fetched.bytes,received_at:fetched.received_at,primary_document_error:followError};status=parsed.indexOnly?'INDEX_ONLY':'READ';
     }catch(e){failed++;error=e instanceof Error?e.message:'DOCUMENT_READ_FAILED';}
     const assessed=new Date().toISOString();

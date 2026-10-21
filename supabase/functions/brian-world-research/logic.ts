@@ -8,11 +8,18 @@ export function officialUri(value: unknown, domain: string): string | null {
     u.hash = ''; return u.toString();
   } catch { return null; }
 }
-export async function readOfficial(uri: string, domain: string, fetcher: typeof fetch = fetch) {
+const DEFAULT_USER_AGENT = 'BrianEvidence/1.0 (+https://github.com/om3r305/Om3r-Pro-Proje)';
+// SEC fair access requires a declared "Name contact@domain" User-Agent; without it EDGAR answers 403
+// to cloud clients. The operator contact is sent to sec.gov only, never to other hosts.
+export function userAgentFor(domain: string, contact: string | null): string {
+  const host = domain.toLowerCase().replace(/^www\./, '');
+  return host === 'sec.gov' && contact && /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(contact) ? `BRIAN Research ${contact}` : DEFAULT_USER_AGENT;
+}
+export async function readOfficial(uri: string, domain: string, fetcher: typeof fetch = fetch, contact: string | null = null) {
   let current = officialUri(uri, domain); if (!current) throw Error('OFFICIAL_URI_REJECTED');
-  const signal = AbortSignal.timeout(7000);
+  const signal = AbortSignal.timeout(7000), userAgent = userAgentFor(domain, contact);
   for (let hop = 0; hop <= 2; hop++) {
-    const r = await fetcher(current, { redirect: 'manual', signal, headers: { accept: 'text/html,application/xhtml+xml,text/plain,application/xml;q=0.8', 'user-agent': 'BrianEvidence/1.0 (+https://github.com/om3r305/Om3r-Pro-Proje)' } });
+    const r = await fetcher(current, { redirect: 'manual', signal, headers: { accept: 'text/html,application/xhtml+xml,text/plain,application/xml;q=0.8', 'user-agent': userAgent } });
     if ([301,302,303,307,308].includes(r.status)) {
       const next = officialUri(new URL(r.headers.get('location') || '', current).toString(), domain);
       await r.body?.cancel(); if (!next || hop === 2) throw Error('OFFICIAL_REDIRECT_REJECTED'); current = next; continue;
