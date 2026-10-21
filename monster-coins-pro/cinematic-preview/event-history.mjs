@@ -13,7 +13,7 @@ export function createEventHistory(limit=180){
  return {
   observe(graph,{replay=false,origin='observed',now=new Date().toISOString()}={}){
    if(!graph?.valid)return;
-   for(const node of graph.nodes.filter(n=>n.id!=='brian')){
+   for(const node of graph.nodes){
     const signature=JSON.stringify([node.at,node.raw],(_,value)=>value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(k=>[k,value[k]])):value);
     const previous=[...records].reverse().find(r=>r.nodeId===node.id&&r.imported===replay);
     if(records.some(r=>r.nodeId===node.id&&r.imported===replay&&r.signature===signature))continue;
