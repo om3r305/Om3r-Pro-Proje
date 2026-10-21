@@ -36,7 +36,7 @@ Deno.test("acquireCollectorLease: true data means acquired", async () => {
 });
 
 Deno.test("acquireCollectorLease: false data means contended, not an error", async () => {
-  const { client } = mockClient({ brian_acquire_collector_lease: { data: false, error: null } });
+  const { client } = mockClient({ brian_acquire_collector_lease: { data: false, error: null }, brian_renew_collector_lease: { data: false, error: null } });
   assertEquals(await acquireCollectorLease(client, "brian-intrabar-eye", "token-1", 55), false);
 });
 
@@ -48,6 +48,77 @@ Deno.test("acquireCollectorLease: an RPC error is rethrown, not swallowed as con
 Deno.test("releaseCollectorLease: true data means released", async () => {
   const { client } = mockClient({ brian_release_collector_lease: { data: true, error: null } });
   assertEquals(await releaseCollectorLease(client, "brian-intrabar-eye", "token-1"), true);
+});
+
+Deno.test("acquireCollectorLease: recover a committed acquire whose response was lost", async () => {
+  const calls: RpcCall[] = [];
+  let attempts = 0;
+  const client: RpcClient = {
+    rpc(fn, params) {
+      calls.push({ fn, params });
+      if (fn === "brian_acquire_collector_lease") {
+        attempts++;
+        return Promise.resolve(attempts === 1
+          ? { data: null, error: new Error("response lost after commit") }
+          : { data: false, error: null });
+      }
+      return Promise.resolve({ data: fn === "brian_renew_collector_lease", error: null });
+    },
+  };
+  assertEquals(await acquireCollectorLease(client, "sandbox", "same-owner", 180), true);
+  assertEquals(calls.map((c) => c.params.p_owner_token), ["same-owner", "same-owner", "same-owner"]);
+});
+
+Deno.test("withCollectorLease: both acquire responses lost still requires confirmed ownership", async () => {
+  for (const ownsLease of [true, false]) {
+    const { client, calls } = mockClient({
+      brian_acquire_collector_lease: { data: null, error: new Error("timeout") },
+      brian_renew_collector_lease: { data: ownsLease, error: null },
+      brian_release_collector_lease: { data: true, error: null },
+    });
+    let runs = 0;
+    const run = () => withCollectorLease(client, "sandbox", 180, () => Promise.resolve(++runs));
+    if (ownsLease) {
+      assertEquals((await run()).value, 1);
+      assertEquals(runs, 1);
+      assertEquals(calls.at(-1)?.fn, "brian_release_collector_lease");
+    } else {
+      await assertRejects(run, Error, "timeout");
+      assertEquals(runs, 0);
+      assert(!calls.some((c) => c.fn === "brian_release_collector_lease"));
+    }
+  }
+});
+
+Deno.test("withCollectorLease: failed ownership confirmation never executes work", async () => {
+  const { client } = mockClient({
+    brian_acquire_collector_lease: { data: false, error: null },
+    brian_renew_collector_lease: { data: null, error: new Error("confirmation unavailable") },
+  });
+  let runs = 0;
+  await assertRejects(() => withCollectorLease(client, "sandbox", 180, () => Promise.resolve(++runs)), Error, "confirmation unavailable");
+  assertEquals(runs, 0);
+});
+
+Deno.test("acquireCollectorLease: actual HTTP aborts recover only through token confirmation", async () => {
+  let aborts = 0;
+  const client: RpcClient = {
+    rpc(fn) {
+      if (fn === "brian_renew_collector_lease") return Promise.resolve({ data: true, error: null });
+      return Object.assign(new Promise<{ data: unknown; error: unknown }>(() => {}), {
+        abortSignal(signal: AbortSignal) {
+          return new Promise<{ data: unknown; error: unknown }>((resolve) => {
+            signal.addEventListener("abort", () => {
+              aborts++;
+              resolve({ data: null, error: signal.reason });
+            }, { once: true });
+          });
+        },
+      });
+    },
+  };
+  assertEquals(await acquireCollectorLease(client, "sandbox", "same-owner", 6), true);
+  assertEquals(aborts, 2);
 });
 
 Deno.test("renewCollectorLease: true data means renewed", async () => {
@@ -66,7 +137,7 @@ Deno.test("renewCollectorLease: an RPC error is rethrown, not swallowed as lost 
 });
 
 Deno.test("withCollectorLease: contended acquire returns immediately without running work", async () => {
-  const { client, calls } = mockClient({ brian_acquire_collector_lease: { data: false, error: null } });
+  const { client, calls } = mockClient({ brian_acquire_collector_lease: { data: false, error: null }, brian_renew_collector_lease: { data: false, error: null } });
   let workRan = false;
   const result = await withCollectorLease(client, "brian-sensor-mesh", 240, () => {
     workRan = true;
@@ -74,7 +145,7 @@ Deno.test("withCollectorLease: contended acquire returns immediately without run
   });
   assertEquals(result.contended, true);
   assertEquals(workRan, false, "work must never run when the lease is contended");
-  assertEquals(calls.length, 1, "a contended lease must not call release -- there is nothing to release");
+  assertEquals(calls.map((c) => c.fn), ["brian_acquire_collector_lease", "brian_renew_collector_lease"], "confirm ownership without releasing another worker's lease");
   assertEquals(calls[0].fn, "brian_acquire_collector_lease");
   assertEquals(calls[0].params.p_collector_id, "brian-sensor-mesh");
   assertEquals(calls[0].params.p_lease_seconds, 240);
