@@ -98,7 +98,7 @@
   const sections = { research: 'predictionResearch', performance: 'shadowScorecard', news: 'opsFlow', system: 'opsControl' };
   const announce = state => { if (parent !== window) parent.postMessage({ type: 'brian-room-status', room: requestedRoom, state }, location.origin); };
   function openRequestedRoom() {
-    if (roomOpened || !requestedRoom) return;
+    if (roomOpened || !requestedRoom || window.__FRONTIER_COMPOSED_BOOT__) return;
     if (typeof key !== 'function' || !key()) { announce('locked'); return; }
     const actions = { meeting: () => $('openMeeting')?.click(), accounting: () => window.openTreasuryAccounting?.(), engineering: () => window.openBrianEngineeringRoom?.(), anatomy: () => window.openBrianAnatomy?.() };
     const available = { meeting: !!$('openMeeting'), accounting: typeof window.openTreasuryAccounting === 'function', engineering: typeof window.openBrianEngineeringRoom === 'function', anatomy: typeof window.openBrianAnatomy === 'function' };
