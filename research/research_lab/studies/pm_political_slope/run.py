@@ -64,7 +64,7 @@ def fetch_failures_too_high(failed: int, used: int) -> bool:
 
 
 class Http:
-    def __init__(self, min_interval_s: float = 0.12, max_requests: int = 60000):
+    def __init__(self, min_interval_s: float = 0.12, max_requests: int = 150000):
         self.min_interval_s = min_interval_s
         self.max_requests = max_requests
         self.count = 0
@@ -75,7 +75,8 @@ class Http:
         if host not in ALLOWED_HOSTS:
             raise ValueError(f"host not allowed: {host}")
         if self.count >= self.max_requests:
-            raise RuntimeError("request budget exhausted")
+            # Treated like a failed fetch: the affected listing/price is incomplete -> REVIEW_REQUIRED.
+            raise FetchFailed("request budget exhausted")
         for attempt in range(4):
             wait = self.min_interval_s - (time.monotonic() - self._last)
             if wait > 0:
@@ -165,6 +166,19 @@ def month_chunks(start: str, end: str) -> list[tuple[str, str]]:
     return out
 
 
+def week_chunks(start: str, end: str, days: int = 7) -> list[tuple[str, str]]:
+    """Split [start, end) into windows of `days` days so every listing can reach its last page
+    (month windows hit the page cap for Jul-Sep 2026 in run-3)."""
+    s, e = parse_ts(start), parse_ts(end)
+    out, cur = [], s
+    while cur < e:
+        hi = min(cur + days * 86400, e)
+        out.append((datetime.fromtimestamp(cur, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    datetime.fromtimestamp(hi, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")))
+        cur = hi
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -189,7 +203,7 @@ def main() -> int:
     seen = 0
     chunk_states: list[dict] = []
     def all_markets():
-        for lo, hi in month_chunks(args.start, args.end):
+        for lo, hi in week_chunks(args.start, args.end):
             st: dict = {"window": [lo, hi]}
             chunk_states.append(st)
             try:
@@ -235,7 +249,7 @@ def main() -> int:
     boot = cluster_bootstrap_slope(((r["event_id"], r["price_yes"], r["outcome_yes"]) for r in rows), resamples=args.resamples)
     n_events = len({r["event_id"] for r in rows})
     status, reason = decide(len(rows), n_events, boot["lower"], boot["upper"])
-    incomplete = [c["window"][0][:7] for c in chunk_states if not c.get("complete")]
+    incomplete = [c["window"][0][:10] for c in chunk_states if not c.get("complete")]
     if incomplete:
         # A truncated market list is a biased sample: never report it as PASS/FAIL.
         status, reason = "REVIEW_REQUIRED", f"market listing truncated in {incomplete}; sample may be biased"

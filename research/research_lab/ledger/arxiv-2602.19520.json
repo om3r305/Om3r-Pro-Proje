@@ -178,6 +178,10 @@
       {
         "change": "After run-2 aborted on one network failure (no result produced): a failed price fetch excludes that market (counted as HISTORY_FETCH_FAILED); more than 2% failures, or a failed month listing, is REVIEW_REQUIRED. Decision thresholds unchanged.",
         "stricter": true
+      },
+      {
+        "change": "After run-3 (Jul-Sep month listings hit the 4000-page cap; REVIEW_REQUIRED, kept): listing split into 7-day windows, each must reach its last page; request budget 150000 and its exhaustion counts as a failed fetch (REVIEW_REQUIRED), never a crash. Decision thresholds unchanged.",
+        "stricter": true
       }
     ]
   }

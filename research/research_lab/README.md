@@ -30,7 +30,7 @@ Plan ve gerekçe: [`docs/reviews/BRIAN_VISUAL_RESEARCH_LAB_PHASE0_20261020.md`](
 | Kaynak | Sınır |
 |---|---|
 | Çalıştırma süresi | 180 dk (workflow `timeout-minutes`) |
-| HTTP isteği | 60.000; istekler arası en az 0,12 sn; 401/403/451 alınırsa yeniden denenmez |
+| HTTP isteği | 150.000; bütçe dolarsa `REVIEW_REQUIRED`; istekler arası en az 0,12 sn; 401/403/451 alınırsa yeniden denenmez |
 | GPU / büyük indirme | 0; gerekirse kullanıcı onayı şart |
 | Ücretli API / model | 0 |
 | Veri | Yalnızca kamuya açık veri. Depo public olduğu için BRIAN'ın gizli verisi buraya girmez |
