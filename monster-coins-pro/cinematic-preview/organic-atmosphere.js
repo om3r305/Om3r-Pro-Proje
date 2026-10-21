@@ -17,8 +17,9 @@ export function createOrganicAtmosphere(scene,stage){
  void main(){float head=fract(flow.y+t*(.055+flow.w*.025));float p=head-flow.z*.10;float present=step(0.,p);p=clamp(p,0.,1.);float r=mix(1.,.055,p);float a=flow.x+.24*sin(p*3.14159+flow.x);vec3 q=vec3(cos(a)*r*7.1*aspect,sin(a)*r*5.,-1.8);gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.);gl_PointSize=clamp((2.6+energy*2.)*pixelScale*(1.-flow.z*.45),1.,8.);alpha=present*(1.-flow.z)*smoothstep(0.,.07,p)*(1.-smoothstep(.88,1.,p));}`,
  fragmentShader:`uniform vec3 tint;uniform vec3 eventTint;uniform float energy;uniform float strength;varying float alpha;void main(){float r=length(gl_PointCoord-.5);if(r>.5)discard;float glow=exp(-r*r*24.);vec3 color=mix(tint,eventTint,energy);gl_FragColor=vec4(color*(.65+energy*1.3),glow*alpha*(strength+energy*.55));}`});
  const points=new THREE.Points(geometry,material);points.frustumCulled=false;points.renderOrder=-1;scene.add(points);
- const cosmic=createCosmicScene(scene,stage);
+ const cosmic=createCosmicScene(stage);
  return {
+  renderEnvironment(renderer,camera){cosmic.render(renderer,camera);},
   observe(raw,graph,options){cosmic.observe(raw,graph,options);},
   pulse(color,mode){if(!policy.flowing)return;energy=1;events++;lastMode=mode;uniforms.eventTint.value.set(color);},
   update(dt,{fresh,replay,paused,mobile,quality,aspect,pixelScale,mood}){
