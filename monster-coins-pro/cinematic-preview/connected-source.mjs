@@ -1,4 +1,5 @@
-export const DATA_ROOT='https://qbcjuxhvhwagvqbjyemo.supabase.co/functions/v1';
+// Keep protected status reads on the verified same-origin web API route.
+export const DATA_ROOT='/api/brian';
 export const DASHBOARD_KEY='mcp-dashboard-key-v1';
 const FIELDS=['decision_id','compiler_version','observed_at','asset_id','observed_reference_price','action','direction','evidence_score','independent_group_count','support_groups','conflict_groups','source_cost_quote_id','estimated_round_trip_cost_bps','gross_edge_bps','net_edge_bps','veto_reason','reason','source_observation_ids','source_intrabar_event_ids'];
 export function decisionRecord(row){return Object.fromEntries(FIELDS.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));}
@@ -15,8 +16,8 @@ export async function readConnectedSource({fetcher=fetch,storage=localStorage,ti
  let key='';try{key=(storage.getItem(DASHBOARD_KEY)||'').trim();}catch{}
  if(!key)return {heartbeat,decisions:[],connection:'public',matched:false,fetchedAt:new Date().toISOString()};
  try{
-  const res=await fetcher(DATA_ROOT+'/brian-control-center',{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'}),credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(timeout)});
-  if(!res.ok)return {heartbeat,decisions:[],connection:res.status===401||res.status===403?'locked':'unavailable',matched:false,fetchedAt:new Date().toISOString()};
+  const res=await fetcher(DATA_ROOT+'/brian-control-center',{method:'POST',headers:{'content-type':'application/json','x-brian-dashboard-key':key},body:JSON.stringify({action:'status'}),credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(Math.max(timeout,30000))});
+  if(!res.ok)return {heartbeat,decisions:[],connection:res.status===401||res.status===403?'locked':'unavailable',matched:false,connectionDetail:'HTTP '+res.status,fetchedAt:new Date().toISOString()};
   const control=await res.json(),result=connectDecision(heartbeat,control);return {...result,connection:'authenticated',fetchedAt:new Date().toISOString()};
- }catch{return {heartbeat,decisions:[],connection:'unavailable',matched:false,fetchedAt:new Date().toISOString()};}
+ }catch(error){return {heartbeat,decisions:[],connection:'unavailable',matched:false,connectionDetail:['TimeoutError','AbortError','SyntaxError','TypeError'].includes(error?.name)?error.name:'REQUEST_FAILED',fetchedAt:new Date().toISOString()};}
 }
