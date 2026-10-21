@@ -52,6 +52,7 @@ function rebuildScene(){networkScene.remove(network);dispose(network);network=ne
  labelSizes=labels.map(el=>({w:el.offsetWidth,h:el.offsetHeight}));$('labelLeaders').innerHTML=nodes.map(()=>'<line/>').join('');leaderEls=[...$('labelLeaders').children];$('sceneCounts').textContent=String(nodes.length).padStart(2,'0')+' NODE / '+String(state.graph.edges.length).padStart(2,'0')+' LINK';
 }
 const journeyPanel=document.createElement('div');journeyPanel.id='journeyPanel';document.querySelector('.scene-overlay').append(journeyPanel);
+const sourcePanels=document.createElement('details');sourcePanels.id='sourcePanels';sourcePanels.className='source-panels';const sourceSummary=document.createElement('summary');sourceSummary.textContent='Canlı kaynak panelleri / ALPHA · Dünya · Haber hattı';sourcePanels.append(sourceSummary);$('commandView').before(sourcePanels);sourcePanels.append($('commandView'));
 const reviewButton=document.createElement('button');reviewButton.id='openEventReview';reviewButton.className='text-button';reviewButton.textContent='↶ Geçmişi ve gerekçeyi incele';document.querySelector('.inspector').append(reviewButton);reviewButton.onclick=()=>eventReview.open(state.selected);
 const healthPanel=document.createElement('div');healthPanel.id='healthPanel';document.querySelector('.feed-health .section-head').after(healthPanel);
 let journeyKey='',healthKey='';
