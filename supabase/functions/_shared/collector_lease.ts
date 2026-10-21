@@ -3,7 +3,7 @@ import postgres from "npm:postgres@3.4.7";
 // Collector-level atomic lease/mutex for Brian collectors.
 //
 // The database lease remains the source of truth. This client wrapper adds bounded retry and
-// structured error normalization around the three idempotent lease RPCs so a transient
+// structured error normalization around the lease RPCs so a transient
 // PostgREST/schema-cache/connection wobble does not immediately take every collector down with
 // an opaque "[object Object]" failure.
 
@@ -116,6 +116,7 @@ async function rpcWithRetry(
   client: RpcClient,
   fn: string,
   params: Record<string, unknown>,
+  timeoutMs = RPC_TIMEOUT_MS,
 ): Promise<unknown> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= RPC_ATTEMPTS; attempt++) {
@@ -123,12 +124,12 @@ async function rpcWithRetry(
     try {
       const request = client.rpc(fn, params) as AbortableRpcRequest;
       if (typeof request?.abortSignal === "function") {
-        result = await request.abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS));
+        result = await request.abortSignal(AbortSignal.timeout(timeoutMs));
       } else {
         result = await new Promise<RpcResult>((resolve, reject) => {
           const timer = setTimeout(
-            () => reject(new Error(`${fn} timeout after ${RPC_TIMEOUT_MS}ms`)),
-            RPC_TIMEOUT_MS,
+            () => reject(new Error(`${fn} timeout after ${timeoutMs}ms`)),
+            timeoutMs,
           );
           Promise.resolve(request).then(
             (value) => {
@@ -164,13 +165,31 @@ export async function acquireCollectorLease(
   leaseSeconds: number,
 ): Promise<boolean> {
   const direct = await directLeaseCall("acquire", collectorId, ownerToken, leaseSeconds);
-  if (direct !== null) return direct;
-  const data = await rpcWithRetry(client, "brian_acquire_collector_lease", {
-    p_collector_id: collectorId,
-    p_owner_token: ownerToken,
-    p_lease_seconds: leaseSeconds,
-  });
-  return data === true;
+  if (direct === true) return true;
+  let acquireError: unknown;
+  if (direct === null) {
+    try {
+      const data = await rpcWithRetry(client, "brian_acquire_collector_lease", {
+        p_collector_id: collectorId,
+        p_owner_token: ownerToken,
+        p_lease_seconds: leaseSeconds,
+      }, Math.min(15_000, Math.max(1_000, leaseSeconds * 1000 / 6)));
+      if (data === true) return true;
+    } catch (error) {
+      acquireError = error;
+    }
+  }
+  // Aborting HTTP does not prove that the database rolled back. A lost response
+  // can leave OUR active token in the row, which acquire then reports as blocked.
+  // Renew atomically checks BOTH the token and expiry; it cannot steal another
+  // worker's lease or revive an expired one. Never run work on a guessed success.
+  try {
+    if (await renewCollectorLease(client, collectorId, ownerToken, leaseSeconds)) return true;
+  } catch (error) {
+    if (!acquireError) throw error;
+  }
+  if (acquireError) throw acquireError;
+  return false;
 }
 
 export async function renewCollectorLease(
