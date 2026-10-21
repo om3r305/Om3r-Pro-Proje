@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id),esc=v=>String(v??'—').replace(/[&<>"']
 const display=v=>typeof v==='object'?JSON.stringify(v):String(v??'—');
 const clock=v=>Number.isFinite(Date.parse(v))?new Date(v).toLocaleTimeString('tr-TR',{hour12:false}):'—';
 export function createResonance({onCue,onMood}){
- const stream=createRecordStream();let active=null,elapsed=0,lastPhase=-1,offline=false,graph=null,ledger=[];
+ const stream=createRecordStream();let active=null,elapsed=0,lastPhase=-1,offline=false,graph=null,ledger=[],imported=false;
  function paint(record,mode){
   record={...record,delta:record.delta||[],observedAt:record.observedAt||graph?.at,mode:record.mode||'baseline'};
   if(record.mode==='import')mode='import';
@@ -29,11 +29,11 @@ export function createResonance({onCue,onMood}){
  document.addEventListener('click',e=>{const b=e.target.closest('[data-select]');if(b)focus(b.dataset.select);});
  return {
   focus,
-  observe(g,options){graph=g;const added=stream.observe(g,options);renderLedger();if(!active&&added.length){const first=added.find(n=>n.id==='alpha')||added[0];paint(first,'baseline');elapsed=8;}},
+  observe(g,options){if(!!options?.replay!==imported){active=null;imported=!!options?.replay;}graph=g;const added=stream.observe(g,options);renderLedger();if(!active&&added.length){const first=added.find(n=>n.id==='alpha')||added[0];paint(first,'baseline');elapsed=8;}},
   health(g,degraded){graph=g;offline=degraded||!g?.fresh;},
   tick(dt,{offline:degraded=false,reduced=false}={}){
    if(!active)return;document.body.classList.toggle('res-motion-paused',reduced);offline=degraded||!graph?.fresh;
-   if(offline){stream.clear();document.body.style.setProperty('--event-energy','0');document.body.dataset.resonance='offline';$('resMode').textContent='KAYNAK ESKİ / BAĞLANTI YOK · SON KAYIT';return;}
+   if(offline){stream.clear();document.body.style.setProperty('--event-energy','0');document.body.dataset.resonance='offline';$('resMode').textContent=(imported?'İÇE AKTARILMIŞ KAYIT / CANLI DEĞİL · ':'')+'KAYNAK ESKİ / BAĞLANTI YOK · SON KAYIT';return;}
    elapsed+=dt;
    if(elapsed>8){const next=stream.next();if(next)paint(next,next.mode);else document.body.dataset.resonance='idle';}
    const phase=phaseAt(elapsed);if(phase!==lastPhase){lastPhase=phase;document.body.dataset.resPhase=String(phase);document.querySelectorAll('#resPhases li').forEach((li,i)=>{li.classList.toggle('done',i<phase);li.classList.toggle('current',i===phase);});}
