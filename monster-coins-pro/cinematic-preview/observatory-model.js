@@ -9,7 +9,7 @@
   const current=(at,ttl)=>{const t=Date.parse(at||'');return Number.isFinite(t)&&t<=now&&now-t<=ttl;};
   const fresh=current(h.observed_at,120000)&&!h.__cached&&!h.transport_degraded;
   const nodes=[],edges=[];
-  const add=(id,label,path,raw,ttl=1200000,group='core')=>{if(!raw||typeof raw!=='object'||Array.isArray(raw))return;const at=stamp(raw);const failed=raw.status==='FAILED'||raw.status==='ERROR';const n={id,label,path,raw,at,group,state:failed?'failed':fresh&&current(at,ttl)?'current':'stale',record_id:raw.id||raw.run_id||raw.source_decision_id||raw.snapshot_id||null};nodes.push(n);if(id!=='brian')edges.push({from:'brian',to:id,type:'contains-record',path});return n;};
+  const add=(id,label,path,raw,ttl=1200000,group='core')=>{if(!raw||typeof raw!=='object'||Array.isArray(raw))return;const at=stamp(raw);const failed=raw.status==='FAILED'||raw.status==='ERROR';const n={id,label,path,raw,at,group,state:failed?'failed':fresh&&current(at,ttl)?'current':'stale',record_id:raw.decision_id||raw.id||raw.run_id||raw.source_decision_id||raw.snapshot_id||null};nodes.push(n);if(id!=='brian')edges.push({from:'brian',to:id,type:'contains-record',path});return n;};
   add('brian','BRIAN','/',{status:h.status,observed_at:h.observed_at,source:h.source,read_only:h.read_only,shadow_only:h.shadow_only,live_execution:h.live_execution},120000);
   add('world','Dünya istihbaratı','/world_run',h.world_run);
   add('alpha','ALPHA karar','/alpha',h.alpha,420000);
