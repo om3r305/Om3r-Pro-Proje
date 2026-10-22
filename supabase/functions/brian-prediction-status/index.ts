@@ -33,7 +33,8 @@ Deno.serve(async (req: Request) => {
       return response({ ...(cache.body as object), cache_age_seconds: (Date.now() - cache.at) / 1000 });
     }
     const parts: { prediction: unknown; calibrationInputs: unknown; pilot: unknown; research: unknown } = { prediction: null, calibrationInputs: null, pilot: null, research: null };
-    const errors: { prediction?: string; calibration?: string; pilot?: string; research?: string } = {};
+    let integration: unknown = null;
+    const errors: { prediction?: string; calibration?: string; pilot?: string; research?: string; integration?: string } = {};
     let observedAt = new Date();
     await sql.begin(async (tx) => {
       await tx`set local statement_timeout = '8s'`;
@@ -52,8 +53,13 @@ Deno.serve(async (req: Request) => {
       parts.calibrationInputs = await read("calibration", async () => (await tx`select public.brian_prediction_calibration_inputs_v1(transaction_timestamp(), interval '24 hours') as v`)[0].v);
       parts.pilot = await read("pilot", async () => (await tx`select public.brian_niulai4_pilot_status_v1(transaction_timestamp()) as v`)[0].v);
       parts.research = await read("research", async () => (await tx`select public.brian_research_status_v1(transaction_timestamp()) as v`)[0].v);
+      integration = await read("integration", async () => (await tx`select public.brian_treasury_integration_status_v1(transaction_timestamp()) as v`)[0].v);
     });
-    const body = buildPredictionStatus(parts, errors, observedAt);
+    // Whole-system wiring (treasury, evidence ledger, sensors, studies, local collectors): see the UI contract.
+    const body = {
+      ...buildPredictionStatus(parts, errors, observedAt),
+      integration: integration ?? { status: "UNAVAILABLE", error: errors.integration ?? "READ_FAILED", integrated: false },
+    };
     cache = { body, at: Date.now() };
     return response({ ...body, cache_age_seconds: 0 });
   } catch (e) {

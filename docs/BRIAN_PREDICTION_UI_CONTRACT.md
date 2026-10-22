@@ -226,3 +226,15 @@ Deney koşucusu (jobid 44, her saat :27) ve terfi kurulu (jobid 45, her saat :34
 - Tazelik sunucuda hesaplanır (`status` + `stale_after_seconds`). Arayüz kendi saatine göre yeniden "taze" kararı vermez; yalnızca "x dk önce" metni üretir.
 - Yanıt 503 ya da ağ hatası verdiyse ekrandaki son veri "eski (son başarılı: …)" etiketiyle kalabilir. Yeni veri gibi gösterilemez.
 - Sayısal alan `null` ise arayüz "—" ya da "veri yok" gösterir, `0` göstermez.
+
+## 8. `integration` — tüm sistemin bağlılık durumu (23 Ekim, `brian.integration-status.v1`)
+
+`brian-prediction-status` yanıtına `integration` alanı eklendi (aynı POST, aynı anahtar). Kaynak: `public.brian_treasury_integration_status_v1()`.
+
+- `integrated` (bool): kasaya veri besleyen her parça (`feeds_treasury`: treasury, unified, evidence, prediction_eye) `OK` ve izlenen cron işlerinin hepsi aktifse `true`. UI bunu tek rozet olarak göstermeli: **Entegre** / **Kopukluk var**.
+- `components.<ad>.status`: `OK` | `STALE` | `OFF` | `LOCAL_ONLY`. `LOCAL_ONLY` hata değildir (OFI şu an PC'de çalışıyor); gri göster.
+- `components.treasury`: `equity_usd`, `cash_usd`, `deployment_pct`, `blocked_reasons[0]` (neden nakitte durduğunu tek cümleyle gösterir).
+- `components.evidence`: `segments`, `segments_clearing_cost` (masrafı geçen sinyal ailesi sayısı; 0 ise kasa bilerek nakitte), `lanes.{MULTIASSET_EVENT_REACTION,CANONICAL_ALPHA}.n7d`.
+- `components.pm_calibration`, `niulai4`, `ofi`, `opportunity_audit`: ayrı deneyler; `role` metni neden kasaya doğrudan bağlı olmadıklarını açıklar, olduğu gibi gösterilebilir.
+- Okuma başarısızsa `integration = {status:"UNAVAILABLE", integrated:false}` gelir; UI bunu "bilinmiyor" göstermeli, asla "entegre" değil.
+- Hiçbir alan işlem sinyali değildir (`trade_signal:false`).
