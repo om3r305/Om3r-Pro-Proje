@@ -25,7 +25,10 @@ import {
   UNIFIED_POSITION_PREFIX,
   UNIFIED_TREASURY_VERSION,
   buildUnifiedOpportunities,
+  newsClassOf,
   parseSegmentEdges,
+  signalFromCanonical,
+  signalFromMultiasset,
   type SegmentEdge,
 } from "../_shared/evolution_treasury_unified.ts";
 import {
@@ -316,7 +319,10 @@ async function loadOpportunities(state: TreasuryState, nowIso: string): Promise<
   return opportunities;
 }
 
-async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIso: string): Promise<CanonicalAlphaShadowOpportunity[]> {
+async function loadCanonicalAlphaShadowOpportunities(
+  state: TreasuryState,
+  nowIso: string,
+): Promise<{ rows: CanonicalAlphaDecisionRow[]; opportunities: CanonicalAlphaShadowOpportunity[] }> {
   const nowMs = Date.parse(nowIso);
   if (!Number.isFinite(nowMs)) throw new Error("treasury_alpha_shadow: invalid cycle timestamp");
   const since = new Date(nowMs - CANONICAL_ALPHA_SHADOW_MAINTENANCE_MAX_AGE_SECONDS * 1000).toISOString();
@@ -348,7 +354,7 @@ async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIs
       l2RuntimeStatus: metadata.l2_runtime_status == null ? null : String(metadata.l2_runtime_status),
     };
   });
-  return buildCanonicalAlphaShadowOpportunities(rows, state.positions, nowIso);
+  return { rows, opportunities: buildCanonicalAlphaShadowOpportunities(rows, state.positions, nowIso) };
 }
 
 async function loadMultiassetShadowOpportunities(
@@ -398,11 +404,23 @@ async function loadUnifiedEnabled(): Promise<boolean> {
   return !q.error && String(q.data?.config_value ?? "") === "true";
 }
 
-// Segment evidence from point-in-time realised outcomes; an error yields no evidence (no entries).
+// Segment evidence from point-in-time realised outcomes (hourly cache: lane x class x direction x
+// news reliability); an error yields no evidence, i.e. no entries.
 async function loadSegmentEdges(): Promise<{ segments: SegmentEdge[]; error: string | null }> {
-  const q = await db.rpc("brian_treasury_segment_edges_v1", { p_days: 7 });
+  const q = await db.rpc("brian_treasury_segment_edges_v2");
   if (q.error) return { segments: [], error: q.error.message };
   return { segments: parseSegmentEdges(q.data), error: null };
+}
+
+// Trust class of the news each multiasset signal reacted to (one indexed lookup per cycle).
+async function loadNewsTrust(rows: MultiassetAlphaDecisionRow[]): Promise<Map<string, string>> {
+  const ids = [...new Set(rows.flatMap((row) => row.linkedEventIds))].slice(0, 500);
+  const trust = new Map<string, string>();
+  if (!ids.length) return trust;
+  const q = await db.from("brian_intel_events").select("event_id,trust_class").in("event_id", ids);
+  if (q.error) throw new Error(`treasury_news_trust:${q.error.message}`);
+  for (const row of q.data ?? []) trust.set(String(row.event_id), String(row.trust_class ?? ""));
+  return trust;
 }
 
 async function commitCycle(input: {
@@ -535,7 +553,7 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities, alphaShadowOpportunities, multiasset, unifiedEnabled, segmentEdges] = await Promise.all([
+      const [promotionGate, opportunities, canonical, multiasset, unifiedEnabled, segmentEdges] = await Promise.all([
         loadPromotionGate(),
         loadOpportunities(loaded.state, observedAt),
         loadCanonicalAlphaShadowOpportunities(loaded.state, observedAt),
@@ -544,7 +562,13 @@ Deno.serve(async (req: Request) => {
         loadSegmentEdges(),
       ]);
       const multiassetShadowOpportunities = multiasset.opportunities;
-      const unified = buildUnifiedOpportunities(multiasset.rows, segmentEdges.segments, loaded.state.positions, observedAt);
+      const alphaShadowOpportunities = canonical.opportunities;
+      const newsTrust = await loadNewsTrust(multiasset.rows);
+      const signals = [
+        ...multiasset.rows.map((row) => signalFromMultiasset(row, newsClassOf(row.linkedEventIds, newsTrust))),
+        ...canonical.rows.map(signalFromCanonical),
+      ];
+      const unified = buildUnifiedOpportunities(signals, segmentEdges.segments, loaded.state.positions, observedAt);
       const plan = planPromotionGatedTreasuryCycle({
         state: loaded.state,
         opportunities,

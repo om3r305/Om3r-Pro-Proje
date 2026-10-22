@@ -2,9 +2,15 @@ import { assert, assertAlmostEquals, assertEquals } from "jsr:@std/assert@1";
 import { initialTreasuryState, planTreasuryCycle, type TreasuryState } from "./evolution_treasury.ts";
 import { planPromotionGatedTreasuryCycle } from "./evolution_treasury_gate.ts";
 import type { MultiassetAlphaDecisionRow } from "./evolution_treasury_multiasset_shadow.ts";
+import type { CanonicalAlphaDecisionRow } from "./evolution_treasury_alpha_shadow.ts";
 import {
   buildUnifiedOpportunities,
+  newsClassOf,
+  parseSegmentEdges,
   segmentVerdict,
+  signalFromCanonical,
+  signalFromMultiasset,
+  UNIFIED_LANES,
   UNIFIED_POSITION_PREFIX,
   UNIFIED_RULES,
   type SegmentEdge,
@@ -14,7 +20,7 @@ const NOW = "2026-10-22T14:00:00.000Z";
 const at = (minutesAgo: number) => new Date(Date.parse(NOW) - minutesAgo * 60_000).toISOString();
 const lane = UNIFIED_RULES.lane;
 
-function row(over: Partial<MultiassetAlphaDecisionRow> = {}): MultiassetAlphaDecisionRow {
+function maRow(over: Partial<MultiassetAlphaDecisionRow> = {}): MultiassetAlphaDecisionRow {
   return {
     decisionId: "d1", observedAt: at(2), assetId: "equity:AAA", assetClass: "equity", providerTime: at(4),
     referencePrice: 100, action: "OPEN_LONG", direction: 1, evidenceScore: 0.8, independentGroupCount: 4,
@@ -23,8 +29,9 @@ function row(over: Partial<MultiassetAlphaDecisionRow> = {}): MultiassetAlphaDec
     shadowOnly: true, liveExecution: false, metadata: {}, ...over,
   };
 }
+const row = (over: Partial<MultiassetAlphaDecisionRow> = {}, news = "NONE") => signalFromMultiasset(maRow(over), news);
 const seg = (over: Partial<SegmentEdge> = {}): SegmentEdge =>
-  ({ lane, assetClass: "equity", direction: 1, n: 400, grossBps: 40, seBps: 3, hitRate: 0.62, ...over });
+  ({ lane, assetClass: "equity", direction: 1, newsClass: "NONE", n: 400, grossBps: 40, seBps: 3, hitRate: 0.62, ...over });
 const gate = { authorized: false, reason: "no EXPECTED_EDGE promotion", evidenceRef: null } as never;
 
 Deno.test("segment verdict: shrinks gross toward zero, subtracts one SE and the cost; refuses thin evidence", () => {
@@ -108,4 +115,30 @@ Deno.test("unified OFF keeps the previous behaviour (promotion gate wording, mic
   assert(plan.blockedReasons.some((r) => r.startsWith("layer4 promotion gate closed")));
   assertEquals(plan.multiassetShadow.enabled, true);
   assertEquals(plan.unified?.enabled, false);
+});
+
+Deno.test("crypto lane: canonical alpha decisions use their own CANONICAL_ALPHA evidence", () => {
+  const c = signalFromCanonical({
+    decisionId: "c1", observedAt: at(1), assetId: "crypto:BTCUSDT", referencePrice: 60_000, action: "OPEN_SHORT", direction: -1,
+    estimatedRoundTripCostBps: 8, independentGroupCount: 3, vetoReason: null, shadowOnly: true, liveExecution: false,
+  } as unknown as CanonicalAlphaDecisionRow);
+  assertEquals([c.lane, c.assetClass, c.newsClass, c.sessionState], [UNIFIED_LANES.crypto, "crypto", "NONE", "REGULAR"]);
+  const cryptoSeg = seg({ lane: UNIFIED_LANES.crypto, assetClass: "crypto", direction: -1 });
+  assertEquals(buildUnifiedOpportunities([c], [cryptoSeg], [], NOW).opportunities[0]?.recommendation, "ALLOW_EDGE");
+  const wrongLane = buildUnifiedOpportunities([c], [seg({ assetClass: "crypto", direction: -1 })], [], NOW);
+  assertEquals(wrongLane.opportunities.length, 0, "multiasset evidence never licenses a crypto trade");
+  assertEquals(wrongLane.verdicts[0].reason, "NO_SEGMENT");
+});
+
+Deno.test("news reliability: evidence is split by the best trust class of the linked news", () => {
+  const trust = new Map([["e1", "OFFICIAL_PRIMARY"], ["e2", "INDEPENDENT_PROFESSIONAL"], ["e3", "SOCIAL"]]);
+  assertEquals(newsClassOf([], trust), "NONE");
+  assertEquals(newsClassOf(["e3", "e1"], trust), "OFFICIAL");
+  assertEquals(newsClassOf(["e2", "e3"], trust), "PROFESSIONAL");
+  assertEquals(newsClassOf(["e3"], trust), "UNVERIFIED");
+  assertEquals(newsClassOf(["missing"], trust), "UNKNOWN");
+  const segs = [seg({ newsClass: "OFFICIAL" }), seg({ newsClass: "UNVERIFIED", grossBps: 5 })];
+  assertEquals(buildUnifiedOpportunities([row({}, "OFFICIAL")], segs, [], NOW).opportunities.length, 1);
+  assertEquals(buildUnifiedOpportunities([row({}, "UNVERIFIED")], segs, [], NOW).opportunities.length, 0);
+  assertEquals(parseSegmentEdges([{ lane, asset_class: "equity", direction: 1, n: 1, gross_bps: 1, se_bps: 1, hit_rate: 0.5 }])[0].newsClass, "NONE");
 });
