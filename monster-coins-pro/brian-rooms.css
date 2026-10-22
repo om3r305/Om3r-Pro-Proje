@@ -5,6 +5,9 @@ body.brian-room-surface :is(button,input,select,textarea){font-family:inherit}
 body.brian-room-surface :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--br-ice)!important;outline-offset:4px}
 #roomDialog{padding:0;width:calc(100vw - 32px);max-width:2400px;height:calc(100dvh - 32px);max-height:none;border:1px solid #64738b;border-radius:12px;background:var(--br-bg);color:var(--br-text);box-shadow:0 30px 100px #000c;overflow:hidden}
 #roomDialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr)}
+#roomDialog>header{grid-row:1;order:0}
+#roomDialog>.room-switcher{grid-row:2;order:0;align-items:center;min-height:64px;box-sizing:border-box}
+#roomDialog>#roomFrame{grid-row:3;order:0}
 #roomDialog::backdrop{background:#01050bd9;backdrop-filter:blur(7px)}
 #roomDialog>header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 26px;border-bottom:1px solid var(--br-edge);background:linear-gradient(100deg,#111a27,#070b12 70%);position:relative;isolation:isolate;overflow:hidden}
 #roomDialog>header:before{content:'';position:absolute;right:-80px;top:-100px;width:340px;height:280px;background:url('/cinematic-preview/assets/organic-membrane-v1.png') center/contain no-repeat;opacity:.2;z-index:-1;pointer-events:none}
@@ -65,7 +68,7 @@ body[data-workspace-room] .workspace-room-target{display:block!important;margin:
 body[data-workspace-room] .workspace-room-target .ops-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
 @media(min-width:1800px){.brian-room-surface .ar-stats{grid-template-columns:repeat(4,minmax(0,1fr))}.brian-room-surface .ar-charts{grid-template-columns:1.6fr 1fr!important}.brian-room-surface :is(.ar-card,.er-card){padding:26px!important}.brian-room-surface :is(.ar-hero,.er-hero){padding:32px!important}}
 @media(max-width:760px){
- #roomDialog{width:100%;height:100dvh;max-width:none;margin:0;border:0;border-radius:0}
+ #roomDialog{width:100vw;height:100dvh;max-width:none;margin:0;border:0;border-radius:0;box-sizing:border-box;inset:0}
  #roomDialog>header{padding:calc(14px + env(safe-area-inset-top)) 14px 12px;align-items:flex-start;gap:12px;flex-wrap:wrap}
  #roomDialog .room-eyebrow{font-size:9px}#roomDialog h2{font-size:25px}
  #roomDialog .room-actions{width:100%;display:grid;grid-template-columns:auto 1fr 44px}
