@@ -1,4 +1,4 @@
-import {createWorkspaceRooms} from './workspace-rooms.mjs';
+import {createWorkspaceRooms} from './workspace-rooms.mjs?v=20261022-rooms1';
 import {mobileLabelLayout,createMobileCommand} from './mobile-layout.mjs';
 import {recordSummary} from './record-details.mjs';
 import {resolveDesktopLabels} from './desktop-layout.mjs';

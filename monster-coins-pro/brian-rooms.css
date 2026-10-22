@@ -1,0 +1,97 @@
+/* Shared Organic Intelligence skin. Existing room handlers and data contracts own behavior. */
+:root{--br-bg:#060b10;--br-panel:#0c131c;--br-edge:#354253;--br-text:#e2e8f0;--br-muted:#9caabd;--br-ice:#b9d4ed}
+body.brian-room-surface{background:var(--br-bg);color:var(--br-text);color-scheme:dark}
+body.brian-room-surface :is(button,input,select,textarea){font-family:inherit}
+body.brian-room-surface :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--br-ice)!important;outline-offset:4px}
+#roomDialog{padding:0;width:calc(100vw - 32px);max-width:2400px;height:calc(100dvh - 32px);max-height:none;border:1px solid #64738b;border-radius:12px;background:var(--br-bg);color:var(--br-text);box-shadow:0 30px 100px #000c;overflow:hidden}
+#roomDialog[open]{display:grid;grid-template-rows:auto auto minmax(0,1fr)}
+#roomDialog>header{grid-row:1;order:0}
+#roomDialog>.room-switcher{grid-row:2;order:0;align-items:center;min-height:64px;box-sizing:border-box}
+#roomDialog>#roomFrame{grid-row:3;order:0}
+#roomDialog::backdrop{background:#01050bd9;backdrop-filter:blur(7px)}
+#roomDialog>header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 26px;border-bottom:1px solid var(--br-edge);background:linear-gradient(100deg,#111a27,#070b12 70%);position:relative;isolation:isolate;overflow:hidden}
+#roomDialog>header:before{content:'';position:absolute;right:-80px;top:-100px;width:340px;height:280px;background:url('/cinematic-preview/assets/organic-membrane-v1.png') center/contain no-repeat;opacity:.2;z-index:-1;pointer-events:none}
+#roomDialog .room-eyebrow{font:10px/1.5 ui-monospace,monospace;letter-spacing:.16em;color:#a9bcd3;margin:0 0 6px}
+#roomDialog h2{font:500 clamp(22px,2vw,32px)/1.2 system-ui;margin:0;letter-spacing:-.03em}
+#roomDialog #roomStatus{font:12px/1.6 system-ui;color:var(--br-muted);margin:8px 0 0;max-width:840px}
+#roomDialog .room-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#roomDialog :is(button,a){min-height:44px;border:1px solid var(--br-edge);border-radius:6px;padding:10px 14px;background:#111a25;color:var(--br-text);font:12px/1.4 system-ui;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+#roomDialog :is(button,a):hover{border-color:#91a4bf;background:#1a2838}
+#roomDialog #roomClose{font-size:18px;min-width:44px}
+#roomDialog .room-switcher{display:flex;gap:6px;padding:10px 24px;overflow-x:auto;border-bottom:1px solid var(--br-edge);background:#090f17;scrollbar-width:thin}
+#roomDialog .room-switcher button{flex:0 0 auto;gap:8px;color:var(--br-muted)}
+#roomDialog .room-switcher button[aria-current=page]{border-color:#a8bdd8;color:#eef5ff;background:linear-gradient(120deg,#263649,#121b28);box-shadow:inset 0 -2px #c4d7ed}
+#roomDialog .room-switcher small{font:9px monospace;color:#7b91aa}
+#roomDialog iframe{border:0;width:100%;height:100%;min-height:0;background:var(--br-bg)}
+/* All legacy rooms keep their own meaningful state colors, charts and controls. */
+.brian-room-surface :is(#treasuryAccountingRoom,#brianEngineeringRoomV2,#brianAnatomyLive){background:radial-gradient(ellipse at 80% 0,#1a253944,transparent 55%),var(--br-bg)!important;color:var(--br-text)!important}
+.brian-room-surface :is(.ar-wrap,.er-wrap,.an-shell){width:min(100%,2200px)!important;max-width:2200px!important;margin:auto!important;padding-inline:clamp(16px,3vw,64px)!important}
+.brian-room-surface :is(.ar-top,.er-top,.an-header,#meetingModal .modal-top){background:#080e17f5!important;border-bottom:1px solid #52617a!important;backdrop-filter:blur(12px);gap:16px;flex-wrap:wrap}
+.brian-room-surface :is(.ar-top,.er-top,.an-header){padding-block:20px!important}
+.brian-room-surface :is(.ar-top,.er-top,.an-header,#meetingModal .modal-top) :is(h1,h2,.section-title){font-weight:500!important;letter-spacing:-.025em;color:#e6edf7!important}
+.brian-room-surface :is(.ar-body,.er-body){padding-top:24px!important;gap:20px!important}
+.brian-room-surface :is(.ar-card,.ar-stat,.er-card,.er-stat,.an-card,.an-stat,.cv-panel,.cv-summary,.cv-detail,.cv-log,.prediction-card,#workspaceStatus){background:linear-gradient(135deg,#101925ee,#090f18f5)!important;border:1px solid var(--br-edge)!important;border-radius:9px!important;box-shadow:inset 0 1px #b8c9e80a!important;min-width:0}
+.brian-room-surface :is(.ar-hero,.er-hero,.cv-stage){background:radial-gradient(ellipse at 95% 15%,#68759922,transparent 60%),#0b131e!important;border:1px solid #5d6a82!important;border-radius:12px!important;position:relative;isolation:isolate;overflow:hidden}
+.brian-room-surface :is(.ar-hero,.er-hero):before{content:'';position:absolute;right:-90px;top:-90px;width:320px;height:320px;background:url('/cinematic-preview/assets/organic-membrane-v1.png') center/contain no-repeat;opacity:.17;z-index:-1;pointer-events:none}
+.brian-room-surface :is(.ar-label,.er-kicker,.cv-eyebrow,.an-eyebrow){color:#b1c2d8!important;font:10px/1.6 ui-monospace,monospace!important;letter-spacing:.12em!important}
+.brian-room-surface :is(.ar-body,.er-body,.cv,.an-shell) :is(p,dt,small){color:#aab8ca}
+.brian-room-surface :is(.ar-equity,.ar-stat b,.er-stat b,.an-stat b){font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:#e8eff9}
+.brian-room-surface :is(#treasuryAccountingRoom,#brianEngineeringRoomV2,#brianAnatomyLive,#meetingModal) :is(button:not(.cv-node):not(.an-organ),select,input:not([type=range])){min-height:44px;background-color:#131d2a!important;border:1px solid #46556d!important;color:#dfe8f4!important;border-radius:6px!important}
+.brian-room-surface :is(#arClose,#berClose,.an-close){background:#243348!important;color:#edf4ff!important;border-color:#8f9fb7!important}
+.brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs) button[aria-pressed=true],.brian-room-surface .cv-tabs button[aria-selected=true]{color:#edf4ff!important;background:#2a384d!important;border-color:#a5b9d7!important;box-shadow:inset 0 -2px #b6cbe6}
+.brian-room-surface :is(.ar-toolbar,.er-controls){gap:16px!important;flex-wrap:wrap}
+.brian-room-surface :is(.ar-row,.er-row,.cv-row,.an-row){border-color:#344155!important}
+.brian-room-surface :is(pre,code){color:#c5d5e9;overflow-wrap:anywhere}
+.brian-room-surface pre{max-width:100%;overflow:auto;background:#060d17!important;border:1px solid #2b394d;border-radius:6px;padding:14px}
+.brian-room-surface .ar-chart polyline{stroke:#bfd3ec}
+.brian-room-surface .ar-chart circle{fill:#e1edff;stroke:#6c8bac}
+.brian-room-surface .ar-chart text{fill:#afbed1}
+.brian-room-surface .ar-range{accent-color:#bdd1e9}
+.brian-room-surface .ar-good{color:#8ed8b8!important}.brian-room-surface .ar-bad{color:#f49aa8!important}
+.brian-room-surface #meetingModal .modal-card{background:linear-gradient(145deg,#101823,#070d15)!important;border-radius:12px!important;border-color:#66748c!important;width:min(2200px,96vw)!important;max-height:94dvh!important}
+.brian-room-surface #meetingModal .modal-card.meeting-v6-modal-red{border-color:#ed748b!important}
+.brian-room-surface #meetingModal .modal-card.meeting-v6-modal-orange{border-color:#e2b26b!important}
+.brian-room-surface .cv-network{background:radial-gradient(ellipse at center,#4c5e7d30,transparent 65%),url('/cinematic-preview/assets/organic-reef-v1.png') center/cover!important}
+.brian-room-surface #meetingModal .cv-network{justify-items:center;gap:24px;padding:36px 18px}
+.brian-room-surface #meetingModal .cv-node{background:radial-gradient(circle at 32% 22%,#6e849c77,#0a111df5 72%)!important;border:1px solid #7184a3!important;border-radius:50%!important;color:#dce8fa!important;width:120px;height:120px;min-height:120px;max-width:100%;align-content:center;gap:4px;isolation:isolate}
+.brian-room-surface #meetingModal .cv-node:before{content:'';position:absolute;inset:-16px;background:url('/cinematic-preview/assets/organic-membrane-v1.png') center/contain no-repeat;opacity:.35;pointer-events:none;z-index:-1}
+.brian-room-surface #meetingModal .cv-node[aria-pressed=true]{border-color:#d7e7ff!important;box-shadow:0 0 22px #9db9f333,inset 0 0 22px #809dca22}
+.brian-room-surface .an-stage{background:radial-gradient(ellipse,#1a294333,transparent 65%),#060b13!important;border-color:#485871!important}
+.brian-room-surface :is(#brianOperations,#shadowScorecard,#predictionResearch,#worldPanel) :is(.card,.ops-room,.prediction-card){background:linear-gradient(130deg,#111b29,#070d15)!important;border-color:#39475c!important;border-radius:9px!important}
+.brian-room-surface #workspaceNav{background:#080e16;border-color:#364359}
+.brian-room-surface #workspaceNav :is(a,button){background:#101925;border-color:#35445c;color:#c3d1e4;border-radius:6px}
+body[data-workspace-room]>.topbar,body[data-workspace-room]>.ticker,body[data-workspace-room]>#workspaceNav,body[data-workspace-room]>#brianCommandRadar{display:none!important}
+body[data-workspace-room] .shell{display:block!important;max-width:2200px!important;width:100%!important;margin:auto;padding:24px!important;box-sizing:border-box}
+body[data-workspace-room] .shell>*:not(#brianOperations):not(.workspace-room-target):not(.workspace-room-path){display:none!important}
+body[data-workspace-room] #brianOperations{display:contents!important}
+body[data-workspace-room] #brianOperations>*:not(.workspace-room-target):not(.workspace-room-path){display:none!important}
+body[data-workspace-room] .workspace-room-path:not(.shell){display:contents!important}
+body[data-workspace-room] .workspace-room-path>*:not(.workspace-room-path):not(.workspace-room-target){display:none!important}
+body[data-workspace-room] .workspace-room-target{display:block!important;margin:0!important;max-height:none!important;scroll-margin-top:20px!important;width:100%!important;grid-column:auto!important;grid-row:auto!important;box-sizing:border-box}
+body.brian-room-surface[data-workspace-room] :is(#predictionResearch,#shadowScorecard,#opsFlow,#opsControl){background:linear-gradient(135deg,#111b28,#080f18)!important;border:1px solid #56647b!important;border-radius:10px!important;padding:clamp(16px,2vw,32px)!important;color:#dfe8f4!important}
+body[data-workspace-room] .workspace-room-target .ops-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@media(min-width:1800px){.brian-room-surface .ar-stats{grid-template-columns:repeat(4,minmax(0,1fr))}.brian-room-surface .ar-charts{grid-template-columns:1.6fr 1fr!important}.brian-room-surface :is(.ar-card,.er-card){padding:26px!important}.brian-room-surface :is(.ar-hero,.er-hero){padding:32px!important}}
+@media(max-width:760px){
+ #roomDialog{width:100vw;height:100dvh;max-width:none;margin:0;border:0;border-radius:0;box-sizing:border-box;inset:0}
+ #roomDialog>header{padding:calc(14px + env(safe-area-inset-top)) 14px 12px;align-items:flex-start;gap:12px;flex-wrap:wrap}
+ #roomDialog .room-eyebrow{font-size:9px}#roomDialog h2{font-size:25px}
+ #roomDialog .room-actions{width:100%;display:grid;grid-template-columns:auto 1fr 44px}
+ #roomDialog #roomStatus{font-size:11px;line-height:1.5}
+ #roomDialog .room-switcher{padding:8px 14px;scroll-padding-inline:14px}#roomDialog .room-switcher button{padding:8px 12px;font-size:12px}
+ .brian-room-surface :is(.ar-wrap,.er-wrap,.an-shell){padding-inline:14px!important}
+ .brian-room-surface :is(.ar-top,.er-top,.an-header){gap:12px;padding-block:14px!important}
+ .brian-room-surface :is(.ar-top,.er-top,.an-header) :is(h1,h2){font-size:20px!important}
+ .brian-room-surface :is(.ar-hero,.er-hero,.ar-charts,.er-flow,.cv-summary,.cv-bottom,.an-layout,.an-lower){grid-template-columns:minmax(0,1fr)!important}
+ .brian-room-surface :is(.ar-stats,.er-stats){grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs){display:flex!important;overflow-x:auto;max-width:100%;gap:6px;scrollbar-width:thin}
+ .brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs)>button{flex:0 0 auto!important;white-space:nowrap;padding:10px 14px!important}
+ .brian-room-surface #meetingModal .modal-card{width:100%!important;max-height:100dvh!important;border-radius:0!important;padding:14px!important}
+ .brian-room-surface #meetingModal .cv-network{gap:18px 8px;padding:24px 6px}
+ .brian-room-surface #meetingModal .cv-node{width:90px;height:90px;min-height:90px;padding:10px 3px}
+ .brian-room-surface #meetingModal .cv-node:before{inset:-9px}
+ .brian-room-surface :is(input,select,textarea){font-size:16px!important;max-width:100%}
+ .brian-room-surface :is(.ar-row-head,.er-controls){flex-wrap:wrap!important}
+ body[data-workspace-room] .shell{padding:14px!important}
+ body[data-workspace-room] .workspace-room-target .ops-grid{grid-template-columns:minmax(0,1fr)!important}
+}
+@media(prefers-reduced-motion:reduce){#roomDialog *,.brian-room-surface :is(.ar-hero,.er-hero,.cv-network){animation:none!important;scroll-behavior:auto!important}}

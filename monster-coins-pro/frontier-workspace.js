@@ -3,6 +3,10 @@
 (() => {
   const $ = id => document.getElementById(id);
   if (!$('brianOperations') || $('workspaceNav')) return;
+  document.body.classList.add('brian-room-surface');
+  const roomSkin = document.createElement('link');
+  roomSkin.rel = 'stylesheet'; roomSkin.href = '/brian-rooms.css?v=20261022-rooms1';
+  document.head.appendChild(roomSkin);
   const style = document.createElement('link');
   style.rel = 'stylesheet'; style.href = '/frontier-workspace.css?v=20261020-ui1';
   document.head.appendChild(style);
@@ -104,7 +108,8 @@
     const available = { meeting: !!$('openMeeting'), accounting: typeof window.openTreasuryAccounting === 'function', engineering: typeof window.openBrianEngineeringRoom === 'function', anatomy: typeof window.openBrianAnatomy === 'function' };
     try {
       if (actions[requestedRoom]) { if (!available[requestedRoom]) return; actions[requestedRoom](); }
-      else { const target = $(sections[requestedRoom]); if (!target) return; for (let n = target; n; n = n.parentElement) if (n.tagName === 'DETAILS') n.open = true; target.scrollIntoView({ block: 'start' }); target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
+      else { const target = $(sections[requestedRoom]); if (!target) return; target.classList.add('workspace-room-target'); for (let n = target.parentElement; n && n !== document.body; n = n.parentElement) { n.classList.add('workspace-room-path'); if (n.tagName === 'DETAILS') n.open = true; } target.scrollIntoView({ block: 'start' }); target.setAttribute('tabindex', '-1'); target.focus({ preventScroll: true }); }
+      document.body.dataset.workspaceRoom = requestedRoom;
       roomOpened = true; announce('ready');
     } catch { announce('error'); }
   }
