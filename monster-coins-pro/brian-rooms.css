@@ -36,7 +36,7 @@ body.brian-room-surface :is(button,a,input,select,textarea,summary):focus-visibl
 .brian-room-surface :is(.ar-label,.er-kicker,.cv-eyebrow,.an-eyebrow){color:#b1c2d8!important;font:10px/1.6 ui-monospace,monospace!important;letter-spacing:.12em!important}
 .brian-room-surface :is(.ar-body,.er-body,.cv,.an-shell) :is(p,dt,small){color:#aab8ca}
 .brian-room-surface :is(.ar-equity,.ar-stat b,.er-stat b,.an-stat b){font-variant-numeric:tabular-nums;letter-spacing:-.03em;color:#e8eff9}
-.brian-room-surface :is(#treasuryAccountingRoom,#brianEngineeringRoomV2,#brianAnatomyLive,#meetingModal) :is(button,select,input:not([type=range])){min-height:44px;background-color:#131d2a!important;border:1px solid #46556d!important;color:#dfe8f4!important;border-radius:6px!important}
+.brian-room-surface :is(#treasuryAccountingRoom,#brianEngineeringRoomV2,#brianAnatomyLive,#meetingModal) :is(button:not(.cv-node):not(.an-organ),select,input:not([type=range])){min-height:44px;background-color:#131d2a!important;border:1px solid #46556d!important;color:#dfe8f4!important;border-radius:6px!important}
 .brian-room-surface :is(#arClose,#berClose,.an-close){background:#243348!important;color:#edf4ff!important;border-color:#8f9fb7!important}
 .brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs) button[aria-pressed=true],.brian-room-surface .cv-tabs button[aria-selected=true]{color:#edf4ff!important;background:#2a384d!important;border-color:#a5b9d7!important;box-shadow:inset 0 -2px #b6cbe6}
 .brian-room-surface :is(.ar-toolbar,.er-controls){gap:16px!important;flex-wrap:wrap}
@@ -52,7 +52,10 @@ body.brian-room-surface :is(button,a,input,select,textarea,summary):focus-visibl
 .brian-room-surface #meetingModal .modal-card.meeting-v6-modal-red{border-color:#ed748b!important}
 .brian-room-surface #meetingModal .modal-card.meeting-v6-modal-orange{border-color:#e2b26b!important}
 .brian-room-surface .cv-network{background:radial-gradient(ellipse at center,#4c5e7d30,transparent 65%),url('/cinematic-preview/assets/organic-reef-v1.png') center/cover!important}
-.brian-room-surface .cv-node{background:#0a111deb!important;border-color:#7184a3!important;border-radius:50%!important;color:#dce8fa!important}
+.brian-room-surface #meetingModal .cv-network{justify-items:center;gap:24px;padding:36px 18px}
+.brian-room-surface #meetingModal .cv-node{background:radial-gradient(circle at 32% 22%,#6e849c77,#0a111df5 72%)!important;border:1px solid #7184a3!important;border-radius:50%!important;color:#dce8fa!important;width:120px;height:120px;min-height:120px;max-width:100%;align-content:center;gap:4px;isolation:isolate}
+.brian-room-surface #meetingModal .cv-node:before{content:'';position:absolute;inset:-16px;background:url('/cinematic-preview/assets/organic-membrane-v1.png') center/contain no-repeat;opacity:.35;pointer-events:none;z-index:-1}
+.brian-room-surface #meetingModal .cv-node[aria-pressed=true]{border-color:#d7e7ff!important;box-shadow:0 0 22px #9db9f333,inset 0 0 22px #809dca22}
 .brian-room-surface .an-stage{background:radial-gradient(ellipse,#1a294333,transparent 65%),#060b13!important;border-color:#485871!important}
 .brian-room-surface :is(#brianOperations,#shadowScorecard,#predictionResearch,#worldPanel) :is(.card,.ops-room,.prediction-card){background:linear-gradient(130deg,#111b29,#070d15)!important;border-color:#39475c!important;border-radius:9px!important}
 .brian-room-surface #workspaceNav{background:#080e16;border-color:#364359}
@@ -83,6 +86,9 @@ body[data-workspace-room] .workspace-room-target .ops-grid{grid-template-columns
  .brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs){display:flex!important;overflow-x:auto;max-width:100%;gap:6px;scrollbar-width:thin}
  .brian-room-surface :is(.ar-tabs,.er-tabs,.cv-tabs)>button{flex:0 0 auto!important;white-space:nowrap;padding:10px 14px!important}
  .brian-room-surface #meetingModal .modal-card{width:100%!important;max-height:100dvh!important;border-radius:0!important;padding:14px!important}
+ .brian-room-surface #meetingModal .cv-network{gap:18px 8px;padding:24px 6px}
+ .brian-room-surface #meetingModal .cv-node{width:90px;height:90px;min-height:90px;padding:10px 3px}
+ .brian-room-surface #meetingModal .cv-node:before{inset:-9px}
  .brian-room-surface :is(input,select,textarea){font-size:16px!important;max-width:100%}
  .brian-room-surface :is(.ar-row-head,.er-controls){flex-wrap:wrap!important}
  body[data-workspace-room] .shell{padding:14px!important}
