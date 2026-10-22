@@ -22,6 +22,13 @@ import {
   type MultiassetShadowOpportunity,
 } from "../_shared/evolution_treasury_multiasset_shadow.ts";
 import {
+  UNIFIED_POSITION_PREFIX,
+  UNIFIED_TREASURY_VERSION,
+  buildUnifiedOpportunities,
+  parseSegmentEdges,
+  type SegmentEdge,
+} from "../_shared/evolution_treasury_unified.ts";
+import {
   assessTreasuryRuntimeEvidence,
   missingTreasuryPositionEdgeAssets,
 } from "../_shared/evolution_treasury_runtime.ts";
@@ -347,7 +354,7 @@ async function loadCanonicalAlphaShadowOpportunities(state: TreasuryState, nowIs
 async function loadMultiassetShadowOpportunities(
   state: TreasuryState,
   nowIso: string,
-): Promise<MultiassetShadowOpportunity[]> {
+): Promise<{ rows: MultiassetAlphaDecisionRow[]; opportunities: MultiassetShadowOpportunity[] }> {
   const nowMs = Date.parse(nowIso);
   if (!Number.isFinite(nowMs)) throw new Error("treasury_multiasset_shadow: invalid cycle timestamp");
   const since = new Date(nowMs - MULTIASSET_SHADOW_MAINTENANCE_MAX_AGE_SECONDS * 1000).toISOString();
@@ -380,7 +387,22 @@ async function loadMultiassetShadowOpportunities(
     liveExecution: row.live_execution === true,
     metadata: (row.metadata ?? {}) as Record<string, unknown>,
   }));
-  return buildMultiassetShadowOpportunities(rows, state.positions, nowIso);
+  return { rows, opportunities: buildMultiassetShadowOpportunities(rows, state.positions, nowIso) };
+}
+
+// Unified lane switch (brian_evolution_runtime_config.brian_treasury_unified_enabled = 'true').
+// Missing or unreadable config means OFF, i.e. the previous behaviour.
+async function loadUnifiedEnabled(): Promise<boolean> {
+  const q = await db.from("brian_evolution_runtime_config").select("config_value")
+    .eq("config_key", "brian_treasury_unified_enabled").maybeSingle();
+  return !q.error && String(q.data?.config_value ?? "") === "true";
+}
+
+// Segment evidence from point-in-time realised outcomes; an error yields no evidence (no entries).
+async function loadSegmentEdges(): Promise<{ segments: SegmentEdge[]; error: string | null }> {
+  const q = await db.rpc("brian_treasury_segment_edges_v1", { p_days: 7 });
+  if (q.error) return { segments: [], error: q.error.message };
+  return { segments: parseSegmentEdges(q.data), error: null };
 }
 
 async function commitCycle(input: {
@@ -400,6 +422,7 @@ async function commitCycle(input: {
     const multiassetShadow = String(action.positionId || "").startsWith(MULTIASSET_SHADOW_POSITION_PREFIX) ||
       action.reason === "MULTIASSET_SHADOW_SIGNAL" || action.reason === "MULTIASSET_SIGNAL_REVOKED" ||
       action.reason === "MULTIASSET_SESSION_CLOSED_OR_STALE";
+    const unifiedLane = String(action.positionId || "").startsWith(UNIFIED_POSITION_PREFIX);
     actions.push({
       action_id: await sha(`treasury-action|${cycleId}|${index}|${action.kind}|${action.assetId}|${action.positionId ?? "none"}`),
       observed_at: input.observedAt,
@@ -418,7 +441,8 @@ async function commitCycle(input: {
         gate_version: BRIAN_TREASURY_GATE_VERSION,
         canonical_alpha_shadow: canonicalAlphaShadow,
         multiasset_shadow: multiassetShadow,
-        shadow_lane: multiassetShadow ? "MULTIASSET_EVENT_REACTION" : canonicalAlphaShadow ? "CANONICAL_ALPHA" : "EXPECTED_EDGE",
+        unified_version: unifiedLane ? UNIFIED_TREASURY_VERSION : null,
+        shadow_lane: unifiedLane ? "UNIFIED_EVIDENCE" : multiassetShadow ? "MULTIASSET_EVENT_REACTION" : canonicalAlphaShadow ? "CANONICAL_ALPHA" : "EXPECTED_EDGE",
         expected_edge_semantics: canonicalAlphaShadow || multiassetShadow ? "UNAVAILABLE_SHADOW_SIGNAL" : "EXPECTED_NET_EDGE_BPS",
       },
     });
@@ -511,17 +535,23 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities, alphaShadowOpportunities, multiassetShadowOpportunities] = await Promise.all([
+      const [promotionGate, opportunities, alphaShadowOpportunities, multiasset, unifiedEnabled, segmentEdges] = await Promise.all([
         loadPromotionGate(),
         loadOpportunities(loaded.state, observedAt),
         loadCanonicalAlphaShadowOpportunities(loaded.state, observedAt),
         loadMultiassetShadowOpportunities(loaded.state, observedAt),
+        loadUnifiedEnabled(),
+        loadSegmentEdges(),
       ]);
+      const multiassetShadowOpportunities = multiasset.opportunities;
+      const unified = buildUnifiedOpportunities(multiasset.rows, segmentEdges.segments, loaded.state.positions, observedAt);
       const plan = planPromotionGatedTreasuryCycle({
         state: loaded.state,
         opportunities,
         shadowFallbackOpportunities: alphaShadowOpportunities,
         multiassetShadowOpportunities,
+        unifiedOpportunities: unified.opportunities,
+        unifiedEnabled,
         observedAt,
         promotionGate,
         positionIdFor: (opportunity) => `treasury:${opportunity.sourceDecisionId}`,
@@ -536,6 +566,8 @@ Deno.serve(async (req: Request) => {
         canonical_alpha_shadow: plan.canonicalAlphaShadow,
         multiasset_shadow: plan.multiassetShadow,
         multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
+        unified: { ...plan.unified, segments: segmentEdges.segments.length, segment_error: segmentEdges.error,
+          verdicts: unified.verdicts.slice(0, 40) },
         actions: plan.actions.length,
         positions: plan.state.positions.length,
         equity_usd: plan.afterEquityUsd,
@@ -556,6 +588,7 @@ Deno.serve(async (req: Request) => {
         canonical_alpha_shadow_opportunities: alphaShadowOpportunities.length,
         multiasset_shadow: plan.multiassetShadow,
         multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
+        unified: { ...plan.unified, segments: segmentEdges.segments, segment_error: segmentEdges.error, verdicts: unified.verdicts },
         actions: plan.actions,
         treasury: {
           starting_equity_usd: plan.state.startingEquityUsd,
