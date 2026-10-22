@@ -17,8 +17,14 @@ import {
   isMultiassetShadowPosition,
   type MultiassetShadowOpportunity,
 } from "./evolution_treasury_multiasset_shadow.ts";
+import {
+  UNIFIED_POSITION_PREFIX,
+  UNIFIED_RULES,
+  UNIFIED_TREASURY_VERSION,
+  isUnifiedPosition,
+} from "./evolution_treasury_unified.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v6-multiasset-continuity";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v7-unified-evidence";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
@@ -35,6 +41,7 @@ export interface PromotionGateState {
 }
 
 export interface PromotionGatedTreasuryPlan extends TreasuryCyclePlan {
+  unified?: { enabled: boolean; version: string; allowed: number; opens: number };
   promotionGate: PromotionGateState;
   gateVersion: typeof BRIAN_TREASURY_GATE_VERSION;
   canonicalAlphaShadow: {
@@ -425,6 +432,12 @@ export function planPromotionGatedTreasuryCycle(input: {
   opportunities: TreasuryOpportunity[];
   shadowFallbackOpportunities?: CanonicalAlphaShadowOpportunity[];
   multiassetShadowOpportunities?: MultiassetShadowOpportunity[];
+  // Unified lane (evolution_treasury_unified.ts). When enabled, evidence replaces the promotion
+  // council as the entry gate: expected-edge and unified opportunities go to the one planner,
+  // sized by their measured net edge; the fixed-ticket multiasset micro lane opens nothing new
+  // (its existing positions are still maintained and closed normally).
+  unifiedOpportunities?: TreasuryOpportunity[];
+  unifiedEnabled?: boolean;
   observedAt: string;
   promotionGate: PromotionGateState;
   positionIdFor: (opportunity: TreasuryOpportunity) => string;
@@ -433,7 +446,17 @@ export function planPromotionGatedTreasuryCycle(input: {
   const fallbackOpportunities = input.shadowFallbackOpportunities ?? [];
   const multiassetOpportunities = input.multiassetShadowOpportunities ?? [];
   const multiassetMaintenance = multiassetShadowMaintenance(input.state, multiassetOpportunities);
-  const effectiveOpportunities = promotionGate.authorized
+  const unified = input.unifiedEnabled === true;
+  const unifiedOpportunities = unified ? input.unifiedOpportunities ?? [] : [];
+  const unifiedIds = new Set(unifiedOpportunities.map((o) => o.sourceDecisionId));
+  const effectiveOpportunities = unified
+    ? [
+      ...input.opportunities,
+      ...unifiedOpportunities,
+      ...canonicalShadowMaintenance(input.state, fallbackOpportunities),
+      ...multiassetMaintenance,
+    ]
+    : promotionGate.authorized
     ? [
       ...input.opportunities,
       ...canonicalShadowInvalidationsWhenPromoted(input.state, input.opportunities, input.observedAt),
@@ -449,13 +472,14 @@ export function planPromotionGatedTreasuryCycle(input: {
     state: input.state,
     opportunities: effectiveOpportunities,
     observedAt: input.observedAt,
-    positionIdFor: input.positionIdFor,
+    positionIdFor: (o) => unifiedIds.has(o.sourceDecisionId) ? `${UNIFIED_POSITION_PREFIX}${o.sourceDecisionId}` : input.positionIdFor(o),
+    minHoldSecondsFor: (p) => isUnifiedPosition(p) ? UNIFIED_RULES.minHoldSeconds : 0,
   });
 
   rewriteCanonicalShadowExitReasons(planned.actions, fallbackOpportunities, promotionGate.authorized);
   rewriteMultiassetShadowExitReasons(planned.actions, multiassetOpportunities);
   const fallbackOpens = promotionGate.authorized ? 0 : applyCanonicalAlphaShadowOpens(planned, fallbackOpportunities, input.observedAt);
-  const multiassetOpens = applyMultiassetShadowOpens(planned, multiassetOpportunities, input.observedAt);
+  const multiassetOpens = unified ? 0 : applyMultiassetShadowOpens(planned, multiassetOpportunities, input.observedAt);
   const fallbackActions = planned.actions.filter((action) =>
     String(action.positionId || "").startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX) ||
     action.reason === "CANONICAL_ALPHA_SHADOW_SIGNAL" || action.reason === "ALPHA_SIGNAL_REVOKED" ||
@@ -470,8 +494,13 @@ export function planPromotionGatedTreasuryCycle(input: {
   ).length;
 
   const blockedReasons = [...planned.blockedReasons];
-  if (!promotionGate.authorized) blockedReasons.unshift(`layer4 promotion gate closed: ${promotionGate.reason}`);
-  if (!promotionGate.authorized && !CANONICAL_ALPHA_MICRO_ENTRY_ENABLED) {
+  const unifiedOpens = planned.actions.filter((a) => a.kind === "OPEN" && String(a.positionId || "").startsWith(UNIFIED_POSITION_PREFIX)).length;
+  if (unified) {
+    if (!unifiedOpportunities.some((o) => o.recommendation === "ALLOW_EDGE")) {
+      blockedReasons.unshift(`${UNIFIED_TREASURY_VERSION}: no signal family clears cost + ${UNIFIED_RULES.minNetEdgeBps} bps on measured ${UNIFIED_RULES.horizonMinutes}-min outcomes; holding cash`);
+    }
+  } else if (!promotionGate.authorized) blockedReasons.unshift(`layer4 promotion gate closed: ${promotionGate.reason}`);
+  if (!unified && !promotionGate.authorized && !CANONICAL_ALPHA_MICRO_ENTRY_ENABLED) {
     blockedReasons.unshift("canonical ALPHA micro-entry paused: BIG_MOVE validation mode; evidence/outcome learning remains active");
   }
 
@@ -485,8 +514,14 @@ export function planPromotionGatedTreasuryCycle(input: {
       candidates: fallbackOpportunities.filter((row) => row.actionable).length,
       actions: Math.max(fallbackActions, fallbackOpens),
     },
+    unified: {
+      enabled: unified,
+      version: UNIFIED_TREASURY_VERSION,
+      allowed: unifiedOpportunities.filter((o) => o.recommendation === "ALLOW_EDGE").length,
+      opens: unifiedOpens,
+    },
     multiassetShadow: {
-      enabled: true,
+      enabled: !unified,
       candidates: multiassetOpportunities.filter((row) => row.actionable).length,
       actions: Math.max(multiassetActions, multiassetOpens),
     },

@@ -149,7 +149,10 @@ function applyOpen(state:TreasuryState,o:TreasuryOpportunity,capitalUsd:number,p
   actions.push({kind:"OPEN",assetId:o.assetId,direction:o.direction,capitalUsd,referencePrice:o.referencePrice,costUsd:entryCost,expectedNetEdgeBps:o.expectedNetEdgeBps,sourceDecisionId:o.sourceDecisionId,reason:"POSITIVE_VALIDATED_EDGE",positionId});return true;
 }
 
-export function planTreasuryCycle(input:{state:TreasuryState;opportunities:TreasuryOpportunity[];observedAt:string;positionIdFor:(o:TreasuryOpportunity)=>string;}):TreasuryCyclePlan{
+// minHoldSecondsFor (optional, default 0): a position younger than its minimum hold is not closed for
+// soft reasons (edge invalidated/stale/decayed, time decay). The risk stop and a validated opposite
+// signal still close it. The unified lane uses the horizon its edge was measured on (anti-churn).
+export function planTreasuryCycle(input:{state:TreasuryState;opportunities:TreasuryOpportunity[];observedAt:string;positionIdFor:(o:TreasuryOpportunity)=>string;minHoldSecondsFor?:(p:TreasuryPosition)=>number;}):TreasuryCyclePlan{
   const nowMs=time(input.observedAt);if(nowMs==null)throw new Error("invalid cycle observedAt");const state=cloneState(input.state);const actions:TreasuryAction[]=[];const blockedReasons:string[]=[];const noReopenAssets=new Set<string>();const marks=markMap(input.opportunities,state,nowMs);const beforeEquity=treasuryEquityUsd(state,marks);assertFinitePositive(beforeEquity,"treasury equity");const latest=latestByAsset(input.opportunities,nowMs);const latestRaw=latestRawByAsset(input.opportunities,nowMs);
 
   for(const p of [...state.positions]){
@@ -161,6 +164,8 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
     else if(freshSame&&pnlBps>=PROFIT_DECAY_ARM_BPS&&freshSame.expectedNetEdgeBps<Math.max(MIN_EDGE_BPS,p.entryExpectedNetEdgeBps*.25))reason="PROFIT_EDGE_DECAY";
     else if(!freshSame&&ageSeconds>EDGE_STALE_SECONDS)reason="STALE_EDGE";
     else if(ageSeconds>MAX_HOLD_SECONDS&&pnlBps<=0)reason="TIME_DECAY";
+    const minHold=Math.max(0,input.minHoldSecondsFor?.(p)??0);
+    if(reason&&ageSeconds<minHold&&reason!=="RISK_STOP"&&reason!=="DIRECTION_FLIP")reason=null;
     if(reason){applyExit(state,p,mark,currentEdge,latestAny?.sourceDecisionId??p.sourceDecisionId,reason,actions);if(reason!=="DIRECTION_FLIP")noReopenAssets.add(p.assetId);}
   }
 
