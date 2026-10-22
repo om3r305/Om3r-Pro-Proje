@@ -99,8 +99,21 @@ insert into public.brian_system_job_registry (job_name, component, operator_mana
 values ('brian-treasury-signal-outcomes-hourly', 'TREASURY', true)
 on conflict do nothing;
 
-select cron.schedule('brian-treasury-signal-outcomes-hourly', '23 * * * *',
-  $cron$select public.brian_record_treasury_signal_outcomes_v1(interval '3 hours')$cron$);
+-- Dormant by contract: scheduling is an explicit operator step, never part of the migration.
+-- Operator activation on 2026-10-22: select brian_private.schedule_treasury_signal_outcomes_v1();
+create or replace function brian_private.schedule_treasury_signal_outcomes_v1()
+returns bigint
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $fn$
+declare j bigint;
+begin
+  j := cron.schedule('brian-treasury-signal-outcomes-hourly', '23 * * * *',
+    $cron$select public.brian_record_treasury_signal_outcomes_v1(interval '3 hours')$cron$);
+  return j;
+end $fn$;
+revoke all on function brian_private.schedule_treasury_signal_outcomes_v1() from public, anon, authenticated, service_role;
 
 -- Kill switch for the unified lane (read by brian-evolution-treasury every cycle). Starts OFF; the
 -- operator-approved switch-on is a separate, logged step.
