@@ -7,6 +7,7 @@ const {stripTypeScriptTypes}=require('node:module');
 const {webcrypto,createHash}=require('node:crypto');
 const root=path.resolve(__dirname,'../supabase/functions');
 const {assessMarketSession}=require('../supabase/functions/_shared/multiasset_market_session.ts');
+const feedGuard=require('../supabase/functions/_shared/multiasset_feed_guard.ts');
 const now=Date.parse('2026-09-25T15:00:00Z');
 const start=now/1000-3600,end=now/1000+3600;
 const iso=ms=>new Date(ms).toISOString();
@@ -29,7 +30,7 @@ function load(name,extras={}){
   let handler;
   const source=fs.readFileSync(path.join(root,name,'index.ts'),'utf8').replace(/^import .*;\s*$/mg,'');
   class Clock extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
-  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,withCollectorLease:async(db,id,ttl,work)=>({contended:false,value:await work()}),...extras});
+  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,withCollectorLease:async(db,id,ttl,work)=>({contended:false,value:await work()}),...feedGuard,...extras});
   vm.runInContext(stripTypeScriptTypes(source),ctx);
   return {ctx,handle:req=>handler(req)};
 }
@@ -40,18 +41,21 @@ test('collector derives REGULAR from actual provider session, not OPEN fallback'
   assert.equal(mark.metadata.regular_session_end,end);
   assert.equal(mark.live_execution,false);
 });
-async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',duplicate=false,reaction=.01,enabled=true,configFailure=false}={}){
+async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',duplicate=false,reaction=.01,enabled=true,configFailure=false,price=100,history=[],scanner=null}={}){
   const writes={};
   const events=[{event_id:'news-1',observed_at:iso(now-60000),published_at:iso(now-60000),source_id:'official:test',claim,primary_asset:null}];
   if(duplicate)events.push({...events[0]});
   const db={from:table=>{
     const q={select:()=>q,eq:()=>q,gte:()=>q,order:()=>q,limit:()=>q,single:()=>q,abortSignal:()=>q,
       insert:async rows=>{writes[table]=rows;return {error:null}},
-      then:resolve=>resolve(table==='brian_evolution_runtime_config'?{data:{config_value:enabled?'true':'false'},error:configFailure?{message:'offline'}:null}:{data:table==='brian_dashboard_auth'?{cron_key_sha256:createHash('sha256').update('test-key').digest('hex')}:events,error:null})};
+      then:resolve=>resolve(table==='brian_evolution_runtime_config'?{data:{config_value:enabled?'true':'false'},error:configFailure?{message:'offline'}:null}:{data:table==='brian_dashboard_auth'?{cron_key_sha256:createHash('sha256').update('test-key').digest('hex')}:table==='brian_multiasset_alpha_decisions'?history:events,error:null})};
     return q;
   }};
-  const mark={asset_id:'commodity:GOLD',asset_class:'commodity',provider_time:iso(now-age*1000),price:100,return_5m:reaction,return_1h:reaction,session_state:'OPEN',data_latency_seconds:1,provider_quality:'PUBLIC_UNOFFICIAL_SHADOW_ONLY',metadata:{themes:['MONETARY','FINANCIAL','FX','GEOPOLITICAL'],regular_session_start:start,regular_session_end:sessionEnd}};
-  const {handle}=load('brian-multiasset-opportunity-engine',{createClient:()=>db,fetch:async()=>new Response(JSON.stringify({status:'SUCCESS',marks:[mark],crowd:[]}))});
+  const mark={asset_id:'commodity:GOLD',asset_class:'commodity',provider_time:iso(now-age*1000),price,return_5m:reaction,return_1h:reaction,session_state:'OPEN',data_latency_seconds:1,provider_quality:'PUBLIC_UNOFFICIAL_SHADOW_ONLY',metadata:{themes:['MONETARY','FINANCIAL','FX','GEOPOLITICAL'],regular_session_start:start,regular_session_end:sessionEnd}};
+  const fetch=async url=>String(url).includes('scanner.tradingview.com')
+    ?(scanner?new Response(JSON.stringify(scanner)):new Response('blocked',{status:403}))
+    :new Response(JSON.stringify({status:'SUCCESS',marks:[mark],crowd:[]}));
+  const {handle}=load('brian-multiasset-opportunity-engine',{createClient:()=>db,fetch});
   const response=await handle(new Request('https://test.local',{method:'POST',headers:{'x-brian-cron-key':'test-key'}}));
   if(!enabled||configFailure){const body=await response.json();assert.equal(body.status,configFailure?'FAILED_CLOSED':'OPERATOR_STOPPED');assert.equal(writes.brian_multiasset_alpha_decisions,undefined);return body;}
   assert.equal(response.status,200);
@@ -77,6 +81,16 @@ test('stale cached OPEN mark cannot generate an order',async()=>{
 test('closed session and unconfirmed market reaction both wait',async()=>{
   assert.equal((await runEngine({sessionEnd:now/1000})).action,'WAIT');
   assert.equal((await runEngine({reaction:0})).veto_reason,'REACTION_NOT_CONFIRMED');
+});
+test('a commodity roll-like jump is vetoed by the feed guard (second source down: fail closed)',async()=>{
+  const d=await runEngine({price:113.7,history:[{asset_id:'commodity:GOLD',observed_at:iso(now-600000),observed_reference_price:100,feed_contract:null}]});
+  assert.equal(d.action,'WAIT');assert.equal(d.veto_reason,'PRICE_DISCONTINUITY');
+  assert.match(d.metadata.feed_guard.second_source,/^UNAVAILABLE/);
+});
+test('a jump confirmed by the second source still reaches a decision',async()=>{
+  const d=await runEngine({price:105,history:[{asset_id:'commodity:GOLD',observed_at:iso(now-600000),observed_reference_price:100,feed_contract:null}],
+    scanner:{data:[{s:'COMEX:GC1!',d:[105,4.9]},{s:'COMEX:GC2!',d:[106,4.8]}]}});
+  assert.equal(d.action,'OPEN_LONG');assert.equal(d.metadata.feed_guard.veto,null);
 });
 // Existing real treasury planner contract: small shadow entries, costs, exits and closed promotion gate.
 global.Deno={test};
