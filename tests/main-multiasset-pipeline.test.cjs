@@ -89,7 +89,7 @@ test('a commodity roll-like jump is vetoed by the feed guard (second source down
 });
 test('a jump confirmed by the second source still reaches a decision',async()=>{
   const d=await runEngine({price:105,history:[{asset_id:'commodity:GOLD',observed_at:iso(now-600000),observed_reference_price:100,feed_contract:null}],
-    scanner:{data:[{s:'COMEX:GC1!',d:[105,4.9]},{s:'COMEX:GC2!',d:[106,4.8]}]}});
+    scanner:{data:[{s:'COMEX:GCZ2026',d:[105,4.9,20261229]},{s:'COMEX:GCG2027',d:[106,4.8,20270224]}]}});
   assert.equal(d.action,'OPEN_LONG');assert.equal(d.metadata.feed_guard.veto,null);
 });
 // Existing real treasury planner contract: small shadow entries, costs, exits and closed promotion gate.

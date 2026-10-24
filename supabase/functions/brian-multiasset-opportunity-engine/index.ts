@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
-import { FEED_GUARD_RULES, FEED_GUARD_VERSION, feedGuardVerdict, parseScanner, scannerTickers, type OwnObservation, type SecondSourceQuote } from "../_shared/multiasset_feed_guard.ts";
+import { FEED_GUARD_RULES, FEED_GUARD_VERSION, SCANNER_COLUMNS, feedGuardVerdict, parseScanner, scannerTickers, type OwnObservation, type SecondSourceQuote } from "../_shared/multiasset_feed_guard.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -77,12 +77,13 @@ function ticket(score:number){return score>=.82?20:score>=.68?10:score>=.55?5:3}
 // Second source for commodity futures (front + next contract); unavailable -> empty map (guard fails closed on jumps).
 async function loadSecondSource():Promise<{quotes:Map<string,SecondSourceQuote>;error:string|null}>{
   try{
+    const nowIso=new Date().toISOString();
     const r=await fetch("https://scanner.tradingview.com/futures/scan",{
       method:"POST",headers:{"content-type":"application/json","user-agent":"Mozilla/5.0 Brian-Shadow-FeedGuard/1.0"},
-      body:JSON.stringify({symbols:{tickers:scannerTickers()},columns:["close","change"]}),signal:AbortSignal.timeout(5000)
+      body:JSON.stringify({symbols:{tickers:scannerTickers(nowIso)},columns:SCANNER_COLUMNS}),signal:AbortSignal.timeout(5000)
     });
     if(!r.ok)return {quotes:new Map(),error:`HTTP_${r.status}`};
-    return {quotes:parseScanner(await r.json()),error:null};
+    return {quotes:parseScanner(await r.json(),nowIso),error:null};
   }catch(e){return {quotes:new Map(),error:errorText(e).slice(0,120)}}
 }
 // The engine's own recent commodity observations (prices + which contract they matched).
