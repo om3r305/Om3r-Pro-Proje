@@ -1,11 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
+import { FEED_GUARD_RULES, FEED_GUARD_VERSION, feedGuardVerdict, parseScanner, scannerTickers, type OwnObservation, type SecondSourceQuote } from "../_shared/multiasset_feed_guard.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.multiasset-opportunity-engine.v5-operator-controlled";
+const VERSION="brian.multiasset-opportunity-engine.v6-feed-guard";
 const COLLECTOR_ID="brian-multiasset-opportunity-engine-v1";
 const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-multiasset-export";
 
@@ -72,6 +73,33 @@ function costBps(assetClass:string){
     assetClass==="etf"?12:18;
 }
 function ticket(score:number){return score>=.82?20:score>=.68?10:score>=.55?5:3}
+
+// Second source for commodity futures (front + next contract); unavailable -> empty map (guard fails closed on jumps).
+async function loadSecondSource():Promise<{quotes:Map<string,SecondSourceQuote>;error:string|null}>{
+  try{
+    const r=await fetch("https://scanner.tradingview.com/futures/scan",{
+      method:"POST",headers:{"content-type":"application/json","user-agent":"Mozilla/5.0 Brian-Shadow-FeedGuard/1.0"},
+      body:JSON.stringify({symbols:{tickers:scannerTickers()},columns:["close","change"]}),signal:AbortSignal.timeout(5000)
+    });
+    if(!r.ok)return {quotes:new Map(),error:`HTTP_${r.status}`};
+    return {quotes:parseScanner(await r.json()),error:null};
+  }catch(e){return {quotes:new Map(),error:errorText(e).slice(0,120)}}
+}
+// The engine's own recent commodity observations (prices + which contract they matched).
+async function loadOwnHistory():Promise<Map<string,OwnObservation[]>>{
+  const since=new Date(Date.now()-FEED_GUARD_RULES.windowMinutes*60_000).toISOString();
+  const q=await db.from("brian_multiasset_alpha_decisions")
+    .select("asset_id,observed_at,observed_reference_price,feed_contract:metadata->>feed_guard_contract")
+    .eq("asset_class","commodity").gte("observed_at",since).order("observed_at",{ascending:true}).limit(400);
+  if(q.error)throw new Error(`feed_guard_history:${q.error.message}`);
+  const out=new Map<string,OwnObservation[]>();
+  for(const row of (q.data??[]) as any[]){
+    const arr=out.get(String(row.asset_id))??[];
+    arr.push({observedAt:String(row.observed_at),price:n(row.observed_reference_price),feedContract:row.feed_contract==null?null:String(row.feed_contract)});
+    out.set(String(row.asset_id),arr);
+  }
+  return out;
+}
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return out({error:"POST required"},405);
@@ -140,6 +168,7 @@ Deno.serve(async(req:Request)=>{
       }
     }
 
+    const [secondSource,ownHistory]=await Promise.all([loadSecondSource(),loadOwnHistory()]);
     const decisions:any[]=[];
     for(const m of marks){
       const price=n(m.price);
@@ -170,8 +199,11 @@ Deno.serve(async(req:Request)=>{
       const crowdConflict=direction!==0&&crowdDirection!==0&&crowdDirection!==direction&&crowdStrength>=.70&&crowdConfidence>=.60;
       const crowdExtremeChase=direction!==0&&crowdDirection===direction&&crowdStrength>=.85&&crowdConfidence>=.65&&
         ((direction===1&&crowdState==="FOMO_CHASE_PROXY")||(direction===-1&&crowdState==="PANIC_SELL_PROXY"));
+      const guard=feedGuardVerdict({assetId:String(m.asset_id),nowIso:new Date().toISOString(),price,
+        history:ownHistory.get(String(m.asset_id))??[],quote:secondSource.quotes.get(String(m.asset_id))??null});
       let action="WAIT",veto:string|null=null;
       if(!fresh)veto="MARKET_CLOSED_OR_STALE";
+      else if(guard.veto)veto=guard.veto;
       else if(!relevant)veto="NO_RELEVANT_EVENT";
       else if(!moving||direction===0)veto="REACTION_NOT_CONFIRMED";
       else if(groups.length<2)veto="INSUFFICIENT_INDEPENDENT_GROUPS";
@@ -203,6 +235,8 @@ Deno.serve(async(req:Request)=>{
           crowd_behavior_role:"RISK_CONTEXT_NOT_INDEPENDENT_EVIDENCE",
           crowd_behavior_context:crowd??null,
           crowd_behavior_risk_applied:crowdConflict||crowdExtremeChase,
+          ...(guard.guarded?{feed_guard_contract:guard.feedContract,feed_guard:{version:FEED_GUARD_VERSION,veto:guard.veto,
+            max_step_log:guard.maxStepLog,reason:guard.reason,second_source:secondSource.error?`UNAVAILABLE:${secondSource.error}`:"tradingview_scanner_public"}}:{}),
           execution_grade:false,shadow_lane:"MULTIASSET_EVENT_REACTION"
         },
         evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
@@ -219,7 +253,10 @@ Deno.serve(async(req:Request)=>{
     const receipt=await db.from("brian_collector_runs").insert({
       run_id:runId,collector_id:COLLECTOR_ID,started_at:startedAt,finished_at:finishedAt,status:"SUCCESS",
       observed_records:marks.length+events.length,stored_records:decisions.length,degraded_sources:[],
-      metadata:{version:VERSION,marks:marks.length,events:events.length,actionable:decisions.filter(d=>d.action!=="WAIT").length,shadow_only:true,live_execution:false},
+      metadata:{version:VERSION,marks:marks.length,events:events.length,actionable:decisions.filter(d=>d.action!=="WAIT").length,
+        feed_guard:{version:FEED_GUARD_VERSION,second_source_error:secondSource.error,quotes:secondSource.quotes.size,
+          vetoes:decisions.filter(d=>d.veto_reason==="FEED_CONTRACT_ROLL"||d.veto_reason==="PRICE_DISCONTINUITY").map(d=>`${d.asset_id}:${d.veto_reason}`)},
+        shadow_only:true,live_execution:false},
       evidence_class:"PROSPECTIVE_DEVELOPMENT_SHADOW",shadow_only:true,live_execution:false
     });
     if(receipt.error)throw new Error("MULTIASSET_RECEIPT_UNAVAILABLE");
