@@ -49,9 +49,20 @@ Deno.test("ordinary moves, gaps and non-commodities pass", () => {
   assertEquals(feedGuardVerdict({ assetId: "equity:META", nowIso: NOW, price: 120, history, quote: null }).guarded, false);
 });
 
-Deno.test("scanner parsing maps 1!/2! tickers back to assets", () => {
-  const q = parseScanner({ data: [{ s: "NYMEX:NG1!", d: [2.64, -5.6] }, { s: "NYMEX:NG2!", d: [3.05, -1] }, { s: "BAD", d: "x" }] });
-  assertEquals(q.get("commodity:NATGAS"), { front: 2.64, next: 3.05, frontDailyChangePct: -5.6 });
+Deno.test("scanner parsing picks front/next by expiration and skips expired or unlisted months", () => {
+  const now = "2026-10-24T08:00:00.000Z";
+  // Real 2026-10-24 scanner rows (unordered; one expired contract added).
+  const q = parseScanner({ data: [
+    { s: "NYMEX:NGZ2026", d: [3.05, -3.36, 20261125] }, { s: "NYMEX:NGX2026", d: [2.64, -5.58, 20261028] },
+    { s: "NYMEX:NGV2026", d: [2.9, 0, 20261020] },
+    { s: "ICEEUR:BRNF2027", d: [111.7, 2.8, 20261130] }, { s: "ICEEUR:BRNZ2026", d: [116.72, 3.14, 20261030] },
+    { s: "BAD", d: "x" },
+  ] }, now);
+  assertEquals(q.get("commodity:NATGAS"), { front: 2.64, next: 3.05, frontDailyChangePct: -5.58 });
+  assertEquals(q.get("commodity:BRENT"), { front: 116.72, next: 111.7, frontDailyChangePct: 3.14 });
   assertEquals(q.has("commodity:GOLD"), false);
-  assertEquals(scannerTickers().length, 10);
+  const tickers = scannerTickers(now);
+  assertEquals(tickers.length, 30);
+  assertEquals(tickers.slice(0, 3), ["NYMEX:NGV2026", "NYMEX:NGX2026", "NYMEX:NGZ2026"]);
+  assertEquals(scannerTickers("2026-11-15T00:00:00.000Z").includes("NYMEX:NGF2027"), true, "year rolls over");
 });
