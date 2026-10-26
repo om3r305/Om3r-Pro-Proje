@@ -28,6 +28,10 @@ on:
       - 'research/niulai4_pilot/**'
       - 'docs/BRIAN_PREDICTION_INTELLIGENCE.md'
       - '.github/workflows/brian-prediction-ci.yml'
+      - 'supabase/functions/_shared/orb_shadow*.ts'
+      - 'supabase/functions/brian-orb-shadow/**'
+      - 'supabase/migrations/*brian_orb_shadow*.sql'
+      - 'research/research_lab/studies/orb_shadow/**'
   workflow_dispatch:
 
 permissions:
@@ -57,6 +61,8 @@ jobs:
           supabase/functions/brian-prediction-status/index.ts
           supabase/functions/brian-niulai4-pilot-ingest/index.ts
           supabase/functions/brian-realtime-market-marks-public/index.ts
+          supabase/functions/_shared/orb_shadow.ts
+          supabase/functions/brian-orb-shadow/index.ts
 
       - name: Type-check and test the local NIULAI4 pilot (no network)
         run: |
@@ -64,7 +70,7 @@ jobs:
           deno test --allow-read --allow-write research/niulai4_pilot/pilot_test.ts
 
       - name: Run offline behavioral tests (no network, live smoke test stays skipped)
-        run: deno test supabase/functions/_shared/prediction_*.test.ts supabase/functions/_shared/market_mark_freshness.test.ts
+        run: deno test supabase/functions/_shared/prediction_*.test.ts supabase/functions/_shared/market_mark_freshness.test.ts supabase/functions/_shared/orb_shadow.test.ts
 
   verify-prediction-storage:
     runs-on: ubuntu-24.04
