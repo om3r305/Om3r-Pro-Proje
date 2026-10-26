@@ -24,7 +24,7 @@ import {
   isUnifiedPosition,
 } from "./evolution_treasury_unified.ts";
 
-export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v7-unified-evidence";
+export const BRIAN_TREASURY_GATE_VERSION = "brian.treasury-promotion-gate.v8-daily-risk-guard";
 export const TREASURY_PROMOTION_MAX_AGE_SECONDS = 6 * 60 * 60;
 const PROMOTION_FUTURE_SKEW_SECONDS = 5;
 const MAX_SHADOW_POSITIONS = 8;
@@ -32,6 +32,26 @@ const MAX_SHADOW_POSITIONS = 8;
 // Do not charge the main SHADOW treasury for probe churn: learning/outcomes continue,
 // but only promoted EXPECTED_EDGE or the separate multiasset event-reaction lane may open capital.
 const CANONICAL_ALPHA_MICRO_ENTRY_ENABLED = false;
+
+// Daily risk guard (operator 2026-10-26; idea from the day-trader-skill risk checks). Per UTC day:
+// once equity is down maxDailyLossPct from the day's opening equity, or maxOpensPerDay positions were
+// opened, no new position opens until the next day. Exits, risk stops and marks are never blocked.
+export const TREASURY_RISK_GUARD = Object.freeze({ maxDailyLossPct: 0.02, maxOpensPerDay: 12 });
+export interface DailyRiskInput { opensToday: number; dayStartEquityUsd: number | null; currentEquityUsd: number | null }
+export interface RiskGuardState { opensToday: number; openBudget: number; dayReturnPct: number | null; blocked: string | null }
+
+export function riskGuardState(input: DailyRiskInput | undefined): RiskGuardState | null {
+  if (!input) return null;
+  const opensToday = Math.max(0, Math.trunc(Number(input.opensToday) || 0));
+  const start = input.dayStartEquityUsd, cur = input.currentEquityUsd;
+  const dayReturnPct = start != null && cur != null && start > 0 && cur > 0 ? cur / start - 1 : null;
+  if (dayReturnPct != null && dayReturnPct <= -TREASURY_RISK_GUARD.maxDailyLossPct) {
+    return { opensToday, openBudget: 0, dayReturnPct, blocked: `daily loss limit: ${(dayReturnPct * 100).toFixed(2)}% <= -${TREASURY_RISK_GUARD.maxDailyLossPct * 100}% today; no new positions until 00:00 UTC` };
+  }
+  const openBudget = Math.max(0, TREASURY_RISK_GUARD.maxOpensPerDay - opensToday);
+  return { opensToday, openBudget, dayReturnPct,
+    blocked: openBudget === 0 ? `daily trade limit: ${opensToday} positions opened today (max ${TREASURY_RISK_GUARD.maxOpensPerDay}); no new positions until 00:00 UTC` : null };
+}
 
 export interface PromotionGateState {
   authorized: boolean;
@@ -42,6 +62,7 @@ export interface PromotionGateState {
 
 export interface PromotionGatedTreasuryPlan extends TreasuryCyclePlan {
   unified?: { enabled: boolean; version: string; allowed: number; opens: number };
+  riskGuard?: RiskGuardState | null;
   promotionGate: PromotionGateState;
   gateVersion: typeof BRIAN_TREASURY_GATE_VERSION;
   canonicalAlphaShadow: {
@@ -265,6 +286,7 @@ function applyMultiassetShadowOpens(
   plan: TreasuryCyclePlan,
   rows: MultiassetShadowOpportunity[],
   observedAt: string,
+  maxOpens = Number.MAX_SAFE_INTEGER,
 ): number {
   const candidates = [...latestMultiassetByAsset(rows).values()]
     .filter((row) =>
@@ -279,6 +301,7 @@ function applyMultiassetShadowOpens(
   let opens = 0;
   const exitedAssets = new Set(plan.actions.filter((action) => action.kind === "EXIT").map((action) => action.assetId));
   for (const row of candidates) {
+    if (opens >= maxOpens) break;
     if (exitedAssets.has(row.assetId)) continue;
     if (plan.state.positions.length >= MAX_SHADOW_POSITIONS) break;
     if (plan.state.positions.some((position) => position.assetId === row.assetId)) continue;
@@ -365,6 +388,7 @@ function applyCanonicalAlphaShadowOpens(
   plan: TreasuryCyclePlan,
   fallbacks: CanonicalAlphaShadowOpportunity[],
   observedAt: string,
+  maxOpens = Number.MAX_SAFE_INTEGER,
 ): number {
   if (!CANONICAL_ALPHA_MICRO_ENTRY_ENABLED) return 0;
   const candidates = [...latestCanonicalByAsset(fallbacks).values()]
@@ -372,6 +396,7 @@ function applyCanonicalAlphaShadowOpens(
     .sort((a, b) => (b.signalScore - a.signalScore) || ((time(b.observedAt) ?? 0) - (time(a.observedAt) ?? 0)));
   let opens = 0;
   for (const row of candidates) {
+    if (opens >= maxOpens) break;
     if (plan.state.positions.length >= MAX_SHADOW_POSITIONS) break;
     if (plan.state.positions.some((position) => position.assetId === row.assetId)) continue;
     const requested = row.requestedCapitalUsd;
@@ -438,6 +463,8 @@ export function planPromotionGatedTreasuryCycle(input: {
   // (its existing positions are still maintained and closed normally).
   unifiedOpportunities?: TreasuryOpportunity[];
   unifiedEnabled?: boolean;
+  // Daily risk guard inputs (omitted = no guard, previous behaviour).
+  dailyRisk?: DailyRiskInput;
   observedAt: string;
   promotionGate: PromotionGateState;
   positionIdFor: (opportunity: TreasuryOpportunity) => string;
@@ -468,18 +495,22 @@ export function planPromotionGatedTreasuryCycle(input: {
       ...multiassetMaintenance,
     ];
 
+  const guard = riskGuardState(input.dailyRisk);
+  const budget = guard ? guard.openBudget : Number.MAX_SAFE_INTEGER;
   const planned = planTreasuryCycle({
     state: input.state,
     opportunities: effectiveOpportunities,
     observedAt: input.observedAt,
     positionIdFor: (o) => unifiedIds.has(o.sourceDecisionId) ? `${UNIFIED_POSITION_PREFIX}${o.sourceDecisionId}` : input.positionIdFor(o),
     minHoldSecondsFor: (p) => isUnifiedPosition(p) ? UNIFIED_RULES.minHoldSeconds : 0,
+    maxOpens: budget,
   });
+  const plannerOpens = planned.actions.filter((a) => a.kind === "OPEN").length;
 
   rewriteCanonicalShadowExitReasons(planned.actions, fallbackOpportunities, promotionGate.authorized);
   rewriteMultiassetShadowExitReasons(planned.actions, multiassetOpportunities);
-  const fallbackOpens = promotionGate.authorized ? 0 : applyCanonicalAlphaShadowOpens(planned, fallbackOpportunities, input.observedAt);
-  const multiassetOpens = unified ? 0 : applyMultiassetShadowOpens(planned, multiassetOpportunities, input.observedAt);
+  const fallbackOpens = promotionGate.authorized ? 0 : applyCanonicalAlphaShadowOpens(planned, fallbackOpportunities, input.observedAt, Math.max(0, budget - plannerOpens));
+  const multiassetOpens = unified ? 0 : applyMultiassetShadowOpens(planned, multiassetOpportunities, input.observedAt, Math.max(0, budget - plannerOpens - fallbackOpens));
   const fallbackActions = planned.actions.filter((action) =>
     String(action.positionId || "").startsWith(CANONICAL_ALPHA_SHADOW_POSITION_PREFIX) ||
     action.reason === "CANONICAL_ALPHA_SHADOW_SIGNAL" || action.reason === "ALPHA_SIGNAL_REVOKED" ||
@@ -494,6 +525,7 @@ export function planPromotionGatedTreasuryCycle(input: {
   ).length;
 
   const blockedReasons = [...planned.blockedReasons];
+  if (guard?.blocked) blockedReasons.unshift(guard.blocked);
   const unifiedOpens = planned.actions.filter((a) => a.kind === "OPEN" && String(a.positionId || "").startsWith(UNIFIED_POSITION_PREFIX)).length;
   if (unified) {
     if (!unifiedOpportunities.some((o) => o.recommendation === "ALLOW_EDGE")) {
@@ -509,6 +541,7 @@ export function planPromotionGatedTreasuryCycle(input: {
     blockedReasons,
     promotionGate,
     gateVersion: BRIAN_TREASURY_GATE_VERSION,
+    riskGuard: guard,
     canonicalAlphaShadow: {
       enabled: !promotionGate.authorized && CANONICAL_ALPHA_MICRO_ENTRY_ENABLED,
       candidates: fallbackOpportunities.filter((row) => row.actionable).length,

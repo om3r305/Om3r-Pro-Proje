@@ -152,7 +152,9 @@ function applyOpen(state:TreasuryState,o:TreasuryOpportunity,capitalUsd:number,p
 // minHoldSecondsFor (optional, default 0): a position younger than its minimum hold is not closed for
 // soft reasons (edge invalidated/stale/decayed, time decay). The risk stop and a validated opposite
 // signal still close it. The unified lane uses the horizon its edge was measured on (anti-churn).
-export function planTreasuryCycle(input:{state:TreasuryState;opportunities:TreasuryOpportunity[];observedAt:string;positionIdFor:(o:TreasuryOpportunity)=>string;minHoldSecondsFor?:(p:TreasuryPosition)=>number;}):TreasuryCyclePlan{
+// maxOpens (optional, default unlimited): new positions this cycle may open at most this many; 0 = exits only
+// (the daily risk guard in evolution_treasury_gate.ts). Replacement exits are skipped when no open is allowed.
+export function planTreasuryCycle(input:{state:TreasuryState;opportunities:TreasuryOpportunity[];observedAt:string;positionIdFor:(o:TreasuryOpportunity)=>string;minHoldSecondsFor?:(p:TreasuryPosition)=>number;maxOpens?:number;}):TreasuryCyclePlan{
   const nowMs=time(input.observedAt);if(nowMs==null)throw new Error("invalid cycle observedAt");const state=cloneState(input.state);const actions:TreasuryAction[]=[];const blockedReasons:string[]=[];const noReopenAssets=new Set<string>();const marks=markMap(input.opportunities,state,nowMs);const beforeEquity=treasuryEquityUsd(state,marks);assertFinitePositive(beforeEquity,"treasury equity");const latest=latestByAsset(input.opportunities,nowMs);const latestRaw=latestRawByAsset(input.opportunities,nowMs);
 
   for(const p of [...state.positions]){
@@ -170,7 +172,9 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
   }
 
   const candidates=[...latest.values()].sort((a,b)=>opportunityScore(b)-opportunityScore(a));
+  const maxOpens=Math.max(0,Math.trunc(input.maxOpens??Number.MAX_SAFE_INTEGER));let opened=0;
   for(const o of candidates){
+    if(opened>=maxOpens)break;
     if(noReopenAssets.has(o.assetId)||state.positions.some(p=>p.assetId===o.assetId))continue;
     let equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});
     let target=targetCapitalUsd(o,equity);
@@ -192,7 +196,7 @@ export function planTreasuryCycle(input:{state:TreasuryState;opportunities:Treas
       equity=treasuryEquityUsd(state,{...marks,[o.assetId]:o.referencePrice});target=targetCapitalUsd(o,equity);desired=Math.min(target,availableCapitalFor(o,state,equity));minimumTicket=Math.min(equity*MIN_POSITION_PCT,100);
     }
 
-    if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;applyOpen(state,o,desired,input.positionIdFor(o),input.observedAt,actions);
+    if(state.positions.length>=MAX_POSITIONS)continue;if(desired<minimumTicket)continue;if(applyOpen(state,o,desired,input.positionIdFor(o),input.observedAt,actions))opened++;
   }
 
   const afterMarks={...marks};for(const o of candidates)afterMarks[o.assetId]=o.referencePrice;state.observedAt=input.observedAt;const afterEquity=treasuryEquityUsd(state,afterMarks);const deployed=deploymentUsd(state);

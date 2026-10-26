@@ -76,6 +76,7 @@ jobs:
           supabase/functions/_shared/evolution_treasury_runtime.test.ts
           supabase/functions/_shared/evolution_treasury_unified.ts
           supabase/functions/_shared/evolution_treasury_unified.test.ts
+          supabase/functions/_shared/evolution_treasury_risk_guard.test.ts
           supabase/functions/_shared/multiasset_feed_guard.ts
           supabase/functions/_shared/multiasset_feed_guard.test.ts
           supabase/functions/_shared/evolution_ocean.ts
@@ -119,6 +120,7 @@ jobs:
           supabase/functions/_shared/evolution_treasury_gate.test.ts
           supabase/functions/_shared/evolution_treasury_runtime.test.ts
           supabase/functions/_shared/evolution_treasury_unified.test.ts
+          supabase/functions/_shared/evolution_treasury_risk_guard.test.ts
           supabase/functions/_shared/multiasset_feed_guard.test.ts
           supabase/functions/_shared/evolution_ocean.test.ts
           supabase/functions/_shared/evolution_ocean_preflight.test.ts
@@ -152,6 +154,7 @@ jobs:
           supabase/functions/_shared/evolution_treasury_runtime.test.ts
           supabase/functions/_shared/evolution_treasury_unified.ts
           supabase/functions/_shared/evolution_treasury_unified.test.ts
+          supabase/functions/_shared/evolution_treasury_risk_guard.test.ts
           supabase/functions/_shared/multiasset_feed_guard.ts
           supabase/functions/_shared/multiasset_feed_guard.test.ts
           supabase/functions/_shared/evolution_ocean.ts
