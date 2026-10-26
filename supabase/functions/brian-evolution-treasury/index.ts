@@ -4,7 +4,9 @@ import { requireCronAuth } from "../_shared/cron_auth.ts";
 import { EVOLUTION_EVIDENCE_CLASS } from "../_shared/evolution_contract.ts";
 import {
   BRIAN_TREASURY_GATE_VERSION,
+  TREASURY_RISK_GUARD,
   planPromotionGatedTreasuryCycle,
+  type DailyRiskInput,
   type PromotionGateState,
 } from "../_shared/evolution_treasury_gate.ts";
 import {
@@ -333,7 +335,7 @@ async function loadCanonicalAlphaShadowOpportunities(
     .order("observed_at", { ascending: false }).limit(500);
   if (q.error) throw new Error(`treasury_alpha_shadow:${q.error.message}`);
 
-  const rows: CanonicalAlphaDecisionRow[] = (q.data ?? []).map((row) => {
+  const rows: CanonicalAlphaDecisionRow[] = ((q.data ?? []) as Record<string, unknown>[]).map((row) => {
     const metadata = (row.metadata ?? {}) as Record<string, unknown>;
     return {
       decisionId: String(row.decision_id),
@@ -371,7 +373,7 @@ async function loadMultiassetShadowOpportunities(
     .order("observed_at", { ascending: false }).limit(300);
   if (q.error) throw new Error(`treasury_multiasset_shadow:${q.error.message}`);
 
-  const rows: MultiassetAlphaDecisionRow[] = (q.data ?? []).map((row) => ({
+  const rows: MultiassetAlphaDecisionRow[] = ((q.data ?? []) as Record<string, unknown>[]).map((row) => ({
     decisionId: String(row.decision_id),
     observedAt: String(row.observed_at),
     assetId: String(row.asset_id),
@@ -421,6 +423,22 @@ async function loadNewsTrust(rows: MultiassetAlphaDecisionRow[]): Promise<Map<st
   if (q.error) throw new Error(`treasury_news_trust:${q.error.message}`);
   for (const row of q.data ?? []) trust.set(String(row.event_id), String(row.trust_class ?? ""));
   return trust;
+}
+
+// Daily risk guard inputs (UTC day): positions opened today, the equity of the last snapshot before
+// 00:00 UTC, and the latest equity. Unreadable inputs fail closed for NEW positions only (exits continue).
+async function loadDailyRisk(nowIso: string): Promise<DailyRiskInput> {
+  const dayStart = `${nowIso.slice(0, 10)}T00:00:00.000Z`;
+  const [opens, start, latest] = await Promise.all([
+    db.from("brian_treasury_shadow_actions").select("action_id", { count: "exact", head: true }).eq("kind", "OPEN").gte("observed_at", dayStart),
+    db.from("brian_treasury_shadow_snapshots").select("equity_usd").lt("observed_at", dayStart).order("observed_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("brian_treasury_shadow_latest").select("equity_usd").limit(1).maybeSingle(),
+  ]);
+  if (opens.error || start.error || latest.error) {
+    console.error("treasury daily risk inputs unavailable", opens.error?.message ?? start.error?.message ?? latest.error?.message);
+    return { opensToday: TREASURY_RISK_GUARD.maxOpensPerDay, dayStartEquityUsd: null, currentEquityUsd: null };
+  }
+  return { opensToday: opens.count ?? 0, dayStartEquityUsd: finite(start.data?.equity_usd), currentEquityUsd: finite(latest.data?.equity_usd) };
 }
 
 async function commitCycle(input: {
@@ -553,13 +571,14 @@ Deno.serve(async (req: Request) => {
     const lease = await withCollectorLease(db, COLLECTOR_ID, LEASE_SECONDS, async () => {
       const observedAt = new Date().toISOString();
       const loaded = await loadState(observedAt);
-      const [promotionGate, opportunities, canonical, multiasset, unifiedEnabled, segmentEdges] = await Promise.all([
+      const [promotionGate, opportunities, canonical, multiasset, unifiedEnabled, segmentEdges, dailyRisk] = await Promise.all([
         loadPromotionGate(),
         loadOpportunities(loaded.state, observedAt),
         loadCanonicalAlphaShadowOpportunities(loaded.state, observedAt),
         loadMultiassetShadowOpportunities(loaded.state, observedAt),
         loadUnifiedEnabled(),
         loadSegmentEdges(),
+        loadDailyRisk(observedAt),
       ]);
       const multiassetShadowOpportunities = multiasset.opportunities;
       const alphaShadowOpportunities = canonical.opportunities;
@@ -576,6 +595,7 @@ Deno.serve(async (req: Request) => {
         multiassetShadowOpportunities,
         unifiedOpportunities: unified.opportunities,
         unifiedEnabled,
+        dailyRisk,
         observedAt,
         promotionGate,
         positionIdFor: (opportunity) => `treasury:${opportunity.sourceDecisionId}`,
@@ -592,6 +612,7 @@ Deno.serve(async (req: Request) => {
         multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
         unified: { ...plan.unified, segments: segmentEdges.segments.length, segment_error: segmentEdges.error,
           verdicts: unified.verdicts.slice(0, 40) },
+        risk_guard: plan.riskGuard ?? null,
         actions: plan.actions.length,
         positions: plan.state.positions.length,
         equity_usd: plan.afterEquityUsd,
@@ -613,6 +634,7 @@ Deno.serve(async (req: Request) => {
         multiasset_shadow: plan.multiassetShadow,
         multiasset_shadow_opportunities: multiassetShadowOpportunities.length,
         unified: { ...plan.unified, segments: segmentEdges.segments, segment_error: segmentEdges.error, verdicts: unified.verdicts },
+        risk_guard: plan.riskGuard ?? null,
         actions: plan.actions,
         treasury: {
           starting_equity_usd: plan.state.startingEquityUsd,
