@@ -1,12 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2.116.0";
 import { withCollectorLease } from "../_shared/collector_lease.ts";
 import { assessMarketSession } from "../_shared/multiasset_market_session.ts";
+import { EDGAR_SOURCE_PREFIX, EVENT_LINK_VERSION, directlyLinkedAssets, linkableThemes } from "../_shared/multiasset_event_link.ts";
 import { FEED_GUARD_RULES, FEED_GUARD_VERSION, SCANNER_COLUMNS, feedGuardVerdict, parseScanner, scannerTickers, type OwnObservation, type SecondSourceQuote } from "../_shared/multiasset_feed_guard.ts";
 
 const URL=Deno.env.get("SUPABASE_URL")!;
 const SERVICE=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db=createClient(URL,SERVICE,{auth:{persistSession:false,autoRefreshToken:false}});
-const VERSION="brian.multiasset-opportunity-engine.v6-feed-guard";
+const VERSION="brian.multiasset-opportunity-engine.v7-event-relevance";
 const COLLECTOR_ID="brian-multiasset-opportunity-engine-v1";
 const EXPORT_URL="https://dliediwlldojkfjzlznm.supabase.co/functions/v1/brian-realtime-multiasset-export";
 
@@ -37,28 +38,9 @@ async function operatorEnabled(){
  if(q.error||!q.data)throw new Error("OPERATOR_CONTROL_UNAVAILABLE");
  return q.data.config_value==="true";
 }
-function classify(claim:string,source:string){
-  const x=`${claim} ${source}`.toLowerCase();
-  const themes=new Set<string>();
-  if(/\b(ecb|fed|federal reserve|bank of england|boe|bank of japan|boj|bank of canada|boc|interest rate|policy rate|monetary|inflation|yield|liquidity)\b/.test(x))themes.add("MONETARY");
-  if(/\b(war|missile|houthi|sanction|russia|ukraine|iran|saudi|nato|geopolit|attack|conflict|air raid)\b/.test(x))themes.add("GEOPOLITICAL");
-  if(/\b(oil|crude|brent|wti|opec|gas|pipeline|energy|refinery|blackout|power)\b/.test(x))themes.add("ENERGY");
-  if(/\b(ai|artificial intelligence|nvidia|semiconductor|chip|gemini|microsoft|meta|google|data center)\b/.test(x))themes.add("AI_TECH");
-  if(/\b(bank|banking|credit|financial|systemic|treasury|bond|debt|liquidity)\b/.test(x))themes.add("FINANCIAL");
-  if(/\b(dollar|usd|euro|eur|yen|jpy|sterling|gbp|currency|fx)\b/.test(x))themes.add("FX");
-  return [...themes];
-}
 function markThemes(mark:Mark):string[]{
   const raw=mark.metadata?.themes;
   return Array.isArray(raw)?raw.map(String).filter(Boolean):[];
-}
-function directlyLinkedAssets(event:EventRow):string[]{
-  const assets=new Set<string>();
-  if(event.primary_asset)assets.add(event.primary_asset);
-  // Explicit metals references also work when the headline has no macro theme.
-  if(/\b(gold|bullion)\b/i.test(event.claim)){assets.add("commodity:GOLD");assets.add("etf:GLD")}
-  if(/\bsilver\b/i.test(event.claim))assets.add("commodity:SILVER");
-  return [...assets];
 }
 function threshold(assetClass:string){
   return assetClass==="fx"?0.0007:
@@ -130,6 +112,8 @@ Deno.serve(async(req:Request)=>{
     const eventsQ=await db.from("brian_world_event_frames")
       .select("event_id,observed_at,published_at,event_kind,source_id,claim,primary_asset")
       .gte("observed_at",since)
+      // EDGAR company filings (~3,000/day) carry no instrument and would fill the 300-row window.
+      .not("source_id","like",`${EDGAR_SOURCE_PREFIX}%`)
       .order("observed_at",{ascending:false})
       .limit(300);
     if(eventsQ.error)throw new Error(`world_events:${eventsQ.error.message}`);
@@ -145,7 +129,7 @@ Deno.serve(async(req:Request)=>{
       }
     }
     for(const ev of events){
-      const themes=classify(String(ev.claim??""),String(ev.source_id??""));
+      const themes=linkableThemes(ev);
       const eventAt=Date.parse(String(ev.published_at??ev.observed_at));
       if(!Number.isFinite(eventAt)||eventAt>Date.now()+5_000)continue;
       const ageH=Math.max(0,(Date.now()-eventAt)/3600000);
@@ -227,7 +211,7 @@ Deno.serve(async(req:Request)=>{
         veto_reason:veto,session_state:session.sessionState,data_latency_seconds:session.latency??1e9,
         metadata:{
           version:VERSION,provider_quality:m.provider_quality,event_strength:eventStrength,reaction_score:reactionScore,
-          return_5m:r5,return_1h:r1,threshold:th,linked_themes:[...new Set(links.map(l=>l.theme))],
+          return_5m:r5,return_1h:r1,threshold:th,linked_themes:[...new Set(links.map(l=>l.theme))],event_link_version:EVENT_LINK_VERSION,
           direction_source:"OBSERVED_MARKET_REACTION_NOT_HEADLINE_GUESS",
           data_quality_gate:"REGULAR_SESSION_AND_15M_FRESHNESS",
           data_quality_reason:session.reason,
