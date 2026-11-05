@@ -1,0 +1,4 @@
+# Optional: only needed for live Claude / Grok calls of brian2026.multi_agent.
+# Not installed by CI; the layer and its tests run without them (paid calls are off by default).
+anthropic>=1.0
+xai-sdk>=1.0
