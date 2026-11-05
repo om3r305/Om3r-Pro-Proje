@@ -1,0 +1,55 @@
+name: Brian Multi-Agent Shadow
+
+# Shadow-only assessment of fresh CORE event-reaction signals (brian2026/multi_agent/live.py).
+# Paid model calls stay off unless the repository variables enable them with a budget; the
+# repository variable BRIAN_MULTI_AGENT_RUNNER must be "on" for scheduled runs to do anything.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and decide without writing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brian-multi-agent-shadow
+  cancel-in-progress: false
+
+jobs:
+  assess:
+    if: github.event_name == 'workflow_dispatch' || vars.BRIAN_MULTI_AGENT_RUNNER == 'on'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      BRIAN_CORE_SUPABASE_URL: https://qbcjuxhvhwagvqbjyemo.supabase.co
+      BRIAN_CORE_SUPABASE_SECRET_KEY: ${{ secrets.BRIAN_MARKET_INTELLIGENCE_SUPABASE_SECRET_KEY }}
+      BRIAN_MULTI_AGENT_ENABLED: ${{ vars.BRIAN_MULTI_AGENT_ENABLED || 'false' }}
+      BRIAN_MULTI_AGENT_STOP: ${{ vars.BRIAN_MULTI_AGENT_STOP || 'false' }}
+      BRIAN_AGENT_COST_LIMIT_USD: ${{ vars.BRIAN_AGENT_COST_LIMIT_USD || '0' }}
+      BRIAN_CLAUDE_MODEL: ${{ vars.BRIAN_CLAUDE_MODEL }}
+      BRIAN_GROK_MODEL: ${{ vars.BRIAN_GROK_MODEL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install requirements
+        run: |
+          python -m pip install -r requirements.txt
+          if [ "${BRIAN_AGENT_COST_LIMIT_USD}" != "0" ]; then python -m pip install -r requirements-multi-agent.txt; fi
+      - name: Assess fresh candidates
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            python -m brian2026.multi_agent.live --dry-run
+          else
+            python -m brian2026.multi_agent.live
+          fi

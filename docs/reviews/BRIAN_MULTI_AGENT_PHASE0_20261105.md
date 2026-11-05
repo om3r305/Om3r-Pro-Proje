@@ -83,9 +83,32 @@ both adapters against fake SDKs, verifier/skeptic/risk/scanner, coordinator path
 evidence chain tamper detection, point-in-time evaluation, end-to-end dry run). Full suite locally:
 494 passed, 62 skipped.
 
+## Phase 2 — live wiring (prepared, not yet deployed)
+
+| Piece | Status |
+|---|---|
+| `live.py` | Reads fresh OPEN event-reaction signals, their linked news, the segment evidence and today's treasury state over PostgREST; maps them to candidates (news class mirrors the treasury's rule); one candidate per asset and direction; cross-run de-duplication; inserts with `on_conflict=candidate_id` / ignore duplicates. `--dry-run` writes nothing. Crypto ALPHA is not routed (microstructure signals, no news catalyst). |
+| Migration `20261105230000_brian_multi_agent_decisions.sql` | Insert-only table (update/delete rejected by `brian_reject_mutation`), RLS on, client roles revoked, `execution_allowed=false` enforced by a check. **Not applied to CORE.** |
+| Workflow `brian-multi-agent-shadow.yml` | Every 15 min, only when repository variable `BRIAN_MULTI_AGENT_RUNNER=on`; manual runs default to dry run. Uses the existing CORE secret; model keys/budget only from repository secrets/variables. **Inactive until merged and switched on.** |
+| Risk change | An unobserved live spread no longer blocks (the measured cost already includes the normal spread); an observed spread above 25 bps still blocks. |
+
+Tests: `tests/test_multi_agent_live.py` (7) — mapping, news class, de-duplication, scanner and risk on
+mapped rows, insert idempotency, errors without key echo, refusal without configuration.
+
+### Check against real CORE data (read-only, 2026-11-05)
+- Last 24 h: 46 OPEN event-reaction signals (20 asset/direction pairs); 6 moved ≥ 100 bps in 1 h and
+  pass the scanner; **0 pass the risk gate** (best net −15.4 bps). Model calls that day: 0, cost $0.
+- Two real signals (SILVER long 02:03, BRENT short 02:23 UTC) were run through `live.decide_all`
+  offline: both NO_TRADE before any model call (net −25.6 and −15.4 bps; the second matches the SQL).
+- **Finding: news relevance.** The SILVER and GOLD signals count as `OFFICIAL` news only because the
+  engine linked SEC Form 144 filings of unrelated investment funds; BRENT was linked to, among others,
+  a video-game delay headline. The segment evidence is therefore split by a news class that is partly
+  noise. This is exactly the question the Grok analyst is meant to answer ("is the news about this
+  instrument?"), and it can also be improved without any model by tightening the event-to-asset link.
+
 ## Not done (honest list)
 - No live Claude or Grok call (no approved budget). The adapters are untested against real APIs.
-- Scanner is not yet fed from the live CORE tables; Phase 2 wires `brian_multiasset_alpha_decisions` +
-  `brian_treasury_segment_edge_cache` as inputs and stores records in a new append-only table.
+- Phase 2 table and workflow are not live: they need the migration applied, the PR merged and the
+  runner variable switched on (operator decisions).
 - No dashboard panel (Phase 4; UI files belong to the separate UI owner).
-- No A/B/C comparison result yet: needs Phase 2 data plus later outcomes.
+- No A/B/C comparison result yet: needs live records plus later outcomes.

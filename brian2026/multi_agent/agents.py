@@ -190,6 +190,7 @@ def verify(candidate: Candidate, decision_time: datetime, edge: MeasuredEdge | N
         computed = parse_utc(edge.computed_at)
         if computed is None or computed > decision_time:
             failures.append("EDGE_COMPUTED_AFTER_DECISION")
+    checks["spread"] = "UNOBSERVED (measured cost model used)" if candidate.spread_bps is None else f"{candidate.spread_bps}bps"
     checks["measured_edge"] = "OK" if edge is not None and edge.net_bps is not None else "MISSING"
 
     all_sources = list(candidate.sources) + [s for a in assessments for s in a.sources]
@@ -271,9 +272,9 @@ def risk_check(candidate: Candidate, edge: MeasuredEdge | None, *, opens_today: 
             reasons.append(f"SAMPLES_BELOW_{limits.min_samples}")
         if net < limits.min_net_edge_bps:
             reasons.append(f"NET_EDGE_BELOW_{limits.min_net_edge_bps:g}BPS")
-    if candidate.spread_bps is None:
-        reasons.append("SPREAD_UNKNOWN")
-    elif candidate.spread_bps > limits.max_spread_bps:
+    # An unobserved live spread is not a block: the measured round-trip cost already includes the
+    # normal spread of the asset class. An observed spread above the limit blocks.
+    if candidate.spread_bps is not None and candidate.spread_bps > limits.max_spread_bps:
         reasons.append("SPREAD_TOO_WIDE")
     if opens_today is None or opens_today >= limits.max_opens_per_day:
         reasons.append("DAILY_TRADE_LIMIT_OR_UNKNOWN")
