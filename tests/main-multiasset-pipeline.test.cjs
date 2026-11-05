@@ -8,6 +8,7 @@ const {webcrypto,createHash}=require('node:crypto');
 const root=path.resolve(__dirname,'../supabase/functions');
 const {assessMarketSession}=require('../supabase/functions/_shared/multiasset_market_session.ts');
 const feedGuard=require('../supabase/functions/_shared/multiasset_feed_guard.ts');
+const eventLink=require('../supabase/functions/_shared/multiasset_event_link.ts');
 const now=Date.parse('2026-09-25T15:00:00Z');
 const start=now/1000-3600,end=now/1000+3600;
 const iso=ms=>new Date(ms).toISOString();
@@ -30,7 +31,7 @@ function load(name,extras={}){
   let handler;
   const source=fs.readFileSync(path.join(root,name,'index.ts'),'utf8').replace(/^import .*;\s*$/mg,'');
   class Clock extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
-  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,withCollectorLease:async(db,id,ttl,work)=>({contended:false,value:await work()}),...feedGuard,...extras});
+  const ctx=vm.createContext({Deno:{env:{get:()=>''},serve:fn=>handler=fn},createClient:()=>({}),assessMarketSession:(p,s,e)=>assessMarketSession(p,s,e,now),Date:Clock,Response,Request,AbortSignal,TextEncoder,crypto:webcrypto,console,withCollectorLease:async(db,id,ttl,work)=>({contended:false,value:await work()}),...feedGuard,...eventLink,...extras});
   vm.runInContext(stripTypeScriptTypes(source),ctx);
   return {ctx,handle:req=>handler(req)};
 }
@@ -41,12 +42,12 @@ test('collector derives REGULAR from actual provider session, not OPEN fallback'
   assert.equal(mark.metadata.regular_session_end,end);
   assert.equal(mark.live_execution,false);
 });
-async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',duplicate=false,reaction=.01,enabled=true,configFailure=false,price=100,history=[],scanner=null}={}){
+async function runEngine({age=5,sessionEnd=end,claim='Gold bullion reserves expanded',source='official:test',duplicate=false,reaction=.01,enabled=true,configFailure=false,price=100,history=[],scanner=null,filters=[]}={}){
   const writes={};
-  const events=[{event_id:'news-1',observed_at:iso(now-60000),published_at:iso(now-60000),source_id:'official:test',claim,primary_asset:null}];
+  const events=[{event_id:'news-1',observed_at:iso(now-60000),published_at:iso(now-60000),source_id:source,claim,primary_asset:null}];
   if(duplicate)events.push({...events[0]});
   const db={from:table=>{
-    const q={select:()=>q,eq:()=>q,gte:()=>q,order:()=>q,limit:()=>q,single:()=>q,abortSignal:()=>q,
+    const q={select:()=>q,eq:()=>q,gte:()=>q,not:(...a)=>{filters.push([table,...a]);return q},order:()=>q,limit:()=>q,single:()=>q,abortSignal:()=>q,
       insert:async rows=>{writes[table]=rows;return {error:null}},
       then:resolve=>resolve(table==='brian_evolution_runtime_config'?{data:{config_value:enabled?'true':'false'},error:configFailure?{message:'offline'}:null}:{data:table==='brian_dashboard_auth'?{cron_key_sha256:createHash('sha256').update('test-key').digest('hex')}:table==='brian_multiasset_alpha_decisions'?history:events,error:null})};
     return q;
@@ -99,4 +100,17 @@ require('../supabase/functions/_shared/evolution_treasury_multiasset_shadow.test
 test('multiasset decision worker respects STOP and fails closed on unreadable operator control',async()=>{
  assert.equal((await runEngine({enabled:false})).status,'OPERATOR_STOPPED');
  assert.equal((await runEngine({configFailure:true})).status,'FAILED_CLOSED');
+});
+test('EDGAR company filings are excluded from the event window and never link through the filer name',async()=>{
+  const filters=[];
+  const d=await runEngine({claim:'144 - BASSWOOD FINANCIAL FUND, L.P. (0001519641) (Reporting)',source:'official:sec:edgar_current',filters});
+  assert.deepEqual(filters,[['brian_world_event_frames','source_id','like','official:sec:edgar%']]);
+  assert.equal(d.action,'WAIT');assert.equal(d.veto_reason,'NO_RELEVANT_EVENT');assert.equal(d.linked_event_ids.length,0);
+  assert.equal(d.metadata.event_link_version,'brian.multiasset-event-link.v1');
+});
+test('an entertainment headline does not reach assets through a macro theme',async()=>{
+  const d=await runEngine({claim:'God of War Laufey Delayed to May 2027 - 80 Level',source:'80.lv'});
+  assert.equal(d.veto_reason,'NO_RELEVANT_EVENT');
+  const real=await runEngine({claim:'Iran says vessels catch fire in Strait of Hormuz',source:'reuters.com'});
+  assert.equal(real.action,'OPEN_LONG');assert.equal(real.linked_event_ids.join(),'news-1');
 });
